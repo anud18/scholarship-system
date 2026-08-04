@@ -32,16 +32,17 @@ class BulkApprovalService:
         application_ids: List[int],
         approver_user_id: int,
         approval_notes: Optional[str] = None,
-        send_notifications: bool = True,
     ) -> Dict[str, Any]:
-        """Bulk approve multiple applications"""
+        """Bulk approve multiple applications.
+
+        Students are NOT emailed about the outcome — the only mail a student
+        receives is the submission confirmation and the 3-day draft reminder.
+        """
 
         results = {
             "total_requested": len(application_ids),
             "successful_approvals": [],
             "failed_approvals": [],
-            "notifications_sent": 0,
-            "notifications_failed": 0,
         }
 
         try:
@@ -60,7 +61,9 @@ class BulkApprovalService:
             for application in applications:
                 try:
                     # Validate application can be approved
-                    if application.status not in [
+                    # Normalize: SQLite returns strings, PostgreSQL returns enum members
+                    _status = getattr(application.status, "value", application.status)
+                    if _status not in [
                         ApplicationStatus.submitted.value,
                         ApplicationStatus.under_review.value,
                     ]:
@@ -102,24 +105,10 @@ class BulkApprovalService:
                         }
                     )
 
-                    # Send notification if requested
-                    if send_notifications:
-                        try:
-                            notification_sent = await self.notification_service.send_status_change_notification(
-                                application, old_status, application.status
-                            )
-                            if notification_sent:
-                                results["notifications_sent"] += 1
-                            else:
-                                results["notifications_failed"] += 1
-                        except Exception as e:
-                            logger.error(f"Failed to send notification for application {application.id}: {str(e)}")
-                            results["notifications_failed"] += 1
-
                     logger.info(f"Bulk approved application {application.app_id}")
 
                 except Exception as e:
-                    logger.error(f"Failed to approve application {application.id}: {str(e)}")
+                    logger.exception(f"Failed to approve application {application.id}")
                     await self.db.rollback()
                     results["failed_approvals"].append(
                         {
@@ -132,8 +121,8 @@ class BulkApprovalService:
 
             return results
 
-        except Exception as e:
-            logger.error(f"Bulk approval operation failed: {str(e)}")
+        except Exception:
+            logger.exception("Bulk approval operation failed")
             await self.db.rollback()
             raise
 
@@ -142,16 +131,16 @@ class BulkApprovalService:
         application_ids: List[int],
         rejector_user_id: int,
         rejection_reason: str,
-        send_notifications: bool = True,
     ) -> Dict[str, Any]:
-        """Bulk reject multiple applications"""
+        """Bulk reject multiple applications.
+
+        As with bulk approval, no outcome email is sent to the student.
+        """
 
         results = {
             "total_requested": len(application_ids),
             "successful_rejections": [],
             "failed_rejections": [],
-            "notifications_sent": 0,
-            "notifications_failed": 0,
         }
 
         try:
@@ -162,7 +151,9 @@ class BulkApprovalService:
             for application in applications:
                 try:
                     # Validate application can be rejected
-                    if application.status not in [
+                    # Normalize: SQLite returns strings, PostgreSQL returns enum members
+                    _status = getattr(application.status, "value", application.status)
+                    if _status not in [
                         ApplicationStatus.submitted.value,
                         ApplicationStatus.under_review.value,
                     ]:
@@ -181,17 +172,14 @@ class BulkApprovalService:
                     application.decision_date = datetime.now(timezone.utc)
                     application.reviewer_id = rejector_user_id
 
-                    # Note: rejection_reason moved to ApplicationReview model
                     # Create ApplicationReview record to store rejection reason
-                    from app.models.application import ApplicationReview, ReviewStatus
+                    from app.models.review import ApplicationReview
 
                     review = ApplicationReview(
                         application_id=application.id,
                         reviewer_id=rejector_user_id,
-                        review_stage="bulk_rejection",
-                        review_status=ReviewStatus.REJECTED.value,
                         recommendation="reject",
-                        decision_reason=rejection_reason,
+                        comments=rejection_reason,
                         reviewed_at=datetime.now(timezone.utc),
                     )
                     self.db.add(review)
@@ -211,24 +199,10 @@ class BulkApprovalService:
                         }
                     )
 
-                    # Send notification
-                    if send_notifications:
-                        try:
-                            notification_sent = await self.notification_service.send_status_change_notification(
-                                application, old_status, application.status
-                            )
-                            if notification_sent:
-                                results["notifications_sent"] += 1
-                            else:
-                                results["notifications_failed"] += 1
-                        except Exception as e:
-                            logger.error(f"Failed to send notification for application {application.id}: {str(e)}")
-                            results["notifications_failed"] += 1
-
                     logger.info(f"Bulk rejected application {application.app_id}")
 
                 except Exception as e:
-                    logger.error(f"Failed to reject application {application.id}: {str(e)}")
+                    logger.exception(f"Failed to reject application {application.id}")
                     await self.db.rollback()
                     results["failed_rejections"].append(
                         {
@@ -240,8 +214,8 @@ class BulkApprovalService:
 
             return results
 
-        except Exception as e:
-            logger.error(f"Bulk rejection operation failed: {str(e)}")
+        except Exception:
+            logger.exception("Bulk rejection operation failed")
             await self.db.rollback()
             raise
 
@@ -332,7 +306,7 @@ class BulkApprovalService:
                     logger.info(f"Auto-approved application {application.app_id}")
 
                 except Exception as e:
-                    logger.error(f"Failed to auto-approve application {application.id}: {str(e)}")
+                    logger.exception(f"Failed to auto-approve application {application.id}")
                     await self.db.rollback()
                     auto_approval_failures.append({"application_id": application.id, "error": str(e)})
 
@@ -352,8 +326,8 @@ class BulkApprovalService:
                 "failure_count": len(auto_approval_failures),
             }
 
-        except Exception as e:
-            logger.error(f"Auto-approval by criteria failed: {str(e)}")
+        except Exception:
+            logger.exception("Auto-approval by criteria failed")
             raise
 
     async def bulk_status_update(
@@ -369,8 +343,8 @@ class BulkApprovalService:
             # Validate status
             try:
                 _ = ApplicationStatus(new_status)
-            except ValueError:
-                raise ValueError(f"Invalid status: {new_status}")
+            except ValueError as exc:
+                raise ValueError(f"Invalid status: {new_status}") from exc
 
             stmt = select(Application).where(Application.id.in_(application_ids))
             result = await self.db.execute(stmt)
@@ -410,7 +384,7 @@ class BulkApprovalService:
                     )
 
                 except Exception as e:
-                    logger.error(f"Failed to update application {application.id}: {str(e)}")
+                    logger.exception(f"Failed to update application {application.id}")
                     await self.db.rollback()
                     update_failures.append({"application_id": application.id, "error": str(e)})
 
@@ -424,8 +398,8 @@ class BulkApprovalService:
                 "updated_by": updater_user_id,
             }
 
-        except Exception as e:
-            logger.error(f"Bulk status update failed: {str(e)}")
+        except Exception:
+            logger.exception("Bulk status update failed")
             raise
 
     def _meets_approval_criteria(self, application: Application, criteria: Dict[str, Any]) -> bool:
@@ -459,8 +433,8 @@ class BulkApprovalService:
 
             return True
 
-        except Exception as e:
-            logger.error(f"Error checking approval criteria for application {application.id}: {str(e)}")
+        except Exception:
+            logger.exception(f"Error checking approval criteria for application {application.id}")
             return False
 
     async def batch_process_with_notifications(
@@ -481,14 +455,12 @@ class BulkApprovalService:
                     application_ids,
                     operator_user_id,
                     operation_params.get("approval_notes"),
-                    operation_params.get("send_notifications", True),
                 )
             elif operation_type == "reject":
                 results = await self.bulk_reject_applications(
                     application_ids,
                     operator_user_id,
                     operation_params.get("rejection_reason", "Bulk rejection"),
-                    operation_params.get("send_notifications", True),
                 )
             elif operation_type == "update_status":
                 results = await self.bulk_status_update(
@@ -513,8 +485,8 @@ class BulkApprovalService:
                     }
 
                     await self.notification_service.send_batch_processing_notification(admin_email, notification_data)
-                except Exception as e:
-                    logger.error(f"Failed to send admin notification: {str(e)}")
+                except Exception:
+                    logger.exception("Failed to send admin notification")
 
             # Add operation metadata
             results["operation_metadata"] = {
@@ -526,6 +498,6 @@ class BulkApprovalService:
 
             return results
 
-        except Exception as e:
-            logger.error(f"Batch processing with notifications failed: {str(e)}")
+        except Exception:
+            logger.exception("Batch processing with notifications failed")
             raise

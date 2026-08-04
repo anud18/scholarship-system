@@ -1,0 +1,170 @@
+[
+  {
+    "id": 7,
+    "uid": "application-logs",
+    "orgId": 1,
+    "title": "Application Logs",
+    "uri": "db/application-logs",
+    "url": "/monitoring/d/application-logs/application-logs",
+    "slug": "",
+    "type": "dash-db",
+    "tags": [
+      "application",
+      "logs",
+      "staging"
+    ],
+    "isStarred": false,
+    "folderId": 4,
+    "folderUid": "bf0qa6pv62cxsd",
+    "folderTitle": "Application",
+    "folderUrl": "/monitoring/dashboards/f/bf0qa6pv62cxsd/application",
+    "sortMeta": 0,
+    "isDeleted": false
+  },
+  {
+    "id": 6,
+    "uid": "container-monitoring",
+    "orgId": 1,
+    "title": "Container Monitoring (cAdvisor)",
+    "uri": "db/container-monitoring-cadvisor",
+    "url": "/monitoring/d/container-monitoring/container-monitoring-cadvisor",
+    "slug": "",
+    "type": "dash-db",
+    "tags": [
+      "cadvisor",
+      "containers",
+      "docker"
+    ],
+    "isStarred": false,
+    "folderId": 4,
+    "folderUid": "bf0qa6pv62cxsd",
+    "folderTitle": "Application",
+    "folderUrl": "/monitoring/dashboards/f/bf0qa6pv62cxsd/application",
+    "sortMeta": 0,
+    "isDeleted": false
+  },
+  {
+    "id": 9,
+    "uid": "minio-monitoring",
+    "orgId": 1,
+    "title": "MinIO Monitoring",
+    "uri": "db/minio-monitoring",
+    "url": "/monitoring/d/minio-monitoring/minio-monitoring",
+    "slug": "",
+    "type": "dash-db",
+    "tags": [
+      "database",
+      "minio",
+      "storage"
+    ],
+    "isStarred": false,
+    "folderId": 8,
+    "folderUid": "ef269ulsakxdsc",
+    "folderTitle": "Database",
+    "folderUrl": "/monitoring/dashboards/f/ef269ulsakxdsc/database",
+    "sortMeta": 0,
+    "isDeleted": false
+  },
+  {
+    "id": 5,
+    "uid": "nginx-monitoring",
+    "orgId": 1,
+    "title": "Nginx Monitoring",
+    "uri": "db/nginx-monitoring",
+    "url": "/monitoring/d/nginx-monitoring/nginx-monitoring",
+    "slug": "",
+    "type": "dash-db",
+    "tags": [
+      "application",
+      "nginx"
+    ],
+    "isStarred": false,
+    "folderId": 4,
+    "folderUid": "bf0qa6pv62cxsd",
+    "folderTitle": "Application",
+    "folderUrl": "/monitoring/dashboards/f/bf0qa6pv62cxsd/application",
+    "sortMeta": 0,
+    "isDeleted": false
+  },
+  {
+    "id": 10,
+    "uid": "postgresql-monitoring",
+    "orgId": 1,
+    "title": "PostgreSQL Monitoring",
+    "uri": "db/postgresql-monitoring",
+    "url": "/monitoring/d/postgresql-monitoring/postgresql-monitoring",
+    "slug": "",
+    "type": "dash-db",
+    "tags": [
+      "database",
+      "postgresql"
+    ],
+    "isStarred": false,
+    "folderId": 8,
+    "folderUid": "ef269ulsakxdsc",
+    "folderTitle": "Database",
+    "folderUrl": "/monitoring/dashboards/f/ef269ulsakxdsc/database",
+    "sortMeta": 0,
+    "isDeleted": false
+  },
+  {
+    "id": 11,
+    "uid": "redis-monitoring",
+    "orgId": 1,
+    "title": "Redis Monitoring",
+    "uri": "db/redis-monitoring",
+    "url": "/monitoring/d/redis-monitoring/redis-monitoring",
+    "slug": "",
+    "type": "dash-db",
+    "tags": [
+      "cache",
+      "database",
+      "redis"
+    ],
+    "isStarred": false,
+    "folderId": 8,
+    "folderUid": "ef269ulsakxdsc",
+    "folderTitle": "Database",
+    "folderUrl": "/monitoring/dashboards/f/ef269ulsakxdsc/database",
+    "sortMeta": 0,
+    "isDeleted": false
+  },
+  {
+    "id": 1,
+    "uid": "scholarship-overview",
+    "orgId": 1,
+    "title": "Scholarship System Overview",
+    "uri": "db/scholarship-system-overview",
+    "url": "/monitoring/d/scholarship-overview/scholarship-system-overview",
+    "slug": "",
+    "type": "dash-db",
+    "tags": [
+      "overview",
+      "scholarship-system"
+    ],
+    "isStarred": false,
+    "sortMeta": 0,
+    "isDeleted": false
+  },
+  {
+    "id": 3,
+    "uid": "node-exporter-system",
+    "orgId": 1,
+    "title": "System Monitoring (Node Exporter)",
+    "uri": "db/system-monitoring-node-exporter",
+    "url": "/monitoring/d/node-exporter-system/system-monitoring-node-exporter",
+    "slug": "",
+    "type": "dash-db",
+    "tags": [
+      "node-exporter",
+      "system"
+    ],
+    "isStarred": false,
+    "folderId": 2,
+    "folderUid": "ff0qa6pr08g74b",
+    "folderTitle": "System",
+    "folderUrl": "/monitoring/dashboards/f/ff0qa6pr08g74b/system",
+    "sortMeta": 0,
+    "isDeleted": false
+  }
+]

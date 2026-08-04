@@ -1,7 +1,20 @@
 "use client";
 
 import React, { useState, useCallback, useEffect, useTransition } from "react";
+import { logger } from "@/lib/utils/logger";
 import { apiClient } from "@/lib/api";
+
+/**
+ * Coerce a caught error to a user-presentable string. The `error` argument
+ * is `unknown` because TypeScript widens caught values for safety; this
+ * helper centralizes the narrowing so each catch block doesn't need its own
+ * `instanceof Error` boilerplate.
+ */
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "string" && error) return error;
+  return fallback;
+}
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -49,10 +62,10 @@ interface PeriodOption {
 
 type ValidationWarning =
   | {
-      row?: number;
-      field?: string;
-      message?: string;
-      warning_type?: string;
+      row?: number | null;
+      field?: string | null;
+      message?: string | null;
+      warning_type?: string | null;
     }
   | string;
 
@@ -60,7 +73,7 @@ interface UploadedBatch {
   batch_id: number;
   file_name: string;
   total_records: number;
-  preview_data: Array<Record<string, any>>;
+  preview_data: Array<Record<string, unknown>>;
   validation_summary: {
     valid_count: number;
     invalid_count: number;
@@ -151,10 +164,10 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
     try {
       const response = await apiClient.admin.getMyScholarships();
       if (response.success && response.data) {
-        setScholarships(response.data);
+        setScholarships(response.data as Scholarship[]);
       }
     } catch (error) {
-      console.error("Failed to fetch scholarships:", error);
+      logger.error("Failed to fetch scholarships", { error: error });
       setError(locale === "zh" ? "無法載入獎學金列表" : "Failed to load scholarships");
     } finally {
       setIsLoadingScholarships(false);
@@ -177,7 +190,7 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
         }
       }
     } catch (error) {
-      console.error("Failed to fetch periods:", error);
+      logger.error("Failed to fetch periods", { error: error });
       setError(locale === "zh" ? "無法載入學年學期選項" : "Failed to load period options");
     } finally {
       setIsLoadingPeriods(false);
@@ -191,7 +204,7 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
         setHistory(response.data.items);
       }
     } catch (error) {
-      console.error("Failed to fetch import history:", error);
+      logger.error("Failed to fetch import history", { error: error });
     }
   };
 
@@ -241,8 +254,10 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
 
     try {
       await apiClient.batchImport.downloadTemplate(selectedScholarship.code);
-    } catch (error: any) {
-      setError(error.message || (locale === "zh" ? "下載範例檔案失敗" : "Failed to download template"));
+    } catch (error) {
+      setError(
+        getErrorMessage(error, locale === "zh" ? "下載範例檔案失敗" : "Failed to download template")
+      );
     }
   };
 
@@ -265,7 +280,7 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
         selectedFile,
         selectedScholarship.code,
         academicYear,
-        semester || ""
+        semester
       );
 
       if (response.success && response.data) {
@@ -274,8 +289,8 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
       } else {
         setError(response.message || (locale === "zh" ? "上傳失敗" : "Upload failed"));
       }
-    } catch (error: any) {
-      setError(error.message || (locale === "zh" ? "上傳時發生錯誤" : "Error during upload"));
+    } catch (error) {
+      setError(getErrorMessage(error, locale === "zh" ? "上傳時發生錯誤" : "Error during upload"));
     } finally {
       setIsUploading(false);
     }
@@ -309,8 +324,10 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
       } else {
         setError(response.message || (locale === "zh" ? "確認匯入失敗" : "Confirm import failed"));
       }
-    } catch (error: any) {
-      setError(error.message || (locale === "zh" ? "確認時發生錯誤" : "Error during confirmation"));
+    } catch (error) {
+      setError(
+        getErrorMessage(error, locale === "zh" ? "確認時發生錯誤" : "Error during confirmation")
+      );
     } finally {
       setIsConfirming(false);
     }
@@ -355,9 +372,12 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
           }
         }, 100);
       }
-    } catch (error: any) {
+    } catch (error) {
       setError(
-        error.message || (locale === "zh" ? "獲取批次詳情失敗" : "Failed to get batch details")
+        getErrorMessage(
+          error,
+          locale === "zh" ? "獲取批次詳情失敗" : "Failed to get batch details"
+        )
       );
     }
   };
@@ -386,9 +406,9 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
             (locale === "zh" ? "批次刪除成功" : "Batch deleted successfully")
         );
       }
-    } catch (error: any) {
+    } catch (error) {
       setError(
-        error.message || (locale === "zh" ? "刪除批次失敗" : "Failed to delete batch")
+        getErrorMessage(error, locale === "zh" ? "刪除批次失敗" : "Failed to delete batch")
       );
     }
   };
@@ -437,8 +457,10 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
         } else {
           setError(response.message || (locale === "zh" ? "刪除失敗" : "Delete failed"));
         }
-      } catch (error: any) {
-        setError(error.message || (locale === "zh" ? "刪除時發生錯誤" : "Error during deletion"));
+      } catch (error) {
+        setError(
+          getErrorMessage(error, locale === "zh" ? "刪除時發生錯誤" : "Error during deletion")
+        );
       }
     };
 
@@ -466,13 +488,18 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
                 <td className="border border-gray-200 px-4 py-2 text-sm font-medium">
                   {locale === "zh" ? `第 ${idx + 1} 筆` : `#${idx + 1}`}
                 </td>
-                {columns.map((col) => (
-                  <td key={col} className="border border-gray-200 px-4 py-2 text-sm">
-                    {typeof row[col] === 'object' && row[col] !== null
-                      ? JSON.stringify(row[col])
-                      : row[col] ?? ''}
-                  </td>
-                ))}
+                {columns.map((col) => {
+                  const cell = row[col];
+                  const display: string | number | boolean =
+                    typeof cell === "object" && cell !== null
+                      ? JSON.stringify(cell)
+                      : (cell as string | number | boolean | null | undefined) ?? "";
+                  return (
+                    <td key={col} className="border border-gray-200 px-4 py-2 text-sm">
+                      {display}
+                    </td>
+                  );
+                })}
                 <td className="border border-gray-200 px-4 py-2 text-sm">
                   <Button
                     variant="ghost"
@@ -850,12 +877,14 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
                               onClick={async () => {
                                 try {
                                   await apiClient.batchImport.downloadFile(item.id);
-                                } catch (error: any) {
+                                } catch (error) {
                                   setError(
-                                    error.message ||
-                                      (locale === "zh"
+                                    getErrorMessage(
+                                      error,
+                                      locale === "zh"
                                         ? "下載檔案失敗"
-                                        : "Failed to download file")
+                                        : "Failed to download file"
+                                    )
                                   );
                                 }
                               }}

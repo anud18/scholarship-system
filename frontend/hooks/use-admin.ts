@@ -7,6 +7,7 @@ import {
   ScholarshipStats,
   SubTypeStats,
 } from "@/lib/api";
+import { logger } from "@/lib/utils/logger";
 import { useAuth } from "@/hooks/use-auth";
 import { useScholarshipPermissions } from "./use-scholarship-permissions";
 
@@ -68,11 +69,12 @@ export function useAdminDashboard() {
       !user ||
       (user.role !== "admin" && user.role !== "super_admin")
     ) {
-      console.warn(
-        "fetchRecentApplications: User not authenticated or insufficient privileges",
+      logger.warn(
+        "fetchRecentApplications: user not authenticated or insufficient privileges",
         {
           isAuthenticated,
-          user: user ? { id: user.id, role: user.role } : null,
+          userId: user?.id,
+          role: user?.role,
         }
       );
       return;
@@ -82,17 +84,22 @@ export function useAdminDashboard() {
       setIsRecentLoading(true);
       setError(null);
 
-      console.log("Fetching recent applications...");
+      logger.debug("Fetching recent applications");
       const response = await apiClient.admin.getRecentApplications(5);
-      console.log("Recent applications response:", response);
+      logger.debug("Recent applications response received", {
+        success: response.success,
+        count: response.data?.length ?? 0,
+      });
 
       if (response.success && response.data) {
-        console.log("Setting recent applications:", response.data);
-        setRecentApplications(response.data);
+        setRecentApplications(response.data as Application[]);
       } else {
         const errorMsg =
           response.message || "Failed to fetch recent applications";
-        console.error("Recent applications fetch failed:", errorMsg, response);
+        logger.error("Recent applications fetch failed", {
+          errorMsg,
+          success: response.success,
+        });
         throw new Error(errorMsg);
       }
     } catch (err) {
@@ -100,7 +107,7 @@ export function useAdminDashboard() {
         err instanceof Error
           ? err.message
           : "Failed to fetch recent applications";
-      console.error("Error fetching recent applications:", err);
+      logger.error("Error fetching recent applications", { err });
       setError(errorMsg);
     } finally {
       setIsRecentLoading(false);
@@ -124,7 +131,7 @@ export function useAdminDashboard() {
       const response = await apiClient.admin.getSystemAnnouncements(5);
 
       if (response.success && response.data) {
-        setSystemAnnouncements(response.data);
+        setSystemAnnouncements(response.data as NotificationResponse[]);
       } else {
         throw new Error(
           response.message || "Failed to fetch system announcements"
@@ -163,7 +170,7 @@ export function useAdminDashboard() {
         );
 
         if (response.success && response.data) {
-          setAllApplications(response.data.items);
+          setAllApplications(response.data.items as Application[]);
           setPagination({
             page: response.data.page,
             size: response.data.size,
@@ -197,7 +204,7 @@ export function useAdminDashboard() {
         if (response.success && response.data) {
           // Update the application in the list
           setAllApplications(prev =>
-            prev.map(app => (app.id === applicationId ? response.data! : app))
+            prev.map(app => (app.id === applicationId ? response.data! as Application : app))
           );
 
           // Refresh stats to reflect the change
@@ -297,16 +304,27 @@ export function useCollegeApplications() {
 
         if (response.success && response.data) {
           // Transform data to ensure consistent field mapping
-          const transformedApplications = response.data.map((app: any) => ({
-            ...app,
-            // Ensure student fields are correctly mapped
-            student_name:
-              app.student_name ||
-              app.student_info?.display_name ||
-              "未提供姓名",
-            student_id:
-              app.student_id || app.student_info?.student_id_masked || "N/A",
-          }));
+          const transformedApplications = response.data.map(app => {
+            // Loose typing for fields not on the canonical Application
+            // type (the college-review endpoint includes a denormalized
+            // `student_info` block plus already-flattened student_name /
+            // student_id strings). We narrow only the read fields.
+            const a = app as Application & {
+              student_info?: {
+                display_name?: string;
+                student_id_masked?: string;
+              };
+            };
+            return {
+              ...a,
+              student_name:
+                a.student_name ||
+                a.student_info?.display_name ||
+                "未提供姓名",
+              student_id:
+                a.student_id || a.student_info?.student_id_masked || "N/A",
+            };
+          });
           setApplications(transformedApplications);
         } else {
           throw new Error(
@@ -357,10 +375,10 @@ export function useCollegeApplications() {
         if (response.success && response.data) {
           // Update the application in the list
           setApplications(prev =>
-            prev.map(app => (app.id === applicationId ? response.data! : app))
+            prev.map(app => (app.id === applicationId ? response.data! as Application : app))
           );
 
-          return response.data;
+          return response.data as Application;
         } else {
           throw new Error(
             response.message || "Failed to update application status"
@@ -429,7 +447,7 @@ export function useScholarshipSpecificApplications() {
         if (user.role === "admin" || user.role === "college") {
           // Create objects with both id and code for filtering
           const scholarshipObjects = types.map(type => ({
-            id: response.data![type].id, // Use the actual scholarship ID
+            id: (response.data![type] as { id: number }).id, // Use the actual scholarship ID
             code: type, // Keep the code for reference
           }));
 
@@ -451,7 +469,7 @@ export function useScholarshipSpecificApplications() {
       }
       return [];
     } catch (err) {
-      console.error("Failed to fetch scholarship types:", err);
+      logger.error("Failed to fetch scholarship types", { err });
       return [];
     }
   }, [isAuthenticated, user, filterScholarshipsByPermission]);
@@ -463,8 +481,8 @@ export function useScholarshipSpecificApplications() {
       !user ||
       !["admin", "super_admin", "college", "professor"].includes(user.role)
     ) {
-      console.log(
-        "User not authenticated or insufficient privileges for scholarship-specific applications"
+      logger.debug(
+        "fetchApplicationsByType: user not authenticated or insufficient privileges"
       );
       return;
     }
@@ -473,13 +491,13 @@ export function useScholarshipSpecificApplications() {
       setIsLoading(true);
       setError(null);
 
-      console.log("Fetching scholarship types...");
+      logger.debug("Fetching scholarship types");
       // First get scholarship types from backend (already filtered by permissions)
       const types = await fetchScholarshipTypes();
-      console.log("Scholarship types received:", types);
+      logger.debug("Scholarship types received", { count: types?.length ?? 0 });
 
       if (!types || types.length === 0) {
-        console.log("No scholarship types found, setting empty applications");
+        logger.debug("No scholarship types found, clearing applications");
         setApplicationsByType({});
         return;
       }
@@ -489,31 +507,36 @@ export function useScholarshipSpecificApplications() {
       // Fetch applications for each scholarship type
       for (const type of types) {
         try {
-          console.log(`Fetching applications for scholarship type: ${type}`);
+          logger.debug("Fetching applications for scholarship type", { type });
           const response =
             await apiClient.admin.getApplicationsByScholarship(type);
-          console.log(`Response for ${type}:`, response);
 
           if (response.success && response.data) {
-            applications[type] = response.data;
-            console.log(
-              `Found ${response.data.length} applications for ${type}`
-            );
+            applications[type] = response.data as Application[];
+            logger.debug("Applications fetched for type", {
+              type,
+              count: response.data.length,
+            });
           } else {
             applications[type] = [];
-            console.log(`No applications found for ${type}`);
+            logger.debug("No applications found for type", { type });
           }
         } catch (typeError) {
-          console.error(`Failed to fetch applications for ${type}:`, typeError);
+          logger.error("Failed to fetch applications for type", {
+            type,
+            typeError,
+          });
           applications[type] = [];
         }
       }
 
-      console.log("Final applications by type:", applications);
+      logger.debug("Final applications-by-type tally", {
+        typeCount: Object.keys(applications).length,
+      });
       setApplicationsByType(applications);
     } catch (err) {
       setError("Failed to fetch scholarship-specific applications");
-      console.error("Error fetching scholarship-specific applications:", err);
+      logger.error("Error fetching scholarship-specific applications", { err });
     } finally {
       setIsLoading(false);
     }
@@ -542,7 +565,7 @@ export function useScholarshipSpecificApplications() {
           );
         }
       } catch (error) {
-        console.error("Failed to update application status:", error);
+        logger.error("Failed to update application status", { error });
         throw error;
       }
     },
@@ -594,7 +617,7 @@ export function useScholarshipReview() {
       const response = await apiClient.admin.getScholarshipStats();
 
       if (response.success && response.data) {
-        setScholarshipStats(response.data);
+        setScholarshipStats(response.data as Record<string, ScholarshipStats>);
       } else {
         throw new Error(
           response.message || "Failed to fetch scholarship stats"
@@ -631,7 +654,7 @@ export function useScholarshipReview() {
         if (response.success && response.data) {
           setApplicationsByScholarship(prev => ({
             ...prev,
-            [scholarshipCode]: response.data || [],
+            [scholarshipCode]: (response.data as Application[]) || [],
           }));
         } else {
           throw new Error(response.message || "Failed to fetch applications");
@@ -664,7 +687,7 @@ export function useScholarshipReview() {
         if (response.success && response.data) {
           setSubTypeStats(prev => ({
             ...prev,
-            [scholarshipCode]: response.data || [],
+            [scholarshipCode]: (response.data as SubTypeStats[]) || [],
           }));
         } else {
           throw new Error(response.message || "Failed to fetch sub-type stats");
@@ -701,7 +724,7 @@ export function useScholarshipReview() {
           );
         }
       } catch (error) {
-        console.error("Failed to update application status:", error);
+        logger.error("Failed to update application status", { error });
         throw error;
       }
     },

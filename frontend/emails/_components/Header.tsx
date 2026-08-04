@@ -45,7 +45,7 @@ export const Header = () => {
           letterSpacing: '0.3px',
         }}
       >
-        獎學金申請與簽核系統
+        獎學金申請與審核系統
       </Text>
       <Text
         className="text-blue-100 text-xs m-0 mt-1"

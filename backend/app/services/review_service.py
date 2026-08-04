@@ -4,16 +4,54 @@ Review Service
 統一審查服務，處理所有角色的審查邏輯
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
+from app.core.exceptions import AuthorizationError, NotFoundError
+from app.models.audit_log import AuditAction, AuditLog
 from app.models.application import Application
+from app.models.enums import ReviewStage
 from app.models.review import ApplicationReview, ApplicationReviewItem
-from app.models.user import User
+from app.models.user import User, UserRole
+
+# Stages at or beyond "college review starts" — once an application reaches any
+# of these, professor review edits/submits are locked for non-admin users.
+# (See issue #64.)  professor_review and professor_reviewed remain editable so
+# professors can still iterate on their own input before the college takes over.
+# Synthetic sub-type both review dialogs fall back to when a scholarship exposes
+# no active sub-type config (see FALLBACK_SUB_TYPE in the frontend components).
+FALLBACK_SUB_TYPE_CODE = "default"
+
+LOCKED_STAGES_FOR_PROFESSOR_REVIEW = frozenset(
+    {
+        ReviewStage.college_review.value,
+        ReviewStage.college_reviewed.value,
+        ReviewStage.college_ranking.value,
+        ReviewStage.college_ranked.value,
+        ReviewStage.admin_review.value,
+        ReviewStage.admin_reviewed.value,
+        ReviewStage.quota_distribution.value,
+        ReviewStage.quota_distributed.value,
+        ReviewStage.roster_preparation.value,
+        ReviewStage.roster_prepared.value,
+        ReviewStage.roster_submitted.value,
+        ReviewStage.completed.value,
+        ReviewStage.archived.value,
+    }
+)
+
+
+def is_professor_review_locked(application: Application) -> bool:
+    """True if professor review on this application is locked because college
+    review (or a later stage) has begun."""
+    stage = application.review_stage
+    # SQLAlchemy may return either the enum instance or its string value
+    stage_value = getattr(stage, "value", stage)
+    return stage_value in LOCKED_STAGES_FOR_PROFESSOR_REVIEW
 
 
 class ReviewService:
@@ -21,6 +59,30 @@ class ReviewService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    @staticmethod
+    def _normalized_subtypes(application: Application) -> List[str]:
+        """該申請配置的完整子項目代碼清單（小寫並去除空白，無設定則回退為單一 "default" 項）."""
+        raw_subtypes = application.scholarship_subtype_list or []
+        normalized = [code.lower().strip() if isinstance(code, str) else code for code in raw_subtypes]
+        return normalized or ["default"]
+
+    async def assert_professor_review_unlocked(self, application_id: int, current_user: User) -> None:
+        """
+        Guard: raise AuthorizationError if professor review on this application is
+        locked because college review (or beyond) has begun. Admins / super_admins
+        bypass the lock to keep the manual-intervention escape hatch open (#64).
+        """
+        if current_user.role in (UserRole.admin, UserRole.super_admin):
+            return
+
+        application = await self.db.get(Application, application_id)
+        if not application:
+            raise NotFoundError(f"Application {application_id} not found")
+
+        if is_professor_review_locked(application):
+            stage_value = getattr(application.review_stage, "value", application.review_stage)
+            raise AuthorizationError(f"教授審核已鎖定：本申請已進入「{stage_value}」階段，學院審核中無法再修改")
 
     async def get_subtype_cumulative_status(self, application_id: int) -> Dict[str, Dict[str, Any]]:
         """
@@ -134,13 +196,10 @@ class ReviewService:
             return []
 
         # 取得所有子項目（正規化為小寫並去除空白）
-        raw_subtypes = application.scholarship_subtype_list or []
-        all_subtypes = [code.lower().strip() if isinstance(code, str) else code for code in raw_subtypes]
-        if not all_subtypes:
-            all_subtypes = ["default"]
+        all_subtypes = self._normalized_subtypes(application)
 
         logger.info(f"[Auth Debug] Application {application_id} - Role: {current_user_role}")
-        logger.info(f"[Auth Debug] Raw sub-types from DB: {raw_subtypes}")
+        logger.info(f"[Auth Debug] Raw sub-types from DB: {application.scholarship_subtype_list}")
         logger.info(f"[Auth Debug] Normalized all_subtypes: {all_subtypes}")
 
         # 取得子項目累積狀態
@@ -252,6 +311,82 @@ class ReviewService:
         logger.warning(f"[Auth Debug] Unknown role '{role_str}' (original: {current_user_role}) - returning empty list")
         return []
 
+    async def validate_review_submission(
+        self,
+        application_id: int,
+        current_user: User,
+        submitted_codes: List[str],
+    ) -> List[str]:
+        """Validate that a review submission matches the sub-types this reviewer
+        may currently decide, and return the normalised codes.
+
+        Two independent checks:
+
+        * **membership** — every submitted code must be in the reviewer's
+          reviewable set. Without it a caller could record a verdict on a
+          sub-type already rejected upstream, or one the student never applied
+          for.
+        * **coverage** — every sub-type the reviewer can actually decide must
+          appear in the submission. A review is stored as ONE row per reviewer
+          whose items are deleted and recreated on each submit, so a partial
+          payload silently destroys the reviewer's earlier verdicts (the
+          dialogs re-hydrate prior items, but fall back to all-"pending"
+          whenever that fetch fails). Requiring full coverage makes a truncated
+          payload a loud 422 instead of quiet data loss, and keeps the
+          application's status resolvable — see ``update_application_status``.
+
+        Coverage is deliberately scoped to what the reviewer's form can render
+        rather than to ``reviewable`` outright. ``reviewable`` comes from
+        ``Application.scholarship_subtype_list``, while the form lists only
+        applied sub-types that still have an ACTIVE ``ScholarshipSubTypeConfig``
+        row. Those two can legitimately diverge — sub-types are quotas-driven,
+        so an admin can introduce one with no config row at all, and an existing
+        config can be deactivated mid-cycle. Demanding a sub-type the form
+        cannot show would leave the application permanently unsubmittable, so
+        an undecidable sub-type is skipped; the application simply stays at
+        ``under_review`` until the configuration is fixed.
+
+        Raises:
+            AuthorizationError: a submitted sub-type is not reviewable (403).
+            BusinessLogicError: duplicate or missing sub-types (422).
+        """
+        from app.core.exceptions import BusinessLogicError
+        from app.services.application_service import ApplicationService
+
+        reviewable = await self.get_reviewable_subtypes(application_id, current_user.role)
+        available = await ApplicationService(self.db).get_application_available_sub_types(application_id, current_user)
+        renderable = {(opt.get("value") or "").lower().strip() for opt in available if isinstance(opt, dict)}
+
+        normalized = [code.lower().strip() if isinstance(code, str) else code for code in submitted_codes]
+
+        duplicates = sorted({code for code in normalized if normalized.count(code) > 1})
+        if duplicates:
+            raise BusinessLogicError(f"同一子項目不可重複提交：{'、'.join(str(c) for c in duplicates)}")
+
+        if renderable:
+            allowed = set(reviewable)
+            required = [code for code in reviewable if code in renderable]
+        else:
+            # The scholarship exposes no active sub-type config, so both review
+            # dialogs collapse to a single synthetic "default" item. Accept it
+            # instead of 403-ing a reviewer who has nothing else to choose.
+            allowed = set(reviewable) | {FALLBACK_SUB_TYPE_CODE}
+            required = []
+
+        unauthorized = [code for code in normalized if code not in allowed]
+        if unauthorized:
+            raise AuthorizationError(
+                f"您無權審查子項目 {'、'.join(str(c) for c in unauthorized)}（該子項目可能已被前位審查者拒絕）"
+            )
+
+        missing = [code for code in required if code not in normalized]
+        if missing:
+            raise BusinessLogicError(
+                f"必須完成所有可審查子項目才能送出，尚未評估：{'、'.join(str(c) for c in missing)}"
+            )
+
+        return normalized
+
     async def calculate_overall_recommendation(self, items: List[Dict[str, Any]]) -> str:
         """
         根據子項目審查結果計算整體建議
@@ -319,6 +454,23 @@ class ReviewService:
         rejected_items = [item for item in items if item.get("recommendation") == "reject"]
 
         if not rejected_items:
+            # G7 (#969): decision_reason is an append-only narrative. When a
+            # re-review APPROVES everything but earlier rejection text exists,
+            # append an explicit closing line — otherwise the stale rejection
+            # reads as the current decision.
+            if application.decision_reason:
+                role_value = reviewer.role.value if hasattr(reviewer.role, "value") else str(reviewer.role).lower()
+                role_name = {
+                    "professor": "教授",
+                    "college": "學院",
+                    "admin": "管理員",
+                    "super_admin": "系統管理員",
+                }.get(role_value, role_value)
+                timestamp = reviewed_at.strftime("%Y-%m-%d %H:%M:%S")
+                application.decision_reason += (
+                    f"\n\n[{timestamp}] {role_name} ({reviewer.name}): 重新審核後同意"
+                    f"（上方先前退件理由保留供稽核，不再適用）"
+                )
             return
 
         # 角色名稱對應 - 先提取 role 字符串值
@@ -364,9 +516,45 @@ class ReviewService:
         application.review_stage = new_stage
         await self.db.flush()
 
+    async def _awaits_further_required_review(
+        self, application: Application, latest_reviewer_role: Optional[str]
+    ) -> bool:
+        """Whether the configured pipeline still expects another required reviewer.
+
+        Issue #182: a single professor "approve" used to flip ``status`` to
+        ``approved`` even when ``requires_college_review=True``, which both
+        bypassed college review and locked the student out of ``withdraw``
+        (only ``submitted``/``under_review`` are withdrawable). Returning
+        True here keeps the app at ``under_review`` until the college (or
+        any later required role) signs off.
+        """
+        if not latest_reviewer_role or not application.scholarship_configuration_id:
+            return False
+        from app.models.scholarship import ScholarshipConfiguration
+
+        config = await self.db.get(ScholarshipConfiguration, application.scholarship_configuration_id)
+        if not config:
+            return False
+        # College is the only post-professor required-reviewer surface today.
+        # Add chained gates here as the pipeline grows (admin, finance, …).
+        # Renewals carry their own admin-configured college-review flag.
+        requires_college = config.requires_college_review_for(bool(application.is_renewal))
+        return latest_reviewer_role == "professor" and requires_college
+
     async def update_application_status(self, application_id: int) -> str:
         """
         根據子項目累積狀態更新 Application 狀態和階段
+
+        A verdict (approved/rejected/partial_approved) is only final once every
+        sub-type the application was configured with has actually been decided
+        by someone. Reviewers (professors especially — the UI's "審核進度 X/N"
+        supports submitting one sub-type at a time) may leave some sub-types
+        untouched in a given submission; `get_subtype_cumulative_status` simply
+        omits those from its result, so judging all_approved/all_rejected over
+        that partial set alone would prematurely finalize the application (and,
+        for an all-reject submission, permanently lock the professor out — see
+        the professor-reject-is-terminal policy) before the remaining sub-types
+        are ever reviewed.
 
         Args:
             application_id: 申請 ID
@@ -386,19 +574,16 @@ class ReviewService:
         if not subtype_status:
             return application.status
 
-        # 計算整體狀態（用戶可見）
-        all_approved = all(status["status"] == "approved" for status in subtype_status.values())
-        all_rejected = all(status["status"] == "rejected" for status in subtype_status.values())
+        # 是否每一個設定好的子項目都已經有人做出決定
+        all_subtypes = self._normalized_subtypes(application)
+        all_subtypes_reviewed = set(all_subtypes) <= set(subtype_status.keys())
 
-        if all_approved:
-            application.status = ApplicationStatus.approved.value
-        elif all_rejected:
-            application.status = ApplicationStatus.rejected.value
-        else:
-            # 部分核准
-            application.status = ApplicationStatus.partial_approved.value
+        # 計算整體狀態（用戶可見）— 未涵蓋全部子項目前不視為定案
+        all_approved = all_subtypes_reviewed and all(s["status"] == "approved" for s in subtype_status.values())
+        all_rejected = all_subtypes_reviewed and all(s["status"] == "rejected" for s in subtype_status.values())
 
-        # 更新審核階段（基於最新審查者角色）
+        # Determine latest reviewer role first — used both for review_stage
+        # below AND for gating the terminal status transitions (issue #182).
         stmt = (
             select(ApplicationReview)
             .where(ApplicationReview.application_id == application_id)
@@ -408,22 +593,101 @@ class ReviewService:
         result = await self.db.execute(stmt)
         latest_review = result.scalar_one_or_none()
 
+        latest_reviewer_role: Optional[str] = None
         if latest_review and latest_review.reviewer:
-            reviewer_role = (
+            latest_reviewer_role = (
                 latest_review.reviewer.role.value
                 if hasattr(latest_review.reviewer.role, "value")
                 else str(latest_review.reviewer.role).lower()
             )
 
-            # 根據審查者角色更新階段
-            if reviewer_role == "professor":
-                application.review_stage = ReviewStage.professor_reviewed.value
-            elif reviewer_role == "college":
-                application.review_stage = ReviewStage.college_reviewed.value
-            elif reviewer_role in ["admin", "super_admin"]:
-                application.review_stage = ReviewStage.admin_reviewed.value
+        awaits_further = await self._awaits_further_required_review(application, latest_reviewer_role)
+
+        if not all_subtypes_reviewed:
+            # 還有子項目沒人審過 — 無論目前已決定的部分是同意還是拒絕，都還不是定案。
+            # Only ever move FORWARD out of a pre-decision status: a record that
+            # already carries a final outcome (e.g. legacy data whose missing
+            # sub-type is no longer decidable, or an application the college has
+            # since settled) must not silently regress to under_review and get
+            # stuck there.
+            current_status = getattr(application.status, "value", application.status)
+            if current_status in (
+                ApplicationStatus.draft.value,
+                ApplicationStatus.submitted.value,
+                ApplicationStatus.under_review.value,
+            ):
+                application.status = ApplicationStatus.under_review.value
+        elif all_approved:
+            application.status = (
+                ApplicationStatus.under_review.value if awaits_further else ApplicationStatus.approved.value
+            )
+        elif all_rejected:
+            application.status = ApplicationStatus.rejected.value
+        else:
+            # 部分同意（子項目意見不一致）
+            application.status = (
+                ApplicationStatus.under_review.value if awaits_further else ApplicationStatus.partial_approved.value
+            )
+
+        # 根據審查者角色更新階段
+        if latest_reviewer_role == "professor":
+            application.review_stage = ReviewStage.professor_reviewed.value
+        elif latest_reviewer_role == "college":
+            application.review_stage = ReviewStage.college_reviewed.value
+        elif latest_reviewer_role in ("admin", "super_admin"):
+            application.review_stage = ReviewStage.admin_reviewed.value
 
         return application.status
+
+    def _snapshot_review(self, review) -> Dict[str, Any]:
+        """Serializable snapshot of a review + its sub-type items (G6/#968)."""
+        return {
+            "recommendation": review.recommendation,
+            "comments": review.comments,
+            "reviewed_at": review.reviewed_at.isoformat() if review.reviewed_at else None,
+            "items": [
+                {
+                    "sub_type_code": item.sub_type_code,
+                    "recommendation": item.recommendation,
+                    "comments": item.comments,
+                }
+                for item in (review.items or [])
+            ],
+        }
+
+    def _audit_review_revision(
+        self,
+        review,
+        reviewer_id: int,
+        old_snapshot: Dict[str, Any] | None,
+        new_items: List[Dict[str, Any]],
+        overall_recommendation: str,
+        combined_comments: str,
+    ) -> None:
+        """G6 (#968): re-reviews overwrite in place and hard-delete old items —
+        the ONLY durable version history is this audit row. old_values carries
+        the full prior review (incl. per-sub-type decisions); new_values the
+        replacement. Browse via the 稽核日誌 tab (resource_type
+        application_review)."""
+        self.db.add(
+            AuditLog.create_log(
+                user_id=reviewer_id,
+                action=(AuditAction.update.value if old_snapshot else AuditAction.create.value),
+                resource_type="application_review",
+                resource_id=str(review.id),
+                description=(
+                    f"review {'revised' if old_snapshot else 'created'} for application "
+                    f"{review.application_id}: {overall_recommendation}"
+                ),
+                old_values=old_snapshot,
+                new_values={
+                    "recommendation": overall_recommendation,
+                    "comments": combined_comments,
+                    "items": new_items,
+                },
+                meta_data={"application_id": review.application_id},
+            )
+        )
 
     async def create_review(
         self,
@@ -465,10 +729,14 @@ class ReviewService:
         existing_review = result.scalar_one_or_none()
 
         if existing_review:
+            # G6 (#968): preserve the prior version BEFORE overwriting — the
+            # old recommendation/comments/items would otherwise be lost.
+            prior_snapshot = self._snapshot_review(existing_review)
+
             # 更新現有記錄
             existing_review.recommendation = overall_recommendation
             existing_review.comments = combined_comments
-            existing_review.reviewed_at = datetime.utcnow()
+            existing_review.reviewed_at = datetime.now(timezone.utc)
 
             # 刪除舊的子項目記錄
             for old_item in existing_review.items:
@@ -483,11 +751,20 @@ class ReviewService:
                 reviewer_id=reviewer_id,
                 recommendation=overall_recommendation,
                 comments=combined_comments,
-                reviewed_at=datetime.utcnow(),
+                reviewed_at=datetime.now(timezone.utc),
             )
             self.db.add(review)
+            prior_snapshot = None
 
         await self.db.flush()  # 取得 review.id
+        self._audit_review_revision(
+            review,
+            reviewer_id=reviewer_id,
+            old_snapshot=prior_snapshot,
+            new_items=items,
+            overall_recommendation=overall_recommendation,
+            combined_comments=combined_comments,
+        )
 
         # 建立新的子項目審查記錄
         for item in items:
@@ -566,6 +843,9 @@ class ReviewService:
         if not review:
             return None
 
+        # G6 (#968): preserve the prior version before the in-place overwrite.
+        prior_snapshot = self._snapshot_review(review)
+
         # 刪除舊的子項目
         for old_item in review.items:
             await self.db.delete(old_item)
@@ -592,7 +872,16 @@ class ReviewService:
         # 更新審查記錄
         review.recommendation = overall_recommendation
         review.comments = combined_comments
-        review.reviewed_at = datetime.utcnow()
+        review.reviewed_at = datetime.now(timezone.utc)
+
+        self._audit_review_revision(
+            review,
+            reviewer_id=review.reviewer_id,
+            old_snapshot=prior_snapshot,
+            new_items=items,
+            overall_recommendation=overall_recommendation,
+            combined_comments=combined_comments,
+        )
 
         await self.db.commit()
         await self.db.refresh(review)
@@ -601,8 +890,9 @@ class ReviewService:
         reviewer = await self.db.get(User, review.reviewer_id)
         application = await self.db.get(Application, review.application_id)
         if application and reviewer:
-            # 清除舊的 decision_reason（因為是更新）
-            # 在實務上可能需要更複雜的邏輯來處理
+            # decision_reason is append-only by design (the audit narrative);
+            # update_decision_reason appends the latest verdict — including an
+            # explicit 同意 closing line when nothing is rejected (G7/#969).
             await self.update_decision_reason(application, reviewer, items, review.reviewed_at)
 
         # 更新申請狀態

@@ -3,8 +3,10 @@ Scholarship Configuration Management API endpoints
 Clean, database-driven approach for dynamic scholarship configuration management
 """
 
+import logging
 from typing import Any, Dict, List, Optional
 
+from pydantic import BaseModel
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import and_
@@ -14,14 +16,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy.orm.attributes import flag_modified
 
+from app.core.cache import invalidate
 from app.core.security import require_admin, require_staff
 from app.db.deps import get_db
 
 # Student model removed - student data now fetched from external API
 from app.models.application import Application, ApplicationStatus
-from app.models.enums import Semester
+from app.models.enums import QuotaManagementMode, Semester
+from app.models.audit_log import AuditAction, AuditLog
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
+from app.models.student import Academy
 from app.models.user import AdminScholarship, User
+from app.utils.quota_validation import validate_quota_matrix
 from app.schemas.response import ApiResponse
 from app.schemas.scholarship_configuration import (
     WhitelistBatchAddRequest,
@@ -32,7 +38,58 @@ from app.schemas.scholarship_configuration import (
 )
 from app.services.whitelist_excel_service import whitelist_excel_service
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
+
+
+async def _validate_shared_quota_sources(
+    db: AsyncSession,
+    shared_quota_sources: Optional[List[Dict[str, Any]]],
+    requesting_academic_year: int,
+) -> None:
+    """Imperative link validation (spec §10 — no DB FK on source_config_code).
+
+    Each entry's source_config_code must resolve to an existing config with
+    academic_year strictly less than the requesting config's, and every listed
+    sub_type must be defined in that source config's quotas matrix. Fail-fast
+    with HTTP 400 so a dangling link never reaches the distribution pool reader.
+    """
+    if not shared_quota_sources:
+        return
+
+    for entry in shared_quota_sources:
+        source_code = entry.get("source_config_code")
+        sub_types = entry.get("sub_types") or []
+        if not source_code:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="共享配額來源缺少 source_config_code",
+            )
+
+        source_stmt = select(ScholarshipConfiguration).where(ScholarshipConfiguration.config_code == source_code)
+        source_result = await db.execute(source_stmt)
+        source_config = source_result.scalar_one_or_none()
+
+        if source_config is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"共享配額來源配置不存在: {source_code}",
+            )
+
+        if source_config.academic_year >= requesting_academic_year:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"共享配額來源 {source_code} 的學年度必須早於本配置",
+            )
+
+        defined_sub_types = set((source_config.quotas or {}).keys())
+        for st in sub_types:
+            if st not in defined_sub_types:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"共享配額來源 {source_code} 未定義子類型: {st}",
+                )
 
 
 # Utility functions
@@ -44,6 +101,62 @@ def taiwan_to_western_year(taiwan_year: int) -> int:
 def western_to_taiwan_year(western_year: int) -> int:
     """Convert Western calendar year to Taiwan calendar year (民國年)"""
     return western_year - 1911
+
+
+DEFAULT_PHD_SUB_TYPES = ["nstc", "moe_1w", "moe_2w"]
+
+
+async def _resolve_quota_allowlists(db: AsyncSession, scholarship_type_id: int):
+    """Return (allowed_sub_types, allowed_college_codes) for matrix validation."""
+    sub_result = await db.execute(
+        select(ScholarshipType.sub_type_list).where(ScholarshipType.id == scholarship_type_id)
+    )
+    sub_types = sub_result.scalar_one_or_none() or DEFAULT_PHD_SUB_TYPES
+    col_result = await db.execute(select(Academy.code))
+    college_codes = list(col_result.scalars().all())
+    return sub_types, college_codes
+
+
+async def _apply_quota_fields(db: AsyncSession, config, config_data, *, scholarship_type_id: int):
+    """Assign quota fields from config_data onto config, validating the matrix.
+
+    Shared by create and update so the rules cannot drift. In matrix_based mode the
+    matrix is structurally re-validated (422 on violation) and total_quota is
+    recomputed as the sum of all cells (the body's total_quota is ignored).
+    """
+    if "quota_management_mode" in config_data:
+        raw_mode = config_data["quota_management_mode"]
+        if not raw_mode:
+            config.quota_management_mode = QuotaManagementMode.none
+        else:
+            resolved_mode = next((m for m in QuotaManagementMode if m.value == raw_mode), None)
+            if resolved_mode is None:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"未知的配額管理模式：{raw_mode}",
+                )
+            config.quota_management_mode = resolved_mode
+    if "has_quota_limit" in config_data:
+        config.has_quota_limit = config_data["has_quota_limit"]
+    if "has_college_quota" in config_data:
+        config.has_college_quota = config_data["has_college_quota"]
+
+    is_matrix = config.quota_management_mode == QuotaManagementMode.matrix_based
+    if "quotas" in config_data and config_data["quotas"] is not None:
+        quotas = config_data["quotas"]
+        if is_matrix:
+            sub_types, college_codes = await _resolve_quota_allowlists(db, scholarship_type_id)
+            errors = validate_quota_matrix(quotas, sub_types, college_codes)
+            if errors:
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="；".join(errors))
+            # matrix mode derives total_quota from the cell-sum; ignore any body total_quota
+            config.total_quota = sum(sum(row.values()) for row in quotas.values() if isinstance(row, dict))
+        elif "total_quota" in config_data:
+            config.total_quota = config_data["total_quota"]
+        config.quotas = quotas
+        flag_modified(config, "quotas")
+    elif "total_quota" in config_data and not is_matrix:
+        config.total_quota = config_data["total_quota"]
 
 
 async def get_user_accessible_scholarship_ids(user: User, db: AsyncSession) -> List[int]:
@@ -71,7 +184,7 @@ async def get_user_accessible_scholarship_ids(user: User, db: AsyncSession) -> L
 @router.get("/available-semesters")
 async def get_available_semesters(
     scholarship_code: Optional[str] = Query(
-        None, description="Filter periods by specific scholarship code", regex=r"^[a-z_]{1,50}$"
+        None, description="Filter periods by specific scholarship code", pattern=r"^[a-z_]{1,50}$"
     ),
     quota_management_mode: Optional[str] = Query(
         None, description="Filter periods by quota management mode (e.g., 'matrix')"
@@ -177,17 +290,12 @@ async def get_available_semesters(
         )
 
     except Exception as e:
-        import logging
-        import traceback
-
-        logger = logging.getLogger(__name__)
-        logger.error(f"Error in get_available_semesters: {type(e).__name__}: {str(e)}", exc_info=True)
-        logger.error(f"Full traceback: {traceback.format_exc()}")
+        logger.error("Error in get_available_semesters: %s: %s", type(e).__name__, e, exc_info=True)
 
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve available semesters: {str(e)}",
-        )
+            detail="Failed to retrieve available semesters",
+        ) from e
 
 
 @router.get("/matrix-quota-status/{period}")
@@ -203,7 +311,12 @@ async def get_matrix_quota_status(
         if "-" in period:
             academic_year_str, semester_str = period.split("-")
             academic_year = int(academic_year_str)
-            semester = Semester.first if semester_str == "1" else Semester.second
+            # Per APP-ID format: 1=first, 2=second, 0=yearly. The previous
+            # binary check silently misclassified '0' (yearly) as Semester.second.
+            semester_map = {"1": Semester.first, "2": Semester.second, "0": Semester.yearly}
+            semester = semester_map.get(semester_str)
+            if semester is None:
+                raise ValueError(f"Invalid semester code: {semester_str}")
         else:
             academic_year = int(period)
             semester = None
@@ -359,17 +472,14 @@ async def get_matrix_quota_status(
 
         return ApiResponse(success=True, message="Matrix quota status retrieved successfully", data=response_data)
 
-    except ValueError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid period format: {period}")
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid period format: {period}") from exc
     except Exception as e:
-        import logging
-
-        logger = logging.getLogger(__name__)
-        logger.error(f"Error in get_matrix_quota_status: {type(e).__name__}: {str(e)}", exc_info=True)
+        logger.error("Error in get_matrix_quota_status: %s: %s", type(e).__name__, e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve matrix quota status: {str(e)}",
-        )
+            detail="Failed to retrieve matrix quota status",
+        ) from e
 
 
 @router.put("/matrix-quota")
@@ -465,6 +575,12 @@ async def update_matrix_quota(
         await db.commit()
         await db.refresh(config)
 
+        # Cache invalidation: matrix quota changes affect refdata + form-config
+        # surfaces. quota:* prefix is owned by PR 2 (quota_service caching).
+        await invalidate("refdata:")
+        await invalidate("formconfig:")
+        await invalidate("quota:")
+
         return ApiResponse(
             success=True,
             message=f"Matrix quota updated: {sub_type} - {college}: {old_quota} → {new_quota}",
@@ -482,13 +598,10 @@ async def update_matrix_quota(
 
     except Exception as e:
         await db.rollback()
-        import logging
-
-        logger = logging.getLogger(__name__)
-        logger.error(f"Error in update_matrix_quota: {type(e).__name__}: {str(e)}", exc_info=True)
+        logger.error("Error in update_matrix_quota: %s: %s", type(e).__name__, e, exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update matrix quota: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update matrix quota"
+        ) from e
 
 
 @router.get("/colleges")
@@ -504,9 +617,10 @@ async def get_colleges(current_user: User = Depends(require_admin), db: AsyncSes
         return ApiResponse(success=True, message=f"Retrieved {len(colleges)} colleges", data=colleges)
 
     except Exception as e:
+        logger.exception("Failed to retrieve colleges")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve colleges: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve colleges"
+        ) from e
 
 
 @router.get("/scholarship-types")
@@ -549,6 +663,9 @@ async def get_scholarship_types(current_user: User = Depends(require_staff), db:
             latest_config = config_result.scalar_one_or_none()
 
             type_config = {
+                # Callers that key on the scholarship type itself (e.g. the
+                # 匯入已領月份數 dialog) need the id, not just the code.
+                "id": stype.id,
                 "code": stype.code,
                 "name": stype.name,
                 "name_en": stype.name_en or stype.name,
@@ -568,9 +685,10 @@ async def get_scholarship_types(current_user: User = Depends(require_staff), db:
         return ApiResponse(success=True, message=f"Retrieved {len(type_configs)} scholarship types", data=type_configs)
 
     except Exception as e:
+        logger.exception("Failed to retrieve scholarship types")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve scholarship types: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve scholarship types"
+        ) from e
 
 
 @router.get("/overview/{period}")
@@ -586,7 +704,11 @@ async def get_quota_overview(
         if "-" in period:
             academic_year_str, semester_str = period.split("-")
             academic_year = int(academic_year_str)
-            semester = Semester.first if semester_str == "1" else Semester.second
+            # Per APP-ID format: 1=first, 2=second, 0=yearly.
+            semester_map = {"1": Semester.first, "2": Semester.second, "0": Semester.yearly}
+            semester = semester_map.get(semester_str)
+            if semester is None:
+                raise ValueError(f"Invalid semester code: {semester_str}")
         else:
             academic_year = int(period)
             semester = None
@@ -697,12 +819,13 @@ async def get_quota_overview(
 
         return ApiResponse(success=True, message="Quota overview retrieved successfully", data=overview_data)
 
-    except ValueError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid period format: {period}")
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid period format: {period}") from exc
     except Exception as e:
+        logger.exception("Failed to retrieve quota overview")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve quota overview: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve quota overview"
+        ) from e
 
 
 # CRUD Endpoints for ScholarshipConfiguration Management
@@ -739,7 +862,24 @@ async def create_scholarship_configuration(
         if existing_config:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="此學年度/學期已存在配置")
 
+        # Validate cross-config borrow links before persisting (spec §10).
+        await _validate_shared_quota_sources(
+            db,
+            config_data.get("shared_quota_sources"),
+            requesting_academic_year=config_data["academic_year"],
+        )
+
         # Create new configuration
+        from app.utils.date_utils import parse_date_field
+
+        # Non-nullable boolean columns: only literal true enables a flag, so
+        # an explicit JSON null cannot reach the DB as None (500). Renewal
+        # review dates are only meaningful when the matching flag is on —
+        # drop them otherwise so no silently-ignored windows are persisted
+        # (mirrors ScholarshipConfigurationBase.validate_renewal_review_dates).
+        renewal_requires_professor_review = config_data.get("renewal_requires_professor_review") is True
+        renewal_requires_college_review = config_data.get("renewal_requires_college_review") is True
+
         new_config = ScholarshipConfiguration(
             scholarship_type_id=scholarship_type_id,
             academic_year=config_data["academic_year"],
@@ -751,31 +891,58 @@ async def create_scholarship_configuration(
             amount=config_data["amount"],
             currency=config_data.get("currency", "TWD"),
             whitelist_student_ids=config_data.get("whitelist_student_ids", {}),
-            renewal_application_start_date=config_data.get("renewal_application_start_date"),
-            renewal_application_end_date=config_data.get("renewal_application_end_date"),
-            application_start_date=config_data.get("application_start_date"),
-            application_end_date=config_data.get("application_end_date"),
-            renewal_professor_review_start=config_data.get("renewal_professor_review_start"),
-            renewal_professor_review_end=config_data.get("renewal_professor_review_end"),
-            renewal_college_review_start=config_data.get("renewal_college_review_start"),
-            renewal_college_review_end=config_data.get("renewal_college_review_end"),
+            renewal_application_start_date=parse_date_field(config_data.get("renewal_application_start_date")),
+            renewal_application_end_date=parse_date_field(config_data.get("renewal_application_end_date")),
+            application_start_date=parse_date_field(config_data.get("application_start_date")),
+            application_end_date=parse_date_field(config_data.get("application_end_date")),
+            renewal_requires_professor_review=renewal_requires_professor_review,
+            renewal_professor_review_start=(
+                parse_date_field(config_data.get("renewal_professor_review_start"))
+                if renewal_requires_professor_review
+                else None
+            ),
+            renewal_professor_review_end=(
+                parse_date_field(config_data.get("renewal_professor_review_end"))
+                if renewal_requires_professor_review
+                else None
+            ),
+            renewal_requires_college_review=renewal_requires_college_review,
+            renewal_college_review_start=(
+                parse_date_field(config_data.get("renewal_college_review_start"))
+                if renewal_requires_college_review
+                else None
+            ),
+            renewal_college_review_end=(
+                parse_date_field(config_data.get("renewal_college_review_end"))
+                if renewal_requires_college_review
+                else None
+            ),
             requires_professor_recommendation=config_data.get("requires_professor_recommendation", False),
-            professor_review_start=config_data.get("professor_review_start"),
-            professor_review_end=config_data.get("professor_review_end"),
+            professor_review_start=parse_date_field(config_data.get("professor_review_start")),
+            professor_review_end=parse_date_field(config_data.get("professor_review_end")),
             requires_college_review=config_data.get("requires_college_review", False),
-            college_review_start=config_data.get("college_review_start"),
-            college_review_end=config_data.get("college_review_end"),
-            review_deadline=config_data.get("review_deadline"),
+            college_review_start=parse_date_field(config_data.get("college_review_start")),
+            college_review_end=parse_date_field(config_data.get("college_review_end")),
+            review_deadline=parse_date_field(config_data.get("review_deadline")),
             is_active=config_data.get("is_active", True),
-            effective_start_date=config_data.get("effective_start_date"),
-            effective_end_date=config_data.get("effective_end_date"),
+            effective_start_date=parse_date_field(config_data.get("effective_start_date")),
+            effective_end_date=parse_date_field(config_data.get("effective_end_date")),
             version=config_data.get("version", "1.0"),
+            project_numbers=config_data.get("project_numbers"),
+            shared_quota_sources=config_data.get("shared_quota_sources"),
             created_by=current_user.id,
         )
+
+        # Persist + validate quota fields (create previously dropped them).
+        await _apply_quota_fields(db, new_config, config_data, scholarship_type_id=scholarship_type_id)
 
         db.add(new_config)
         await db.commit()
         await db.refresh(new_config)
+
+        await invalidate("refdata:")
+        await invalidate("formconfig:")
+        await invalidate("quota:")
 
         return ApiResponse(
             success=True,
@@ -787,9 +954,10 @@ async def create_scholarship_configuration(
         raise
     except Exception as e:
         await db.rollback()
+        logger.exception("Failed to create configuration")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create configuration: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create configuration"
+        ) from e
 
 
 @router.get("/configurations/{id}")
@@ -839,6 +1007,8 @@ async def get_scholarship_configuration(
             "quota_management_mode": config.quota_management_mode.value if config.quota_management_mode else "none",
             "total_quota": config.total_quota,
             "quotas": config.quotas,
+            "project_numbers": config.project_numbers,
+            "shared_quota_sources": config.shared_quota_sources,
             "renewal_application_start_date": (
                 config.renewal_application_start_date.isoformat() if config.renewal_application_start_date else None
             ),
@@ -849,12 +1019,14 @@ async def get_scholarship_configuration(
                 config.application_start_date.isoformat() if config.application_start_date else None
             ),
             "application_end_date": config.application_end_date.isoformat() if config.application_end_date else None,
+            "renewal_requires_professor_review": config.renewal_requires_professor_review,
             "renewal_professor_review_start": (
                 config.renewal_professor_review_start.isoformat() if config.renewal_professor_review_start else None
             ),
             "renewal_professor_review_end": (
                 config.renewal_professor_review_end.isoformat() if config.renewal_professor_review_end else None
             ),
+            "renewal_requires_college_review": config.renewal_requires_college_review,
             "renewal_college_review_start": (
                 config.renewal_college_review_start.isoformat() if config.renewal_college_review_start else None
             ),
@@ -871,6 +1043,8 @@ async def get_scholarship_configuration(
             "college_review_end": config.college_review_end.isoformat() if config.college_review_end else None,
             "review_deadline": config.review_deadline.isoformat() if config.review_deadline else None,
             "is_active": config.is_active,
+            "allow_supplementary_import": config.allow_supplementary_import,
+            "allow_college_view_distribution": config.allow_college_view_distribution,
             "effective_start_date": config.effective_start_date.isoformat() if config.effective_start_date else None,
             "effective_end_date": config.effective_end_date.isoformat() if config.effective_end_date else None,
             "version": config.version,
@@ -883,9 +1057,10 @@ async def get_scholarship_configuration(
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception("Failed to retrieve configuration")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve configuration: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve configuration"
+        ) from e
 
 
 @router.put("/configurations/{id}")
@@ -895,7 +1070,7 @@ async def update_scholarship_configuration(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Update a scholarship configuration (excluding quota fields)"""
+    """Update a scholarship configuration (quota fields included; matrix validated)."""
 
     try:
         # Get accessible scholarship IDs
@@ -942,7 +1117,14 @@ async def update_scholarship_configuration(
         if "application_end_date" in config_data:
             config.application_end_date = parse_date_field(config_data["application_end_date"])
 
-        # Update review periods
+        # Update review periods.
+        # The renewal_requires_* columns are non-nullable: only literal true
+        # enables a flag, so an explicit JSON null cannot reach the DB as
+        # None (integrity error → 500).
+        if "renewal_requires_professor_review" in config_data:
+            config.renewal_requires_professor_review = config_data["renewal_requires_professor_review"] is True
+        if "renewal_requires_college_review" in config_data:
+            config.renewal_requires_college_review = config_data["renewal_requires_college_review"] is True
         if "renewal_professor_review_start" in config_data:
             config.renewal_professor_review_start = parse_date_field(config_data["renewal_professor_review_start"])
         if "renewal_professor_review_end" in config_data:
@@ -966,6 +1148,26 @@ async def update_scholarship_configuration(
         if "review_deadline" in config_data:
             config.review_deadline = parse_date_field(config_data["review_deadline"])
 
+        # Renewal review dates are only meaningful when the matching flag is
+        # on — clear them otherwise so no silently-ignored windows persist
+        # (mirrors the UI, which clears the dates when a flag is unchecked,
+        # and ScholarshipConfigurationBase.validate_renewal_review_dates).
+        if not config.renewal_requires_professor_review:
+            config.renewal_professor_review_start = None
+            config.renewal_professor_review_end = None
+        if not config.renewal_requires_college_review:
+            config.renewal_college_review_start = None
+            config.renewal_college_review_end = None
+
+        # Supplementary import toggle (admin opens this per-configuration after
+        # distribution has been finalized; flag gates all colleges' rankings
+        # under this configuration).
+        if "allow_supplementary_import" in config_data:
+            config.allow_supplementary_import = bool(config_data["allow_supplementary_import"])
+
+        if "allow_college_view_distribution" in config_data:
+            config.allow_college_view_distribution = bool(config_data["allow_college_view_distribution"])
+
         # Update status and effective dates
         if "is_active" in config_data:
             config.is_active = config_data["is_active"]
@@ -976,37 +1178,28 @@ async def update_scholarship_configuration(
         if "version" in config_data:
             config.version = config_data["version"]
 
-        # Update quota management settings
-        if "quota_management_mode" in config_data:
-            from app.models.enums import QuotaManagementMode
-
-            mode_value = config_data["quota_management_mode"]
-            if mode_value:
-                # Find the enum by its value
-                mode_enum = None
-                for mode in QuotaManagementMode:
-                    if mode.value == mode_value:
-                        mode_enum = mode
-                        break
-                if mode_enum:
-                    config.quota_management_mode = mode_enum
-            else:
-                config.quota_management_mode = QuotaManagementMode.none
-
-        if "has_quota_limit" in config_data:
-            config.has_quota_limit = config_data["has_quota_limit"]
-        if "has_college_quota" in config_data:
-            config.has_college_quota = config_data["has_college_quota"]
-        if "total_quota" in config_data:
-            config.total_quota = config_data["total_quota"]
-        if "quotas" in config_data:
-            config.quotas = config_data["quotas"]
-            flag_modified(config, "quotas")
+        # Update quota management settings (validated; matrix mode recomputes total).
+        await _apply_quota_fields(db, config, config_data, scholarship_type_id=config.scholarship_type_id)
+        if "project_numbers" in config_data:
+            config.project_numbers = config_data["project_numbers"]
+            flag_modified(config, "project_numbers")
+        if "shared_quota_sources" in config_data:
+            # Validate links against the config's (possibly updated) academic_year.
+            requesting_year = config_data.get("academic_year", config.academic_year)
+            await _validate_shared_quota_sources(
+                db, config_data["shared_quota_sources"], requesting_academic_year=requesting_year
+            )
+            config.shared_quota_sources = config_data["shared_quota_sources"]
+            flag_modified(config, "shared_quota_sources")
 
         config.updated_by = current_user.id
 
         await db.commit()
         await db.refresh(config)
+
+        await invalidate("refdata:")
+        await invalidate("formconfig:")
+        await invalidate("quota:")
 
         return ApiResponse(
             success=True, message="配置更新成功", data={"id": config.id, "config_code": config.config_code}
@@ -1016,13 +1209,90 @@ async def update_scholarship_configuration(
         raise
     except Exception as e:
         await db.rollback()
-        import logging
-
-        logger = logging.getLogger(__name__)
-        logger.error(f"Error in update_scholarship_configuration: {type(e).__name__}: {str(e)}", exc_info=True)
+        logger.error("Error in update_scholarship_configuration: %s: %s", type(e).__name__, e, exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update configuration: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update configuration"
+        ) from e
+
+
+class SupplementaryImportToggle(BaseModel):
+    allow: bool
+
+
+@router.patch("/configurations/{id}/supplementary-import")
+async def toggle_configuration_supplementary_import(
+    id: int,
+    body: SupplementaryImportToggle,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin toggle: open or close supplementary import for a scholarship configuration.
+
+    Applies to all colleges' rankings under this (scholarship_type, academic_year, semester).
+    """
+    accessible_scholarship_ids = await get_user_accessible_scholarship_ids(current_user, db)
+
+    stmt = select(ScholarshipConfiguration).where(
+        and_(
+            ScholarshipConfiguration.id == id,
+            ScholarshipConfiguration.scholarship_type_id.in_(accessible_scholarship_ids),
         )
+    )
+    result = await db.execute(stmt)
+    config = result.scalar_one_or_none()
+
+    if not config:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="配置不存在或您沒有存取權限")
+
+    config.allow_supplementary_import = body.allow
+    config.updated_by = current_user.id
+    await db.commit()
+
+    return ApiResponse(
+        success=True,
+        message=f"Supplementary import {'enabled' if body.allow else 'disabled'}",
+        data={"id": config.id, "allow_supplementary_import": body.allow},
+    )
+
+
+class CollegeViewDistributionToggle(BaseModel):
+    allow: bool
+
+
+@router.patch("/configurations/{id}/college-view-distribution")
+async def toggle_configuration_college_view_distribution(
+    id: int,
+    body: CollegeViewDistributionToggle,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin toggle: open or close college visibility of distribution results.
+
+    Applies to all colleges' rankings under this (scholarship_type, academic_year, semester).
+    """
+    accessible_scholarship_ids = await get_user_accessible_scholarship_ids(current_user, db)
+
+    stmt = select(ScholarshipConfiguration).where(
+        and_(
+            ScholarshipConfiguration.id == id,
+            ScholarshipConfiguration.scholarship_type_id.in_(accessible_scholarship_ids),
+        )
+    )
+    result = await db.execute(stmt)
+    config = result.scalar_one_or_none()
+
+    if not config:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="配置不存在或您沒有存取權限")
+
+    config.allow_college_view_distribution = body.allow
+    config.updated_by = current_user.id
+    await db.commit()
+
+    return ApiResponse(
+        success=True,
+        message=f"College view of distribution {'enabled' if body.allow else 'disabled'}",
+        data={"id": config.id, "allow_college_view_distribution": body.allow},
+    )
 
 
 @router.delete("/configurations/{id}")
@@ -1058,6 +1328,10 @@ async def deactivate_scholarship_configuration(
 
         await db.commit()
 
+        await invalidate("refdata:")
+        await invalidate("formconfig:")
+        await invalidate("quota:")
+
         return ApiResponse(
             success=True, message="配置已停用", data={"id": config.id, "config_code": config.config_code}
         )
@@ -1066,9 +1340,10 @@ async def deactivate_scholarship_configuration(
         raise
     except Exception as e:
         await db.rollback()
+        logger.exception("Failed to deactivate configuration")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to deactivate configuration: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to deactivate configuration"
+        ) from e
 
 
 @router.post("/configurations/{id}/duplicate")
@@ -1130,8 +1405,19 @@ async def duplicate_scholarship_configuration(
             whitelist_student_ids=(
                 source_config.whitelist_student_ids.copy() if source_config.whitelist_student_ids else {}
             ),
+            has_quota_limit=source_config.has_quota_limit,
+            has_college_quota=source_config.has_college_quota,
+            quota_management_mode=source_config.quota_management_mode,
+            total_quota=source_config.total_quota,
+            quotas=(source_config.quotas.copy() if source_config.quotas else None),
+            project_numbers=(source_config.project_numbers.copy() if source_config.project_numbers else None),
+            shared_quota_sources=(
+                [dict(s) for s in source_config.shared_quota_sources] if source_config.shared_quota_sources else None
+            ),
             requires_professor_recommendation=source_config.requires_professor_recommendation,
             requires_college_review=source_config.requires_college_review,
+            renewal_requires_professor_review=source_config.renewal_requires_professor_review,
+            renewal_requires_college_review=source_config.renewal_requires_college_review,
             is_active=True,
             version="1.0",
             created_by=current_user.id,
@@ -1141,6 +1427,10 @@ async def duplicate_scholarship_configuration(
         await db.commit()
         await db.refresh(new_config)
 
+        await invalidate("refdata:")
+        await invalidate("formconfig:")
+        await invalidate("quota:")
+
         return ApiResponse(
             success=True, message="配置複製成功", data={"id": new_config.id, "config_code": new_config.config_code}
         )
@@ -1149,9 +1439,10 @@ async def duplicate_scholarship_configuration(
         raise
     except Exception as e:
         await db.rollback()
+        logger.exception("Failed to duplicate configuration")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to duplicate configuration: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to duplicate configuration"
+        ) from e
 
 
 @router.get("/configurations")
@@ -1189,6 +1480,8 @@ async def list_scholarship_configurations(
                 conditions.append(ScholarshipConfiguration.semester == Semester.first)
             elif semester == "second":
                 conditions.append(ScholarshipConfiguration.semester == Semester.second)
+            elif semester == "yearly":
+                conditions.append(ScholarshipConfiguration.semester == Semester.yearly)
 
         # Execute query
         stmt = (
@@ -1223,7 +1516,11 @@ async def list_scholarship_configurations(
                 "quota_management_mode": config.quota_management_mode.value if config.quota_management_mode else "none",
                 "total_quota": config.total_quota,
                 "quotas": config.quotas,
+                "project_numbers": config.project_numbers,
+                "shared_quota_sources": config.shared_quota_sources,
                 "is_active": config.is_active,
+                "allow_supplementary_import": config.allow_supplementary_import,
+                "allow_college_view_distribution": config.allow_college_view_distribution,
                 "renewal_application_start_date": (
                     config.renewal_application_start_date.isoformat() if config.renewal_application_start_date else None
                 ),
@@ -1237,12 +1534,14 @@ async def list_scholarship_configurations(
                     config.application_end_date.isoformat() if config.application_end_date else None
                 ),
                 # Add review-related fields
+                "renewal_requires_professor_review": config.renewal_requires_professor_review,
                 "renewal_professor_review_start": (
                     config.renewal_professor_review_start.isoformat() if config.renewal_professor_review_start else None
                 ),
                 "renewal_professor_review_end": (
                     config.renewal_professor_review_end.isoformat() if config.renewal_professor_review_end else None
                 ),
+                "renewal_requires_college_review": config.renewal_requires_college_review,
                 "renewal_college_review_start": (
                     config.renewal_college_review_start.isoformat() if config.renewal_college_review_start else None
                 ),
@@ -1275,9 +1574,10 @@ async def list_scholarship_configurations(
         return ApiResponse(success=True, message=f"Retrieved {len(config_list)} configurations", data=config_list)
 
     except Exception as e:
+        logger.exception("Failed to list configurations")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to list configurations: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to list configurations"
+        ) from e
 
 
 # Whitelist Management Endpoints
@@ -1383,11 +1683,25 @@ async def batch_add_whitelist(
         config.add_student_to_whitelist(nycu_id, sub_type)
         added_count += 1
 
+    # 白名單控制申請資格 — 異動必須留稽核軌跡 (issue #972 / G10)。
+    db.add(
+        AuditLog.create_log(
+            user_id=current_user.id,
+            action=AuditAction.update.value,
+            resource_type="scholarship_configuration",
+            resource_id=str(id),
+            description=f"whitelist: batch add {added_count} student(s) to config {config.config_code}",
+            new_values={"added_students": [st["nycu_id"] for st in request.students], "added_count": added_count},
+        )
+    )
     # Mark the field as modified for JSON update
     flag_modified(config, "whitelist_student_ids")
     config.updated_by = current_user.id
 
     await db.commit()
+
+    # Whitelist mutations affect eligibility-driven reference UI.
+    await invalidate("refdata:")
 
     return ApiResponse(
         success=True,
@@ -1427,11 +1741,28 @@ async def batch_remove_whitelist(
         if removed:
             removed_count += 1
 
+    # 白名單控制申請資格 — 異動必須留稽核軌跡 (issue #972 / G10)。
+    db.add(
+        AuditLog.create_log(
+            user_id=current_user.id,
+            action=AuditAction.update.value,
+            resource_type="scholarship_configuration",
+            resource_id=str(id),
+            description=f"whitelist: batch remove {removed_count} student(s) from config {config.config_code}",
+            new_values={
+                "removed_students": request.nycu_ids,
+                "sub_type": request.sub_type,
+                "removed_count": removed_count,
+            },
+        )
+    )
     # Mark the field as modified for JSON update
     flag_modified(config, "whitelist_student_ids")
     config.updated_by = current_user.id
 
     await db.commit()
+
+    await invalidate("refdata:")
 
     return ApiResponse(success=True, message=f"成功移除 {removed_count} 位學生", data={"removed_count": removed_count})
 
@@ -1496,7 +1827,24 @@ async def import_whitelist_excel(
     if added_count > 0:
         flag_modified(config, "whitelist_student_ids")
         config.updated_by = current_user.id
+        # 白名單控制申請資格 — 異動必須留稽核軌跡 (issue #972 / G10)。
+        db.add(
+            AuditLog.create_log(
+                user_id=current_user.id,
+                action=AuditAction.import_.value,
+                resource_type="scholarship_configuration",
+                resource_id=str(id),
+                description=f"whitelist: import {added_count} student(s) from Excel into config {config.config_code}",
+                new_values={
+                    "imported_students": [st["nycu_id"] for st in success_data],
+                    "added_count": added_count,
+                    "error_count": len(all_errors),
+                    "filename": file.filename,
+                },
+            )
+        )
         await db.commit()
+        await invalidate("refdata:")
 
     return ApiResponse(
         success=True,

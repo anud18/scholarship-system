@@ -8,7 +8,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import AuthorizationError, NotFoundError
+from app.core.exceptions import AuthorizationError, NotFoundError, ScholarshipException
+from app.core.metrics import scholarship_reviews_total
 from app.core.security import require_professor
 from app.db.deps import get_db
 from app.models.user import User
@@ -26,12 +27,16 @@ async def get_professor_applications(
     request: Request,
     status_filter: Optional[str] = Query(None, description="Filter by review status: pending, completed, all"),
     page: int = Query(1, ge=1, description="Page number"),
-    size: int = Query(20, ge=1, le=100, description="Items per page"),
+    size: Optional[int] = Query(None, ge=1, description="Items per page; omit to return all applications"),
     current_user: User = Depends(require_professor),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get applications requiring professor review with pagination"""
-    logger.info("Professor {current_user.id} requesting applications for review (page {page}, size {size})")
+    """Get applications requiring professor review.
+
+    Returns ALL assigned applications by default; pass ``page``/``size``
+    for explicit pagination.
+    """
+    logger.info(f"Professor {current_user.id} requesting applications for review (page {page}, size {size})")
 
     try:
         service = ApplicationService(db)
@@ -42,8 +47,14 @@ async def get_professor_applications(
             size=size,
         )
 
-        # Calculate pagination metadata
-        total_pages = (total_count + size - 1) // size  # Ceiling division
+        # Calculate pagination metadata; size=None means the full set in one page
+        if size is None:
+            page = 1  # keep metadata consistent — the full set is always page 1
+            response_size = total_count
+            total_pages = 1 if total_count else 0
+        else:
+            response_size = size
+            total_pages = (total_count + size - 1) // size  # Ceiling division
 
         logger.info(
             f"Found {len(applications)} applications (page {page}/{total_pages}, total: {total_count}) for professor {current_user.id}"
@@ -53,7 +64,7 @@ async def get_professor_applications(
             items=applications,
             total=total_count,
             page=page,
-            size=size,
+            size=response_size,
             pages=total_pages,
         )
         return {
@@ -63,11 +74,11 @@ async def get_professor_applications(
         }
 
     except Exception as e:
-        logger.error(f"Error fetching professor applications: {str(e)}")
+        logger.exception("Error fetching professor applications")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while fetching applications",
-        )
+        ) from e
 
 
 @router.get("/applications/{application_id}/review")
@@ -110,7 +121,6 @@ async def get_professor_review(
                     sub_type_code=item.sub_type_code,
                     recommendation=item.recommendation,
                     comments=item.comments,
-                    created_at=item.created_at,
                 )
                 for item in review.items
             ],
@@ -122,17 +132,14 @@ async def get_professor_review(
             "data": review_response.model_dump(),
         }
 
-    except NotFoundError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Professor review not found")
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Professor review not found") from exc
     except Exception as e:
-        logger.error(f"Error fetching professor review: {str(e)}")
-        import traceback
-
-        logger.error(f"Full traceback: {traceback.format_exc()}")
+        logger.exception("Error fetching professor review")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while fetching review",
-        )
+        ) from e
 
 
 @router.post("/applications/{application_id}/review")
@@ -163,6 +170,19 @@ async def submit_professor_review(
         ):
             raise AuthorizationError("Professor not authorized to submit review at this time or for this application")
 
+        # Block professor edits once the college has started reviewing (#64).
+        # Admins/super_admins are allowed through inside the helper.
+        await review_service.assert_professor_review_unlocked(application_id, current_user)
+
+        # 驗證送出的子項目「剛好」等於本人現在可審查的子項目（成員檢查 + 全覆蓋檢查）
+        normalized_codes = await review_service.validate_review_submission(
+            application_id,
+            current_user,
+            [item.sub_type_code for item in review_data.items],
+        )
+        for item, normalized_code in zip(review_data.items, normalized_codes):
+            item.sub_type_code = normalized_code
+
         # Create review using unified ReviewService - use new format directly
         items_data = [item.model_dump() for item in review_data.items]
         review = await review_service.create_review(
@@ -170,6 +190,16 @@ async def submit_professor_review(
             reviewer_id=current_user.id,
             items=items_data,
         )
+
+        # Business metric for the Scholarship System Overview dashboard (#159).
+        # This used to live on the unreachable POST /applications/{id}/review
+        # handler, so the professor dimension never actually incremented; it
+        # belongs on the live submit path. College's counterpart is emitted in
+        # CollegeReviewService.
+        scholarship_reviews_total.labels(
+            reviewer_type="professor",
+            action=str(review.recommendation) if review.recommendation else "unknown",
+        ).inc()
 
         # Return new format response directly
         review_response = ReviewResponse(
@@ -187,7 +217,6 @@ async def submit_professor_review(
                     sub_type_code=item.sub_type_code,
                     recommendation=item.recommendation,
                     comments=item.comments,
-                    created_at=item.created_at,
                 )
                 for item in review.items
             ],
@@ -200,19 +229,21 @@ async def submit_professor_review(
             "data": review_response.model_dump(),
         }
 
-    except NotFoundError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found") from exc
     except AuthorizationError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except ScholarshipException:
+        # Domain errors (e.g. validate_review_submission's coverage check) carry
+        # their own status_code; scholarship_exception_handler renders them.
+        # Without this they would surface as a misleading 500.
+        raise
     except Exception as e:
-        logger.error(f"Error submitting professor review: {str(e)}")
-        import traceback
-
-        logger.error(f"Full traceback: {traceback.format_exc()}")
+        logger.exception("Error submitting professor review")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while submitting review",
-        )
+        ) from e
 
 
 @router.put("/applications/{application_id}/review/{review_id}")
@@ -243,12 +274,35 @@ async def update_professor_review(
         if existing_review.application_id != application_id:
             raise AuthorizationError("Review does not belong to the specified application")
 
+        # Block professor edits once the college has started reviewing (#64).
+        await review_service.assert_professor_review_unlocked(application_id, current_user)
+
+        # 驗證送出的子項目「剛好」等於本人現在可審查的子項目（成員檢查 + 全覆蓋檢查）。
+        # update_review replaces this reviewer's items wholesale, so an
+        # incomplete payload here would delete the verdicts it omits — and this
+        # is the path the UI takes for every re-review.
+        normalized_codes = await review_service.validate_review_submission(
+            application_id,
+            current_user,
+            [item.sub_type_code for item in review_data.items],
+        )
+        for item, normalized_code in zip(review_data.items, normalized_codes):
+            item.sub_type_code = normalized_code
+
         # Update review using unified ReviewService - use new format directly
         items_data = [item.model_dump() for item in review_data.items]
         review = await review_service.update_review(
             review_id=review_id,
             items=items_data,
         )
+
+        # Same business metric as the POST path (#159). The UI sends PUT for
+        # every re-review, so counting only POST under-reports the professor
+        # dimension for exactly the case that happens most.
+        scholarship_reviews_total.labels(
+            reviewer_type="professor",
+            action=str(review.recommendation) if review.recommendation else "unknown",
+        ).inc()
 
         # Return new format response directly
         review_response = ReviewResponse(
@@ -266,7 +320,6 @@ async def update_professor_review(
                     sub_type_code=item.sub_type_code,
                     recommendation=item.recommendation,
                     comments=item.comments,
-                    created_at=item.created_at,
                 )
                 for item in review.items
             ],
@@ -280,18 +333,19 @@ async def update_professor_review(
         }
 
     except AuthorizationError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
-    except NotFoundError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review not found")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review not found") from exc
+    except ScholarshipException:
+        # Domain errors (e.g. validate_review_submission's coverage check) carry
+        # their own status_code; scholarship_exception_handler renders them.
+        raise
     except Exception as e:
-        logger.error(f"Error updating professor review: {str(e)}")
-        import traceback
-
-        logger.error(f"Full traceback: {traceback.format_exc()}")
+        logger.exception("Error updating professor review")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while updating review",
-        )
+        ) from e
 
 
 @router.get("/applications/{application_id}/sub-types")
@@ -301,26 +355,19 @@ async def get_application_sub_types(
     current_user: User = Depends(require_professor),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get available sub-types for an application (config-driven)"""
-    logger.info("Professor {current_user.id} requesting sub-types for application {application_id}")
+    """Get available sub-types for an application (config-driven, role-filtered).
 
+    Implementation landed in ``ApplicationService.get_application_available_sub_types``;
+    closes issue #649 for the professor route. For professors this returns
+    every active sub-type configured on the scholarship.
+    """
+    service = ApplicationService(db)
     try:
-        service = ApplicationService(db)
-        sub_types = await service.get_application_available_sub_types(application_id)
+        sub_types = await service.get_application_available_sub_types(application_id, current_user)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found") from exc
 
-        logger.info("Found {len(sub_types)} sub-types for application {application_id}")
-        return {
-            "success": True,
-            "message": "查詢成功",
-            "data": sub_types,
-        }
-
-    except Exception as e:
-        logger.error(f"Error fetching application sub-types: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An internal error occurred while fetching sub-types",
-        )
+    return {"success": True, "message": "查詢成功", "data": sub_types}
 
 
 @router.get("/stats")
@@ -348,8 +395,8 @@ async def get_professor_review_stats(
         }
 
     except Exception as e:
-        logger.error(f"Error fetching professor stats: {str(e)}")
+        logger.exception("Error fetching professor stats")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while fetching statistics",
-        )
+        ) from e

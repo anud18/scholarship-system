@@ -25,8 +25,9 @@ function validateId(id: string | null, paramName: string): void {
     throw new Error(`Invalid ${paramName}: path traversal detected`);
   }
 
-  // Only allow safe characters: letters, numbers, hyphens, underscores
-  const idPattern = /^[a-zA-Z0-9_-]+$/;
+  // Allow `.` for filenames with extensions (e.g. <hash>.pdf for bank documents);
+  // `..` / `/` / `\` are already rejected by the path-traversal check above.
+  const idPattern = /^[a-zA-Z0-9_.-]+$/;
   if (!idPattern.test(id)) {
     throw new Error(`Invalid ${paramName}: contains illegal characters`);
   }
@@ -165,12 +166,13 @@ export async function GET(request: NextRequest) {
           { status: 400 }
         );
       }
-    } catch (validationError: any) {
+    } catch (validationError: unknown) {
       logger.error("Input validation error", {});
-      return NextResponse.json(
-        { error: validationError.message },
-        { status: 400 }
-      );
+      const message =
+        validationError instanceof Error
+          ? validationError.message
+          : "Invalid input";
+      return NextResponse.json({ error: message }, { status: 400 });
     }
 
     if (!token) {
@@ -184,7 +186,7 @@ export async function GET(request: NextRequest) {
     let backendUrl: URL;
     try {
       backendUrl = getSafeBackendUrl();
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error("Backend URL validation error", {});
       return NextResponse.json(
         { error: "Invalid backend configuration" },
@@ -208,7 +210,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.log("Preview API called:", {
+    logger.debug("Preview API called:", {
       fileId,
       applicationId,
       userId,
@@ -244,6 +246,17 @@ export async function GET(request: NextRequest) {
       finalContentType = contentType.startsWith("image/")
         ? contentType
         : "image/jpeg";
+    } else {
+      // type param may be a document category (e.g. "bank_account_cover") rather than
+      // a mime hint — infer from filename extension as a reliable fallback
+      const lowerFilename = (filename || "").toLowerCase();
+      if (lowerFilename.endsWith(".pdf")) {
+        finalContentType = "application/pdf";
+      } else if (/\.(jpe?g|png|gif|bmp|webp)$/.test(lowerFilename)) {
+        finalContentType = contentType.startsWith("image/")
+          ? contentType
+          : "image/jpeg";
+      }
     }
 
     // 處理中文文件名編碼
@@ -319,7 +332,7 @@ async function handleRosterPreview(
     let backendUrl: URL;
     try {
       backendUrl = getSafeBackendUrl();
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error("Roster Preview: Backend URL validation error", {});
       return NextResponse.json(
         {
@@ -337,7 +350,7 @@ async function handleRosterPreview(
     backendUrl.searchParams.set("max_preview_rows", String(max_preview_rows));
     backendUrl.searchParams.set("include_excluded", String(include_excluded));
 
-    console.log(`[Roster Preview] Fetching: ${backendUrl.toString()}`);
+    logger.debug(`[Roster Preview] Fetching: ${backendUrl.toString()}`);
 
     // 調用後端 API
     const response = await fetch(backendUrl, {
@@ -368,6 +381,13 @@ async function handleRosterPreview(
       return new NextResponse(htmlContent, {
         headers: {
           "Content-Type": "text/html; charset=utf-8",
+          // Defense-in-depth: the template only needs inline styles; block all
+          // scripts so any markup that slips through escaping cannot execute.
+          // base-uri/form-action are NOT covered by default-src, so set them
+          // explicitly; frame-ancestors mirrors X-Frame-Options in CSP.
+          "Content-Security-Policy":
+            "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
+          "X-Frame-Options": "SAMEORIGIN",
         },
       });
     }
@@ -399,7 +419,35 @@ async function handleRosterPreview(
 }
 
 // 生成造冊預覽 HTML
-function generateRosterPreviewHTML(data: any): string {
+interface RosterPreviewPayload {
+  roster_code: string;
+  preview_data: (string | number | null)[][];
+  total_rows: number;
+  column_headers: string[];
+  validation_result?: {
+    is_valid?: boolean;
+    errors?: string[];
+    warnings?: string[];
+    [key: string]: unknown;
+  };
+}
+
+// SECURITY: escape any backend-provided value before interpolating it into the
+// HTML template below. Without this, roster codes, column headers, validation
+// errors, or cell values containing markup (e.g. "<img src=x onerror=...>") would
+// execute as script in the rendered preview (stored/reflected XSS).
+function escapeHtml(value: unknown): string {
+  const str =
+    value === null || value === undefined ? '' : String(value);
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function generateRosterPreviewHTML(data: RosterPreviewPayload): string {
   const { roster_code, preview_data, total_rows, column_headers, validation_result } = data;
 
   return `
@@ -408,7 +456,7 @@ function generateRosterPreviewHTML(data: any): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>造冊預覽 - ${roster_code}</title>
+  <title>造冊預覽 - ${escapeHtml(roster_code)}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -523,7 +571,7 @@ function generateRosterPreviewHTML(data: any): string {
   <div class="container">
     <div class="header">
       <h1>📋 造冊預覽</h1>
-      <p>造冊代碼: ${roster_code}</p>
+      <p>造冊代碼: ${escapeHtml(roster_code)}</p>
     </div>
 
     <div class="info-bar">
@@ -541,7 +589,7 @@ function generateRosterPreviewHTML(data: any): string {
     <div class="validation">
       <h3>⚠️ 驗證警告</h3>
       <ul>
-        ${validation_result.errors?.map((error: string) => `<li>${error}</li>`).join('') || ''}
+        ${validation_result.errors?.map((error: string) => `<li>${escapeHtml(error)}</li>`).join('') || ''}
       </ul>
     </div>
     ` : ''}
@@ -551,15 +599,24 @@ function generateRosterPreviewHTML(data: any): string {
       <table>
         <thead>
           <tr>
-            ${column_headers?.map((header: string) => `<th>${header}</th>`).join('') || '<th>無資料</th>'}
+            ${column_headers?.map((header: string) => `<th>${escapeHtml(header)}</th>`).join('') || '<th>無資料</th>'}
           </tr>
         </thead>
         <tbody>
-          ${preview_data.map((row: any[]) => `
+          ${preview_data
+            .map(
+              row => `
             <tr>
-              ${row.map((cell: any) => `<td>${cell !== null && cell !== undefined ? cell : '-'}</td>`).join('')}
+              ${row
+                .map(
+                  cell =>
+                    `<td>${cell !== null && cell !== undefined ? escapeHtml(cell) : '-'}</td>`
+                )
+                .join('')}
             </tr>
-          `).join('')}
+          `
+            )
+            .join('')}
         </tbody>
       </table>
       ` : `

@@ -2,6 +2,7 @@
 User management API endpoints
 """
 
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -9,11 +10,14 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.functions import count
 
+from app.core.cache import invalidate as cache_invalidate
 from app.core.security import get_current_user, require_admin
 from app.db.deps import get_db
 from app.models.user import EmployeeStatus, User, UserRole, UserType
 from app.schemas.user import BulkScholarshipAssignRequest, BulkScholarshipAssignResponse, UserCreate, UserUpdate
 from app.services.auth_service import AuthService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -79,9 +83,14 @@ async def get_student_info(current_user: User = Depends(get_current_user), db: A
                     term_data = await student_service.get_student_term_info(student_code, str(year), term)
                     if term_data:
                         semesters.append({"academic_year": str(year), "term": term, **term_data})
-                except Exception:
-                    # Log but continue - some semesters may not exist
-                    pass
+                except Exception as term_exc:
+                    logger.debug(
+                        "SIS term fetch skipped: student=%s year=%s term=%s: %s",
+                        student_code,
+                        year,
+                        term,
+                        term_exc,
+                    )
 
     # Return student information with new structure
     return {
@@ -133,8 +142,15 @@ async def update_my_profile(
     # This automatically stays in sync with schema changes
     allowed_fields = set(update_data.model_fields.keys())
 
+    # SECURITY: privilege-controlling fields must never be self-editable via the
+    # profile endpoint, otherwise any authenticated user could escalate to
+    # super_admin by sending {"role": "super_admin"}.
+    self_protected_fields = {"role", "user_type", "status", "college_code"}
+
     update_dict = update_data.model_dump(exclude_unset=True)
     for field, value in update_dict.items():
+        if field in self_protected_fields:
+            continue
         if field in allowed_fields and hasattr(current_user, field):
             setattr(current_user, field, value)
 
@@ -207,14 +223,14 @@ async def get_all_users(
             user_roles = [UserRole(r) for r in role_list]
             stmt = stmt.where(User.role.in_(user_roles))
         except ValueError as e:
-            raise HTTPException(status_code=400, detail=f"Invalid role in roles parameter: {e}")
+            raise HTTPException(status_code=400, detail="Invalid role in roles parameter") from e
     elif role:
         # Handle single role (backward compatibility)
         try:
             user_role = UserRole(role.lower())
             stmt = stmt.where(User.role == user_role)
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid role: {role}")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid role: {role}") from exc
 
     if search:
         stmt = stmt.where(
@@ -345,12 +361,25 @@ async def update_user(
     allowed_fields = set(update_data.model_fields.keys())
 
     update_dict = update_data.model_dump(exclude_unset=True)
+
+    # SECURITY: restrict role changes to prevent privilege escalation.
+    # A plain admin must not be able to grant roles (e.g. promote themselves or
+    # another account to super_admin); only super_admin may change roles, and no
+    # one may change their own role.
+    if "role" in update_dict and update_dict["role"] != user.role:
+        if user.id == current_user.id:
+            raise HTTPException(status_code=403, detail="Cannot change your own role")
+        if not current_user.is_super_admin():
+            raise HTTPException(status_code=403, detail="Only super admin can change user roles")
+
     for field, value in update_dict.items():
         if field in allowed_fields and hasattr(user, field):
             setattr(user, field, value)
 
     await db.commit()
     await db.refresh(user)
+    # Role / college_code change can affect dashboard scope for this admin.
+    await cache_invalidate("dashboard:")
 
     return {
         "success": True,
@@ -380,8 +409,28 @@ async def delete_user(
     if user.id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
 
+    # Capture identity *before* the delete so the audit log survives the
+    # SQLAlchemy cascade. After db.delete(user) the attached object's
+    # attributes may be expired.
+    deleted_email = user.email
+    deleted_role = user.role.value if hasattr(user.role, "value") else str(user.role)
+
     await db.delete(user)
     await db.commit()
+    await cache_invalidate("dashboard:")
+
+    logger.warning(
+        "User %s (role=%s) hard-deleted by admin user_id=%s",
+        id,
+        deleted_role,
+        current_user.id,
+        extra={
+            "deleted_user_id": id,
+            "deleted_email": deleted_email,
+            "deleted_role": deleted_role,
+            "actor_user_id": current_user.id,
+        },
+    )
 
     return {
         "success": True,
@@ -436,9 +485,25 @@ async def update_user_college(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    previous_college_code = user.college_code
     user.college_code = college_code
     await db.commit()
     await db.refresh(user)
+    await cache_invalidate("dashboard:")
+
+    logger.info(
+        "User %s college_code changed %r → %r by super-admin user_id=%s",
+        id,
+        previous_college_code,
+        college_code,
+        current_user.id,
+        extra={
+            "target_user_id": id,
+            "previous_college_code": previous_college_code,
+            "new_college_code": college_code,
+            "actor_user_id": current_user.id,
+        },
+    )
 
     return {
         "success": True,
@@ -518,6 +583,8 @@ async def bulk_assign_scholarships(
         raise HTTPException(status_code=400, detail="Invalid operation. Use 'set' or 'add'")
 
     await db.commit()
+    # Admin scope changed: dashboard cache for this admin must be rebuilt.
+    await cache_invalidate("dashboard:")
 
     # Get final scholarship list
     final_stmt = (
@@ -534,6 +601,25 @@ async def bulk_assign_scholarships(
         removed_count=removed_count,
         total_scholarships=len(scholarships),
         scholarships=[{"id": s.id, "code": s.code, "name": s.name} for s in scholarships],
+    )
+
+    logger.info(
+        "Bulk scholarship %s on user %s by super-admin user_id=%s: assigned=%d removed=%d total=%d",
+        request.operation,
+        id,
+        current_user.id,
+        assigned_count,
+        removed_count,
+        len(scholarships),
+        extra={
+            "target_user_id": id,
+            "operation": request.operation,
+            "requested_scholarship_ids": request.scholarship_ids,
+            "assigned_count": assigned_count,
+            "removed_count": removed_count,
+            "total_after": len(scholarships),
+            "actor_user_id": current_user.id,
+        },
     )
 
     return {
@@ -571,9 +657,9 @@ async def get_user_stats(current_user: User = Depends(require_admin), db: AsyncS
         status_stats[employee_status.value] = user_count
 
     # Recent registrations (last 30 days)
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
 
-    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
     recent_stmt = select(count(User.id)).where(User.created_at >= thirty_days_ago)
     recent_result = await db.execute(recent_stmt)
     recent_count = recent_result.scalar()

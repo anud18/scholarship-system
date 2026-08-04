@@ -178,8 +178,8 @@ export function PermissionStatusPanel({
                 {locale === "zh" ? " 個獎學金" : " scholarship(s)"}
               </p>
               <ul className="text-sm space-y-1 ml-2">
-                {status.scholarship_list.map((scholarship, index) => (
-                  <li key={index} className="text-gray-700 flex items-center gap-1">
+                {status.scholarship_list.map((scholarship) => (
+                  <li key={scholarship.code} className="text-gray-700 flex items-center gap-1">
                     <span className="text-green-600">✓</span>
                     <span className="font-medium">{scholarship.name}</span>
                     <span className="text-gray-500">({scholarship.code})</span>
@@ -202,7 +202,7 @@ export function PermissionStatusPanel({
             </p>
             <ul className="space-y-1">
               {status.permission_issues.map((issue, index) => (
-                <li key={index} className="text-xs text-red-800 flex items-center gap-1">
+                <li key={`${issue}-${index}`} className="text-xs text-red-800 flex items-center gap-1">
                   <span className="text-red-600">✕</span>
                   {issue}
                 </li>

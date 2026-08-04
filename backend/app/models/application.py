@@ -3,9 +3,10 @@ Application models for scholarship applications
 """
 
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional
 
+import sqlalchemy as sa
 from sqlalchemy import (
     JSON,
     Boolean,
@@ -13,15 +14,16 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
     Text,
-    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
+from app.core.encrypted_json import StudentDataJSON
 from app.db.base_class import Base
 from app.models.enums import ApplicationStatus, ReviewStage, Semester
 from app.models.scholarship import SubTypeSelectionMode
@@ -83,10 +85,11 @@ class Application(Base):
     )  # Specific configuration applied for
     scholarship_name = Column(String(200))
     amount = Column(Numeric(10, 2))
-    scholarship_subtype_list = Column(JSON, nullable=False, default=[])
+    scholarship_subtype_list = Column(JSON, nullable=False, default=lambda: [])
     sub_type_selection_mode = Column(
         Enum(SubTypeSelectionMode, values_callable=lambda obj: [e.value for e in obj]), nullable=False
     )
+    sub_type_preferences = Column(JSON, nullable=True)  # Ordered preference list: ["nstc", "moe_1w"]
 
     # New fields for comprehensive scholarship system (Issue #10)
     # Sub type is configuration-driven (dynamic), use String for flexibility
@@ -98,7 +101,13 @@ class Application(Base):
         nullable=False,
     )
     is_renewal = Column(Boolean, default=False, nullable=False)  # 是否為續領申請
+    renewal_year = Column(Integer, nullable=True)  # 續領年份 (e.g. 113)，display-only (§9，不再參與配額計算)
+    allocation_config_id = Column(
+        Integer, ForeignKey("scholarship_configurations.id"), nullable=True
+    )  # Config a renewal consumes (§9); NEVER NULL for an approved renewal
     previous_application_id = Column(Integer, ForeignKey("applications.id"))
+    challenges_application_id = Column(Integer, ForeignKey("applications.id"), nullable=True, index=True)
+    cancelled_due_to_application_id = Column(Integer, ForeignKey("applications.id"), nullable=True, index=True)
     review_deadline = Column(DateTime(timezone=True))
     decision_date = Column(DateTime(timezone=True))
 
@@ -124,7 +133,9 @@ class Application(Base):
     )  # Can be NULL for yearly scholarships
 
     # 申請資料 (申請當時)
-    student_data = Column(JSON)  # Student 資料
+    # std_pid (身分證字號) inside this JSON is transparently AES-256-GCM
+    # encrypted at rest by StudentDataJSON; the column is read as plaintext.
+    student_data = Column(StudentDataJSON)  # Student 資料
     submitted_form_data = Column(JSON)  # Field, Document 資料
 
     # 同意條款
@@ -142,6 +153,20 @@ class Application(Base):
     final_ranking_position = Column(Integer)  # 最終排名位置
     quota_allocation_status = Column(String(20))  # 'allocated', 'rejected', 'waitlisted'
 
+    # 撤銷/暫停追蹤 (columns exist in DB via revoke_suspend_001 migration)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    revoked_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    revoke_reason = Column(Text, nullable=True)
+    suspended_at = Column(DateTime(timezone=True), nullable=True)
+    suspended_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    suspend_reason = Column(Text, nullable=True)
+    # 撤銷/停發當下的狀態快照。撤銷/停發可以在「確認分發」之前執行（學生休學/
+    # 退學讓他必須被排除於本次分發），此時把申請恢復成 approved/allocated 是錯的
+    # ——復原必須把 status / quota_allocation_status 放回取消前的值。
+    # NULL = 尚未被撤銷/停發（或已復原）。
+    cancelled_from_status = Column(String(30), nullable=True)
+    cancelled_from_quota_status = Column(String(20), nullable=True)
+
     # 時間戳記
     submitted_at = Column(DateTime(timezone=True))
     reviewed_at = Column(DateTime(timezone=True))
@@ -157,7 +182,9 @@ class Application(Base):
     # 批次匯入相關 (Batch Import)
     imported_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # 匯入者
     batch_import_id = Column(Integer, ForeignKey("batch_imports.id"), nullable=True)  # 批次匯入紀錄
-    import_source = Column(String(20), nullable=True, default="online")  # 'online' | 'batch_import'
+    # 'online' | 'batch_import' | 'renewal_import' | 'supplementary_import'
+    # NOTE: 'supplementary_import' is exactly 20 chars — String(20) has no headroom left.
+    import_source = Column(String(20), nullable=True, default="online")
     document_status = Column(String(30), nullable=True, default="complete")  # 'complete' | 'pending_documents'
 
     # 其他資訊
@@ -183,7 +210,9 @@ class Application(Base):
         overlaps="applications,scholarship_type_ref",
     )
     scholarship_configuration = relationship("ScholarshipConfiguration", foreign_keys=[scholarship_configuration_id])
-    previous_application = relationship("Application", remote_side=[id])
+    previous_application = relationship("Application", remote_side=[id], foreign_keys=[previous_application_id])
+    challenged_renewal = relationship("Application", remote_side=[id], foreign_keys=[challenges_application_id])
+    cancelled_due_to = relationship("Application", remote_side=[id], foreign_keys=[cancelled_due_to_application_id])
 
     files = relationship("ApplicationFile", back_populates="application", cascade="all, delete-orphan")
     reviews = relationship("ApplicationReview", back_populates="application", cascade="all, delete-orphan")
@@ -194,15 +223,53 @@ class Application(Base):
     imported_by = relationship("User", foreign_keys=[imported_by_id])
     batch_import = relationship("BatchImport", back_populates="applications", foreign_keys=[batch_import_id])
 
-    # 唯一約束：確保每個用戶在每個學年、學期、獎學金組合下只能有一個申請
-    # Use user_id instead of student_id since students are now from external API
+    # 唯一約束：拆成三個 partial unique indexes，允許同一學期內並存三種申請：
+    # 1. 續領申請 (is_renewal = true)
+    # 2. 挑戰申請 (is_renewal = false, challenges_application_id IS NOT NULL)
+    # 3. 一般新申請 (is_renewal = false, challenges_application_id IS NULL)
     __table_args__ = (
-        UniqueConstraint(
+        Index(
+            "uq_user_renewal_app",
             "user_id",
             "scholarship_type_id",
             "academic_year",
             "semester",
-            name="uq_user_scholarship_academic_term",
+            unique=True,
+            postgresql_where=sa.text("is_renewal = true AND deleted_at IS NULL"),
+        ),
+        Index(
+            "uq_user_challenge_app",
+            "user_id",
+            "scholarship_type_id",
+            "academic_year",
+            "semester",
+            unique=True,
+            postgresql_where=sa.text(
+                "is_renewal = false AND challenges_application_id IS NOT NULL AND deleted_at IS NULL"
+            ),
+        ),
+        Index(
+            "uq_user_pure_new_app",
+            "user_id",
+            "scholarship_type_id",
+            "academic_year",
+            "semester",
+            unique=True,
+            postgresql_where=sa.text("is_renewal = false AND challenges_application_id IS NULL AND deleted_at IS NULL"),
+        ),
+        # Plain index on the FK — heavily filtered by roster_service; PostgreSQL
+        # does not auto-create an index for foreign keys.
+        Index(
+            "ix_applications_scholarship_configuration_id",
+            "scholarship_configuration_id",
+        ),
+        # Plain index on the user FK — the partial unique indexes above lead
+        # with user_id but their WHERE predicates make them unusable for
+        # arbitrary per-user lookups (student application list, admin student
+        # list applied-scholarships aggregation).
+        Index(
+            "ix_applications_user_id",
+            "user_id",
         ),
     )
 
@@ -212,12 +279,12 @@ class Application(Base):
     @property
     def is_editable(self) -> bool:
         """Check if application can be edited"""
-        return bool(self.status in [ApplicationStatus.draft.value, ApplicationStatus.returned.value])
+        return bool(self.status in [ApplicationStatus.draft, ApplicationStatus.returned])
 
     @property
     def is_submitted(self) -> bool:
         """Check if application is submitted"""
-        return bool(self.status != ApplicationStatus.draft.value)
+        return bool(self.status != ApplicationStatus.draft)
 
     @property
     def can_be_reviewed(self) -> bool:
@@ -225,8 +292,8 @@ class Application(Base):
         return bool(
             self.status
             in [
-                ApplicationStatus.submitted.value,
-                ApplicationStatus.under_review.value,
+                ApplicationStatus.submitted,
+                ApplicationStatus.under_review,
             ]
         )
 
@@ -235,7 +302,7 @@ class Application(Base):
         """Check if application review is overdue"""
         if not self.review_deadline:
             return False
-        return bool(datetime.now().replace(tzinfo=None) > self.review_deadline.replace(tzinfo=None))
+        return bool(datetime.now(timezone.utc).replace(tzinfo=None) > self.review_deadline.replace(tzinfo=None))
 
     # get_main_type_enum() removed - main_scholarship_type field no longer exists
 
@@ -252,6 +319,7 @@ class Application(Base):
         return {
             Semester.first: "第一學期",
             Semester.second: "第二學期",
+            Semester.yearly: "全年",
         }.get(self.semester, "")
 
     @property
@@ -272,14 +340,14 @@ class Application(Base):
     def get_review_stage(self) -> Optional[str]:
         """Get current review stage based on application type and status"""
         if self.is_renewal:
-            if self.status == ApplicationStatus.submitted.value:
+            if self.status == ApplicationStatus.submitted:
                 return "renewal_professor"
-            elif self.status == ApplicationStatus.under_review.value:
+            elif self.status == ApplicationStatus.under_review:
                 return "renewal_college"
         else:
-            if self.status == ApplicationStatus.submitted.value:
+            if self.status == ApplicationStatus.submitted:
                 return "general_professor"
-            elif self.status == ApplicationStatus.under_review.value:
+            elif self.status == ApplicationStatus.under_review:
                 return "general_college"
         return None
 
@@ -288,6 +356,12 @@ class ApplicationFile(Base):
     """Application file attachment model"""
 
     __tablename__ = "application_files"
+    __table_args__ = (
+        # Hot path: every upload runs the stale-duplicate SELECT and every
+        # selectinload(Application.files) filters on application_id — Postgres
+        # does not auto-index FK columns.
+        Index("ix_application_files_app_type", "application_id", "file_type"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     application_id = Column(Integer, ForeignKey("applications.id"), nullable=False)
@@ -340,3 +414,25 @@ class ApplicationFile(Base):
     def download_url(self, value: Optional[str]):
         """Set file download URL"""
         self._download_url = value
+
+
+def build_config_match_filters(user_id: int, config):
+    """SQLAlchemy filter clauses matching a student's applications to a
+    scholarship configuration by (user, type, year, semester).
+
+    Shared by the eligible-scholarships "already submitted" check
+    (EligibilityService.has_blocking_application) and the DUPLICATE_APPLICATION
+    guard in the applications endpoint, so the two cannot drift on the
+    semester-NULL handling. Each caller appends its own status clause. ``config``
+    only needs ``scholarship_type_id``, ``academic_year`` and ``semester``.
+    """
+    if config.semester:
+        semester_filter = Application.semester == config.semester
+    else:
+        semester_filter = Application.semester.is_(None)
+    return [
+        Application.user_id == user_id,
+        Application.scholarship_type_id == config.scholarship_type_id,
+        Application.academic_year == config.academic_year,
+        semester_filter,
+    ]

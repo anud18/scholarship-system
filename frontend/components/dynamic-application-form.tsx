@@ -24,7 +24,10 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { FileUpload } from "@/components/file-upload";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
-import { buildSecurePreviewUrl, getAuthToken } from "@/lib/utils/url-validation";
+import {
+  buildSecurePreviewUrl,
+  getAuthToken,
+} from "@/lib/utils/url-validation";
 import {
   Loader2,
   AlertCircle,
@@ -34,6 +37,12 @@ import {
   CheckCircle,
 } from "lucide-react";
 import { api } from "@/lib/api";
+import { logger } from "@/lib/utils/logger";
+import {
+  isValidTaiwanMobile,
+  TAIWAN_MOBILE_MESSAGE,
+} from "@/lib/utils/application-helpers";
+import { getTranslation } from "@/lib/i18n";
 import type {
   ApplicationField,
   ApplicationDocument,
@@ -45,6 +54,7 @@ type Locale = "zh" | "en";
 interface DynamicApplicationFormProps {
   scholarshipType: string;
   locale?: Locale;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onFieldChange?: (fieldName: string, value: any) => void;
   onFileChange?: (documentType: string, files: File[]) => void;
   initialValues?: Record<string, any>;
@@ -55,6 +65,7 @@ interface DynamicApplicationFormProps {
 }
 
 interface FormData {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any;
 }
 
@@ -73,6 +84,7 @@ export function DynamicApplicationForm({
   selectedSubTypes,
   currentUserId,
 }: DynamicApplicationFormProps) {
+  const t = (key: string) => getTranslation(locale, key);
   // State
   const [formConfig, setFormConfig] = useState<ScholarshipFormConfig | null>(
     null
@@ -81,6 +93,7 @@ export function DynamicApplicationForm({
   const [fileData, setFileData] = useState<FileData>(initialFiles);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [previewFile, setPreviewFile] = useState<{
     url: string;
     filename: string;
@@ -91,12 +104,28 @@ export function DynamicApplicationForm({
 
   // Load form configuration
   useEffect(() => {
+    // Switching scholarships swaps the whole field set; drop any inline
+    // errors from the previous form.
+    setFieldErrors({});
     loadFormConfiguration();
   }, [scholarshipType]);
 
   // Update form data when initial values change
   useEffect(() => {
     setFormData(initialValues);
+    // Re-validate fields that currently show an error against the incoming
+    // values so stale messages don't survive a parent-driven rehydration
+    // (e.g. loading a saved draft).
+    setFieldErrors(prev => {
+      const next: Record<string, string> = {};
+      Object.keys(prev).forEach(fieldName => {
+        const error = validateFieldValue(fieldName, initialValues[fieldName]);
+        if (error) {
+          next[fieldName] = error;
+        }
+      });
+      return next;
+    });
   }, [initialValues]);
 
   // Update file data when initial files change
@@ -117,10 +146,12 @@ export function DynamicApplicationForm({
 
         // Auto-populate prefilled values for fixed fields
         const prefillData: Record<string, any> = {};
-        response.data.fields.forEach((field) => {
-          if (field.prefill_value !== undefined &&
-              field.prefill_value !== null &&
-              field.prefill_value !== "") {
+        response.data.fields.forEach(field => {
+          if (
+            field.prefill_value !== undefined &&
+            field.prefill_value !== null &&
+            field.prefill_value !== ""
+          ) {
             prefillData[field.field_name] = field.prefill_value;
           }
         });
@@ -138,28 +169,67 @@ export function DynamicApplicationForm({
           });
         }
       } else {
-        setError(
-          locale === "zh"
-            ? "無法載入表單配置"
-            : "Failed to load form configuration"
-        );
+        setError(t("form_upload.load_form_config_failed"));
       }
     } catch (err) {
-      console.error("Failed to load form configuration:", err);
-      setError(
-        locale === "zh"
-          ? "載入表單配置時發生錯誤"
-          : "Error loading form configuration"
-      );
+      logger.error("Failed to load form configuration", { err });
+      setError(t("form_upload.load_form_config_error"));
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleFieldChange = (fieldName: string, value: any) => {
+  // Field-level validation shown inline as soon as the student finishes the
+  // field (on blur), instead of surprising them at submit time. Mirrors the
+  // submit-time guard in ScholarshipApplicationStep / the backend check.
+  const validateFieldValue = (
+    fieldName: string,
+    value: unknown
+  ): string | null => {
+    if (
+      fieldName === "contact_phone" &&
+      typeof value === "string" &&
+      value !== "" &&
+      !isValidTaiwanMobile(value)
+    ) {
+      return TAIWAN_MOBILE_MESSAGE;
+    }
+    return null;
+  };
+
+  const handleFieldChange = (fieldName: string, value: unknown) => {
     const newFormData = { ...formData, [fieldName]: value };
     setFormData(newFormData);
     onFieldChange?.(fieldName, value);
+
+    // Once a field already shows an error, re-validate live so the message
+    // clears the moment the student fixes the value (don't nag mid-typing
+    // on untouched fields).
+    if (fieldErrors[fieldName]) {
+      const error = validateFieldValue(fieldName, value);
+      setFieldErrors(prev => {
+        const next = { ...prev };
+        if (error) {
+          next[fieldName] = error;
+        } else {
+          delete next[fieldName];
+        }
+        return next;
+      });
+    }
+  };
+
+  const handleFieldBlur = (fieldName: string, value: unknown) => {
+    const error = validateFieldValue(fieldName, value);
+    setFieldErrors(prev => {
+      const next = { ...prev };
+      if (error) {
+        next[fieldName] = error;
+      } else {
+        delete next[fieldName];
+      }
+      return next;
+    });
   };
 
   const handleFileChange = (documentType: string, files: File[]) => {
@@ -194,7 +264,7 @@ export function DynamicApplicationForm({
         "";
 
       if (!token) {
-        console.error("No authentication token available");
+        logger.error("No authentication token available");
         return null;
       }
     }
@@ -291,18 +361,21 @@ export function DynamicApplicationForm({
 
     switch (field.field_type) {
       case "text":
-      case "email":
+      case "email": {
+        // validation_rules JSON may carry { pattern, patternMessage } from the
+        // application_fields config (#60). Surface them via HTML5 pattern + title.
+        const rules = (field as { validation_rules?: { pattern?: string; patternMessage?: string } })
+          .validation_rules ?? undefined;
+        const pattern = rules?.pattern;
+        const patternMessage = rules?.patternMessage;
+        const fieldError = fieldErrors[field.field_name];
+        const errorId = `${field.field_name}-error`;
         return (
           <div key={field.field_name} className="space-y-2">
             <Label htmlFor={field.field_name}>
               {label}
               {field.is_required && (
                 <span className="text-red-500 ml-1">*</span>
-              )}
-              {isFixedField && (
-                <Badge variant="outline" className="ml-2 text-xs">
-                  {locale === "zh" ? "固定欄位" : "Fixed Field"}
-                </Badge>
               )}
             </Label>
             <Input
@@ -312,23 +385,30 @@ export function DynamicApplicationForm({
               onChange={e =>
                 handleFieldChange(field.field_name, e.target.value)
               }
+              onBlur={e => handleFieldBlur(field.field_name, e.target.value)}
               placeholder={placeholder}
               maxLength={field.max_length}
               required={field.is_required}
-              className={`w-full ${isFixedField ? "bg-blue-50 border-blue-200" : ""}`}
+              pattern={pattern}
+              title={patternMessage}
+              aria-invalid={fieldError ? true : undefined}
+              aria-describedby={fieldError ? errorId : undefined}
+              className={`w-full ${isFixedField ? "bg-blue-50 border-blue-200" : ""} ${fieldError ? "border-red-500 focus-visible:ring-red-500" : ""}`}
             />
-            {isFixedField && fieldValue && (
-              <p className="text-sm text-blue-600">
-                {locale === "zh"
-                  ? "此欄位已從您的個人檔案自動填入，您可以修改內容"
-                  : "This field has been auto-filled from your profile and can be modified"}
+            {fieldError && (
+              <p id={errorId} className="text-sm text-red-600">
+                {fieldError}
               </p>
             )}
+            {patternMessage && (
+              <p className="text-xs text-muted-foreground">{patternMessage}</p>
+            )}
             {helpText && (
-              <p className="text-sm text-muted-foreground">{helpText}</p>
+              <p className="text-sm text-muted-foreground whitespace-pre-line">{helpText}</p>
             )}
           </div>
         );
+      }
 
       case "number":
         return (
@@ -337,11 +417,6 @@ export function DynamicApplicationForm({
               {label}
               {field.is_required && (
                 <span className="text-red-500 ml-1">*</span>
-              )}
-              {isFixedField && (
-                <Badge variant="outline" className="ml-2 text-xs">
-                  {locale === "zh" ? "固定欄位" : "Fixed Field"}
-                </Badge>
               )}
             </Label>
             <Input
@@ -361,15 +436,8 @@ export function DynamicApplicationForm({
               required={field.is_required}
               className={`w-full ${isFixedField ? "bg-blue-50 border-blue-200" : ""}`}
             />
-            {isFixedField && fieldValue && (
-              <p className="text-sm text-blue-600">
-                {locale === "zh"
-                  ? "此欄位已從您的個人檔案自動填入，您可以修改內容"
-                  : "This field has been auto-filled from your profile and can be modified"}
-              </p>
-            )}
             {helpText && (
-              <p className="text-sm text-muted-foreground">{helpText}</p>
+              <p className="text-sm text-muted-foreground whitespace-pre-line">{helpText}</p>
             )}
           </div>
         );
@@ -382,11 +450,6 @@ export function DynamicApplicationForm({
               {field.is_required && (
                 <span className="text-red-500 ml-1">*</span>
               )}
-              {isFixedField && (
-                <Badge variant="outline" className="ml-2 text-xs">
-                  {locale === "zh" ? "固定欄位" : "Fixed Field"}
-                </Badge>
-              )}
             </Label>
             <Input
               id={field.field_name}
@@ -398,15 +461,8 @@ export function DynamicApplicationForm({
               required={field.is_required}
               className={`w-full ${isFixedField ? "bg-blue-50 border-blue-200" : ""}`}
             />
-            {isFixedField && fieldValue && (
-              <p className="text-sm text-blue-600">
-                {locale === "zh"
-                  ? "此欄位已從您的個人檔案自動填入，您可以修改內容"
-                  : "This field has been auto-filled from your profile and can be modified"}
-              </p>
-            )}
             {helpText && (
-              <p className="text-sm text-muted-foreground">{helpText}</p>
+              <p className="text-sm text-muted-foreground whitespace-pre-line">{helpText}</p>
             )}
           </div>
         );
@@ -418,11 +474,6 @@ export function DynamicApplicationForm({
               {label}
               {field.is_required && (
                 <span className="text-red-500 ml-1">*</span>
-              )}
-              {isFixedField && (
-                <Badge variant="outline" className="ml-2 text-xs">
-                  {locale === "zh" ? "固定欄位" : "Fixed Field"}
-                </Badge>
               )}
             </Label>
             <Textarea
@@ -437,20 +488,13 @@ export function DynamicApplicationForm({
               className={`w-full min-h-[120px] ${isFixedField ? "bg-blue-50 border-blue-200" : ""}`}
               rows={6}
             />
-            {isFixedField && fieldValue && (
-              <p className="text-sm text-blue-600">
-                {locale === "zh"
-                  ? "此欄位已從您的個人檔案自動填入，您可以修改內容"
-                  : "This field has been auto-filled from your profile and can be modified"}
-              </p>
-            )}
             {field.max_length && (
               <p className="text-sm text-muted-foreground text-right">
                 {fieldValue?.length || 0} / {field.max_length}
               </p>
             )}
             {helpText && (
-              <p className="text-sm text-muted-foreground">{helpText}</p>
+              <p className="text-sm text-muted-foreground whitespace-pre-line">{helpText}</p>
             )}
           </div>
         );
@@ -485,7 +529,7 @@ export function DynamicApplicationForm({
               </SelectContent>
             </Select>
             {helpText && (
-              <p className="text-sm text-muted-foreground">{helpText}</p>
+              <p className="text-sm text-muted-foreground whitespace-pre-line">{helpText}</p>
             )}
           </div>
         );
@@ -510,7 +554,7 @@ export function DynamicApplicationForm({
               </Label>
             </div>
             {helpText && (
-              <p className="text-sm text-muted-foreground">{helpText}</p>
+              <p className="text-sm text-muted-foreground whitespace-pre-line">{helpText}</p>
             )}
           </div>
         );
@@ -551,7 +595,7 @@ export function DynamicApplicationForm({
               ))}
             </div>
             {helpText && (
-              <p className="text-sm text-muted-foreground">{helpText}</p>
+              <p className="text-sm text-muted-foreground whitespace-pre-line">{helpText}</p>
             )}
           </div>
         );
@@ -581,15 +625,10 @@ export function DynamicApplicationForm({
             {document.is_required && (
               <span className="text-red-500 ml-1">*</span>
             )}
-            {isFixedDocument && (
-              <Badge variant="outline" className="ml-2 text-xs">
-                {locale === "zh" ? "固定文件" : "Fixed Document"}
-              </Badge>
-            )}
           </Label>
           {files.length > 0 && (
             <Badge variant="secondary" className="text-xs">
-              {files.length} {locale === "zh" ? "個檔案" : "files"}
+              {files.length} {t("form_upload.files_suffix")}
             </Badge>
           )}
         </div>
@@ -597,10 +636,7 @@ export function DynamicApplicationForm({
         {isFixedDocument && document.existing_file_url && (
           <div className="space-y-2">
             <h4 className="text-sm font-medium">
-              {locale === "zh"
-                ? "已上傳檔案 (1/1) - "
-                : "Uploaded files (1/1) - "}
-              {documentName}
+              {t("form_upload.uploaded_files")} (1/1) - {documentName}
             </h4>
             <Card>
               <CardContent className="flex items-center justify-between p-3">
@@ -608,11 +644,11 @@ export function DynamicApplicationForm({
                   <FileText className="h-4 w-4 text-muted-foreground" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">
-                      {locale === "zh" ? "存摺封面" : "Bank Book Cover"}
+                      {t("form_upload.bankbook_cover")}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       <span className="ml-1 text-blue-600">
-                        {locale === "zh" ? "已上傳" : "Uploaded"}
+                        {t("form_upload.uploaded")}
                       </span>
                     </p>
                   </div>
@@ -628,15 +664,13 @@ export function DynamicApplicationForm({
                   </Button>
                   <Badge variant="outline" className="text-xs">
                     <CheckCircle className="h-3 w-3 mr-1" />
-                    {locale === "zh" ? "已存在" : "Exists"}
+                    {t("form_upload.exists")}
                   </Badge>
                 </div>
               </CardContent>
             </Card>
             <p className="text-xs text-blue-600">
-              {locale === "zh"
-                ? "您可以上傳新檔案來替換現有檔案"
-                : "You can upload a new file to replace the existing one"}
+              {t("form_upload.replace_existing_notice")}
             </p>
           </div>
         )}
@@ -663,16 +697,14 @@ export function DynamicApplicationForm({
 
         <div className="text-xs text-muted-foreground space-y-1">
           <p>
-            {locale === "zh" ? "接受格式：" : "Accepted formats: "}
+            {t("form_upload.accepted_formats_label")}{" "}
             {document.accepted_file_types.join(", ")}
           </p>
           <p>
-            {locale === "zh" ? "檔案大小限制：" : "File size limit: "}
-            {document.max_file_size}
+            {t("form_upload.file_size_limit_label")} {document.max_file_size}
           </p>
           <p>
-            {locale === "zh" ? "最多檔案數：" : "Maximum files: "}
-            {document.max_file_count}
+            {t("form_upload.max_files_label")} {document.max_file_count}
           </p>
           {instructions && <p className="text-blue-600">{instructions}</p>}
 
@@ -680,33 +712,52 @@ export function DynamicApplicationForm({
           {document.example_file_url && (
             <button
               type="button"
-              onClick={(e) => {
+              onClick={e => {
                 e.preventDefault();
                 try {
                   // SECURITY: Use validated URL builder to prevent open redirect
-                  const safeUrl = buildSecurePreviewUrl('/api/v1/preview-document-example', {
-                    documentId: document.id,
-                    token: getAuthToken()
-                  });
+                  const safeUrl = buildSecurePreviewUrl(
+                    "/api/v1/preview/examples",
+                    {
+                      documentId: document.id,
+                      token: getAuthToken(),
+                    }
+                  );
 
                   // Create and trigger download/preview
-                  const link = window.document.createElement('a');
+                  const link = window.document.createElement("a");
                   link.href = safeUrl;
-                  link.target = '_blank';
-                  link.rel = 'noopener noreferrer';
+                  link.target = "_blank";
+                  link.rel = "noopener noreferrer";
                   link.click();
                 } catch (error) {
-                  console.error('Failed to build preview URL:', error);
-                  alert('無法開啟預覽，請稍後再試');
+                  logger.error("Failed to build preview URL", { error });
+                  alert(t("form_upload.preview_open_failed"));
                 }
               }}
               className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm font-medium mt-2"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                />
               </svg>
-              {locale === "zh" ? "查看範例文件" : "View Example"}
+              {t("form_upload.view_sample_document")}
             </button>
           )}
         </div>
@@ -718,9 +769,7 @@ export function DynamicApplicationForm({
     return (
       <div className={`flex items-center justify-center py-8 ${className}`}>
         <Loader2 className="h-8 w-8 animate-spin" />
-        <span className="ml-2">
-          {locale === "zh" ? "載入表單中..." : "Loading form..."}
-        </span>
+        <span className="ml-2">{t("form_upload.loading_form")}</span>
       </div>
     );
   }
@@ -742,9 +791,7 @@ export function DynamicApplicationForm({
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            {locale === "zh"
-              ? "尚未設定表單配置"
-              : "Form configuration not available"}
+            {t("form_upload.form_config_not_set")}
           </AlertDescription>
         </Alert>
       </div>
@@ -752,11 +799,11 @@ export function DynamicApplicationForm({
   }
 
   const activeFields = formConfig.fields
-    .filter(field => field.is_active)
+    .filter(field => field.is_active && !field.is_fixed)
     .sort((a, b) => a.display_order - b.display_order);
 
   const activeDocuments = formConfig.documents
-    .filter(doc => doc.is_active)
+    .filter(doc => doc.is_active && !doc.is_fixed && doc.requires_upload !== false)
     .sort((a, b) => a.display_order - b.display_order);
 
   return (
@@ -767,12 +814,10 @@ export function DynamicApplicationForm({
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <FormInput className="h-5 w-5" />
-              {locale === "zh" ? "申請資訊" : "Application Information"}
+              {t("form_upload.application_information")}
             </CardTitle>
             <CardDescription>
-              {locale === "zh"
-                ? "請填寫所有必要資訊"
-                : "Please fill in all required information"}
+              {t("form_upload.please_complete_required_info")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -787,12 +832,10 @@ export function DynamicApplicationForm({
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5" />
-              {locale === "zh" ? "必要文件" : "Required Documents"}
+              {t("form_upload.required_documents")}
             </CardTitle>
             <CardDescription>
-              {locale === "zh"
-                ? "請上傳所有必要文件"
-                : "Please upload all required documents"}
+              {t("form_upload.please_upload_required_docs")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -805,9 +848,7 @@ export function DynamicApplicationForm({
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            {locale === "zh"
-              ? "此獎學金類型尚未設定申請要求"
-              : "No application requirements configured for this scholarship type"}
+            {t("form_upload.no_requirements_configured")}
           </AlertDescription>
         </Alert>
       )}

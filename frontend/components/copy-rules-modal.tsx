@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { logger } from "@/lib/utils/logger";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -71,20 +72,21 @@ export function CopyRulesModal({
     try {
       await onCopy(finalYear, targetSemester || undefined, overwriteExisting);
       onClose();
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Extract meaningful error message
       let errorMessage = "複製失敗，請稍後再試";
+      const errShape = error as { message?: string; response?: { data?: { message?: string; detail?: string } } };
 
-      if (error?.message) {
-        errorMessage = error.message;
+      if (errShape.message) {
+        errorMessage = errShape.message;
       } else if (typeof error === "string") {
         errorMessage = error;
-      } else if (error?.response?.data?.message) {
-        errorMessage = error.response.data.message;
+      } else if (errShape.response?.data?.message) {
+        errorMessage = errShape.response.data.message;
       }
 
       setError(errorMessage);
-      console.error("複製失敗:", error);
+      logger.error("複製失敗", { error: error });
     } finally {
       setIsLoading(false);
     }

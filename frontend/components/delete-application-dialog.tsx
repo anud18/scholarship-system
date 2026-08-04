@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { logger } from "@/lib/utils/logger";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { apiClient } from "@/lib/api";
 import { toast } from "sonner";
+import { getTranslation } from "@/lib/i18n";
 
 interface DeleteApplicationDialogProps {
   open: boolean;
@@ -38,39 +40,43 @@ export function DeleteApplicationDialog({
 }: DeleteApplicationDialogProps) {
   const [reason, setReason] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
+  const t = (k: string) => getTranslation(locale, k);
+
+  const resetState = () => {
+    setReason("");
+    setIsDeleting(false);
+  };
 
   const handleDelete = async () => {
-    // Validate reason if required
-    if (requireReason && !reason.trim()) {
-      toast.error(locale === "zh" ? "請輸入刪除原因" : "Deletion reason is required");
+    const trimmedReason = reason.trim();
+    if (requireReason && !trimmedReason) {
+      toast.error(t("dialogs.delete_application.reason_required"));
       return;
     }
 
     setIsDeleting(true);
     try {
-      const response = await apiClient.applications.deleteApplication(
+      const response = await apiClient.admin.deleteApplication(
         applicationId,
-        requireReason ? reason : undefined
+        trimmedReason
       );
 
       if (response.success) {
-        toast.success(
-          locale === "zh" ? "申請已成功刪除" : "Application deleted successfully"
-        );
+        toast.success(t("dialogs.delete_application.delete_success"));
         onOpenChange(false);
-        setReason(""); // Reset reason
+        resetState();
         onSuccess?.();
       } else {
         toast.error(
-          response.message ||
-            (locale === "zh" ? "刪除失敗" : "Failed to delete application")
+          response.message || t("dialogs.delete_application.delete_failed")
         );
       }
-    } catch (error: any) {
-      console.error("Failed to delete application:", error);
+    } catch (error: unknown) {
+      logger.error("Failed to delete application", { error: error });
+      const errShape = error as { response?: { data?: { message?: string } } };
       toast.error(
-        error?.response?.data?.message ||
-          (locale === "zh" ? "刪除申請時發生錯誤" : "Error deleting application")
+        errShape.response?.data?.message ||
+          t("dialogs.delete_application.delete_error")
       );
     } finally {
       setIsDeleting(false);
@@ -78,56 +84,66 @@ export function DeleteApplicationDialog({
   };
 
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) resetState();
+        onOpenChange(next);
+      }}
+    >
       <AlertDialogContent className="max-w-md">
         <AlertDialogHeader>
-          <div className="flex items-center gap-2 text-red-600 mb-2">
-            <AlertTriangle className="h-5 w-5" />
-            <AlertDialogTitle>
-              {locale === "zh" ? "確認刪除申請" : "Confirm Delete Application"}
-            </AlertDialogTitle>
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 flex-shrink-0 mt-1">
+              <AlertTriangle className="h-5 w-5 text-red-600" />
+            </div>
+            <div className="flex-1">
+              <AlertDialogTitle className="text-red-700">
+                {t("dialogs.delete_application.confirm_title")}
+              </AlertDialogTitle>
+              <AlertDialogDescription className="mt-1">
+                {t("dialogs.delete_application.confirm_description")}
+              </AlertDialogDescription>
+            </div>
           </div>
-          <AlertDialogDescription className="space-y-3">
-            <p>
-              {locale === "zh"
-                ? `確定要刪除申請「${applicationName}」嗎？`
-                : `Are you sure you want to delete application "${applicationName}"?`}
-            </p>
-            <p className="text-sm font-medium text-gray-700">
-              {locale === "zh"
-                ? "此操作將標記申請為「已刪除」狀態，可在操作紀錄中查看。"
-                : "This action will mark the application as 'deleted' and can be viewed in the audit trail."}
-            </p>
-
-            {requireReason && (
-              <div className="space-y-2 pt-2">
-                <Label htmlFor="deletion-reason" className="text-gray-900">
-                  {locale === "zh" ? "刪除原因 *" : "Deletion Reason *"}
-                </Label>
-                <Textarea
-                  id="deletion-reason"
-                  placeholder={
-                    locale === "zh"
-                      ? "請輸入刪除原因..."
-                      : "Enter deletion reason..."
-                  }
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  className="min-h-[80px]"
-                  disabled={isDeleting}
-                />
-                <p className="text-xs text-gray-500">
-                  {locale === "zh"
-                    ? "刪除原因將記錄在操作紀錄中"
-                    : "The reason will be recorded in the audit trail"}
-                </p>
-              </div>
-            )}
-          </AlertDialogDescription>
         </AlertDialogHeader>
+
+        <div className="space-y-3 bg-gray-50 border border-gray-200 p-3 rounded-lg">
+          <p className="text-sm text-gray-900">
+            <span className="text-gray-600">
+              {t("dialogs.delete_application.application_label")}{" "}
+            </span>
+            <span className="font-semibold">{applicationName}</span>
+          </p>
+          <p className="text-xs text-gray-500">
+            {t("dialogs.delete_application.cascade_notice")}
+          </p>
+        </div>
+
+        {requireReason && (
+          <div className="space-y-2">
+            <Label htmlFor="deletion-reason" className="text-gray-900">
+              {t("dialogs.delete_application.reason_label")}
+              <span className="text-red-600 ml-1">*</span>
+            </Label>
+            <Textarea
+              id="deletion-reason"
+              placeholder={t("dialogs.delete_application.reason_placeholder")}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              className="min-h-[80px]"
+              maxLength={500}
+              disabled={isDeleting}
+            />
+            <p className="text-xs text-gray-500">
+              {t("dialogs.delete_application.reason_recorded_notice")}
+            </p>
+          </div>
+        )}
+
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isDeleting}>
-            {locale === "zh" ? "取消" : "Cancel"}
+            {t("dialogs.delete_application.cancel")}
           </AlertDialogCancel>
           <AlertDialogAction
             onClick={(e) => {
@@ -140,10 +156,10 @@ export function DeleteApplicationDialog({
             {isDeleting ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                {locale === "zh" ? "刪除中..." : "Deleting..."}
+                {t("dialogs.delete_application.deleting")}
               </>
             ) : (
-              <>{locale === "zh" ? "確認刪除" : "Confirm Delete"}</>
+              t("dialogs.delete_application.confirm_delete")
             )}
           </AlertDialogAction>
         </AlertDialogFooter>

@@ -20,6 +20,7 @@ from app.schemas.application_field import (
     ApplicationFieldUpdate,
     ScholarshipFormConfigResponse,
 )
+from app.services.form_field_labels import FIXED_FIELD_LABELS
 
 
 class ApplicationFieldService:
@@ -256,8 +257,8 @@ class ApplicationFieldService:
                     "advisor_nycu_id": profile.advisor_nycu_id,
                 }
             return None
-        except Exception as e:
-            self.logger.error(f"Error fetching user profile data: {str(e)}")
+        except Exception:
+            self.logger.exception("Error fetching user profile data")
             return None
 
     def _create_fixed_bank_account_field(
@@ -267,13 +268,13 @@ class ApplicationFieldService:
         scholarship_type: str = "fixed",
     ) -> Dict[str, Any]:
         """Create fixed bank account field definition"""
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         return {
             "id": 0,  # Temporary ID for fixed field
             "scholarship_type": scholarship_type,
             "field_name": "postal_account",
-            "field_label": "郵局帳號",
+            "field_label": FIXED_FIELD_LABELS["postal_account"],
             "field_label_en": "Post Office/ESUN Bank Account Number",
             "field_type": "text",
             "is_required": True,
@@ -286,8 +287,8 @@ class ApplicationFieldService:
             "help_text": "請填寫正確的郵局帳號以便獎學金匯款",
             "help_text_en": "Please provide your correct Post Office or ESUN Bank account number for scholarship remittance",
             "prefill_value": prefill_data.get("account_number", "") if prefill_data else "",
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
             "created_by": 0,
             "updated_by": 0,
         }
@@ -299,7 +300,7 @@ class ApplicationFieldService:
         scholarship_type: str = "fixed",
     ) -> Dict[str, Any]:
         """Create fixed bank statement cover document definition"""
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         return {
             "id": 0,  # Temporary ID for fixed document
@@ -318,8 +319,8 @@ class ApplicationFieldService:
             "upload_instructions": "請確保存摺封面清晰可讀，包含戶名、帳號、銀行名稱等資訊",
             "upload_instructions_en": "Please ensure the bank statement cover is clear and readable, including account name, account number, bank name, etc.",
             "existing_file_url": prefill_data.get("bank_document_photo_url", "") if prefill_data else "",
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
             "created_by": 0,
             "updated_by": 0,
         }
@@ -331,7 +332,7 @@ class ApplicationFieldService:
         scholarship_type: str = "fixed",
     ) -> List[Dict[str, Any]]:
         """Create fixed advisor information fields"""
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         fields = []
 
@@ -341,7 +342,7 @@ class ApplicationFieldService:
                 "id": 0,  # Temporary ID for fixed field
                 "scholarship_type": scholarship_type,
                 "field_name": "advisor_name",
-                "field_label": "指導教授姓名",
+                "field_label": FIXED_FIELD_LABELS["advisor_name"],
                 "field_label_en": "Advisor Name",
                 "field_type": "text",
                 "is_required": True,
@@ -354,8 +355,8 @@ class ApplicationFieldService:
                 "help_text": "請填寫指導教授的姓名",
                 "help_text_en": "Please provide the name of the advisor",
                 "prefill_value": prefill_data.get("advisor_name", "") if prefill_data else "",
-                "created_at": datetime.now().isoformat(),
-                "updated_at": datetime.now().isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
                 "created_by": 0,
                 "updated_by": 0,
             }
@@ -367,7 +368,7 @@ class ApplicationFieldService:
                 "id": 0,  # Temporary ID for fixed field
                 "scholarship_type": scholarship_type,
                 "field_name": "advisor_email",
-                "field_label": "指導教授Email",
+                "field_label": FIXED_FIELD_LABELS["advisor_email"],
                 "field_label_en": "Advisor Email",
                 "field_type": "email",
                 "is_required": True,
@@ -380,8 +381,8 @@ class ApplicationFieldService:
                 "help_text": "請填寫指導教授的Email",
                 "help_text_en": "Please provide the email of the advisor",
                 "prefill_value": prefill_data.get("advisor_email", "") if prefill_data else "",
-                "created_at": datetime.now().isoformat(),
-                "updated_at": datetime.now().isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
                 "created_by": 0,
                 "updated_by": 0,
             }
@@ -393,7 +394,7 @@ class ApplicationFieldService:
                 "id": 0,  # Temporary ID for fixed field
                 "scholarship_type": scholarship_type,
                 "field_name": "advisor_nycu_id",
-                "field_label": "指導教授本校人事編號",
+                "field_label": FIXED_FIELD_LABELS["advisor_nycu_id"],
                 "field_label_en": "Advisor NYCU ID",
                 "field_type": "text",
                 "is_required": True,
@@ -406,8 +407,8 @@ class ApplicationFieldService:
                 "help_text": "請填寫指導教授的本校人事編號（必填）",
                 "help_text_en": "Please provide the advisor NYCU ID (required)",
                 "prefill_value": prefill_data.get("advisor_nycu_id", "") if prefill_data else "",
-                "created_at": datetime.now().isoformat(),
-                "updated_at": datetime.now().isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
                 "created_by": 0,
                 "updated_by": 0,
             }
@@ -430,12 +431,14 @@ class ApplicationFieldService:
             configs = result.scalars().all()
 
             for config in configs:
-                if config.requires_professor_recommendation:
+                # Advisor fields are needed if professor review is required
+                # for either general applications or renewals.
+                if config.requires_professor_recommendation or config.renewal_requires_professor_review:
                     return True
 
             return False
-        except Exception as e:
-            self.logger.error(f"Error checking professor recommendation requirement: {str(e)}")
+        except Exception:
+            self.logger.exception("Error checking professor recommendation requirement")
             return False
 
     async def inject_fixed_fields(
@@ -488,8 +491,8 @@ class ApplicationFieldService:
 
             return fields, documents
 
-        except Exception as e:
-            self.logger.error(f"Error injecting fixed fields: {str(e)}")
+        except Exception:
+            self.logger.exception("Error injecting fixed fields")
             return fields, documents
 
     # Combined methods
@@ -548,6 +551,8 @@ class ApplicationFieldService:
                 config_data["title"] = scholarship_model.name  # Add Chinese name
                 config_data["title_en"] = scholarship_model.name_en  # Add English name
                 config_data["terms_document_url"] = scholarship_model.terms_document_url
+                config_data["application_document_note"] = scholarship_model.application_document_note
+                config_data["application_document_note_en"] = scholarship_model.application_document_note_en
 
             config = ScholarshipFormConfigResponse.model_validate(config_data)
 
@@ -555,9 +560,9 @@ class ApplicationFieldService:
             return config
 
         except Exception as e:
-            self.logger.error(f"Error getting form config for {scholarship_type}: {str(e)}")
+            self.logger.exception(f"Error getting form config for {scholarship_type}")
             # Re-raise the exception instead of returning empty config
-            raise e
+            raise e from e
 
     async def save_scholarship_form_config(
         self,
@@ -565,6 +570,8 @@ class ApplicationFieldService:
         fields_data: List[Dict[str, Any]],
         documents_data: List[Dict[str, Any]],
         user_id: int,
+        application_document_note: Optional[str] = None,
+        application_document_note_en: Optional[str] = None,
     ) -> ScholarshipFormConfigResponse:
         """Save complete form configuration for a scholarship type"""
 
@@ -572,4 +579,32 @@ class ApplicationFieldService:
         fields = await self.bulk_update_fields(scholarship_type, fields_data, user_id)
         documents = await self.bulk_update_documents(scholarship_type, documents_data, user_id)
 
-        return ScholarshipFormConfigResponse(scholarship_type=scholarship_type, fields=fields, documents=documents)
+        # Persist the 申請文件 note on the scholarship type when provided.
+        # None means "not part of this save"; empty string clears the note.
+        from app.models.scholarship import ScholarshipType
+
+        stmt = select(ScholarshipType).where(ScholarshipType.code == scholarship_type)
+        result = await self.db.execute(stmt)
+        scholarship_model = result.scalar_one_or_none()
+
+        if scholarship_model:
+            note_changed = False
+            if application_document_note is not None:
+                scholarship_model.application_document_note = application_document_note
+                note_changed = True
+            if application_document_note_en is not None:
+                scholarship_model.application_document_note_en = application_document_note_en
+                note_changed = True
+            if note_changed:
+                await self.db.commit()
+
+        saved_note = scholarship_model.application_document_note if scholarship_model else None
+        saved_note_en = scholarship_model.application_document_note_en if scholarship_model else None
+
+        return ScholarshipFormConfigResponse(
+            scholarship_type=scholarship_type,
+            fields=fields,
+            documents=documents,
+            application_document_note=saved_note,
+            application_document_note_en=saved_note_en,
+        )

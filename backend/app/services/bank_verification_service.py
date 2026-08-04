@@ -154,24 +154,28 @@ class BankVerificationService:
         for doc in documents:
             # Support both English and Chinese document IDs
             if doc.get("document_id") in ["bank_account_cover", "存摺封面"]:
-                # Prefer using file_id for accurate lookup
+                # Prefer file_id for accurate lookup, but a persisted file_id
+                # can dangle (the row was replaced by a re-upload or removed by
+                # the dedupe migration) — fall back to the filename so a
+                # surviving row is still found.
                 file_id = doc.get("file_id")
                 if file_id:
                     stmt = select(ApplicationFile).where(
                         ApplicationFile.application_id == application.id, ApplicationFile.id == file_id
                     )
-                else:
-                    # Fallback: use filename field
-                    filename = doc.get("filename") or doc.get("original_filename")
-                    if filename:
-                        stmt = select(ApplicationFile).where(
-                            ApplicationFile.application_id == application.id, ApplicationFile.filename == filename
-                        )
-                    else:
-                        continue
+                    result = await self.db.execute(stmt)
+                    passbook_file = result.scalar_one_or_none()
+                    if passbook_file:
+                        return passbook_file
 
+                filename = doc.get("filename") or doc.get("original_filename")
+                if not filename:
+                    continue
+                stmt = select(ApplicationFile).where(
+                    ApplicationFile.application_id == application.id, ApplicationFile.filename == filename
+                )
                 result = await self.db.execute(stmt)
-                passbook_file = result.scalar_one_or_none()
+                passbook_file = result.scalars().first()
                 if passbook_file:
                     return passbook_file
 
@@ -236,7 +240,7 @@ class BankVerificationService:
                 file_stream.close()
                 file_stream.release_conn()
             except Exception as e:
-                raise OCRError(f"Failed to read file from storage: {str(e)}")
+                raise OCRError(f"Failed to read file from storage: {str(e)}") from e
 
             # Perform OCR extraction
             ocr_result = await ocr_service.extract_bank_info_from_image(image_data=image_data, db=self.db)
@@ -382,6 +386,8 @@ class BankVerificationService:
         # Update application meta_data with separate statuses
         from datetime import datetime, timezone
 
+        from sqlalchemy.orm.attributes import flag_modified
+
         application.meta_data = application.meta_data or {}
         application.meta_data["bank_verification"] = {
             "overall_status": verification_status,
@@ -390,6 +396,11 @@ class BankVerificationService:
             "verified_at": datetime.now(timezone.utc).isoformat(),
             "requires_manual_review": requires_manual_review,
         }
+        # JSON column does identity-based change detection; the in-place
+        # subscript assignment above doesn't change application.meta_data's
+        # object identity, so without flag_modified() the commit silently
+        # skips the column.
+        flag_modified(application, "meta_data")
         await self.db.commit()
         await self.db.refresh(application)
 
@@ -562,6 +573,19 @@ class BankVerificationService:
             if "fields" not in updated_form_data:
                 updated_form_data["fields"] = {}
 
+            # G19 (#981): capture the student's pre-correction values BEFORE
+            # any overwrite. submitted_form_data is the submission snapshot —
+            # silently rewriting it destroys「學生當時實際填了什麼」.
+            def _field_value(key: str):
+                field = (application.submitted_form_data or {}).get("fields", {}).get(key)
+                return field.get("value") if isinstance(field, dict) else None
+
+            prior_bank_fields = {
+                key: _field_value(key)
+                for key in ("postal_account", "bank_account", "account_number", "account_holder", "account_name")
+                if _field_value(key) is not None
+            }
+
             # Track what was updated
             account_number_updated = False
             account_holder_updated = False
@@ -649,7 +673,20 @@ class BankVerificationService:
                 overall_status = "needs_review"  # Partial verification
 
             # Update application meta_data with separate statuses
+            from sqlalchemy.orm.attributes import flag_modified
+
             application.meta_data = application.meta_data or {}
+            # G19: the FIRST correction permanently preserves the student's
+            # original bank fields; later corrections keep their own
+            # prior_values in verification_details below.
+            if (account_number_corrected or account_holder_corrected) and "original_bank_fields" not in (
+                application.meta_data or {}
+            ):
+                application.meta_data["original_bank_fields"] = {
+                    "fields": prior_bank_fields,
+                    "preserved_at": datetime.now(timezone.utc).isoformat(),
+                    "preserved_reason": "first manual bank correction (G19/#981)",
+                }
             application.meta_data["bank_verification"] = {
                 "overall_status": overall_status,
                 "account_number_status": account_number_status,
@@ -659,6 +696,9 @@ class BankVerificationService:
                 "reviewed_by": reviewer_username,
                 "review_notes": review_notes,
             }
+            # Identity-based change detection on JSON column needs an explicit
+            # flag — see flag_modified() comment in the auto-verify path above.
+            flag_modified(application, "meta_data")
 
             # Query related payment roster items to update their status
             roster_items_stmt = select(PaymentRosterItem).where(PaymentRosterItem.application_id == application_id)
@@ -674,11 +714,21 @@ class BankVerificationService:
                     "account_number": {
                         "status": account_number_status,
                         "corrected_value": account_number_corrected,
+                        "prior_values": {
+                            k: prior_bank_fields.get(k)
+                            for k in ("postal_account", "bank_account", "account_number")
+                            if k in prior_bank_fields
+                        },
                         "approved": account_number_approved,
                     },
                     "account_holder": {
                         "status": account_holder_status,
                         "corrected_value": account_holder_corrected,
+                        "prior_values": {
+                            k: prior_bank_fields.get(k)
+                            for k in ("account_holder", "account_name")
+                            if k in prior_bank_fields
+                        },
                         "approved": account_holder_approved,
                     },
                     "notes": review_notes,
@@ -691,6 +741,11 @@ class BankVerificationService:
                 roster_item.bank_account_number_status = account_number_status
                 roster_item.bank_account_holder_status = account_holder_status
                 roster_item.bank_verification_details = verification_details
+                # bank_verification_details is a JSON column; assigning a fresh
+                # dict here changes the object identity so SQLAlchemy CAN detect
+                # it. flag_modified() is defensive for callers that later
+                # mutate the dict in-place during the same session.
+                flag_modified(roster_item, "bank_verification_details")
                 roster_item.bank_manual_review_notes = review_notes
 
             # Save verified bank account for future reference
@@ -741,7 +796,7 @@ class BankVerificationService:
                         # Create new verified account record
                         # First, deactivate any other active accounts for this user
                         deactivate_stmt = select(StudentBankAccount).where(
-                            StudentBankAccount.user_id == application.user_id, StudentBankAccount.is_active == True
+                            StudentBankAccount.user_id == application.user_id, StudentBankAccount.is_active.is_(True)
                         )
                         deactivate_result = await self.db.execute(deactivate_stmt)
                         active_accounts = deactivate_result.scalars().all()
@@ -800,4 +855,4 @@ class BankVerificationService:
         except Exception as e:
             # Rollback on any error
             await self.db.rollback()
-            raise ValueError(f"Failed to process manual review: {str(e)}") from e
+            raise ValueError("Failed to process manual review") from e

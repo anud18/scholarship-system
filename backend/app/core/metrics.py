@@ -175,8 +175,9 @@ def normalize_endpoint(path: str) -> str:
     # Replace numeric IDs
     path = re.sub(r"/\d+", "/:id", path)
 
-    # Replace alphanumeric IDs (at least 8 characters)
-    path = re.sub(r"/[a-zA-Z0-9_-]{8,}", "/:id", path)
+    # Replace alphanumeric IDs (at least 8 characters, must contain a digit to
+    # avoid collapsing route words like "applications" or "scholarships")
+    path = re.sub(r"/(?=[a-zA-Z0-9_-]*\d)[a-zA-Z0-9_-]{8,}", "/:id", path)
 
     return path
 

@@ -104,8 +104,8 @@ class EmailTemplateLoader:
 
             return template_html
 
-        except Exception as e:
-            logger.error(f"Error reading template file {template_path}: {e}")
+        except Exception:
+            logger.exception(f"Error reading template file {template_path}")
             raise
 
     def render(self, template_name: str, context: Dict[str, str]) -> str:

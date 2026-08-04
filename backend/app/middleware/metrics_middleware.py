@@ -89,7 +89,7 @@ class MetricsMiddleware(BaseHTTPMiddleware):
                 pass  # Silently fail to avoid breaking the application
 
             # Re-raise the exception to let FastAPI handle it
-            raise exc
+            raise exc from exc
 
         finally:
             # Calculate request duration

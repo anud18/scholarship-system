@@ -2,6 +2,7 @@
 Student management API endpoints for administrators
 """
 
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -10,13 +11,88 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import require_admin
 from app.db.deps import get_db
+from app.models.application import Application
+from app.models.enums import ApplicationStatus
+from app.models.scholarship import ScholarshipConfiguration
 from app.models.user import EmployeeStatus, User, UserRole
 from app.services.student_service import StudentService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-def convert_student_to_dict(user: User) -> dict:
+def applied_application_filters() -> list:
+    """Filter clauses for applications that count as "the student applied".
+
+    An application counts once the student has submitted it (draft = not yet
+    applied); soft-deleted rows and rows without a scholarship type link are
+    excluded. Shared by the list annotation and the scholarship filters so the
+    badges shown always match what the filters return — the annotation LEFT
+    JOINs the configuration (and falls back to the denormalized scholarship_name
+    label), so legacy applications with a NULL scholarship_configuration_id are
+    still counted here and surfaced as a badge, never hidden.
+    """
+    return [
+        Application.deleted_at.is_(None),
+        Application.status.notin_([ApplicationStatus.draft.value, ApplicationStatus.deleted.value]),
+        Application.scholarship_type_id.isnot(None),
+    ]
+
+
+async def get_applied_scholarships_map(db: AsyncSession, user_ids: list[int]) -> dict[int, list[dict]]:
+    """Aggregate which scholarship configurations each user has applied for.
+
+    Returns {user_id: [{scholarship_configuration_id, config_code, name, application_count}]},
+    one entry per distinct scholarship configuration (獎學金配置) with the number
+    of qualifying applications (see applied_application_filters for what qualifies).
+    ``name`` is the configuration name (config_name, e.g. "博士生獎學金 114學年").
+
+    The configuration is LEFT JOINed: a legacy application with a NULL
+    scholarship_configuration_id still yields a badge, grouped by and labelled
+    with its denormalized ``scholarship_name`` snapshot (``scholarship_configuration_id``
+    / ``config_code`` are then None). This keeps the badge set identical to what
+    the has_application / scholarship_type_id filters return.
+    """
+    applied_map: dict[int, list[dict]] = {}
+    if not user_ids:
+        return applied_map
+
+    # config_name when the configuration is linked, else the denormalized snapshot.
+    name_label = func.coalesce(ScholarshipConfiguration.config_name, Application.scholarship_name)
+    stmt = (
+        select(
+            Application.user_id,
+            ScholarshipConfiguration.id,
+            ScholarshipConfiguration.config_code,
+            name_label,
+            func.count(Application.id),
+        )
+        .outerjoin(ScholarshipConfiguration, Application.scholarship_configuration_id == ScholarshipConfiguration.id)
+        .where(Application.user_id.in_(user_ids), *applied_application_filters())
+        # Group by the display identity: the linked config (id + code) or, for a
+        # NULL-config legacy row, the fallback name. The PK can be NULL under the
+        # outer join, so the selected config columns are listed explicitly rather
+        # than relying on functional dependency.
+        .group_by(Application.user_id, ScholarshipConfiguration.id, ScholarshipConfiguration.config_code, name_label)
+        # Order by the display label so a student's badges are deterministic even
+        # when several are legacy (config.id NULL); id is a stable tiebreaker.
+        .order_by(name_label, ScholarshipConfiguration.id)
+    )
+    result = await db.execute(stmt)
+    for user_id, config_id, config_code, name, application_count in result.all():
+        applied_map.setdefault(user_id, []).append(
+            {
+                "scholarship_configuration_id": config_id,
+                "config_code": config_code,
+                "name": name,
+                "application_count": application_count,
+            }
+        )
+    return applied_map
+
+
+def convert_student_to_dict(user: User, applied_scholarships: Optional[list[dict]] = None) -> dict:
     """Convert User model (student role) to dictionary"""
     return {
         "id": user.id,
@@ -30,6 +106,7 @@ def convert_student_to_dict(user: User) -> dict:
         "college_code": user.college_code,
         "role": user.role.value if hasattr(user.role, "value") else str(user.role),
         "comment": user.comment,
+        "applied_scholarships": applied_scholarships if applied_scholarships is not None else [],
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "updated_at": user.updated_at.isoformat() if user.updated_at else None,
         "last_login_at": user.last_login_at.isoformat() if user.last_login_at else None,
@@ -43,11 +120,22 @@ async def get_all_students(
     search: Optional[str] = Query(None, description="Search by name, email, or NYCU ID"),
     dept_code: Optional[str] = Query(None, description="Filter by department code"),
     status: Optional[str] = Query(None, description="Filter by status (在學/畢業)"),
+    scholarship_type_id: Optional[int] = Query(
+        None, description="Filter by scholarship type the student has applied for"
+    ),
+    has_application: Optional[bool] = Query(
+        None, description="Filter by whether the student has applied for any scholarship"
+    ),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Get all students with pagination, search, and filters
+
+    Each student item includes applied_scholarships: the scholarship
+    configurations (獎學金配置) the student has submitted applications for
+    (drafts and deleted applications excluded), with per-configuration
+    application counts.
 
     Requires admin or super_admin role.
     """
@@ -76,6 +164,24 @@ async def get_all_students(
         if status in valid_statuses:
             stmt = stmt.where(User.status == status)
 
+    # Apply scholarship application filters (EXISTS correlated on User.id)
+    if scholarship_type_id is not None:
+        stmt = stmt.where(
+            select(Application.id)
+            .where(
+                Application.user_id == User.id,
+                Application.scholarship_type_id == scholarship_type_id,
+                *applied_application_filters(),
+            )
+            .exists()
+        )
+
+    if has_application is not None:
+        any_application = (
+            select(Application.id).where(Application.user_id == User.id, *applied_application_filters()).exists()
+        )
+        stmt = stmt.where(any_application if has_application else ~any_application)
+
     # Get total count
     count_stmt = select(func.count()).select_from(stmt.subquery())
     result = await db.execute(count_stmt)
@@ -88,8 +194,11 @@ async def get_all_students(
     result = await db.execute(stmt)
     students = result.scalars().all()
 
+    # Annotate each student with the scholarships they have applied for
+    applied_map = await get_applied_scholarships_map(db, [student.id for student in students])
+
     # Convert to dict
-    student_list = [convert_student_to_dict(student) for student in students]
+    student_list = [convert_student_to_dict(student, applied_map.get(student.id, [])) for student in students]
 
     # Calculate total pages
     pages = (total + size - 1) // size if total > 0 else 0
@@ -177,6 +286,10 @@ async def get_student_detail(
     Get detailed information for a specific student
 
     Returns basic user info from database.
+
+    SECURITY: Admin PII lookup. Audit-logged with actor_user_id +
+    target user_id + target nycu_id so directed lookups of specific
+    students are traceable to an admin actor.
     """
     stmt = select(User).where(and_(User.id == user_id, User.role == UserRole.student))
     result = await db.execute(stmt)
@@ -185,10 +298,25 @@ async def get_student_detail(
     if not student:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student not found")
 
+    logger.info(
+        "admin student-detail lookup: target_user_id=%s nycu_id=%s by user_id=%s",
+        student.id,
+        student.nycu_id,
+        current_user.id,
+        extra={
+            "actor_user_id": current_user.id,
+            "actor_role": (current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)),
+            "target_user_id": student.id,
+            "target_nycu_id": student.nycu_id,
+        },
+    )
+
+    applied_map = await get_applied_scholarships_map(db, [student.id])
+
     return {
         "success": True,
         "message": "Student detail retrieved successfully",
-        "data": convert_student_to_dict(student),
+        "data": convert_student_to_dict(student, applied_map.get(student.id, [])),
     }
 
 
@@ -203,6 +331,12 @@ async def get_student_sis_data(
 
     This endpoint fetches fresh data from the external Student Information System.
     Requires the student's NYCU ID.
+
+    SECURITY: Live SIS PII fetch (basic info + multi-semester term data).
+    Audit-logged with actor + target identifiers + SIS-fetch outcome.
+    Per-semester fetch failures are also counted so the SIS API's
+    availability is visible without spamming the log on legitimate
+    gap-year terms.
     """
     # Get student from database
     stmt = select(User).where(and_(User.id == user_id, User.role == UserRole.student))
@@ -214,6 +348,13 @@ async def get_student_sis_data(
 
     if not student.nycu_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Student does not have a NYCU ID")
+
+    log_extra = {
+        "actor_user_id": current_user.id,
+        "actor_role": (current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)),
+        "target_user_id": student.id,
+        "target_nycu_id": student.nycu_id,
+    }
 
     # Fetch from SIS API
     student_service = StudentService()
@@ -229,6 +370,7 @@ async def get_student_sis_data(
         from app.utils.academic_period import get_academic_year_range
 
         semesters = []
+        term_fetch_failures = 0
         student_code = basic_info.get("std_stdcode", student.nycu_id)
 
         if student_code:
@@ -241,9 +383,32 @@ async def get_student_sis_data(
                         term_data = await student_service.get_student_term_info(student_code, str(year), term)
                         if term_data:
                             semesters.append({"academic_year": str(year), "term": term, **term_data})
-                    except Exception:
-                        # Log but continue - some semesters may not exist
-                        pass
+                    except Exception as term_exc:
+                        # Some semesters legitimately don't exist (gap years, before-enrollment
+                        # terms). Log at debug + count failures so a real SIS outage is visible
+                        # in the audit row without spamming on legitimate gaps.
+                        term_fetch_failures += 1
+                        logger.debug(
+                            "SIS term fetch failed: student=%s year=%s term=%s: %s",
+                            student_code,
+                            year,
+                            term,
+                            term_exc,
+                        )
+
+        logger.info(
+            "admin SIS-data lookup: target_user_id=%s nycu_id=%s semesters=%d term_failures=%d by user_id=%s",
+            student.id,
+            student.nycu_id,
+            len(semesters),
+            term_fetch_failures,
+            current_user.id,
+            extra={
+                **log_extra,
+                "semesters_count": len(semesters),
+                "term_fetch_failures": term_fetch_failures,
+            },
+        )
 
         return {
             "success": True,
@@ -257,6 +422,7 @@ async def get_student_sis_data(
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception("admin SIS-data lookup failed", extra=log_extra)
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Failed to fetch student data from SIS: {str(e)}"
-        )
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Failed to fetch student data from SIS"
+        ) from e

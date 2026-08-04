@@ -1,3 +1,4 @@
+import { logger } from "@/lib/utils/logger";
 /**
  * Email Rendering API Endpoint
  *
@@ -21,6 +22,7 @@ const VALID_TEMPLATES: EmailTemplate[] = [
   'application-submitted',
   'professor-review-request',
   'college-review-request',
+  'college-ranking-submitted',
   'deadline-reminder',
   'document-request',
   'result-notification',
@@ -78,13 +80,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<RenderEma
       html,
     });
 
-  } catch (error: any) {
-    console.error('[Email Render API] Error rendering email:', error);
+  } catch (error: unknown) {
+    logger.error('[Email Render API] Error rendering email:', error);
 
     return NextResponse.json(
       {
         success: false,
-        error: error.message || 'Failed to render email template'
+        error: error instanceof Error ? error.message : 'Failed to render email template'
       },
       { status: 500 }
     );

@@ -4,6 +4,8 @@ Whitelist Excel Import/Export Service
 
 import io
 import logging
+
+from app.utils.excel_safety import sanitize_excel_cell
 from typing import Dict, List, Tuple
 
 from openpyxl import Workbook, load_workbook
@@ -66,10 +68,12 @@ class WhitelistExcelService:
         row = 2
         for sub_type, students in whitelist_data.items():
             for student in students:
-                ws.cell(row=row, column=1).value = student.get("nycu_id", "")
-                ws.cell(row=row, column=2).value = student.get("name", "")
-                ws.cell(row=row, column=3).value = sub_type
-                ws.cell(row=row, column=4).value = student.get("note", "")
+                # SECURITY (#1081 G): neutralize spreadsheet formula injection from
+                # free-text name/note before writing.
+                ws.cell(row=row, column=1).value = sanitize_excel_cell(student.get("nycu_id", ""))
+                ws.cell(row=row, column=2).value = sanitize_excel_cell(student.get("name", ""))
+                ws.cell(row=row, column=3).value = sanitize_excel_cell(sub_type)
+                ws.cell(row=row, column=4).value = sanitize_excel_cell(student.get("note", ""))
 
                 # 應用樣式
                 for col_idx in range(1, len(self.column_headers) + 1):
@@ -143,8 +147,16 @@ class WhitelistExcelService:
                 continue
 
             # 提取資料
-            nycu_id = str(row_data[col_indices["nycu_id"]]).strip() if "nycu_id" in col_indices else ""
-            sub_type = str(row_data[col_indices["sub_type"]]).strip() if "sub_type" in col_indices else ""
+            nycu_id = (
+                str(row_data[col_indices["nycu_id"]]).strip()
+                if "nycu_id" in col_indices and row_data[col_indices["nycu_id"]] is not None
+                else ""
+            )
+            sub_type = (
+                str(row_data[col_indices["sub_type"]]).strip()
+                if "sub_type" in col_indices and row_data[col_indices["sub_type"]] is not None
+                else ""
+            )
             name = (
                 str(row_data[col_indices["name"]]).strip()
                 if "name" in col_indices and row_data[col_indices["name"]]
@@ -223,7 +235,9 @@ class WhitelistExcelService:
         for row_idx, data in enumerate(example_data, start=2):
             for col_idx, value in enumerate(data, start=1):
                 cell = ws.cell(row=row_idx, column=col_idx)
-                cell.value = value
+                # SECURITY (#1081 G / #1223 A): sub_types are admin-authored keys
+                # from scholarship_configurations.quotas, not an enum.
+                cell.value = sanitize_excel_cell(value)
                 cell.font = self.cell_font
                 cell.alignment = self.cell_alignment
                 cell.border = self.border
@@ -260,7 +274,8 @@ class WhitelistExcelService:
 
         for row_idx, data in enumerate(instructions, start=1):
             for col_idx, value in enumerate(data, start=1):
-                ws_info.cell(row=row_idx, column=col_idx).value = value
+                # The 有效的子獎學金類型 lines interpolate admin-authored sub_type keys.
+                ws_info.cell(row=row_idx, column=col_idx).value = sanitize_excel_cell(value)
 
         # 儲存到 BytesIO
         excel_file = io.BytesIO()

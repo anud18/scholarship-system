@@ -99,7 +99,7 @@ class ApplicationAuditService:
 
         except Exception as e:
             await self.db.rollback()
-            logger.error(f"Failed to create audit log for application {application_id}: {e}")
+            logger.exception(f"Failed to create audit log for application {application_id}")
             # 即使稽核失敗也不應該影響主要業務邏輯
             self._fallback_log(application_id, action, user, str(e))
             return None
@@ -154,15 +154,28 @@ class ApplicationAuditService:
         user: User,
         reason: str,
         request: Optional[Request] = None,
+        scholarship_type_id: Optional[int] = None,
+        student_name: Optional[str] = None,
     ) -> Optional[AuditLog]:
-        """記錄刪除申請"""
+        """記錄刪除申請。
+
+        Application 會被硬刪除，因此必須在 meta_data 記錄
+        scholarship_type_id / student_name 等欄位，`get_scholarship_audit_trail`
+        才能在 applications row 消失後仍然把這筆 log 歸屬回正確的獎學金。
+        """
+        meta_data: Dict[str, Any] = {"app_id": app_id, "deletion_reason": reason}
+        if scholarship_type_id is not None:
+            meta_data["scholarship_type_id"] = scholarship_type_id
+        if student_name:
+            meta_data["student_name"] = student_name
+
         return await self.log_application_operation(
             application_id=application_id,
             action=AuditAction.delete,
             user=user,
             request=request,
             description=f"刪除申請 {app_id}，原因: {reason}",
-            meta_data={"app_id": app_id, "deletion_reason": reason},
+            meta_data=meta_data,
         )
 
     async def log_document_upload(
@@ -274,6 +287,102 @@ class ApplicationAuditService:
             description=f"駁回申請 {app_id}，原因: {reason}",
             new_values={"rejected_by": user.id, "rejection_reason": reason},
             meta_data={"app_id": app_id},
+        )
+
+    async def log_application_revoke(
+        self,
+        application_id: int,
+        app_id: str,
+        user: User,
+        reason: str,
+        prior_quota_status: Optional[str],
+        affected_unlocked_rosters: Optional[list] = None,
+        request: Optional[Request] = None,
+    ) -> Optional[AuditLog]:
+        """記錄撤銷獎學金分發 (issue #980 / G18)
+
+        ``prior_quota_status`` is the application's real quota_allocation_status
+        before the cancel. 撤銷 is legal before 確認分發 too, where that value is
+        NULL or "rejected" — recording a hardcoded "allocated" would put an
+        award in the audit trail that the application never held.
+        """
+        return await self.log_application_operation(
+            application_id=application_id,
+            action=AuditAction.revoke,
+            user=user,
+            request=request,
+            description=f"撤銷申請 {app_id} 的獎學金分發，原因: {reason}",
+            old_values={"quota_allocation_status": prior_quota_status},
+            new_values={
+                "quota_allocation_status": "revoked",
+                "reason": reason,
+                "affected_unlocked_rosters": affected_unlocked_rosters or [],
+            },
+            meta_data={"app_id": app_id},
+        )
+
+    async def log_application_suspend(
+        self,
+        application_id: int,
+        app_id: str,
+        user: User,
+        reason: str,
+        prior_quota_status: Optional[str],
+        affected_unlocked_rosters: Optional[list] = None,
+        request: Optional[Request] = None,
+    ) -> Optional[AuditLog]:
+        """記錄停發獎學金分發 (issue #980 / G18)
+
+        ``prior_quota_status``: see the revoke twin above — 停發 before
+        確認分發 is legal, so the prior state must be recorded, not assumed.
+        """
+        return await self.log_application_operation(
+            application_id=application_id,
+            action=AuditAction.suspend,
+            user=user,
+            request=request,
+            description=f"停發申請 {app_id} 的獎學金分發，原因: {reason}",
+            old_values={"quota_allocation_status": prior_quota_status},
+            new_values={
+                "quota_allocation_status": "suspended",
+                "reason": reason,
+                "affected_unlocked_rosters": affected_unlocked_rosters or [],
+            },
+            meta_data={"app_id": app_id},
+        )
+
+    async def log_application_restore(
+        self,
+        application_id: int,
+        app_id: str,
+        user: User,
+        prior_status: str,
+        restored_quota_status: Optional[str],
+        prior_reason: Optional[str] = None,
+        original_cancellation_log_id: Optional[int] = None,
+        request: Optional[Request] = None,
+    ) -> Optional[AuditLog]:
+        """記錄回復獎學金分發 (issue #980 / G18)
+
+        ``prior_reason`` preserves the original revoke/suspend reason that the
+        restore operation clears from the application row — without it the
+        original cancellation context would survive only in earlier log rows.
+
+        ``restored_quota_status`` is the quota_allocation_status the restore
+        actually replayed from the cancel-time snapshot. A student cancelled
+        before 確認分發 goes back to NULL, not "allocated".
+        """
+        return await self.log_application_operation(
+            application_id=application_id,
+            action=AuditAction.restore,
+            user=user,
+            request=request,
+            description=f"回復申請 {app_id} 的獎學金分發（原狀態: {prior_status}）",
+            old_values={"quota_allocation_status": prior_status, "reason": prior_reason},
+            new_values={"quota_allocation_status": restored_quota_status},
+            # G9 (#971): link back to the revoke/suspend log row so the
+            # decision chain (撤銷 → 回復) is traversable without heuristics.
+            meta_data={"app_id": app_id, "original_cancellation_log_id": original_cancellation_log_id},
         )
 
     async def log_application_create(
@@ -502,8 +611,8 @@ class ApplicationAuditService:
 
             return audit_logs
 
-        except Exception as e:
-            logger.error(f"Failed to retrieve audit trail for application {application_id}: {e}")
+        except Exception:
+            logger.exception(f"Failed to retrieve audit trail for application {application_id}")
             return []
 
     async def get_scholarship_audit_trail(
@@ -526,21 +635,30 @@ class ApplicationAuditService:
             List[Dict]: 稽核日誌列表（包含申請和學生資訊）
         """
         try:
+            from sqlalchemy import func, or_
             from sqlalchemy.orm import selectinload
 
             from app.models.application import Application
 
-            # Join audit logs with applications to filter by scholarship type
-            # Note: We DON'T filter by application status - this ensures deleted app logs are included
+            # LEFT OUTER JOIN so delete logs survive after the Application row is gone.
+            # For orphan rows, fall back to scholarship_type_id stored in meta_data.
+            # meta_data is plain JSON (not JSONB), so use json_extract_path_text for ->> access.
+            scholarship_id_str = str(scholarship_type_id)
+            meta_scholarship_id = func.json_extract_path_text(AuditLog.meta_data, "scholarship_type_id")
             query = (
                 select(AuditLog, Application)
-                .join(
+                .outerjoin(
                     Application,
                     AuditLog.resource_id == Application.id.cast(sqlalchemy.String),
                 )
-                .options(selectinload(AuditLog.user))  # Eager load user to avoid lazy loading issues
+                .options(selectinload(AuditLog.user))
                 .where(AuditLog.resource_type == "application")
-                .where(Application.scholarship_type_id == scholarship_type_id)
+                .where(
+                    or_(
+                        Application.scholarship_type_id == scholarship_type_id,
+                        meta_scholarship_id == scholarship_id_str,
+                    )
+                )
             )
 
             if action_filter:
@@ -551,37 +669,56 @@ class ApplicationAuditService:
             result = await self.db.execute(query)
             rows = result.all()
 
-            # Enrich audit logs with application information
             enriched_logs = []
             for audit_log, application in rows:
-                log_dict = {
-                    "id": audit_log.id,
-                    "action": audit_log.action,
-                    "user_id": audit_log.user_id,
-                    "user_name": audit_log.user.name if audit_log.user else "Unknown",
-                    "description": audit_log.description,
-                    "old_values": audit_log.old_values,
-                    "new_values": audit_log.new_values,
-                    "ip_address": audit_log.ip_address,
-                    "request_method": audit_log.request_method,
-                    "request_url": audit_log.request_url,
-                    "status": audit_log.status,
-                    "error_message": audit_log.error_message,
-                    "meta_data": audit_log.meta_data,
-                    "created_at": audit_log.created_at,
-                    # Add application context
-                    "application_id": application.id,
-                    "app_id": application.app_id,
-                    "scholarship_type_id": application.scholarship_type_id,
-                    "student_name": application.student_data.get("std_cname") if application.student_data else None,
-                }
-                enriched_logs.append(log_dict)
+                meta = audit_log.meta_data or {}
+                if application:
+                    app_id = application.app_id
+                    app_scholarship_id = application.scholarship_type_id
+                    student_name = (
+                        (application.student_data or {}).get("std_cname") if application.student_data else None
+                    )
+                    application_id = application.id
+                else:
+                    # Application has been hard-deleted; rely on snapshot stored in meta_data.
+                    app_id = meta.get("app_id")
+                    app_scholarship_id = meta.get("scholarship_type_id")
+                    student_name = meta.get("student_name")
+                    try:
+                        application_id = int(audit_log.resource_id) if audit_log.resource_id else None
+                    except (TypeError, ValueError):
+                        application_id = None
+
+                enriched_logs.append(
+                    {
+                        "id": audit_log.id,
+                        "action": audit_log.action,
+                        "user_id": audit_log.user_id,
+                        "user_name": audit_log.user.name if audit_log.user else "Unknown",
+                        "description": audit_log.description,
+                        "old_values": audit_log.old_values,
+                        "new_values": audit_log.new_values,
+                        "ip_address": audit_log.ip_address,
+                        "request_method": audit_log.request_method,
+                        "request_url": audit_log.request_url,
+                        "status": audit_log.status,
+                        "error_message": audit_log.error_message,
+                        "meta_data": audit_log.meta_data,
+                        "created_at": audit_log.created_at,
+                        "application_id": application_id,
+                        "app_id": app_id,
+                        "scholarship_type_id": app_scholarship_id,
+                        "student_name": student_name,
+                        "application_deleted": application is None,
+                    }
+                )
 
             return enriched_logs
 
-        except Exception as e:
-            logger.error(
-                f"Failed to retrieve scholarship audit trail for scholarship_type_id {scholarship_type_id}: {e}"
+        except Exception:
+            logger.exception(
+                "Failed to retrieve scholarship audit trail for scholarship_type_id %s",
+                scholarship_type_id,
             )
             return []
 

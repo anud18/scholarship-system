@@ -1,5 +1,6 @@
 "use client"
 
+import { logger } from "@/lib/utils/logger";
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -58,18 +59,15 @@ export function RosterCycleTimeline({ configId }: RosterCycleTimelineProps) {
     setError(null)
 
     try {
-      const response = await apiClient.request("/payment-rosters/cycle-status", {
-        method: "GET",
-        params: { config_id: configId },
-      })
+      const response = await apiClient.paymentRosters.getCycleStatus(configId)
 
       if (response.success && response.data) {
-        setData(response.data)
+        setData(response.data as CycleStatusData)
       } else {
         setError("無法載入造冊週期資料")
       }
     } catch (err) {
-      console.error("Failed to load cycle status:", err)
+      logger.error("Failed to load cycle status", { err: err })
       setError("載入造冊週期時發生錯誤")
     } finally {
       setLoading(false)
@@ -264,12 +262,13 @@ export function RosterCycleTimeline({ configId }: RosterCycleTimelineProps) {
       </Card>
 
       {/* Period Detail Dialog */}
-      {selectedPeriod && (
+      {selectedPeriod && data && (
         <PeriodDetailDialog
           open={dialogOpen}
           onOpenChange={setDialogOpen}
           period={selectedPeriod}
           configId={configId}
+          rosterCycle={data.roster_cycle}
           onRosterGenerated={loadCycleStatus}
         />
       )}

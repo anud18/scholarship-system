@@ -1,6 +1,7 @@
 "use client";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { logger } from "@/lib/utils/logger";
 import { AdminManagementProvider, useAdminManagement } from "@/contexts/admin-management-context";
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
@@ -23,14 +24,20 @@ const AnnouncementsPanel = dynamic(() => import("./announcements/AnnouncementsPa
   loading: () => <div className="flex items-center justify-center py-8"><div className="animate-spin rounded-full h-6 w-6 border-2 border-nycu-blue-600 border-t-transparent"></div></div>
 });
 
+const AuditLogPanel = dynamic(() => import("./audit/AuditLogPanel").then(mod => ({ default: mod.AuditLogPanel })), {
+  loading: () => <div className="flex items-center justify-center py-8"><div className="animate-spin rounded-full h-6 w-6 border-2 border-nycu-blue-600 border-t-transparent"></div></div>
+});
+
 // Import lighter components directly
 import { UserManagementPanel } from "./users/UserManagementPanel";
 import { StudentListManagement } from "./students/StudentListManagement";
+import { StudentHistoryPanel } from "./student-history/StudentHistoryPanel";
 import { QuotaPanel } from "./quota/QuotaPanel";
 import { ConfigurationsPanel } from "./configurations/ConfigurationsPanel";
 import { RulesPanel } from "./rules/RulesPanel";
 import { WorkflowsPanel } from "./workflows/WorkflowsPanel";
 import { SettingsPanel } from "./settings/SettingsPanel";
+import { SystemDocsPanel } from "./system-docs/SystemDocsPanel";
 
 interface User {
   id: string;
@@ -49,7 +56,7 @@ interface User {
   raw_data?: {
     chinese_name?: string;
     english_name?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
 
@@ -73,13 +80,11 @@ function AdminManagementContent({ user }: AdminManagementShellProps) {
         const response = await apiClient.admin.getCurrentUserScholarshipPermissions();
         if (response.success && response.data) {
           const permissions = response.data as ScholarshipPermission[];
-          const hasQuota = permissions.some(
-            (p: any) => p.can_manage_quota
-          );
+          const hasQuota = permissions.some(p => p.can_manage_quota);
           setHasQuotaPermission(hasQuota);
         }
       } catch (error) {
-        console.error("Failed to check quota permissions:", error);
+        logger.error("Failed to check quota permissions", { error: error });
       }
     };
 
@@ -99,11 +104,12 @@ function AdminManagementContent({ user }: AdminManagementShellProps) {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList
-          className={`grid w-full ${hasQuotaPermission ? "grid-cols-11" : "grid-cols-10"}`}
+          className={`grid w-full ${hasQuotaPermission ? "grid-cols-[repeat(14,minmax(0,1fr))]" : "grid-cols-[repeat(13,minmax(0,1fr))]"}`}
         >
           <TabsTrigger value="dashboard">系統概覽</TabsTrigger>
           <TabsTrigger value="users">使用者權限</TabsTrigger>
           <TabsTrigger value="students">學生列表</TabsTrigger>
+          <TabsTrigger value="student-history">學生領獎紀錄查詢</TabsTrigger>
           {hasQuotaPermission && (
             <TabsTrigger value="quota">名額管理</TabsTrigger>
           )}
@@ -112,8 +118,10 @@ function AdminManagementContent({ user }: AdminManagementShellProps) {
           <TabsTrigger value="workflows">工作流程</TabsTrigger>
           <TabsTrigger value="email">郵件管理</TabsTrigger>
           <TabsTrigger value="history">歷史申請</TabsTrigger>
+          <TabsTrigger value="audit-logs">稽核日誌</TabsTrigger>
           <TabsTrigger value="announcements">系統公告</TabsTrigger>
           <TabsTrigger value="settings">系統設定</TabsTrigger>
+          <TabsTrigger value="system-docs">系統文件</TabsTrigger>
         </TabsList>
 
         <TabsContent value="dashboard" className="space-y-4">
@@ -126,6 +134,10 @@ function AdminManagementContent({ user }: AdminManagementShellProps) {
 
         <TabsContent value="students" className="space-y-4">
           <StudentListManagement />
+        </TabsContent>
+
+        <TabsContent value="student-history" className="space-y-4">
+          <StudentHistoryPanel />
         </TabsContent>
 
         {hasQuotaPermission && (
@@ -160,6 +172,14 @@ function AdminManagementContent({ user }: AdminManagementShellProps) {
 
         <TabsContent value="settings" className="space-y-4">
           <SettingsPanel />
+        </TabsContent>
+
+        <TabsContent value="audit-logs" className="space-y-4">
+          <AuditLogPanel />
+        </TabsContent>
+
+        <TabsContent value="system-docs" className="space-y-4">
+          <SystemDocsPanel />
         </TabsContent>
       </Tabs>
     </div>

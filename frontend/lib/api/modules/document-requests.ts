@@ -55,7 +55,7 @@ export function createDocumentRequestsApi() {
     fulfillDocumentRequest: async (
       requestId: number,
       notes?: string
-    ): Promise<ApiResponse<any>> => {
+    ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.PATCH(
         '/api/v1/document-requests/{request_id}/fulfill',
         {
@@ -63,7 +63,30 @@ export function createDocumentRequestsApi() {
           body: notes ? { notes } : undefined,
         }
       );
-      return toApiResponse<any>(response);
+      return toApiResponse<unknown>(response);
+    },
+
+    /**
+     * Cancel a pending document request (staff only).
+     *
+     * Only requests in 'pending' status can be cancelled.
+     * cancellationReason is required by the backend schema (Field(...)).
+     *
+     * PATCH /api/v1/document-requests/{request_id}/cancel
+     * Type-safe: Path parameter and body validated against OpenAPI
+     */
+    cancelDocumentRequest: async (
+      requestId: number,
+      cancellationReason: string
+    ): Promise<ApiResponse<unknown>> => {
+      const response = await typedClient.raw.PATCH(
+        '/api/v1/document-requests/{request_id}/cancel',
+        {
+          params: { path: { request_id: requestId } },
+          body: { cancellation_reason: cancellationReason },
+        }
+      );
+      return toApiResponse<unknown>(response);
     },
   };
 }

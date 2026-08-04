@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { toast } from "sonner";
+import { logger } from "@/lib/utils/logger";
 import { Search, MoreHorizontal, Download, Eye, RefreshCw, Trash2, FileSpreadsheet } from "lucide-react"
 import { formatDateTime, getStatusBadgeVariant } from "@/lib/utils"
 import { buildSecurePreviewUrl, getAuthToken } from "@/lib/utils/url-validation"
@@ -64,15 +65,16 @@ export function PaymentRosterList({ onRosterChange }: PaymentRosterListProps) {
       if (search) params.set("search", search)
       if (statusFilter !== "all") params.set("status", statusFilter)
 
-      const response = await apiClient.request("/payment-rosters", { params: Object.fromEntries(params) })
-      const data = response.data || response
+      const response = await apiClient.paymentRosters.getRosters(Object.fromEntries(params) as never)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (response.data || response) as any
 
       if (data.items) {
         setRosters(data.items)
         setPagination(prev => ({ ...prev, total: data.total }))
       }
     } catch (error) {
-      console.error("獲取造冊列表失敗:", error)
+      logger.error("獲取造冊列表失敗", { error: error })
       toast.error("無法載入造冊列表")
     } finally {
       setLoading(false)
@@ -83,8 +85,9 @@ export function PaymentRosterList({ onRosterChange }: PaymentRosterListProps) {
     try {
       setActionLoading(prev => ({ ...prev, [rosterId]: true }))
 
-      const response = await apiClient.request(`/payment-rosters/${rosterId}/download`)
-      const data = response.data || response
+      const response = await apiClient.paymentRosters.downloadRoster(rosterId)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (response.data || response) as any
 
       // For file downloads, the API should return download_url
       if (data.download_url) {
@@ -95,7 +98,7 @@ export function PaymentRosterList({ onRosterChange }: PaymentRosterListProps) {
 
       toast.success("造冊檔案已下載")
     } catch (error) {
-      console.error("下載造冊失敗:", error)
+      logger.error("下載造冊失敗", { error: error })
       toast.error("無法下載造冊檔案")
     } finally {
       setActionLoading(prev => ({ ...prev, [rosterId]: false }))
@@ -106,16 +109,14 @@ export function PaymentRosterList({ onRosterChange }: PaymentRosterListProps) {
     try {
       setActionLoading(prev => ({ ...prev, [rosterId]: true }))
 
-      await apiClient.request(`/payment-rosters/${rosterId}/regenerate`, {
-        method: "POST",
-      })
+      await apiClient.paymentRosters.regenerateRoster(rosterId)
 
       toast.success("造冊已重新產生")
 
       fetchRosters()
       onRosterChange()
     } catch (error) {
-      console.error("重新產生造冊失敗:", error)
+      logger.error("重新產生造冊失敗", { error: error })
       toast.error("無法重新產生造冊")
     } finally {
       setActionLoading(prev => ({ ...prev, [rosterId]: false }))
@@ -126,9 +127,7 @@ export function PaymentRosterList({ onRosterChange }: PaymentRosterListProps) {
     if (!selectedRoster) return
 
     try {
-      await apiClient.request(`/payment-rosters/${selectedRoster.id}`, {
-        method: "DELETE",
-      })
+      await apiClient.paymentRosters.deleteRoster(selectedRoster.id)
 
       toast.success("造冊已刪除")
 
@@ -137,7 +136,7 @@ export function PaymentRosterList({ onRosterChange }: PaymentRosterListProps) {
       setDeleteDialogOpen(false)
       setSelectedRoster(null)
     } catch (error) {
-      console.error("刪除造冊失敗:", error)
+      logger.error("刪除造冊失敗", { error: error })
       toast.error("無法刪除造冊")
     }
   }
@@ -155,7 +154,7 @@ export function PaymentRosterList({ onRosterChange }: PaymentRosterListProps) {
   const getPeriodLabel = (period: string) => {
     const labels: { [key: string]: string } = {
       monthly: "月度",
-      half_yearly: "半年度",
+      semi_yearly: "半年度",
       yearly: "年度"
     }
     return labels[period] || period
@@ -327,7 +326,7 @@ export function PaymentRosterList({ onRosterChange }: PaymentRosterListProps) {
                                 });
                                 window.open(safeUrl, '_blank');
                               } catch (error) {
-                                console.error('Failed to build preview URL:', error);
+                                logger.error('Failed to build preview URL:', error);
                                 toast.error('無法開啟預覽，請稍後再試');
                               }
                             }}

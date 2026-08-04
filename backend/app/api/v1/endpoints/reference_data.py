@@ -11,7 +11,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.cache import cached
 from app.core.deps import get_db
+from app.core.enroll_types import merge_enroll_types
 from app.models.application import Application
 from app.models.enums import ApplicationCycle, Semester
 from app.models.scholarship import (
@@ -31,56 +33,61 @@ router = APIRouter()
 @router.get("/degrees")
 async def get_degrees(
     session: AsyncSession = Depends(get_db),
-) -> List[dict]:
+) -> ApiResponse[List[dict]]:
     """Get all degree types"""
     result = await session.execute(select(Degree))
     degrees = result.scalars().all()
 
-    return [{"id": degree.id, "name": degree.name} for degree in degrees]
+    data = [{"id": degree.id, "name": degree.name} for degree in degrees]
+    return ApiResponse(success=True, message="Degrees retrieved successfully", data=data)
 
 
 @router.get("/identities")
 async def get_identities(
     session: AsyncSession = Depends(get_db),
-) -> List[dict]:
+) -> ApiResponse[List[dict]]:
     """Get all student identity types"""
     result = await session.execute(select(Identity))
     identities = result.scalars().all()
 
-    return [{"id": identity.id, "name": identity.name} for identity in identities]
+    data = [{"id": identity.id, "name": identity.name} for identity in identities]
+    return ApiResponse(success=True, message="Identities retrieved successfully", data=data)
 
 
 @router.get("/studying-statuses")
 async def get_studying_statuses(
     session: AsyncSession = Depends(get_db),
-) -> List[dict]:
+) -> ApiResponse[List[dict]]:
     """Get all studying status types"""
     result = await session.execute(select(StudyingStatus))
     statuses = result.scalars().all()
 
-    return [{"id": status.id, "name": status.name} for status in statuses]
+    data = [{"id": status.id, "name": status.name} for status in statuses]
+    return ApiResponse(success=True, message="Studying statuses retrieved successfully", data=data)
 
 
 @router.get("/school-identities")
 async def get_school_identities(
     session: AsyncSession = Depends(get_db),
-) -> List[dict]:
+) -> ApiResponse[List[dict]]:
     """Get all school identity types"""
     result = await session.execute(select(SchoolIdentity))
     school_identities = result.scalars().all()
 
-    return [{"id": school_identity.id, "name": school_identity.name} for school_identity in school_identities]
+    data = [{"id": school_identity.id, "name": school_identity.name} for school_identity in school_identities]
+    return ApiResponse(success=True, message="School identities retrieved successfully", data=data)
 
 
 @router.get("/genders")
 async def get_genders(
     session: AsyncSession = Depends(get_db),
-) -> List[dict]:
+) -> ApiResponse[List[dict]]:
     """Get all gender types"""
     result = await session.execute(select(Gender))
     genders = result.scalars().all()
 
-    return [{"id": gender.id, "name": gender.name} for gender in genders]
+    data = [{"id": gender.id, "name": gender.name} for gender in genders]
+    return ApiResponse(success=True, message="Genders retrieved successfully", data=data)
 
 
 @router.get("/academies")
@@ -99,12 +106,12 @@ async def get_academies(
 @router.get("/departments")
 async def get_departments(
     session: AsyncSession = Depends(get_db),
-) -> List[dict]:
+) -> ApiResponse[List[dict]]:
     """Get all department information with academy mapping"""
     result = await session.execute(select(Department).order_by(Department.code))
     departments = result.scalars().all()
 
-    return [
+    data = [
         {
             "id": department.id,
             "code": department.code,
@@ -113,13 +120,14 @@ async def get_departments(
         }
         for department in departments
     ]
+    return ApiResponse(success=True, message="Departments retrieved successfully", data=data)
 
 
 @router.get("/enroll-types")
 async def get_enroll_types(
     degree_id: Optional[int] = Query(None, description="Filter by degree ID"),
     session: AsyncSession = Depends(get_db),
-) -> List[dict]:
+) -> ApiResponse[List[dict]]:
     """Get enrollment types, optionally filtered by degree"""
     query = select(EnrollType).options(selectinload(EnrollType.degree))
 
@@ -129,34 +137,41 @@ async def get_enroll_types(
     result = await session.execute(query.order_by(EnrollType.degreeId, EnrollType.code))
     enroll_types = result.scalars().all()
 
-    return [
-        {
-            "degree_id": enroll_type.degreeId,
-            "code": enroll_type.code,
-            "name": enroll_type.name,
-            "name_en": enroll_type.name_en,
-            "degree_name": enroll_type.degree.name if enroll_type.degree else None,
-        }
-        for enroll_type in enroll_types
-    ]
+    # DB rows first, hardcoded NYCU fallback fills any gaps so every valid
+    # std_enrolltype code resolves to a real name (no more "未知入學方式").
+    data = merge_enroll_types(enroll_types)
+    return ApiResponse(success=True, message="Enroll types retrieved successfully", data=data)
 
 
 @router.get("/all")
 async def get_all_reference_data(
     response: Response,
     session: AsyncSession = Depends(get_db),
-) -> dict:
+) -> ApiResponse[dict]:
     """
     Get all reference data in a single request.
 
-    SECURITY: Sets no-cache headers to prevent sensitive organizational data from being cached.
+    SECURITY: Sets no-cache headers to prevent sensitive organizational data from
+    being cached by browsers / CDNs. Server-side Redis caching (24h) is still
+    applied — it's an internal performance optimisation that never leaks into
+    HTTP cache layers.
     """
 
-    # SECURITY: Prevent caching of organizational structure data
+    # SECURITY: Prevent client-side / CDN caching of organizational structure
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
 
+    data = await _get_all_reference_data_cached(session)
+    return ApiResponse(success=True, message="Reference data retrieved successfully", data=data)
+
+
+@cached(
+    key_fn=lambda *_, **__: "refdata:all:v3", ttl=86400
+)  # 24 h; :v3 busts stale pre-enroll_types-fallback cache on deploy
+async def _get_all_reference_data_cached(session: AsyncSession) -> dict:
+    """Server-side cached body of /reference-data/all. See the wrapper above for
+    the no-store HTTP header rationale."""
     # Get all reference data in parallel
     degrees_result = await session.execute(select(Degree))
     identities_result = await session.execute(select(Identity))
@@ -175,7 +190,7 @@ async def get_all_reference_data(
         .join(ScholarshipType)
         .where(
             ScholarshipType.status == ScholarshipStatus.active.value,
-            ScholarshipSubTypeConfig.is_active == True,
+            ScholarshipSubTypeConfig.is_active.is_(True),
         )
         .order_by(ScholarshipSubTypeConfig.display_order)
     )
@@ -207,24 +222,21 @@ async def get_all_reference_data(
         "genders": [{"id": gender.id, "name": gender.name} for gender in genders],
         "academies": [{"id": academy.id, "code": academy.code, "name": academy.name} for academy in academies],
         "departments": [
-            {"id": department.id, "code": department.code, "name": department.name} for department in departments
-        ],
-        "enroll_types": [
             {
-                "degree_id": enroll_type.degreeId,
-                "code": enroll_type.code,
-                "name": enroll_type.name,
-                "name_en": enroll_type.name_en,
-                "degree_name": enroll_type.degree.name if enroll_type.degree else None,
+                "id": department.id,
+                "code": department.code,
+                "name": department.name,
+                "academy_code": department.academy_code,
             }
-            for enroll_type in enroll_types
+            for department in departments
         ],
+        "enroll_types": merge_enroll_types(enroll_types),
         "sub_type_translations": sub_type_translations,
     }
 
 
 @router.get("/semesters")
-async def get_available_semesters() -> dict:
+async def get_available_semesters() -> ApiResponse[dict]:
     """Get available semester and academic year options for dynamic generation"""
     from datetime import datetime
 
@@ -267,20 +279,21 @@ async def get_available_semesters() -> dict:
         },
     ]
 
-    return {
+    data = {
         "academic_years": academic_years,
         "semesters": semesters,
         "current_academic_year": taiwan_year,
         "current_semester": current_semester,
         "current_western_year": current_year,
     }
+    return ApiResponse(success=True, message="Semesters retrieved successfully", data=data)
 
 
 @router.get("/semester-academic-year-combinations")
 async def get_semester_academic_year_combinations(
     include_statistics: bool = Query(False, description="Include application statistics"),
     session: AsyncSession = Depends(get_db),
-) -> dict:
+) -> ApiResponse[dict]:
     """Get semester and academic year combinations with optional statistics"""
     from datetime import datetime
 
@@ -327,17 +340,22 @@ async def get_semester_academic_year_combinations(
     # Sort by year and semester (newest first)
     combinations.sort(key=lambda x: x["sort_order"], reverse=True)
 
-    return {
+    data = {
         "combinations": combinations,
         "current_combination": f"{taiwan_year}-{current_semester}",
         "total_combinations": len(combinations),
     }
+    return ApiResponse(
+        success=True,
+        message="Semester / academic-year combinations retrieved successfully",
+        data=data,
+    )
 
 
 @router.get("/active-academic-periods")
 async def get_active_academic_periods(
     session: AsyncSession = Depends(get_db),
-) -> dict:
+) -> ApiResponse[dict]:
     """Get academic periods that have actual application data"""
 
     # Get distinct academic year/semester combinations that have applications
@@ -379,13 +397,14 @@ async def get_active_academic_periods(
             }
         )
 
-    return {"active_periods": active_periods, "total_periods": len(active_periods)}
+    data = {"active_periods": active_periods, "total_periods": len(active_periods)}
+    return ApiResponse(success=True, message="Active academic periods retrieved successfully", data=data)
 
 
 @router.get("/scholarship-periods")
 async def get_scholarship_periods(
     scholarship_id: Optional[int] = Query(None, description="Scholarship type ID"),
-    scholarship_code: Optional[str] = Query(None, description="Scholarship type code", regex=r"^[a-z_]{1,50}$"),
+    scholarship_code: Optional[str] = Query(None, description="Scholarship type code", pattern=r"^[a-z_]{1,50}$"),
     application_cycle: Optional[str] = Query(None, description="Application cycle filter (semester/yearly)"),
     session: AsyncSession = Depends(get_db),
 ) -> ApiResponse[dict]:
@@ -491,9 +510,14 @@ async def get_scholarship_periods(
 @router.get("/scholarship-types-with-cycles")
 async def get_scholarship_types_with_cycles(
     session: AsyncSession = Depends(get_db),
-) -> dict:
+) -> ApiResponse[dict]:
     """Get all scholarship types with their application cycles"""
+    data = await _get_scholarship_types_with_cycles_cached(session)
+    return ApiResponse(success=True, message="Scholarship types retrieved successfully", data=data)
 
+
+@cached(key_fn=lambda *_, **__: "refdata:scholarships:active", ttl=43200)  # 12 h
+async def _get_scholarship_types_with_cycles_cached(session: AsyncSession) -> dict:
     stmt = select(ScholarshipType).where(ScholarshipType.status == "active")
     result = await session.execute(stmt)
     scholarships = result.scalars().all()

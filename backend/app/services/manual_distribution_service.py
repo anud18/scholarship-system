@@ -1,0 +1,2905 @@
+"""
+Manual Distribution Service
+
+Replaces automated quota/matrix distribution with admin-driven manual allocation.
+Admin selects one scholarship sub-type per student via UI checkboxes.
+Supports multi-year supplementary distribution (補發) where prior-year
+remaining quotas can be allocated to current-year students.
+"""
+
+import logging
+from datetime import datetime, timezone
+from typing import Any, Literal, Optional, Sequence
+
+from sqlalchemy import and_, case as sa_case, func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload, selectinload
+
+from app.models.application import Application
+from app.models.audit_log import AuditAction, AuditLog
+from app.models.college_review import CollegeRanking, CollegeRankingItem, ManualDistributionHistory
+from app.models.enums import ApplicationStatus, ReviewStage
+from app.models.review import ApplicationReview, ApplicationReviewItem
+from app.models.payment_roster import PaymentRoster, PaymentRosterItem, RosterStatus
+from app.models.scholarship import ScholarshipConfiguration, ScholarshipSubTypeConfig
+from app.models.student import Academy
+from app.models.user import User, UserRole
+from app.services.received_months_service import (
+    calculate_received_months_bulk_async,
+    get_imported_months_bulk_async,
+)
+from app.utils.student_snapshot_fields import format_enrollment_date_roc
+
+logger = logging.getLogger(__name__)
+
+
+def _ranking_semester_condition(semester: str):
+    """
+    Build a SQLAlchemy condition for CollegeRanking.semester.
+    The frontend sends "yearly" for annual scholarships, but the DB stores
+    NULL (or occasionally "annual") for those rows.
+    """
+    if semester == "yearly":
+        return or_(
+            CollegeRanking.semester.is_(None),
+            CollegeRanking.semester == "annual",
+            CollegeRanking.semester == "yearly",
+        )
+    return CollegeRanking.semester == semester
+
+
+def _config_semester_condition(semester: str):
+    """
+    Build a SQLAlchemy condition for ScholarshipConfiguration.semester.
+    The frontend sends "yearly" for annual scholarships, but the DB stores
+    NULL or the enum value "yearly" for those rows.
+    """
+    if semester == "yearly":
+        return or_(
+            ScholarshipConfiguration.semester.is_(None),
+            ScholarshipConfiguration.semester == "yearly",
+        )
+    return ScholarshipConfiguration.semester == semester
+
+
+# Application-level allocation states that mean "this student was pulled out of
+# the distribution on purpose" (撤銷 / 停發). Cancelling frees the quota slot by
+# flipping CollegeRankingItem.is_allocated to False (see _cancel_allocation), so
+# WITHOUT this gate every unallocated-item path — above all the auto-allocation
+# preview — would read them as free candidates and hand the slot straight back.
+CANCELLED_ALLOCATION_STATUSES = ("revoked", "suspended")
+
+# Why 預設分發 could not place a student. Emitted per ranking item so the grid
+# can say WHICH student and WHY instead of inferring it from what it can see —
+# a reject from a reviewer role the grid does not render (admin) is otherwise
+# invisible, and "quota full" is indistinguishable from "never a candidate".
+UNALLOCATED_COLLEGE_REJECTED = "college_rejected"
+UNALLOCATED_CANCELLED = "cancelled"
+UNALLOCATED_QUOTA_FULL = "quota_full"
+UNALLOCATED_REVIEW_REJECTED = "review_rejected"
+UNALLOCATED_NOT_APPLIED = "not_applied"
+# The student's college has no cell in the quota matrix at all — an unmapped
+# 學院代碼, or a config that carries no per-college quota. Distinct from
+# quota_full: no amount of quota fixes it, so saying 「名額不足」 would send the
+# admin to edit a matrix row that does not exist.
+UNALLOCATED_NO_COLLEGE_QUOTA = "no_college_quota"
+
+
+def _holds_award(app: Application) -> bool:
+    """Does this application hold a funded award — or, if 撤銷/停發, get one back
+    when restored?
+
+    MUST stay in lockstep with restore_allocation, whose fallback this encodes:
+    a row cancelled before the `cancelled_from_*` snapshot columns existed has
+    no snapshot, and restore puts it back to approved/allocated because that was
+    the only state a cancel could start from then. Reading
+    `cancelled_from_quota_status` alone would call those legacy rows
+    "never funded" and tell the admin restore merely re-enters them into the
+    round — the opposite of what it does.
+    """
+    if app.quota_allocation_status in CANCELLED_ALLOCATION_STATUSES:
+        if app.cancelled_from_status is None:  # legacy row — no snapshot taken
+            return True
+        return app.cancelled_from_quota_status == "allocated"
+    return app.quota_allocation_status == "allocated"
+
+
+def _norm_sub_type(code: Optional[str]) -> str:
+    """Normalize a sub-type code for comparison.
+
+    Sub-types are free-form admin-defined strings (config quotas keys, review
+    item codes, stored allocations), so every membership test against
+    load_rejected_subtype_map must normalize BOTH sides with this helper.
+    """
+    return (code or "").lower().strip()
+
+
+async def load_rejected_subtype_map(db: AsyncSession, app_ids: list[int]) -> dict[int, set[str]]:
+    """Load reviewer-rejected (不同意) sub-types for a batch of applications.
+
+    Any reviewer's reject counts (professor, college, admin) — a rejected
+    sub-type disables the checkbox in the manual distribution UI and is
+    hard-blocked from every distribution writer (allocate/finalize/restore/
+    auto-distribution, and the renewal auto-approve path). Codes are
+    normalized with _norm_sub_type; compare with normalized values only.
+    """
+    rejected_map: dict[int, set[str]] = {}
+    if not app_ids:
+        return rejected_map
+    query = (
+        select(ApplicationReviewItem.sub_type_code, ApplicationReview.application_id)
+        .join(ApplicationReview, ApplicationReviewItem.review_id == ApplicationReview.id)
+        .where(
+            ApplicationReview.application_id.in_(app_ids),
+            ApplicationReviewItem.recommendation == "reject",
+        )
+    )
+    result = await db.execute(query)
+    for sub_type_code, app_id in result:
+        rejected_map.setdefault(app_id, set()).add(_norm_sub_type(sub_type_code))
+    return rejected_map
+
+
+async def load_review_items_by_role(db: AsyncSession, app_ids: list[int]) -> dict[int, dict[str, list[dict[str, Any]]]]:
+    """Load per-sub-type review verdicts grouped by reviewer role for a batch of applications.
+
+    Returns {application_id: {"professor": [...], "college": [...]}} where each
+    entry is {"sub_type_code", "recommendation", "comments"} — the same summary
+    shape the college review list exposes as professor_review_items. Admin
+    reviews are excluded on purpose: the manual-distribution grid IS the admin
+    decision surface, so only the upstream 教授/學院 verdicts are displayed.
+    Sub-type codes are normalized with _norm_sub_type (matches rejected_sub_types).
+    """
+    review_map: dict[int, dict[str, list[dict[str, Any]]]] = {}
+    if not app_ids:
+        return review_map
+    query = (
+        select(
+            ApplicationReview.application_id,
+            User.role,
+            ApplicationReviewItem.sub_type_code,
+            ApplicationReviewItem.recommendation,
+            ApplicationReviewItem.comments,
+        )
+        .join(ApplicationReviewItem, ApplicationReviewItem.review_id == ApplicationReview.id)
+        .join(User, User.id == ApplicationReview.reviewer_id)
+        .where(
+            ApplicationReview.application_id.in_(app_ids),
+            User.role.in_([UserRole.professor, UserRole.college]),
+        )
+        .order_by(ApplicationReview.reviewed_at, ApplicationReviewItem.id)
+    )
+    result = await db.execute(query)
+    for app_id, role, sub_type_code, recommendation, comments in result:
+        role_key = role.value if hasattr(role, "value") else str(role)
+        review_map.setdefault(app_id, {}).setdefault(role_key, []).append(
+            {
+                "sub_type_code": _norm_sub_type(sub_type_code),
+                "recommendation": recommendation,
+                "comments": comments,
+            }
+        )
+    return review_map
+
+
+def _canonical_sub_type(code: Optional[str], allowed_configs_by_sub_type: dict[str, list[int]]) -> str:
+    """Map a student-supplied sub-type string onto the config's own spelling.
+
+    The quota tracker and the allowed-config index are keyed by the EXACT keys of
+    `ScholarshipConfiguration.quotas`, while a student's applied/preference lists
+    are free-form strings stored by other code paths. Matching them normalized
+    (lower/strip) and returning the config's spelling keeps the downstream
+    lookups exact — and keeps `allocated_sub_type` written in the canonical form
+    the quota columns use. Unknown codes pass through normalized, which simply
+    finds no quota, exactly as before.
+    """
+    normalized = _norm_sub_type(code)
+    for configured in allowed_configs_by_sub_type:
+        if _norm_sub_type(configured) == normalized:
+            return configured
+    return normalized
+
+
+def _dedupe_preview_items(
+    all_items: list,
+    college_code: Optional[str] = None,
+    staged_ids: Optional[set[int]] = None,
+) -> list:
+    """Select the ranking items auto_allocate_preview should suggest for.
+
+    One item per application_id, dropping items whose application is missing or
+    soft-deleted, and — when `college_code` is given — keeping only that
+    college's students so an admin can run the distribution one college at a
+    time. The college filter is applied BEFORE the dedup bookkeeping so a
+    skipped application never shadows a later item.
+
+    An application can legitimately appear in two finalized rankings, and the
+    duplicate the GRID renders is preferred, so the preview keys its suggestions
+    on a ranking_item_id the grid can match. Picking the other duplicate would
+    make a suggestion the grid cannot match: silently dropped at best, staged
+    onto a row the admin never saw at worst. `staged_ids` — the rows the caller
+    has on screen — is the direct evidence of which duplicate that is; without
+    it, fall back to the persisted allocation (the rule
+    get_students_for_distribution uses). Callers must feed items in a
+    deterministic order (rank_position, id) for the same reason.
+    """
+    staged_ids = staged_ids or set()
+
+    def _preferred(candidate, incumbent) -> bool:
+        if staged_ids:
+            candidate_staged = candidate.id in staged_ids
+            if candidate_staged != (incumbent.id in staged_ids):
+                return candidate_staged
+        return bool(candidate.is_allocated) and not incumbent.is_allocated
+
+    index_by_app: dict[int, int] = {}
+    unique_items: list = []
+    for item in all_items:
+        app = item.application
+        if app is None or app.deleted_at is not None:
+            continue
+        if college_code and (app.student_data or {}).get("std_academyno", "") != college_code:
+            continue
+        existing_idx = index_by_app.get(app.id)
+        if existing_idx is not None:
+            if _preferred(item, unique_items[existing_idx]):
+                unique_items[existing_idx] = item
+            continue
+        index_by_app[app.id] = len(unique_items)
+        unique_items.append(item)
+    return unique_items
+
+
+def _compute_suggestions(
+    unique_items: list,
+    default_prefs: list[str],
+    prev_alloc_configs: dict[int, int],
+    allowed_configs_by_sub_type: dict[str, list[int]],
+    quota_tracker: dict[tuple, int],
+    own_config_id: int,
+    rejected_map: Optional[dict[int, set[str]]] = None,
+    undecided_ids: Optional[set[int]] = None,
+) -> list[dict]:
+    """
+    Pure allocation logic (no DB access).  Extracted so it can be unit-tested
+    without mocking async SQLAlchemy sessions.
+
+    Parameters
+    ----------
+    unique_items:
+        CollegeRankingItem objects (with .application pre-loaded) already
+        deduplicated by application_id.
+    default_prefs:
+        Ordered sub_type codes; last-resort preference fallback.
+    prev_alloc_configs:
+        {previous_application_id: allocation_config_id} for renewal students'
+        prior allocations — the config that prior slot consumed.
+    allowed_configs_by_sub_type:
+        {sub_type: [config_id, ...]} own-config-first, then linked source
+        configs by descending year. Defines which configs a sub_type may draw.
+    quota_tracker:
+        Mutable {(config_id, sub_type, college_code): remaining}. Decremented
+        as it allocates. The pool cap is already baked into these counts
+        (seeded from remaining(config, sub_type) split per college).
+    own_config_id:
+        The requesting config id (default target when no prior slot applies).
+    rejected_map:
+        {application_id: {rejected_sub_type_codes}} — excluded from allocation.
+    undecided_ids:
+        Ranking item ids that are 未決 on the CALLER's screen and therefore open
+        to a suggestion. Everything else is already decided — either staged by
+        hand or saved — and is skipped (its quota was charged when the tracker
+        was seeded). Omit to fall back to the persisted `is_allocated` flag,
+        which is only correct when nothing is staged.
+
+    Returns
+    -------
+    list[dict]
+        [{"ranking_item_id", "sub_type_code", "allocation_config_id", "reason"}, ...]
+        One entry per 未決 input item, in allocation order. `reason` is None on a
+        successful allocation and an UNALLOCATED_REASON_* code otherwise.
+    """
+    if rejected_map is None:
+        rejected_map = {}
+
+    def _is_undecided(item) -> bool:
+        if undecided_ids is None:
+            return not item.is_allocated
+        return item.id in undecided_ids
+
+    sorted_items = sorted(
+        [item for item in unique_items if _is_undecided(item)],
+        key=lambda i: (0 if i.application.is_renewal else 1, i.rank_position),
+    )
+
+    results: list[dict] = []
+
+    def _unplaced(item_id: int, reason: str) -> dict:
+        return {
+            "ranking_item_id": item_id,
+            "sub_type_code": None,
+            "allocation_config_id": None,
+            "reason": reason,
+        }
+
+    for item in sorted_items:
+        if getattr(item, "college_rejected", False):
+            results.append(_unplaced(item.id, UNALLOCATED_COLLEGE_REJECTED))
+            continue
+
+        app = item.application
+
+        # 撤銷／停發 is a deliberate admin decision — the student keeps that
+        # state and must never be re-suggested, even though cancelling freed
+        # their ranking item (is_allocated=False). No quota is consumed.
+        if app.quota_allocation_status in CANCELLED_ALLOCATION_STATUSES:
+            results.append(_unplaced(item.id, UNALLOCATED_CANCELLED))
+            continue
+
+        college = (app.student_data or {}).get("std_academyno", "")
+
+        # Preferred target config for a renewal: the config its prior slot consumed.
+        prev_app_id = app.previous_application_id if app.is_renewal else None
+        target_config: Optional[int] = prev_alloc_configs.get(prev_app_id) if prev_app_id else None
+
+        applied = app.scholarship_subtype_list or []
+        rejected = rejected_map.get(app.id, set())
+        raw_prefs: list[str] = app.sub_type_preferences or applied or default_prefs
+        # Compare NORMALIZED on both sides. sub_type_preferences and
+        # scholarship_subtype_list are free-form admin/student-supplied strings
+        # written by different code paths, so "NSTC" / " nstc" vs "nstc" happens;
+        # a raw `in` test silently emptied the whole preference list and the
+        # student came out unallocatable with quota still free.
+        applied_set = {_norm_sub_type(p) for p in applied}
+        # Kept separately from `preferences` so an empty preference list can say
+        # WHICH filter emptied it: sub-types the student may draw before review
+        # is considered, versus what survives review.
+        applicable: list[str] = [
+            canonical
+            for canonical in (_canonical_sub_type(p, allowed_configs_by_sub_type) for p in raw_prefs)
+            if (_norm_sub_type(canonical) in applied_set if applied_set else True)
+        ]
+        preferences: list[str] = [c for c in applicable if _norm_sub_type(c) not in rejected]
+
+        allocated_sub_type: Optional[str] = None
+        allocated_config: Optional[int] = None
+
+        for sub_type in preferences:
+            allowed = allowed_configs_by_sub_type.get(sub_type, [own_config_id])
+            # Try the renewal's prior config first (if it is an allowed source),
+            # then walk the allowed configs in order (own-first, linked by year).
+            candidate_order: list[int] = []
+            if target_config is not None and target_config in allowed:
+                candidate_order.append(target_config)
+            candidate_order.extend(cid for cid in allowed if cid not in candidate_order)
+
+            for cid in candidate_order:
+                key = (cid, sub_type, college)
+                if quota_tracker.get(key, 0) > 0:
+                    quota_tracker[key] -= 1
+                    allocated_sub_type = sub_type
+                    allocated_config = cid
+                    break
+            if allocated_sub_type:
+                break
+
+        if allocated_sub_type:
+            results.append(
+                {
+                    "ranking_item_id": item.id,
+                    "sub_type_code": allocated_sub_type,
+                    "allocation_config_id": allocated_config,
+                    "reason": None,
+                }
+            )
+        elif preferences:
+            # A missing tracker key reads as zero remaining, so "ran out" and
+            # "never had a cell" are the same failure here — tell them apart by
+            # asking whether any cell exists at all.
+            has_cell = any(
+                (cid, sub_type, college) in quota_tracker
+                for sub_type in preferences
+                for cid in allowed_configs_by_sub_type.get(sub_type, [own_config_id])
+            )
+            results.append(_unplaced(item.id, UNALLOCATED_QUOTA_FULL if has_cell else UNALLOCATED_NO_COLLEGE_QUOTA))
+        elif applicable:
+            # Every sub-type they could draw was rejected (不同意) in review.
+            results.append(_unplaced(item.id, UNALLOCATED_REVIEW_REJECTED))
+        else:
+            results.append(_unplaced(item.id, UNALLOCATED_NOT_APPLIED))
+
+    return results
+
+
+class ManualDistributionService:
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    def pool_total(self, config: ScholarshipConfiguration, sub_type: str) -> int:
+        """Mode-aware per-(config, sub_type) pool total (spec §6.1).
+
+        matrix_based / college_based (has_college_quota): sum the per-college
+        matrix row → same as model.get_sub_type_total_quota.
+        simple / none (NOT has_college_quota): quotas[sub_type] is a scalar
+        (or fall back to total_quota). get_sub_type_total_quota returns 0 for
+        these configs, so we MUST NOT route the non-matrix branch through it —
+        a cross-type borrow from such a config would read an empty pool.
+        """
+        quotas = config.quotas or {}
+        if config.has_college_quota:
+            return sum(self._matrix_row(config, sub_type).values())
+        scalar = quotas.get(sub_type, 0)
+        try:
+            scalar_int = int(scalar)
+        except (TypeError, ValueError):
+            scalar_int = 0
+        return scalar_int or int(config.total_quota or 0)
+
+    @staticmethod
+    def _matrix_row(config: ScholarshipConfiguration, sub_type: str) -> dict[str, int]:
+        """Normalized per-college quota row for one sub_type.
+
+        Single owner of the quotas-matrix parsing tolerance: a non-dict row
+        yields {}, and malformed cell values coerce to 0 — so pool_total and
+        _college_breakdown can never disagree about the same row.
+        """
+        row = (config.quotas or {}).get(sub_type, {})
+        if not isinstance(row, dict):
+            return {}
+        normalized: dict[str, int] = {}
+        for code, value in row.items():
+            try:
+                normalized[code] = int(value or 0)
+            except (TypeError, ValueError):
+                normalized[code] = 0
+        return normalized
+
+    @staticmethod
+    def _winner_filters(config_id: int, sub_type: str) -> tuple:
+        """Shared half-1 predicates: allocated non-renewal winners."""
+        return (
+            CollegeRankingItem.is_allocated.is_(True),
+            CollegeRankingItem.allocated_sub_type == sub_type,
+            CollegeRankingItem.allocation_config_id == config_id,
+            Application.is_renewal.is_(False),
+        )
+
+    @staticmethod
+    def _renewal_filters(config_id: int, sub_type: str) -> tuple:
+        """Shared half-2 predicates: approved renewals."""
+        return (
+            Application.is_renewal.is_(True),
+            Application.status == ApplicationStatus.approved,
+            Application.sub_scholarship_type == sub_type,
+            Application.allocation_config_id == config_id,
+        )
+
+    async def consumers_count(self, config_id: int, sub_type: str) -> int:
+        """Count every LIVE consumer of (config_id, sub_type) anywhere (spec §6.2).
+
+        Guaranteed two-half partition (predicates shared with
+        consumers_by_college via _winner_filters/_renewal_filters):
+          half 1 — general/manual winners: allocated CollegeRankingItem whose
+                   application is NOT a renewal (is_renewal==False guard).
+          half 2 — approved renewals: Application(is_renewal, approved).
+
+        The is_renewal==False guard on half 1 is load-bearing:
+        college_review_service.py:636-657 creates a CollegeRankingItem for
+        every application INCLUDING renewals (sorted first), and
+        restore_allocation flips is_allocated=True on any item with an
+        allocated_sub_type — so a revoked-then-restored renewal would otherwise
+        be counted in BOTH halves.
+        """
+        winners_stmt = (
+            select(func.count(CollegeRankingItem.id))
+            .join(Application, CollegeRankingItem.application_id == Application.id)
+            .where(*self._winner_filters(config_id, sub_type))
+        )
+        winners = (await self.db.execute(winners_stmt)).scalar_one()
+
+        renewals_stmt = select(func.count(Application.id)).where(*self._renewal_filters(config_id, sub_type))
+        renewals = (await self.db.execute(renewals_stmt)).scalar_one()
+
+        return int(winners) + int(renewals)
+
+    async def consumers_by_college(self, config_id: int, sub_type: str) -> dict[str, int]:
+        """Per-college split of consumers_count — SAME two-half partition.
+
+        Attribution: application.student_data["std_academyno"]; a missing or
+        empty academyno lands in the "" bucket (rendered 未知 in the UI).
+        Invariant (tripwire-tested): sum(values) == consumers_count(config_id,
+        sub_type) — both methods build their where-clauses from the shared
+        _winner_filters/_renewal_filters helpers, so the predicates cannot
+        drift.
+        """
+        winners_stmt = (
+            select(Application.student_data)
+            .join(CollegeRankingItem, CollegeRankingItem.application_id == Application.id)
+            .where(*self._winner_filters(config_id, sub_type))
+        )
+        renewals_stmt = select(Application.student_data).where(*self._renewal_filters(config_id, sub_type))
+        counts: dict[str, int] = {}
+        for stmt in (winners_stmt, renewals_stmt):
+            for student_data in (await self.db.execute(stmt)).scalars():
+                college = (student_data or {}).get("std_academyno", "") or ""
+                counts[college] = counts.get(college, 0) + 1
+        return counts
+
+    async def remaining(self, config: ScholarshipConfiguration, sub_type: str) -> int:
+        """Global live remaining = pool_total - consumers_count (spec §6.2).
+
+        GLOBAL: counts every consumer of this config anywhere, regardless of
+        which distribution round (or which borrowing config) created the slot —
+        so freeing a slot anywhere instantly raises this value everywhere.
+        """
+        return self.pool_total(config, sub_type) - await self.consumers_count(config.id, sub_type)
+
+    async def _resolve_linked_configs(
+        self, requesting_config: ScholarshipConfiguration, sub_type: str
+    ) -> list[ScholarshipConfiguration]:
+        """Load the linked source configs of `requesting_config` whose
+        shared_quota_sources entry lists `sub_type` (spec §6.3).
+
+        Missing target configs (the source_config_code resolves to nothing) are
+        silently dropped — consistent with §10/§11.5 dangling-link handling.
+        """
+        sources = requesting_config.shared_quota_sources or []
+        codes: list[str] = []
+        for entry in sources:
+            if not isinstance(entry, dict):
+                continue
+            entry_sub_types = entry.get("sub_types") or []
+            code = entry.get("source_config_code")
+            if code and sub_type in entry_sub_types:
+                codes.append(code)
+        if not codes:
+            return []
+        stmt = select(ScholarshipConfiguration).where(ScholarshipConfiguration.config_code.in_(codes))
+        return list((await self.db.execute(stmt)).scalars().all())
+
+    async def _allowed_config_ids(self, requesting_config: ScholarshipConfiguration, sub_type: str) -> set[int]:
+        """Allowed consumed-config ids for an allocation of (requesting, sub_type).
+
+        = {own config id} ∪ {linked source config ids whose link lists sub_type}.
+        Used server-side to validate that an inbound allocation_config_id is
+        permitted before recomputing remaining (spec §7).
+        """
+        allowed = {requesting_config.id}
+        for linked in await self._resolve_linked_configs(requesting_config, sub_type):
+            allowed.add(linked.id)
+        return allowed
+
+    async def distributable_pool(self, requesting_config: ScholarshipConfiguration, sub_type: str) -> list[dict]:
+        """The pool of consumable configs for (requesting_config, sub_type), §6.3.
+
+        Returns the own config first, then each linked source config in
+        DESCENDING academic_year, each with its LIVE `remaining`. Each entry maps
+        to one grid column; an allocation records that config's id as
+        allocation_config_id.
+        """
+        pool: list[dict] = [
+            {
+                "config_id": requesting_config.id,
+                "config_code": requesting_config.config_code,
+                "academic_year": requesting_config.academic_year,
+                "is_own": True,
+                "remaining": await self.remaining(requesting_config, sub_type),
+            }
+        ]
+        linked = await self._resolve_linked_configs(requesting_config, sub_type)
+        for cfg in sorted(linked, key=lambda c: c.academic_year, reverse=True):
+            pool.append(
+                {
+                    "config_id": cfg.id,
+                    "config_code": cfg.config_code,
+                    "academic_year": cfg.academic_year,
+                    "is_own": False,
+                    "remaining": await self.remaining(cfg, sub_type),
+                }
+            )
+        return pool
+
+    async def _batch_load_rejected_map(self, app_ids: list[int]) -> dict[int, set[str]]:
+        """See load_rejected_subtype_map (module-level, shared with the renewal path)."""
+        return await load_rejected_subtype_map(self.db, app_ids)
+
+    async def _batch_load_review_items(self, app_ids: list[int]) -> dict[int, dict[str, list[dict[str, Any]]]]:
+        """See load_review_items_by_role (module-level)."""
+        return await load_review_items_by_role(self.db, app_ids)
+
+    async def _bulk_system_received_months(
+        self,
+        items: list[CollegeRankingItem],
+        scholarship_type_id: int,
+        academic_year: int,
+        semester: str,
+    ) -> dict[str, int]:
+        """
+        Bulk-compute system received_months keyed by student std_stdcode.
+
+        Returns empty dict when no matching ScholarshipConfiguration exists;
+        callers fall back to showing no system value for affected students.
+        """
+        config_stmt = select(ScholarshipConfiguration.id).where(
+            and_(
+                ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
+                ScholarshipConfiguration.academic_year == academic_year,
+                _config_semester_condition(semester),
+            )
+        )
+        config_row = (await self.db.execute(config_stmt)).first()
+        if not config_row:
+            return {}
+        config_id = config_row[0]
+
+        student_ids = self._student_numbers_for(items)
+        if not student_ids:
+            return {}
+
+        return await calculate_received_months_bulk_async(self.db, student_ids, config_id)
+
+    async def _bulk_imported_received_months(
+        self,
+        items: Sequence[CollegeRankingItem],
+        scholarship_type_id: int,
+    ) -> dict[str, int]:
+        """Bulk-load the imported 國科會 baseline keyed by student std_stdcode.
+
+        Unlike the system half this is NOT year-scoped: the imported value is a
+        lifetime total per (學號, scholarship_type).
+        """
+        student_ids = self._student_numbers_for(items)
+        if not student_ids:
+            return {}
+        return await get_imported_months_bulk_async(self.db, student_ids, scholarship_type_id)
+
+    @staticmethod
+    def _student_numbers_for(items: Sequence[CollegeRankingItem]) -> list[str]:
+        """學號 of every item whose application is present and not soft-deleted."""
+        student_ids: list[str] = []
+        for item in items:
+            app = item.application
+            if not app or app.deleted_at is not None:
+                continue
+            sid = (app.student_data or {}).get("std_stdcode", "")
+            if sid:
+                student_ids.append(sid)
+        return student_ids
+
+    async def get_students_for_distribution(
+        self,
+        scholarship_type_id: int,
+        academic_year: int,
+        semester: str,
+        college_code: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        """
+        Get ranked students with their allocation status for manual distribution.
+        Returns students sorted by college, then rank_position.
+        """
+        # Get finalized rankings for this scholarship config
+        ranking_query = select(CollegeRanking).where(
+            and_(
+                CollegeRanking.scholarship_type_id == scholarship_type_id,
+                CollegeRanking.academic_year == academic_year,
+                _ranking_semester_condition(semester),
+                CollegeRanking.is_finalized.is_(True),
+            )
+        )
+        result = await self.db.execute(ranking_query)
+        rankings = result.scalars().all()
+
+        if not rankings:
+            return []
+
+        ranking_ids = [r.id for r in rankings]
+
+        # Get all ranking items with applications. Order by (rank_position, id) so
+        # iteration — and therefore the per-application dedup below — is deterministic
+        # when an application appears in more than one finalized ranking.
+        items_query = (
+            select(CollegeRankingItem)
+            .options(selectinload(CollegeRankingItem.application).selectinload(Application.scholarship_configuration))
+            .where(CollegeRankingItem.ranking_id.in_(ranking_ids))
+            .order_by(CollegeRankingItem.rank_position, CollegeRankingItem.id)
+        )
+        result = await self.db.execute(items_query)
+        items = result.scalars().all()
+
+        # Batch-load rejected sub-types from professor reviews
+        app_ids = [item.application.id for item in items if item.application]
+        rejected_map = await self._batch_load_rejected_map(app_ids)
+
+        # Batch-load per-sub-type 教授/學院 review verdicts for the
+        # recommendation display columns.
+        review_items_map = await self._batch_load_review_items(app_ids)
+
+        # Bulk-load both halves of 已領月份數 in one query each — the imported
+        # 國科會 baseline and this year's system-computed months. They are added,
+        # not overridden; see docs/received-months-calculation.md.
+        system_months = await self._bulk_system_received_months(items, scholarship_type_id, academic_year, semester)
+        imported_months = await self._bulk_imported_received_months(items, scholarship_type_id)
+
+        students = []
+        index_by_app: dict[int, int] = {}
+        for item in items:
+            app = item.application
+            if not app:
+                continue
+
+            # Skip soft-deleted applications
+            if app.deleted_at is not None:
+                continue
+
+            student_data = app.student_data or {}
+
+            # Filter by college if specified
+            student_college = student_data.get("std_academyno", "")
+            if college_code and student_college != college_code:
+                continue
+
+            # Compute application_identity
+            identity = self._compute_application_identity(app)
+
+            # Compute term count
+            term_count = self._compute_term_count(student_data)
+
+            # Format enrollment date (ROC calendar)
+            enrollment_date = self._format_enrollment_date(student_data)
+
+            # 已領月份數 = 匯入 (lifetime 國科會 baseline) + 系統 (this year's
+            # rosters). The two never cover the same month — see
+            # docs/adr/0001-received-months-are-additive.md. `source` tells the
+            # UI which halves contributed, so an admin can see where the
+            # number came from.
+            student_id_value = student_data.get("std_stdcode", "")
+            rm_imported = imported_months.get(student_id_value, 0) if student_id_value else 0
+            rm_system = system_months.get(student_id_value) if student_id_value else None
+
+            if rm_imported or rm_system is not None:
+                rm_value = rm_imported + (rm_system or 0)
+                rm_source = (
+                    "imported+system" if rm_imported and rm_system else ("imported" if rm_imported else "system")
+                )
+            else:
+                rm_value = None
+                rm_source = None
+
+            app_reviews = review_items_map.get(app.id, {})
+            cfg = app.scholarship_configuration
+
+            student = {
+                "ranking_item_id": item.id,
+                "application_id": app.id,
+                "rank_position": item.rank_position,
+                "applied_sub_types": app.scholarship_subtype_list or [],
+                "rejected_sub_types": list(rejected_map.get(app.id, set())),
+                # Per-sub-type 推薦/不推薦 verdicts from the unified review
+                # table, split by reviewer role for the 教授推薦/學院推薦
+                # display columns. The college's PRIMARY verdict is the
+                # finalized ranking itself (college_rejected below) — its
+                # review items only supplement it. requires_professor_
+                # recommendation lets the UI distinguish 未推薦 chips (step
+                # required, no verdict yet) from "—" (no professor step).
+                "professor_review_items": app_reviews.get("professor", []),
+                "college_review_items": app_reviews.get("college", []),
+                "requires_professor_recommendation": bool(
+                    cfg and cfg.requires_professor_review_for(bool(app.is_renewal))
+                ),
+                "allocated_sub_type": item.allocated_sub_type,
+                # Config whose quota this slot consumes — the frontend grid
+                # seeds the checked column from (allocated_sub_type,
+                # allocation_config_id). Superseded the legacy allocation_year.
+                "allocation_config_id": item.allocation_config_id,
+                # Live funding flag — cancel (revoke/suspend) flips this to
+                # False to free the quota slot, restore flips it back. The
+                # frontend seeds the 核配 checkbox from this, not from
+                # allocated_sub_type (which is preserved across cancel).
+                "is_allocated": item.is_allocated,
+                "status": item.status,
+                # Application-level allocation status — drives the
+                # distribution-row status control (正常/撤銷/停發) and
+                # disables the 核配 checkboxes once revoked/suspended.
+                "quota_allocation_status": app.quota_allocation_status,
+                # Does this student hold a funded award — or, once cancelled,
+                # will 復原 give them one back? Derived HERE rather than from raw
+                # columns because it has to mirror restore_allocation exactly,
+                # legacy fallback included; quota_allocation_status only says
+                # they are cancelled NOW, and allocated_sub_type survives a
+                # cancel, so neither answers it alone. Drives the grid's copy:
+                # "was funded, will lose a roster line" vs "was never funded,
+                # just excluded from the round".
+                "holds_award": _holds_award(app),
+                "revoke_reason": app.revoke_reason,
+                "suspend_reason": app.suspend_reason,
+                "college_rejected": item.college_rejected,
+                "is_supplementary": item.is_supplementary,
+                "college_code": student_college,
+                "college_name": student_data.get("trm_academyname", ""),
+                "department_name": student_data.get("trm_depname", ""),
+                "term_count": term_count,
+                "student_name": student_data.get("std_cname", ""),
+                "nationality": student_data.get("std_nation", ""),
+                "enrollment_date": enrollment_date,
+                "student_id": student_data.get("std_stdcode", ""),
+                "application_identity": identity,
+                "is_renewal": app.is_renewal,
+                "renewal_year": app.renewal_year,
+                "renewal_sub_type": self._get_renewal_sub_type(app),
+                "received_months": rm_value,
+                "received_months_source": rm_source,
+            }
+
+            # Deduplicate by application_id: an application can legitimately appear in
+            # two finalized rankings of the same college (e.g. a "default" ranking
+            # finalized alongside a specific sub-type one). Allocation state lives
+            # per-ranking-item, so keep ONE row per application but PREFER the item that
+            # carries the real allocation — otherwise the (rank-ordered) first item, if
+            # unallocated, would hide a persisted allocation on the duplicate. Iteration
+            # order is deterministic (rank_position, id).
+            existing_idx = index_by_app.get(app.id)
+            if existing_idx is not None:
+                kept = students[existing_idx]
+                if student["is_allocated"] and not kept["is_allocated"]:
+                    students[existing_idx] = student
+                elif student["is_allocated"] and kept["is_allocated"]:
+                    # Both duplicate items carry a live allocation — a data anomaly the
+                    # grid can only surface one of. Log it so the hidden allocation (still
+                    # consuming quota) is discoverable; revoke/restore operate per
+                    # application_id and will still reach both copies.
+                    logger.warning(
+                        "Application %s has two allocated ranking items (%s, %s) across "
+                        "finalized rankings; distribution grid shows only %s",
+                        app.id,
+                        kept["ranking_item_id"],
+                        student["ranking_item_id"],
+                        kept["ranking_item_id"],
+                        exc_info=False,
+                    )
+                continue
+            index_by_app[app.id] = len(students)
+            students.append(student)
+
+        # Sort by college_code, then rank_position
+        students.sort(key=lambda s: (s["college_code"], s["rank_position"]))
+        return students
+
+    async def get_quota_status(
+        self,
+        scholarship_type_id: int,
+        academic_year: int,
+        semester: str,
+    ) -> dict[str, Any]:
+        """Real-time quota grid per sub-type, keyed by **config** (spec §6.3, §12).
+
+        Response:
+        {
+          "nstc": {
+            "display_name": "國科會",
+            "by_config": [
+              {"config_id", "config_code", "academic_year", "is_own", "total",
+               "remaining", "by_college"},  # by_college: {code: {total, allocated,
+                                            # remaining}} for matrix configs, else None
+              ...  # own config first, then linked source configs by descending year
+            ]
+          },
+          ...
+        }
+        remaining is the LIVE global value (pool_total − every consumer of that
+        config anywhere, INCLUDING approved renewals — see §17.1 behavior change).
+        """
+        current_config = await self._load_config(scholarship_type_id, academic_year, semester)
+        if current_config is None:
+            return {}
+
+        # Sub-type display names.
+        sub_type_query = (
+            select(ScholarshipSubTypeConfig)
+            .where(
+                and_(
+                    ScholarshipSubTypeConfig.scholarship_type_id == scholarship_type_id,
+                    ScholarshipSubTypeConfig.is_active.is_(True),
+                )
+            )
+            .order_by(ScholarshipSubTypeConfig.display_order)
+        )
+        sub_type_configs = (await self.db.execute(sub_type_query)).scalars().all()
+        sub_type_names = {stc.sub_type_code: stc.name for stc in sub_type_configs}
+
+        # Drive columns off the requesting config's own quota sub_types.
+        own_quotas = current_config.quotas or {}
+
+        quota_status: dict[str, Any] = {}
+        for sub_type in own_quotas.keys():
+            if self.pool_total(current_config, sub_type) <= 0:
+                continue
+            # Resolve linked configs once so we can look up pool_total per linked config.
+            linked_configs = await self._resolve_linked_configs(current_config, sub_type)
+            linked_by_code: dict[str, ScholarshipConfiguration] = {cfg.config_code: cfg for cfg in linked_configs}
+            by_config = []
+            for col in await self.distributable_pool(current_config, sub_type):
+                cfg = current_config if col["is_own"] else linked_by_code.get(col["config_code"])
+                total = self.pool_total(cfg, sub_type) if cfg is not None else 0
+                by_config.append(
+                    {
+                        "config_id": col["config_id"],
+                        "config_code": col["config_code"],
+                        "academic_year": col["academic_year"],
+                        "is_own": col["is_own"],
+                        "total": total,
+                        "remaining": col["remaining"],
+                        "by_college": await self._college_breakdown(cfg, sub_type),
+                    }
+                )
+            quota_status[sub_type] = {
+                "display_name": sub_type_names.get(sub_type, sub_type),
+                "by_config": by_config,
+            }
+
+        return quota_status
+
+    async def _college_breakdown(
+        self,
+        cfg: ScholarshipConfiguration | None,
+        sub_type: str,
+    ) -> dict[str, dict[str, int]] | None:
+        """Per-college quota grid for one (config, sub_type) column.
+
+        None for non-matrix configs (no per-college split exists). Colleges
+        appear when they have quota > 0 in the matrix OR live consumers;
+        remaining is NOT clamped — a negative value means the college is
+        already over its cell, which _assert_round_not_oversubscribed rejects
+        on the next allocate/finalize/restore (per-college quota is a hard cap,
+        not a display hint).
+        """
+        if cfg is None or not cfg.has_college_quota:
+            return None
+        matrix = self._matrix_row(cfg, sub_type)
+        allocated_by_college = await self.consumers_by_college(cfg.id, sub_type)
+
+        breakdown: dict[str, dict[str, int]] = {}
+        for code in sorted(set(matrix) | set(allocated_by_college)):
+            college_total = matrix.get(code, 0)
+            allocated = allocated_by_college.get(code, 0)
+            if college_total <= 0 and allocated <= 0:
+                continue
+            breakdown[code] = {
+                "total": college_total,
+                "allocated": allocated,
+                "remaining": college_total - allocated,
+            }
+        return breakdown
+
+    async def _load_config(
+        self,
+        scholarship_type_id: int,
+        academic_year: int,
+        semester: str,
+    ) -> Optional[ScholarshipConfiguration]:
+        """Load a ScholarshipConfiguration for a given year.
+        If multiple configs exist, returns the latest (highest id).
+        """
+        stmt = (
+            select(ScholarshipConfiguration)
+            .where(
+                and_(
+                    ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
+                    ScholarshipConfiguration.academic_year == academic_year,
+                    _config_semester_condition(semester),
+                )
+            )
+            .order_by(ScholarshipConfiguration.id.desc())
+        )
+        result = await self.db.execute(stmt)
+        return result.scalars().first()
+
+    async def allocate(
+        self,
+        scholarship_type_id: int,
+        academic_year: int,
+        semester: str,
+        allocations: list[dict[str, Any]],
+        admin_user_id: Optional[int] = None,
+    ) -> dict[str, Any]:
+        """
+        Save manual allocation selections.
+        Each allocation: {
+            "ranking_item_id": int,
+            "sub_type_code": str|None,
+            "allocation_config_id": int|None  (None → defaults to the requesting config)
+        }
+        sub_type_code=None means unallocate.
+
+        Rows whose application is 撤銷/停發 are skipped entirely: the grid sends
+        every visible row, and a cancelled row arrives as an unallocate, which
+        would clear the allocated_sub_type that _cancel_allocation deliberately
+        preserved for 復發 (restore_allocation re-affirms the slot from it).
+        Their slot state belongs to revoke/suspend/restore, not to a grid save.
+        """
+        # Validate quota limits first
+        await self._validate_allocations(scholarship_type_id, academic_year, semester, allocations)
+
+        cancelled_item_ids = await self._cancelled_ranking_item_ids([a["ranking_item_id"] for a in allocations])
+
+        updated_count = 0
+        requesting_config = await self._load_config(scholarship_type_id, academic_year, semester)
+        if requesting_config is None:
+            raise ValueError("No active configuration for this distribution round")
+
+        for alloc in allocations:
+            item_id = alloc["ranking_item_id"]
+            if item_id in cancelled_item_ids:
+                continue
+            sub_type = alloc.get("sub_type_code")
+            alloc_config_id = alloc.get("allocation_config_id") or (requesting_config.id if sub_type else None)
+
+            item_query = select(CollegeRankingItem).where(CollegeRankingItem.id == item_id)
+            result = await self.db.execute(item_query)
+            item = result.scalar_one_or_none()
+            if not item:
+                continue
+
+            # G3 (#965): capture the prior slot state — 「誰把哪個名額配給誰」
+            # must be reconstructable from audit_logs, not only from the
+            # undo-oriented ManualDistributionHistory snapshot.
+            prior_state = {
+                "is_allocated": item.is_allocated,
+                "allocated_sub_type": item.allocated_sub_type,
+                "allocation_config_id": item.allocation_config_id,
+            }
+
+            if sub_type:
+                allowed = await self._allowed_config_ids(requesting_config, sub_type)
+                if alloc_config_id not in allowed:
+                    code = await self._config_code_by_id(requesting_config, sub_type, alloc_config_id)
+                    raise ValueError(f"分發目標配置不在允許範圍：{code} (sub_type={sub_type})")
+                item.is_allocated = True
+                item.allocated_sub_type = sub_type
+                item.allocation_config_id = alloc_config_id
+                item.status = "allocated"
+                item.allocation_reason = "手動分發"
+            else:
+                item.is_allocated = False
+                item.allocated_sub_type = None
+                item.allocation_config_id = None
+                item.status = "ranked"
+                item.allocation_reason = None
+
+            if admin_user_id is not None and item.application_id is not None:
+                self.db.add(
+                    AuditLog.create_log(
+                        user_id=admin_user_id,
+                        action=AuditAction.execute_distribution.value,
+                        resource_type="application",
+                        resource_id=str(item.application_id),
+                        description=(
+                            f"manual allocation: ranking_item {item.id} -> "
+                            f"{sub_type or 'unallocated'} (config {alloc_config_id})"
+                        ),
+                        old_values=prior_state,
+                        new_values={
+                            "is_allocated": item.is_allocated,
+                            "allocated_sub_type": item.allocated_sub_type,
+                            "allocation_config_id": item.allocation_config_id,
+                        },
+                        meta_data={"ranking_item_id": item.id},
+                    )
+                )
+
+            updated_count += 1
+
+        # §10 server-side quota gate: lock the consumed config rows, recount,
+        # reject if any is oversubscribed.
+        await self._assert_round_not_oversubscribed(requesting_config)
+
+        await self.db.flush()
+
+        # Record allocation history for undo/redo
+        try:
+            # Get current state snapshot
+            ranking_query = select(CollegeRanking).where(
+                and_(
+                    CollegeRanking.scholarship_type_id == scholarship_type_id,
+                    CollegeRanking.academic_year == academic_year,
+                    _ranking_semester_condition(semester),
+                )
+            )
+            result = await self.db.execute(ranking_query)
+            rankings = result.scalars().all()
+            ranking_ids = [r.id for r in rankings]
+
+            if ranking_ids:
+                # Get current allocations
+                items_query = select(CollegeRankingItem).where(CollegeRankingItem.ranking_id.in_(ranking_ids))
+                result = await self.db.execute(items_query)
+                items = result.scalars().all()
+
+                # Build snapshot
+                allocations_snapshot = {}
+                total_allocated = 0
+                for item in items:
+                    if item.is_allocated:
+                        allocations_snapshot[item.id] = {
+                            "sub_type": item.allocated_sub_type,
+                            "allocation_config_id": item.allocation_config_id,
+                            "status": item.status,
+                        }
+                        total_allocated += 1
+
+                # Create history record
+                history = ManualDistributionHistory(
+                    scholarship_type_id=scholarship_type_id,
+                    academic_year=academic_year,
+                    semester=semester,
+                    allocations_snapshot=allocations_snapshot,
+                    operation_type="save",
+                    change_summary=f"Saved {updated_count} allocation(s)",
+                    total_allocated=total_allocated,
+                    created_by=admin_user_id,
+                )
+                self.db.add(history)
+                await self.db.flush()
+        except Exception as e:
+            logger.warning("Failed to record allocation history", exc_info=True)
+            # Don't fail the allocation if history recording fails
+
+        return {"updated_count": updated_count}
+
+    async def finalize(
+        self,
+        scholarship_type_id: int,
+        academic_year: int,
+        semester: str,
+        admin_user_id: Optional[int] = None,
+    ) -> dict[str, Any]:
+        """
+        Finalize manual distribution:
+        1. Mark rankings as distribution_executed
+        2. Update application statuses (allocated -> approved; non-allocated keeps
+           its prior user-facing status — see #45. Only quota_allocation_status
+           is set to 'rejected' for non-allocated apps so the distribution engine
+           can distinguish allocated/non-allocated outcomes.)
+        3. Update quota_allocation_status on applications
+        """
+        ranking_query = select(CollegeRanking).where(
+            and_(
+                CollegeRanking.scholarship_type_id == scholarship_type_id,
+                CollegeRanking.academic_year == academic_year,
+                _ranking_semester_condition(semester),
+                CollegeRanking.is_finalized.is_(True),
+            )
+        )
+        result = await self.db.execute(ranking_query)
+        rankings = result.scalars().all()
+        ranking_ids = [r.id for r in rankings]
+
+        if not ranking_ids:
+            raise ValueError("No finalized rankings found")
+
+        # Get all ranking items
+        items_query = (
+            select(CollegeRankingItem)
+            .options(selectinload(CollegeRankingItem.application))
+            .where(CollegeRankingItem.ranking_id.in_(ranking_ids))
+        )
+        result = await self.db.execute(items_query)
+        items = result.scalars().all()
+
+        # Rejection gate at finalize time: a reviewer reject (不同意) may have
+        # arrived AFTER the allocation was saved (or been reintroduced via a
+        # history restore) — such allocations must never be finalized into an
+        # approved application. Only items finalize would actually approve are
+        # checked (same skip conditions as the loop below).
+        finalizable = [
+            (item, item.application)
+            for item in items
+            if item.application is not None
+            and item.application.deleted_at is None
+            and item.application.quota_allocation_status not in CANCELLED_ALLOCATION_STATUSES
+            and item.is_allocated
+            and item.allocated_sub_type
+        ]
+        rejected_map = await self._batch_load_rejected_map(list({app.id for _, app in finalizable}))
+        rejected_violations = list(
+            dict.fromkeys(
+                f"{app.app_id} → {item.allocated_sub_type}"
+                for item, app in finalizable
+                if _norm_sub_type(item.allocated_sub_type) in rejected_map.get(app.id, set())
+            )
+        )
+        if rejected_violations:
+            raise ValueError(
+                "以下核配之子類型審核不同意，無法確認分發，請先取消該勾選：" + "、".join(rejected_violations)
+            )
+
+        approved_count = 0
+        rejected_count = 0
+        # Per-ranking approved tallies — each college ranking must record its
+        # OWN winner count, not the global one (#1138).
+        approved_by_ranking: dict[int, int] = {}
+
+        for item in items:
+            app = item.application
+            if not app:
+                continue
+
+            # Skip soft-deleted applications
+            if app.deleted_at is not None:
+                continue
+
+            # Skip applications already revoked/suspended post-finalize. Their
+            # ranking item was unallocated (is_allocated=False) by the cancel
+            # flow; finalize must never flip them back to approved/allocated.
+            if app.quota_allocation_status in CANCELLED_ALLOCATION_STATUSES:
+                continue
+
+            prior_app_state = {
+                "status": app.status.value if hasattr(app.status, "value") else str(app.status),
+                "quota_allocation_status": app.quota_allocation_status,
+            }
+            if item.is_allocated and item.allocated_sub_type:
+                app.status = ApplicationStatus.approved
+                app.quota_allocation_status = "allocated"
+                app.sub_scholarship_type = item.allocated_sub_type
+                app.approved_at = datetime.now(timezone.utc)
+                app.review_stage = ReviewStage.quota_distributed
+                # Backfill: an approved renewal must NEVER have NULL allocation_config_id
+                # (spec §9 — NULL would inflate §6.2 pool counts). Prefer the ranking
+                # item's consumed config; fall back to the app's own config.
+                if app.allocation_config_id is None:
+                    app.allocation_config_id = item.allocation_config_id or app.scholarship_configuration_id
+                if admin_user_id is not None:
+                    self.db.add(
+                        AuditLog.create_log(
+                            user_id=admin_user_id,
+                            action=AuditAction.execute_distribution.value,
+                            resource_type="application",
+                            resource_id=str(app.id),
+                            description=f"distribution finalized: {app.app_id} approved ({item.allocated_sub_type})",
+                            old_values=prior_app_state,
+                            new_values={
+                                "status": "approved",
+                                "quota_allocation_status": "allocated",
+                                "sub_scholarship_type": item.allocated_sub_type,
+                                "allocation_config_id": app.allocation_config_id,
+                            },
+                            meta_data={"app_id": app.app_id, "ranking_item_id": item.id},
+                        )
+                    )
+                approved_count += 1
+                approved_by_ranking[item.ranking_id] = approved_by_ranking.get(item.ranking_id, 0) + 1
+            elif app.is_renewal:
+                # Funded renewals are auto-included in college rankings (#71)
+                # but their allocation state is owned by the renewal-import
+                # path, not by matrix distribution — mirroring the
+                # is_renewal.is_(False) guard in _winner_filters. Downgrading
+                # them to quota-rejected here broke revoke/suspend and
+                # inflated rejected_count (#1171).
+                pass
+            elif item.is_supplementary and not item.is_allocated:
+                # Supplementary students pending a second distribution pass —
+                # leave status as 'ranked' so they appear in the next allocation.
+                pass
+            else:
+                # Non-allocated: keep the user-facing app.status as-is
+                # (e.g. an approved-but-not-funded app stays "approved"). Only
+                # the quota_allocation_status flips to "rejected" so the
+                # distribution engine can identify non-allocated outcomes.
+                # See #45 — earlier code stomped app.status to rejected, which
+                # incorrectly told students their application was denied when
+                # in fact they passed review but missed the quota cut.
+                item.status = "rejected"
+                app.quota_allocation_status = "rejected"
+                app.review_stage = ReviewStage.quota_distributed
+                if admin_user_id is not None:
+                    self.db.add(
+                        AuditLog.create_log(
+                            user_id=admin_user_id,
+                            action=AuditAction.execute_distribution.value,
+                            resource_type="application",
+                            resource_id=str(app.id),
+                            description=f"distribution finalized: {app.app_id} not allocated (quota rejected)",
+                            old_values=prior_app_state,
+                            new_values={
+                                "status": prior_app_state["status"],
+                                "quota_allocation_status": "rejected",
+                            },
+                            meta_data={"app_id": app.app_id, "ranking_item_id": item.id},
+                        )
+                    )
+                rejected_count += 1
+
+        # §10 quota gate — recount under SELECT FOR UPDATE before committing the
+        # finalize. Reject if any consumed config is oversubscribed.
+        requesting_config = await self._load_config(scholarship_type_id, academic_year, semester)
+        if requesting_config is not None:
+            await self._assert_round_not_oversubscribed(requesting_config)
+
+        # Update rankings
+        now = datetime.now(timezone.utc)
+        for ranking in rankings:
+            ranking.distribution_executed = True
+            ranking.distribution_date = now
+            ranking.allocated_count = approved_by_ranking.get(ranking.id, 0)
+
+        await self.db.flush()
+
+        # Record finalization in history for undo capability
+        try:
+            # Build snapshot of finalized allocations
+            allocations_snapshot = {}
+            for item in items:
+                if item.is_allocated and item.allocated_sub_type:
+                    allocations_snapshot[item.id] = {
+                        "sub_type": item.allocated_sub_type,
+                        "allocation_config_id": item.allocation_config_id,
+                        "status": item.status,
+                    }
+
+            history = ManualDistributionHistory(
+                scholarship_type_id=scholarship_type_id,
+                academic_year=academic_year,
+                semester=semester,
+                allocations_snapshot=allocations_snapshot,
+                operation_type="finalize",
+                change_summary=f"Distribution finalized: {approved_count} approved, {rejected_count} rejected",
+                total_allocated=approved_count,
+                created_by=admin_user_id,
+            )
+            self.db.add(history)
+            await self.db.flush()
+        except Exception as e:
+            logger.warning("Failed to record finalization history", exc_info=True)
+            # Don't fail the finalization if history recording fails
+
+        return {
+            "approved_count": approved_count,
+            "rejected_count": rejected_count,
+            "total": approved_count + rejected_count,
+        }
+
+    async def restore_from_history(
+        self,
+        scholarship_type_id: int,
+        academic_year: int,
+        semester: str,
+        allocations_snapshot: dict[str, Any],
+        admin_user_id: Optional[int] = None,
+    ) -> dict[str, Any]:
+        """
+        Restore allocations from a historical snapshot.
+        The snapshot contains: {ranking_item_id: {sub_type, allocation_config_id, status}, ...}
+        """
+        # First clear all current allocations
+        ranking_query = select(CollegeRanking).where(
+            and_(
+                CollegeRanking.scholarship_type_id == scholarship_type_id,
+                CollegeRanking.academic_year == academic_year,
+                _ranking_semester_condition(semester),
+            )
+        )
+        result = await self.db.execute(ranking_query)
+        rankings = result.scalars().all()
+        ranking_ids = [r.id for r in rankings]
+
+        if ranking_ids:
+            # Clear all allocations
+            items_query = select(CollegeRankingItem).where(CollegeRankingItem.ranking_id.in_(ranking_ids))
+            result = await self.db.execute(items_query)
+            items = result.scalars().all()
+
+            for item in items:
+                item.is_allocated = False
+                item.allocated_sub_type = None
+                item.allocation_config_id = None
+                item.status = "ranked"
+                item.allocation_reason = None
+
+        # Resolve snapshot rows to items first (one batched query) so
+        # reviewer-rejected sub-types can be batch-checked before any
+        # allocation is re-applied.
+        wanted: dict[int, dict[str, Any]] = {}
+        for item_id_str, alloc_data in allocations_snapshot.items():
+            try:
+                item_id = int(item_id_str)
+            except (ValueError, TypeError):
+                logger.warning(f"Skipping invalid item ID in snapshot: {item_id_str}")
+                continue
+            if alloc_data.get("sub_type"):
+                wanted[item_id] = alloc_data
+
+        to_restore: list[tuple[CollegeRankingItem, dict[str, Any]]] = []
+        if wanted:
+            items_result = await self.db.execute(
+                select(CollegeRankingItem)
+                .options(selectinload(CollegeRankingItem.application))
+                .where(CollegeRankingItem.id.in_(list(wanted.keys())))
+            )
+            to_restore = [(item, wanted[item.id]) for item in items_result.scalars().all()]
+
+        restore_app_ids = list({item.application_id for item, _ in to_restore if item.application_id is not None})
+        rejected_map = await self._batch_load_rejected_map(restore_app_ids)
+
+        # Now restore from snapshot — a snapshot may predate a reviewer reject
+        # (不同意) or a 撤銷/停發, so those rows are skipped instead of re-allocated.
+        restored_count = 0
+        skipped_rejected = 0
+        skipped_cancelled = 0
+        for item, alloc_data in to_restore:
+            sub_type = _norm_sub_type(alloc_data["sub_type"])
+            if item.application_id is not None and sub_type in rejected_map.get(item.application_id, set()):
+                skipped_rejected += 1
+                logger.info(
+                    "restore_from_history: skipping ranking_item %s — sub_type %s was rejected in review",
+                    item.id,
+                    alloc_data["sub_type"],
+                )
+                continue
+            app = item.application
+            # A snapshot taken before a 撤銷/停發 still holds that student's slot;
+            # re-allocating it would resurrect someone meant to stay out. Write the
+            # slot identity back WITHOUT is_allocated so the cancel state survives:
+            # quota stays free (consumers count on is_allocated — see
+            # _winner_filters) while 復發 can still re-affirm the exact same slot,
+            # which restore_allocation drives off allocated_sub_type.
+            if app is not None and app.quota_allocation_status in CANCELLED_ALLOCATION_STATUSES:
+                skipped_cancelled += 1
+                item.allocated_sub_type = alloc_data["sub_type"]
+                item.allocation_config_id = alloc_data.get("allocation_config_id")
+                logger.info(
+                    "restore_from_history: not re-allocating ranking_item %s — application %s is %s "
+                    "(slot identity preserved for 復發)",
+                    item.id,
+                    item.application_id,
+                    app.quota_allocation_status,
+                )
+                continue
+            item.is_allocated = True
+            item.allocated_sub_type = alloc_data["sub_type"]
+            item.allocation_config_id = alloc_data.get("allocation_config_id")
+            item.status = alloc_data.get("status", "allocated")
+            item.allocation_reason = "還原歷史分發"
+            restored_count += 1
+
+        await self.db.flush()
+
+        # Record this restore as a history event
+        try:
+            history = ManualDistributionHistory(
+                scholarship_type_id=scholarship_type_id,
+                academic_year=academic_year,
+                semester=semester,
+                allocations_snapshot=allocations_snapshot,
+                operation_type="revert",
+                change_summary=f"Restored {restored_count} allocation(s) from history",
+                total_allocated=restored_count,
+                created_by=admin_user_id,
+            )
+            self.db.add(history)
+            await self.db.flush()
+        except Exception:
+            logger.warning("Failed to record restore history", exc_info=True)
+
+        return {
+            "restored_count": restored_count,
+            "skipped_rejected": skipped_rejected,
+            "skipped_cancelled": skipped_cancelled,
+        }
+
+    async def _validate_allocations(
+        self,
+        scholarship_type_id: int,
+        academic_year: int,
+        semester: str,
+        allocations: list[dict[str, Any]],
+    ) -> None:
+        """Validate that allocations don't exceed per-college quotas for each year."""
+        # Check single-select: no duplicate ranking_item_ids
+        seen_items = set()
+        for alloc in allocations:
+            item_id = alloc["ranking_item_id"]
+            if item_id in seen_items:
+                raise ValueError(f"Duplicate ranking item: {item_id}")
+            seen_items.add(item_id)
+
+        # Both allocation gates below read the same (allocation → application)
+        # pairs, so resolve them ONCE — a save can carry hundreds of ranking
+        # item ids and each resolve is a query plus its selectin follow-up.
+        resolved = await self._resolve_allocating_apps(allocations)
+
+        # Review gate (審核不同意的子類型不可被分發) — an explicit reviewer
+        # reject blocks unconditionally. A MISSING professor approval does NOT
+        # block: the grid renders it as 未推薦 (matching the 學院推薦 column)
+        # and the admin decides — distribution must not strand on unreviewed
+        # applications.
+        await self._assert_no_rejected_sub_types(resolved)
+
+        # 撤銷／停發 gate — mirrors the disabled checkbox in the UI so neither a
+        # stale grid nor a crafted request can re-allocate a student the admin
+        # deliberately pulled out of the distribution.
+        self._assert_no_cancelled_applications(resolved)
+
+        # Server-side quota enforcement is net-new (spec §10): the lock gate in
+        # allocate/finalize (_assert_round_not_oversubscribed) recounts remaining
+        # under SELECT FOR UPDATE on the consumed config rows and rejects
+        # oversubscription — both the global pool AND each college's own cell of
+        # quotas[sub_type]. The frontend counts only mirror it; the gate decides.
+
+    async def _resolve_allocating_apps(
+        self, allocations: list[dict[str, Any]]
+    ) -> list[tuple[dict[str, Any], Application]]:
+        """Pair each SUB-TYPE-ASSIGNING allocation with its Application.
+
+        Allocations with ``sub_type_code=None`` mean unallocate and are dropped —
+        no allocation gate applies to them. Shared by the gates in
+        _validate_allocations so they resolve the same rows only once.
+        """
+        allocating = [a for a in allocations if a.get("sub_type_code")]
+        if not allocating:
+            return []
+
+        item_ids = [a["ranking_item_id"] for a in allocating]
+        stmt = (
+            select(CollegeRankingItem)
+            .options(selectinload(CollegeRankingItem.application))
+            .where(CollegeRankingItem.id.in_(item_ids))
+        )
+        items = {it.id: it for it in (await self.db.execute(stmt)).scalars().all()}
+
+        resolved: list[tuple[dict[str, Any], Application]] = []
+        for alloc in allocating:
+            item = items.get(alloc["ranking_item_id"])
+            app = item.application if item else None
+            if app is not None:
+                resolved.append((alloc, app))
+        return resolved
+
+    async def _assert_no_rejected_sub_types(self, resolved: list[tuple[dict[str, Any], Application]]) -> None:
+        """Block any allocation to a sub-type an explicit reviewer reject (不同意) covers.
+
+        Takes the (allocation, application) pairs from _resolve_allocating_apps —
+        already limited to allocations that assign a sub-type. The gate is
+        unconditional — renewal or not — and mirrors the disabled checkbox in the
+        UI so a crafted request can't bypass it. A sub-type the professor merely
+        has NOT approved yet is allocatable: the grid shows it as 未推薦 and the
+        admin decides, so one unreviewed application can't strand the whole
+        distribution.
+        """
+        if not resolved:
+            return
+
+        rejected = await self._batch_load_rejected_map(list({app.id for _, app in resolved}))
+        rejected_violations = list(
+            dict.fromkeys(
+                f"{app.app_id} → {alloc['sub_type_code']}"
+                for alloc, app in resolved
+                if _norm_sub_type(alloc["sub_type_code"]) in rejected.get(app.id, set())
+            )
+        )
+        if rejected_violations:
+            raise ValueError("以下分發之子類型審核不同意，無法分發：" + "、".join(rejected_violations))
+
+    async def _cancelled_ranking_item_ids(self, item_ids: list[int]) -> set[int]:
+        """Ranking items whose application is 撤銷 (revoked) / 停發 (suspended)."""
+        if not item_ids:
+            return set()
+        stmt = (
+            select(CollegeRankingItem.id)
+            .join(Application, CollegeRankingItem.application_id == Application.id)
+            .where(
+                CollegeRankingItem.id.in_(item_ids),
+                Application.quota_allocation_status.in_(CANCELLED_ALLOCATION_STATUSES),
+            )
+        )
+        return set((await self.db.execute(stmt)).scalars().all())
+
+    def _assert_no_cancelled_applications(self, resolved: list[tuple[dict[str, Any], Application]]) -> None:
+        """Block any allocation onto a 撤銷 (revoked) / 停發 (suspended) application.
+
+        Cancelling frees the ranking item (``is_allocated=False``) so the slot can
+        go to someone else — which also makes the student look allocatable again.
+        The admin's decision wins: allocating to them is refused here, and
+        restoring them is a separate explicit action (restore_allocation).
+        Takes the (allocation, application) pairs from _resolve_allocating_apps,
+        so unallocate rows (``sub_type_code=None``) are already excluded and stay
+        allowed.
+        """
+        violations = [
+            f"{app.app_id}（{'撤銷' if app.quota_allocation_status == 'revoked' else '停發'}）"
+            for _, app in resolved
+            if app.quota_allocation_status in CANCELLED_ALLOCATION_STATUSES
+        ]
+        if violations:
+            raise ValueError("以下申請已撤銷／停發，無法分發：" + "、".join(dict.fromkeys(violations)))
+
+    def _compute_application_identity(self, app: Application) -> str:
+        """
+        Compute display string for application identity.
+        e.g., "114新申請", "112續領"
+        """
+        if app.is_renewal and app.previous_application_id:
+            return f"{app.academic_year}續領"
+        else:
+            return f"{app.academic_year}新申請"
+
+    def _compute_term_count(self, student_data: dict) -> int | None:
+        """Get student's semester count (第幾學期) from SIS API data."""
+        term_count = student_data.get("trm_termcount")
+        if term_count is not None:
+            try:
+                return int(term_count)
+            except (ValueError, TypeError):
+                return None
+        return None
+
+    def _get_renewal_sub_type(self, app: Application) -> str | None:
+        """
+        Get the sub-type of the student's renewal application.
+        Maps sub_type codes to Chinese display names.
+        """
+        if not app.is_renewal:
+            return None
+        sub_type = app.sub_scholarship_type
+        if not sub_type or sub_type == "general":
+            return None
+        return self._sub_type_to_chinese(sub_type)
+
+    @staticmethod
+    def _sub_type_to_chinese(sub_type: str) -> str:
+        """Map sub-type code to Chinese display name."""
+        mapping = {
+            "nstc": "國科會",
+            "moe_1w": "教育部",
+            "moe_2w": "教育部",
+        }
+        return mapping.get(sub_type, sub_type)
+
+    def _format_enrollment_date(self, student_data: dict) -> str:
+        """Format enrollment date as ROC calendar (民國年.月.日).
+
+        Delegates to the export module so the grid and the 分發名單 export can
+        never render the same student's date differently.
+        """
+        return format_enrollment_date_roc(student_data)
+
+    async def _get_default_preferences(self, scholarship_type_id: int) -> list[str]:
+        """
+        Return active sub-type codes for a scholarship type, ordered by display_order.
+        Used as the fallback preference list when a student has no sub_type_preferences set.
+        """
+        stmt = (
+            select(ScholarshipSubTypeConfig)
+            .where(
+                and_(
+                    ScholarshipSubTypeConfig.scholarship_type_id == scholarship_type_id,
+                    ScholarshipSubTypeConfig.is_active.is_(True),
+                )
+            )
+            .order_by(ScholarshipSubTypeConfig.display_order)
+        )
+        result = await self.db.execute(stmt)
+        return [row.sub_type_code for row in result.scalars().all()]
+
+    async def _batch_load_previous_allocation_years(self, previous_app_ids: list[int]) -> dict[int, int]:
+        """
+        For renewal students, find the allocation_config_id from their previous
+        application's CollegeRankingItem (the config that prior slot consumed).
+
+        Returns: {previous_application_id: allocation_config_id}
+        Only includes entries where allocation_config_id IS NOT NULL.
+        """
+        if not previous_app_ids:
+            return {}
+
+        stmt = select(CollegeRankingItem).where(
+            and_(
+                CollegeRankingItem.application_id.in_(previous_app_ids),
+                CollegeRankingItem.allocation_config_id.isnot(None),
+            )
+        )
+        result = await self.db.execute(stmt)
+        items = result.scalars().all()
+
+        # If a previous app appears in multiple ranking items, use the first one
+        mapping: dict[int, int] = {}
+        for item in items:
+            if item.application_id not in mapping:
+                mapping[item.application_id] = item.allocation_config_id
+        return mapping
+
+    async def auto_allocate_preview(
+        self,
+        scholarship_type_id: int,
+        academic_year: int,
+        semester: str,
+        college_code: Optional[str] = None,
+        staged: Optional[list[dict]] = None,
+    ) -> list[dict]:
+        """
+        Compute auto-allocation suggestions without persisting any changes.
+
+        Algorithm:
+        1. Load finalized CollegeRanking records + their items (with Application eager-loaded).
+        2. Deduplicate items by application_id (keep the one the caller renders).
+        3. Load default preferences and previous allocation years for renewal students.
+        4. Build quota tracker from config (current year + prior years per sub-type).
+        5. Subtract the allocations in force — see `staged` — from the tracker.
+        6. Sort students: renewal first, then by rank_position ascending.
+        7. Allocate sequentially following preference order and quota constraints.
+
+        `college_code` narrows step 2 to that college's students only (admins can
+        run the distribution one college at a time). The quota tracker is still
+        built and decremented globally, so a single-college run consumes exactly
+        the same slots it would in a whole-scholarship run: tracker keys are
+        (config_id, sub_type, college_code), so no other college's students can
+        be affected by the ones skipped here.
+
+        `staged` is the caller's on-screen state — [{"ranking_item_id",
+        "sub_type_code", "allocation_config_id"}] covering EVERY row it renders,
+        for every college, with a null sub_type_code for a 未決 row. Where it
+        speaks, it overrides the database: a row the admin unticked frees its
+        slot for someone else here and now, and a row they ticked by hand is
+        already decided — charged against the quota, never re-suggested. Without
+        it the tracker falls back to the persisted allocations, which is only
+        the truth when nothing is staged (the first load of a fresh screen).
+
+        Returns list of {"ranking_item_id", "sub_type_code",
+        "allocation_config_id", "reason"} dicts — one per 未決 item, `reason`
+        naming why when nothing could be allocated.
+        """
+        # --- Step 0: Load finalized rankings ---
+        ranking_query = select(CollegeRanking).where(
+            and_(
+                CollegeRanking.scholarship_type_id == scholarship_type_id,
+                CollegeRanking.academic_year == academic_year,
+                _ranking_semester_condition(semester),
+                CollegeRanking.is_finalized.is_(True),
+            )
+        )
+        result = await self.db.execute(ranking_query)
+        rankings = result.scalars().all()
+
+        if not rankings:
+            return []
+
+        ranking_ids = [r.id for r in rankings]
+
+        # Load items with eagerly loaded Application. Ordered by (rank_position,
+        # id) — same as get_students_for_distribution — so the dedup below picks
+        # the SAME duplicate the grid renders.
+        items_query = (
+            select(CollegeRankingItem)
+            .options(selectinload(CollegeRankingItem.application))
+            .where(CollegeRankingItem.ranking_id.in_(ranking_ids))
+            .order_by(CollegeRankingItem.rank_position, CollegeRankingItem.id)
+        )
+        result = await self.db.execute(items_query)
+        all_items = result.scalars().all()
+
+        # Index the raw rows before dedup: the staged overlay is keyed on
+        # ranking_item_id across EVERY college, so charging it needs items the
+        # college filter is about to drop.
+        items_by_id = {item.id: item for item in all_items}
+        staged_ids = (
+            {row["ranking_item_id"] for row in staged if row.get("ranking_item_id") in items_by_id} if staged else set()
+        )
+
+        # Deduplicate by application_id (keeping the row the caller renders),
+        # skip soft-deleted, and keep only the requested college when one was given.
+        unique_items = _dedupe_preview_items(all_items, college_code, staged_ids)
+
+        if not unique_items:
+            return []
+
+        # --- Step 0b: Load default preferences ---
+        default_prefs = await self._get_default_preferences(scholarship_type_id)
+
+        # Previous allocation CONFIG for renewal students (the config prior slot consumed).
+        previous_app_ids = [
+            item.application.previous_application_id
+            for item in unique_items
+            if item.application.is_renewal and item.application.previous_application_id
+        ]
+        prev_alloc_configs = await self._batch_load_previous_allocation_years(previous_app_ids)
+
+        # --- Step 1: Resolve requesting config + its distributable configs ---
+        requesting_config = await self._load_config(scholarship_type_id, academic_year, semester)
+        if requesting_config is None:
+            return []
+        # Configs reachable for any sub_type: own + every linked source,
+        # seeded per real sub_type below (a bare resolve("") matches nothing).
+        all_configs: dict[int, ScholarshipConfiguration] = {requesting_config.id: requesting_config}
+
+        # Build all linked configs across all sub_types
+        sub_types = set((requesting_config.quotas or {}).keys())
+        for entry in requesting_config.shared_quota_sources or []:
+            sub_types.update(entry.get("sub_types") or [])
+        for st in sub_types:
+            for cfg in await self._resolve_linked_configs(requesting_config, st):
+                all_configs[cfg.id] = cfg
+
+        # allowed_configs_by_sub_type: own-first then linked by descending year.
+        allowed_configs_by_sub_type: dict[str, list[int]] = {}
+        for st in sub_types:
+            allowed_configs_by_sub_type[st] = [
+                c["config_id"] for c in await self.distributable_pool(requesting_config, st)
+            ]
+
+        # Resolve the overlay against the config's own spelling of each sub-type,
+        # so a staged "NSTC" charges the same tracker cell a suggested "nstc"
+        # would. A staged sub-type with no config attached consumes the
+        # requesting config, matching how `allocate` reads the same wire shape.
+        staged_map: Optional[dict[int, Optional[tuple[str, int]]]] = None
+        if staged is not None:
+            staged_map = {}
+            for row in staged:
+                item_id = row.get("ranking_item_id")
+                if item_id not in items_by_id:
+                    continue
+                # Reject duplicates rather than letting the last one win, exactly
+                # as `allocate` does for this same wire shape: a row staged twice
+                # would silently collapse, freeing its slot from the tracker while
+                # the screen still shows it taken.
+                if item_id in staged_map:
+                    raise ValueError(f"Duplicate ranking item: {item_id}")
+                sub_type_code = row.get("sub_type_code")
+                if not sub_type_code:
+                    staged_map[item_id] = None
+                    continue
+                staged_map[item_id] = (
+                    _canonical_sub_type(sub_type_code, allowed_configs_by_sub_type),
+                    row.get("allocation_config_id") or requesting_config.id,
+                )
+
+        # --- Step 2: Build the per-(config, sub_type, college) tracker ---
+        # Seed from each consumed config's matrix so per-college caps survive,
+        # then subtract every existing global consumer of that config so the
+        # tracker reflects live remaining (honors the cross-config pool cap).
+        # Keys are (config_id, sub_type, college_code) — see _compute_suggestions.
+        quota_tracker: dict[tuple[int, str, str], int] = {}
+        for cid, cfg in all_configs.items():
+            if not cfg.has_college_quota or not cfg.quotas:
+                continue
+            for sub_type, college_quotas in cfg.quotas.items():
+                if not isinstance(college_quotas, dict):
+                    continue
+                # NOT `college_code` — that is this method's parameter.
+                for matrix_college, quota in college_quotas.items():
+                    quota_tracker[(cid, sub_type, matrix_college)] = int(quota)
+
+        # Subtract every already-allocated ranking item pointing at these configs
+        # (across ALL rankings, not just this round — global pool).
+        existing_stmt = (
+            select(CollegeRankingItem)
+            .options(selectinload(CollegeRankingItem.application))
+            .where(
+                CollegeRankingItem.is_allocated.is_(True),
+                CollegeRankingItem.allocation_config_id.in_(list(all_configs.keys())),
+            )
+        )
+        existing_items = (await self.db.execute(existing_stmt)).scalars().all()
+        for ex in existing_items:
+            # A row the caller has on screen is accounted for by the overlay
+            # below — charging the saved allocation too would bill it twice, and
+            # would keep billing it after the admin unticked the box.
+            if staged_map is not None and ex.id in staged_map:
+                continue
+            if not ex.allocated_sub_type or ex.application is None:
+                continue
+            college = (ex.application.student_data or {}).get("std_academyno", "")
+            key = (ex.allocation_config_id, ex.allocated_sub_type, college)
+            if key in quota_tracker:
+                quota_tracker[key] = max(0, quota_tracker[key] - 1)
+
+        # Subtract approved renewals consuming these configs (Application half).
+        renewal_stmt = select(Application).where(
+            Application.is_renewal.is_(True),
+            Application.status == ApplicationStatus.approved,
+            Application.allocation_config_id.in_(list(all_configs.keys())),
+            Application.deleted_at.is_(None),
+        )
+        renewal_rows = (await self.db.execute(renewal_stmt)).scalars().all()
+        for ra in renewal_rows:
+            if not ra.sub_scholarship_type:
+                continue
+            college = (ra.student_data or {}).get("std_academyno", "")
+            key = (ra.allocation_config_id, ra.sub_scholarship_type, college)
+            if key in quota_tracker:
+                quota_tracker[key] = max(0, quota_tracker[key] - 1)
+
+        # Charge every allocation staged on screen, for EVERY college — the
+        # quota pool is shared, so one college's unsaved ticks are the reason
+        # another college may have nothing left to hand out.
+        if staged_map is not None:
+            for item_id, staged_alloc in staged_map.items():
+                if staged_alloc is None:
+                    continue
+                sub_type, cfg_id = staged_alloc
+                item = items_by_id.get(item_id)
+                if item is None or item.application is None:
+                    continue
+                college = (item.application.student_data or {}).get("std_academyno", "")
+                key = (cfg_id, sub_type, college)
+                if key in quota_tracker:
+                    quota_tracker[key] = max(0, quota_tracker[key] - 1)
+
+        # Who is still open to a suggestion. A row absent from the overlay is
+        # one the caller never rendered, so its saved state is all we know.
+        undecided_ids: Optional[set[int]] = None
+        if staged_map is not None:
+            undecided_ids = {
+                item.id
+                for item in unique_items
+                if (staged_map[item.id] is None if item.id in staged_map else not item.is_allocated)
+            }
+
+        # Load rejected sub-types from professor reviews.
+        app_ids = [item.application.id for item in unique_items]
+        rejected_map = await self._batch_load_rejected_map(app_ids)
+
+        return _compute_suggestions(
+            unique_items=unique_items,
+            default_prefs=default_prefs,
+            prev_alloc_configs=prev_alloc_configs,
+            allowed_configs_by_sub_type=allowed_configs_by_sub_type,
+            quota_tracker=quota_tracker,
+            own_config_id=requesting_config.id,
+            rejected_map=rejected_map,
+            undecided_ids=undecided_ids,
+        )
+
+    async def revoke_allocation(self, application_id: int, admin_user_id: int, reason: str) -> dict:
+        """Revoke an allocated application: status -> cancelled,
+        quota_allocation_status -> revoked, hard-delete its PaymentRosterItem
+        rows in all non-LOCKED rosters, write audit log."""
+        return await self._cancel_allocation(
+            application_id=application_id,
+            admin_user_id=admin_user_id,
+            reason=reason,
+            mode="revoke",
+        )
+
+    async def suspend_allocation(self, application_id: int, admin_user_id: int, reason: str) -> dict:
+        """Suspend an allocated application: status -> cancelled,
+        quota_allocation_status -> suspended, hard-delete its PaymentRosterItem
+        rows in all non-LOCKED rosters, write audit log."""
+        return await self._cancel_allocation(
+            application_id=application_id,
+            admin_user_id=admin_user_id,
+            reason=reason,
+            mode="suspend",
+        )
+
+    async def restore_allocation(self, application_id: int, admin_user_id: int) -> dict:
+        """Restore a revoked/suspended application back to the state it held
+        before the cancel: replay the `cancelled_from_*` snapshot, clear the
+        revoke/suspend metadata, write an audit log.
+
+        A student cancelled AFTER 確認分發 goes back to approved/allocated and
+        re-consumes the quota slot. A student cancelled BEFORE it goes back to
+        e.g. submitted/None and simply re-enters the pool — restoring them into
+        approved/allocated would award a scholarship the distribution never
+        granted.
+
+        Rosters are intentionally NOT touched: items removed from non-LOCKED
+        rosters are re-created on the next roster generation, and items manually
+        removed from a LOCKED roster stay removed (its Excel was already
+        re-exported — we never silently un-delete a locked roster line)."""
+        result = await self.db.execute(select(Application).where(Application.id == application_id).with_for_update())
+        app = result.scalar_one_or_none()
+        if app is None:
+            raise ValueError(f"Application {application_id} not found")
+
+        prior_status = app.quota_allocation_status
+        if prior_status not in CANCELLED_ALLOCATION_STATUSES:
+            raise ValueError(
+                f"Application {application_id} is not revoked/suspended " f"(quota_allocation_status={prior_status})"
+            )
+        # Capture the original cancellation reason BEFORE clearing it below —
+        # the endpoint's audit log preserves it as old_values (G18/G9).
+        prior_reason = app.revoke_reason if prior_status == "revoked" else app.suspend_reason
+
+        # Where the APPLICATION ROW goes back to. `cancelled_from_status` is the
+        # presence marker for the snapshot (it is never NULL when one was
+        # taken), so a NULL quota snapshot can still mean "was pre-distribution".
+        # Rows cancelled before the snapshot columns existed carry no snapshot
+        # at all; by construction those could only have been cancelled from
+        # approved/allocated, which is exactly the fallback.
+        #
+        # The RANKING ITEM is restored independently, below — a saved-but-not-
+        # finalized 核配 lives entirely on the item (is_allocated=True while
+        # quota_allocation_status is still NULL), so keying the item's restore
+        # off the quota snapshot would silently drop the admin's saved tick.
+        if app.cancelled_from_status is not None:
+            target_quota_status = app.cancelled_from_quota_status
+            try:
+                target_app_status = ApplicationStatus(app.cancelled_from_status)
+            except ValueError:
+                logger.warning(
+                    "Application %s carries an unrecognised cancelled_from_status %r; "
+                    "restoring to 'approved' instead",
+                    application_id,
+                    app.cancelled_from_status,
+                )
+                target_app_status = ApplicationStatus.approved
+        else:
+            target_quota_status = "allocated"
+            target_app_status = ApplicationStatus.approved
+        restored_to_allocated = target_quota_status == "allocated"
+
+        ranking_items_result = await self.db.execute(
+            select(CollegeRankingItem).where(CollegeRankingItem.application_id == application_id)
+        )
+        ranking_items = ranking_items_result.scalars().all()
+        ranking_item_id = ranking_items[0].id if ranking_items else None
+
+        # Rejection gate: a reviewer reject (不同意) recorded while the
+        # application was revoked/suspended must not be overridden by restore —
+        # same rule as allocate/finalize (restore is the 5th allocation writer).
+        # Naturally a no-op when no item holds a sub-type, i.e. when there is no
+        # allocation to re-award.
+        rejected = (await self._batch_load_rejected_map([application_id])).get(application_id, set())
+        blocked_sub_types = [
+            ri.allocated_sub_type
+            for ri in ranking_items
+            if ri.allocated_sub_type and _norm_sub_type(ri.allocated_sub_type) in rejected
+        ]
+        if blocked_sub_types:
+            raise ValueError(f"無法復發：子類型 {'、'.join(blocked_sub_types)} 審核不同意，不可恢復該核配")
+
+        app.status = target_app_status
+        app.quota_allocation_status = target_quota_status
+        # Clear both metadata sets regardless of which one applied, plus the
+        # snapshot they were restored from (the application is live again).
+        app.revoked_at = None
+        app.revoked_by = None
+        app.revoke_reason = None
+        app.suspended_at = None
+        app.suspended_by = None
+        app.suspend_reason = None
+        app.cancelled_from_status = None
+        app.cancelled_from_quota_status = None
+
+        # Re-affirm the allocation on the ranking item(s) so the student
+        # re-consumes the quota slot and a finalize run re-approves them. The
+        # allocated_sub_type / allocation_year were preserved at cancel time, so
+        # `allocated_sub_type` is exactly the "held a slot at cancel time" test:
+        # allocate() clears it when a tick is removed, and it covers BOTH a
+        # finalized allocation and a saved-but-not-yet-finalized 核配 (the
+        # latter has quota_allocation_status NULL, so gating this on the quota
+        # snapshot would drop the admin's saved tick on the floor).
+        reaffirmed_config_ids: set = set()
+        for ri in ranking_items:
+            if ri.allocated_sub_type:
+                ri.is_allocated = True
+                if ri.allocation_config_id is not None:
+                    reaffirmed_config_ids.add(ri.allocation_config_id)
+
+        # #1081 finding I: re-affirming a slot re-consumes quota, so it can push a
+        # round over its total (revoke → reallocate the freed slot → restore the
+        # original double-books it). allocate()/finalize() both gate on
+        # _assert_round_not_oversubscribed; restore did not. Recount and reject
+        # here too (raises ValueError, rolling back the flip within the txn).
+        if reaffirmed_config_ids:
+            configs = (
+                (
+                    await self.db.execute(
+                        select(ScholarshipConfiguration).where(ScholarshipConfiguration.id.in_(reaffirmed_config_ids))
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            for cfg in configs:
+                await self._assert_round_not_oversubscribed(cfg)
+
+        # Audit logging moved to the endpoint (ApplicationAuditService.
+        # log_application_restore) so the row carries the acting User +
+        # request IP/UA and the action lives in the AuditAction enum (G18).
+        await self.db.flush()
+
+        return {
+            "application_id": application_id,
+            "app_id": app.app_id,
+            "ranking_item_id": ranking_item_id,
+            "quota_allocation_status": app.quota_allocation_status,
+            "restored_from": prior_status,
+            "restored_reason": prior_reason,
+            # The state replayed from the snapshot — lets the caller tell an
+            # award-backed restore from a pre-distribution one (and gives the
+            # audit log the real value instead of a hardcoded "allocated").
+            "restored_to_status": target_app_status.value,
+            "restored_allocation": restored_to_allocated,
+            # Ranking-item slots re-affirmed — non-zero for a saved-but-not-
+            # finalized 核配 even when restored_allocation is False.
+            "reaffirmed_ranking_items": sum(1 for ri in ranking_items if ri.allocated_sub_type),
+            "restored_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    async def _cancel_allocation(
+        self,
+        application_id: int,
+        admin_user_id: int,
+        reason: str,
+        mode: Literal["revoke", "suspend"],
+    ) -> dict:
+        # 1. Row-lock the application
+        result = await self.db.execute(select(Application).where(Application.id == application_id).with_for_update())
+        app = result.scalar_one_or_none()
+        if app is None:
+            raise ValueError(f"Application {application_id} not found")
+
+        # 2. Conflict check
+        if app.quota_allocation_status in CANCELLED_ALLOCATION_STATUSES:
+            raise ValueError(f"Application {application_id} already {app.quota_allocation_status}")
+
+        # 3. Snapshot the pre-cancellation state.
+        #
+        # 撤銷/停發 is allowed from ANY live state, not just 'allocated': a
+        # student who 休學/退學/畢業 between 學院排序 and 確認分發 must be
+        # markable so auto-allocate stops suggesting them and finalize skips
+        # them. Restoring such a student has to put the application back where
+        # it was — flipping it to approved/allocated would fabricate an award
+        # that never happened — so the prior state is recorded here and
+        # consumed by restore_allocation.
+        prior_quota_status = app.quota_allocation_status
+        app.cancelled_from_status = app.status.value if hasattr(app.status, "value") else str(app.status)
+        app.cancelled_from_quota_status = prior_quota_status
+
+        # Find the CollegeRankingItem(s) for this application (the rows that drove
+        # the allocation in the manual-distribution flow). The spec response
+        # includes ranking_item_id so downstream consumers can reference it.
+        ranking_items_result = await self.db.execute(
+            select(CollegeRankingItem).where(CollegeRankingItem.application_id == application_id)
+        )
+        ranking_items = ranking_items_result.scalars().all()
+        ranking_item_id = ranking_items[0].id if ranking_items else None
+
+        now = datetime.now(timezone.utc)
+
+        # 4. Update application columns
+        app.status = ApplicationStatus.cancelled
+        if mode == "revoke":
+            app.quota_allocation_status = "revoked"
+            app.revoked_at = now
+            app.revoked_by = admin_user_id
+            app.revoke_reason = reason
+        else:
+            app.quota_allocation_status = "suspended"
+            app.suspended_at = now
+            app.suspended_by = admin_user_id
+            app.suspend_reason = reason
+
+        # 4b. Free the quota slot: flip the ranking item(s) out of the allocated
+        # state so (a) the freed slot becomes available for a replacement and
+        # (b) a re-run of finalize cannot resurrect this student. We keep
+        # allocated_sub_type / allocation_year so restore_allocation can re-affirm
+        # the exact same slot without re-deriving it.
+        for ri in ranking_items:
+            ri.is_allocated = False
+
+        # 5. Hard-delete items in non-LOCKED rosters
+        items_result = await self.db.execute(
+            select(PaymentRosterItem)
+            .join(PaymentRoster, PaymentRosterItem.roster_id == PaymentRoster.id)
+            .where(
+                PaymentRosterItem.application_id == application_id,
+                PaymentRoster.status != RosterStatus.LOCKED,
+            )
+        )
+        items_to_delete = items_result.scalars().all()
+        affected_roster_ids = sorted({i.roster_id for i in items_to_delete})
+
+        for item in items_to_delete:
+            await self.db.delete(item)
+        await self.db.flush()  # make deletes visible to the subsequent recompute query
+
+        # 6. Recompute roster totals for affected rosters
+        for roster_id in affected_roster_ids:
+            await self._recompute_roster_totals(roster_id)
+
+        # 7. Audit logging moved to the endpoint (ApplicationAuditService.
+        # log_application_revoke / log_application_suspend) so the row carries
+        # the acting User + request IP/UA and the action lives in the
+        # AuditAction enum instead of an ad-hoc string (G18).
+        await self.db.flush()
+
+        timestamp_key = "revoked_at" if mode == "revoke" else "suspended_at"
+        return {
+            "application_id": application_id,
+            "app_id": app.app_id,
+            "ranking_item_id": ranking_item_id,
+            "quota_allocation_status": app.quota_allocation_status,
+            # The real pre-cancel state — the endpoint's audit row records this
+            # instead of assuming "allocated" (撤銷/停發 is legal pre-分發).
+            "prior_quota_allocation_status": prior_quota_status,
+            timestamp_key: now.isoformat(),
+            "affected_unlocked_rosters": affected_roster_ids,
+        }
+
+    async def _recompute_roster_totals(self, roster_id: int) -> None:
+        """Recompute total_applications, qualified_count, disqualified_count,
+        total_amount for a roster after items have been added/removed.
+
+        - total_applications = all rows
+        - qualified_count = is_included=True rows
+        - disqualified_count = is_included=False rows
+        - total_amount = sum(scholarship_amount) over is_included=True rows
+        """
+        agg = await self.db.execute(
+            select(
+                func.count(PaymentRosterItem.id),
+                func.coalesce(
+                    func.sum(
+                        sa_case(
+                            (PaymentRosterItem.is_included.is_(True), 1),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
+                func.coalesce(
+                    func.sum(
+                        sa_case(
+                            (PaymentRosterItem.is_included.is_(True), PaymentRosterItem.scholarship_amount),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
+            ).where(PaymentRosterItem.roster_id == roster_id)
+        )
+        total_count, qualified_count, total_amount = agg.one()
+
+        roster = await self.db.get(PaymentRoster, roster_id)
+        if roster:
+            roster.total_applications = total_count
+            roster.qualified_count = qualified_count
+            roster.disqualified_count = total_count - qualified_count
+            roster.total_amount = total_amount
+
+    # ------------------------------------------------------------------ #
+    # Phase 6 — General distribution with challenge release + fill-in
+    # See docs/superpowers/specs/2026-05-13-renewal-application-design.md
+    # Section 9 (一般階段分發演算法).
+    # ------------------------------------------------------------------ #
+
+    async def _get_active_config(self, scholarship_type_id: int, academic_year: int) -> ScholarshipConfiguration:
+        """Load the active ScholarshipConfiguration for (type, year).
+
+        Phase 6 distribution operates on quotas at the (sub_type, year) level
+        rather than per-college; semester is unused here since renewal flows
+        target yearly scholarships (see spec Section 1).
+        """
+        stmt = (
+            select(ScholarshipConfiguration)
+            .where(
+                and_(
+                    ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
+                    ScholarshipConfiguration.academic_year == academic_year,
+                    ScholarshipConfiguration.is_active == True,  # noqa: E712
+                )
+            )
+            .order_by(ScholarshipConfiguration.id.desc())
+        )
+        config = (await self.db.execute(stmt)).scalars().first()
+        if config is None:
+            raise ValueError(f"No active ScholarshipConfiguration for type {scholarship_type_id}, year {academic_year}")
+        return config
+
+    async def _get_general_candidates(
+        self,
+        scholarship_type_id: int,
+        academic_year: int,
+        sub_type: str,
+    ) -> list[CollegeRankingItem]:
+        """Return ranked candidates for first-round distribution on `sub_type`.
+
+        Includes BOTH pure-new applicants and challenge applicants whose
+        target sub_type matches — challenges compete for slots within the
+        sub_type they're applying to.
+        """
+        stmt = (
+            select(CollegeRankingItem)
+            .options(selectinload(CollegeRankingItem.application))
+            .join(Application, CollegeRankingItem.application_id == Application.id)
+            .where(
+                Application.scholarship_type_id == scholarship_type_id,
+                Application.academic_year == academic_year,
+                Application.sub_scholarship_type == sub_type,
+                Application.is_renewal.is_(False),
+                Application.status.notin_(
+                    [
+                        ApplicationStatus.approved,
+                        ApplicationStatus.rejected,
+                        ApplicationStatus.withdrawn,
+                        ApplicationStatus.deleted,
+                        ApplicationStatus.cancelled,
+                        ApplicationStatus.cancelled_by_challenge,
+                    ]
+                ),
+                Application.deleted_at.is_(None),
+            )
+            .order_by(CollegeRankingItem.rank_position)
+        )
+        return list((await self.db.execute(stmt)).scalars().all())
+
+    async def _get_waitlist_candidates(
+        self,
+        scholarship_type_id: int,
+        academic_year: int,
+        sub_type: str,
+        limit: Optional[int],
+    ) -> list[CollegeRankingItem]:
+        """Return pure-new candidates eligible to fill released slots.
+
+        Filters challenges_application_id IS NULL — only pure-new applicants
+        can fill released slots (spec Section 9.2). This prevents release
+        chains: a challenge winner's freed slot only flows to a pure-new
+        applicant, so no further releases cascade.
+
+        ``limit=None`` returns the full ordered waitlist — callers that filter
+        candidates afterwards (e.g. the reviewer-rejection skip) must fetch
+        unbounded and apply their own cap AFTER filtering, otherwise a skipped
+        candidate consumes a slot in the fetch window.
+        """
+        stmt = (
+            select(CollegeRankingItem)
+            .options(selectinload(CollegeRankingItem.application))
+            .join(Application, CollegeRankingItem.application_id == Application.id)
+            .where(
+                Application.scholarship_type_id == scholarship_type_id,
+                Application.academic_year == academic_year,
+                Application.sub_scholarship_type == sub_type,
+                Application.is_renewal.is_(False),
+                Application.challenges_application_id.is_(None),
+                Application.status != ApplicationStatus.approved,
+                Application.status.notin_(
+                    [
+                        ApplicationStatus.rejected,
+                        ApplicationStatus.withdrawn,
+                        ApplicationStatus.deleted,
+                        ApplicationStatus.cancelled,
+                        ApplicationStatus.cancelled_by_challenge,
+                    ]
+                ),
+                Application.deleted_at.is_(None),
+            )
+            .order_by(CollegeRankingItem.rank_position)
+        )
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        return list((await self.db.execute(stmt)).scalars().all())
+
+    async def _pick_config(
+        self,
+        requesting_config: ScholarshipConfiguration,
+        sub_type: str,
+        working_remaining: dict[int, int],
+    ) -> Optional[int]:
+        """Pick the next config id with positive working remaining for sub_type.
+
+        Replaces the year-keyed `_pick_pool` (spec §6.3). Policy: prefer the OWN
+        config first, then linked source configs by DESCENDING academic_year.
+        `working_remaining` is keyed by config id and supplied (and decremented)
+        by the caller so a multi-assign loop need not re-query the DB. Returns
+        None when no candidate config has positive remaining.
+        """
+        if working_remaining.get(requesting_config.id, 0) > 0:
+            return requesting_config.id
+        linked = await self._resolve_linked_configs(requesting_config, sub_type)
+        for cfg in sorted(linked, key=lambda c: c.academic_year, reverse=True):
+            if working_remaining.get(cfg.id, 0) > 0:
+                return cfg.id
+        return None
+
+    async def _config_code_by_id(
+        self, requesting_config: ScholarshipConfiguration, sub_type: str, config_id: Optional[int]
+    ) -> str:
+        """Human-readable config_code for an id (own, linked, or any other config),
+        for error messages. Falls back to a direct lookup so a disallowed-but-real
+        config still names itself, and to the raw id only if it does not exist."""
+        if config_id == requesting_config.id:
+            return requesting_config.config_code
+        for cfg in await self._resolve_linked_configs(requesting_config, sub_type):
+            if cfg.id == config_id:
+                return cfg.config_code
+        if config_id is not None:
+            code = await self.db.scalar(
+                select(ScholarshipConfiguration.config_code).where(ScholarshipConfiguration.id == config_id)
+            )
+            if code:
+                return code
+        return str(config_id)
+
+    async def _assert_round_not_oversubscribed(self, requesting_config: ScholarshipConfiguration) -> None:
+        """§10 quota gate: SELECT FOR UPDATE the consumed config rows for this
+        round (own + every linked source across every sub_type), recount remaining
+        via §6.2, and reject if any consumed config is oversubscribed.
+
+        Two caps are enforced, both hard:
+          1. the GLOBAL per-(config, sub_type) pool, and
+          2. for matrix configs (has_college_quota), the PER-COLLEGE cell of that
+             sub_type — 每個學院的子類別名額 is its own ceiling, so a college may
+             not be over-filled even while the global pool still has slots left.
+
+        Flushes pending allocation writes FIRST so the recount sees them (autoflush
+        is off on this session, so the just-written items would otherwise be
+        invisible to the count queries)."""
+        await self.db.flush()
+
+        consumed_ids = {requesting_config.id}
+        for sub_type in (requesting_config.quotas or {}).keys():
+            for cfg in await self._resolve_linked_configs(requesting_config, sub_type):
+                consumed_ids.add(cfg.id)
+
+        locked_rows = (
+            (
+                await self.db.execute(
+                    select(ScholarshipConfiguration)
+                    .where(ScholarshipConfiguration.id.in_(consumed_ids))
+                    .order_by(ScholarshipConfiguration.id)
+                    .with_for_update()
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        for cfg in locked_rows:
+            for sub_type in (cfg.quotas or {}).keys():
+                if not cfg.has_college_quota:
+                    # No per-college split exists — the global pool is the only cap.
+                    if await self.remaining(cfg, sub_type) < 0:
+                        raise ValueError(f"配額超額：{cfg.config_code} / {sub_type} 的核配數已超過總配額，請調整分發")
+                    continue
+                # One pass for BOTH caps. sum(by_college) == consumers_count is a
+                # tripwire-tested invariant (the two share _winner_filters /
+                # _renewal_filters), so the global recount is derivable from the
+                # per-college split — no second pair of count queries on the hot
+                # 儲存 path just to ask the same question at a coarser grain.
+                consumers = await self.consumers_by_college(cfg.id, sub_type)
+                if self.pool_total(cfg, sub_type) - sum(consumers.values()) < 0:
+                    raise ValueError(f"配額超額：{cfg.config_code} / {sub_type} 的核配數已超過總配額，請調整分發")
+                await self._assert_college_quotas_not_exceeded(cfg, sub_type, consumers)
+
+    async def _assert_college_quotas_not_exceeded(
+        self, cfg: ScholarshipConfiguration, sub_type: str, consumers: dict[str, int]
+    ) -> None:
+        """Per-college half of the §10 gate: no college may exceed its own cell of
+        `quotas[sub_type]` — the same numbers the 各學院剩餘名額 grid renders.
+
+        `consumers` is the caller's consumers_by_college result (the SAME two-half
+        partition as the global recount, so the two gates can never disagree about
+        who consumes what). A college that is absent from the matrix — an unmapped
+        學院代碼, or a student whose snapshot carries no std_academyno — has a cell
+        of 0, so allocating into it is over-allocation too; that is the allocation
+        auto-分發 already refuses to make (UNALLOCATED_NO_COLLEGE_QUOTA).
+        """
+        matrix = self._matrix_row(cfg, sub_type)
+        over = [
+            (code, count, matrix.get(code, 0))
+            for code, count in sorted(consumers.items())
+            if count > matrix.get(code, 0)
+        ]
+        if not over:
+            return
+
+        names = await self._college_display_names([code for code, _, _ in over])
+        detail = "；".join(
+            f"{names.get(code) or code or '未知學院（學生資料缺少學院代碼）'} 已核配 {count} 人，"
+            f"超過該學院名額 {total}"
+            for code, count, total in over
+        )
+        raise ValueError(
+            f"學院名額超額：{cfg.config_code} / {sub_type} — {detail}。"
+            f"請取消該學院的部分核配，或於名額設定調整該學院的名額"
+        )
+
+    async def _college_display_names(self, codes: Sequence[str]) -> dict[str, str]:
+        """學院代碼 → 學院名稱, for error messages only. Codes with no academies row
+        are simply absent, and the caller falls back to the raw code."""
+        real = [code for code in codes if code]
+        if not real:
+            return {}
+        rows = await self.db.execute(select(Academy.code, Academy.name).where(Academy.code.in_(real)))
+        return {code: name for code, name in rows.all()}
+
+    async def execute_general_distribution(
+        self,
+        scholarship_type_id: int,
+        academic_year: int,
+    ) -> dict[str, Any]:
+        """Run general-phase distribution with challenge release and waitlist fill-in.
+
+        Rebuilt onto the live shared pool (spec §6.3):
+        1. Per sub_type, seed working_remaining{config_id} from distributable_pool.
+        2. First-round: assign each ranked candidate to the next config with
+           positive working remaining (own first, then linked by year).
+        3. Each approved challenge cancels its renewal target; track the freed
+           slot keyed on the cancelled renewal's allocation_config_id.
+        4. Fill released slots from the same-sub_type waitlist, re-deriving
+           remaining(freed_config, st) rather than trusting a raw release count.
+        """
+        config = await self._get_active_config(scholarship_type_id, academic_year)
+        sub_types = list((config.quotas or {}).keys())
+
+        # 1+2. First-round distribution per sub_type.
+        approved_challenges: list[Application] = []
+        for sub_type in sub_types:
+            pool = await self.distributable_pool(config, sub_type)
+            working_remaining: dict[int, int] = {c["config_id"]: c["remaining"] for c in pool}
+            candidates = await self._get_general_candidates(scholarship_type_id, academic_year, sub_type)
+            rejected_map = await self._batch_load_rejected_map(
+                [c.application_id for c in candidates if c.application_id is not None]
+            )
+            for cand in candidates:
+                app = cand.application
+                if app is None:
+                    continue
+                # Reviewer reject (不同意) on this sub_type — never distribute.
+                if _norm_sub_type(sub_type) in rejected_map.get(app.id, set()):
+                    continue
+                picked = await self._pick_config(config, sub_type, working_remaining)
+                if picked is None:
+                    break
+                app.status = ApplicationStatus.approved
+                app.sub_scholarship_type = sub_type
+                app.quota_allocation_status = "allocated"
+                app.review_stage = ReviewStage.quota_distributed
+                app.approved_at = datetime.now(timezone.utc)
+                cand.is_allocated = True
+                cand.allocated_sub_type = sub_type
+                cand.allocation_config_id = picked
+                cand.status = "allocated"
+                cand.allocation_reason = "一般階段自動分發"
+                working_remaining[picked] -= 1
+                if app.challenges_application_id is not None:
+                    approved_challenges.append(app)
+
+        # 3. Release handling — approved challenges cancel their renewal targets.
+        challenge_renewal_ids = [
+            app.challenges_application_id for app in approved_challenges if app.challenges_application_id is not None
+        ]
+        renewal_apps_by_id: dict[int, Application] = {}
+        if challenge_renewal_ids:
+            renewal_apps_by_id = {
+                app.id: app
+                for app in (
+                    await self.db.scalars(select(Application).where(Application.id.in_(challenge_renewal_ids)))
+                ).all()
+            }
+
+        # released keyed on (sub_type, freed_config_id) from the cancelled renewal.
+        released: dict[tuple[str, int], int] = {}
+        for challenge_app in approved_challenges:
+            renewal_app = renewal_apps_by_id.get(challenge_app.challenges_application_id)
+            if renewal_app is None:
+                logger.warning(
+                    "Challenge app %s references missing renewal id=%s — skipping release",
+                    challenge_app.id,
+                    challenge_app.challenges_application_id,
+                )
+                continue
+            renewal_app.status = ApplicationStatus.cancelled_by_challenge
+            renewal_app.cancelled_due_to_application_id = challenge_app.id
+            freed_config_id = renewal_app.allocation_config_id
+            if freed_config_id is None:
+                logger.warning(
+                    "Cancelled renewal id=%s has no allocation_config_id — cannot release a slot",
+                    renewal_app.id,
+                )
+                continue
+            key = (renewal_app.sub_scholarship_type, freed_config_id)
+            released[key] = released.get(key, 0) + 1
+
+        # 4. Fill released slots from waitlist of same sub_type, re-deriving
+        # remaining(freed_config, st) after the cancellations above were flushed.
+        await self.db.flush()
+        fill_in_count = 0
+        filled_app_ids: set[int] = set()
+        all_configs = {config.id: config}
+        for st in sub_types:
+            for c in await self._resolve_linked_configs(config, st):
+                all_configs[c.id] = c
+        for (sub_type, freed_config_id), _count in released.items():
+            freed_config = all_configs.get(freed_config_id)
+            if freed_config is None:
+                freed_config = (
+                    await self.db.execute(
+                        select(ScholarshipConfiguration).where(ScholarshipConfiguration.id == freed_config_id)
+                    )
+                ).scalar_one_or_none()
+                if freed_config is None:
+                    continue
+            available = await self.remaining(freed_config, sub_type)
+            if available <= 0:
+                continue
+            # Fetch the FULL ordered waitlist and cap only after the rejection
+            # filter — with limit=available a rejected candidate would consume
+            # a fetch-window slot and leave the freed quota unfilled even
+            # though the next-ranked eligible candidate exists.
+            waitlist = await self._get_waitlist_candidates(scholarship_type_id, academic_year, sub_type, limit=None)
+            waitlist_rejected_map = await self._batch_load_rejected_map(
+                [c.application_id for c in waitlist if c.application_id is not None]
+            )
+            filled_for_key = 0
+            for cand in waitlist:
+                if filled_for_key >= available:
+                    break
+                app = cand.application
+                if app is None:
+                    continue
+                # ORM mutations above aren't flushed between released keys, so
+                # skip candidates this run already filled into another slot.
+                if app.id in filled_app_ids:
+                    continue
+                # Reviewer reject (不同意) on this sub_type — never fill in.
+                if _norm_sub_type(sub_type) in waitlist_rejected_map.get(app.id, set()):
+                    continue
+                app.status = ApplicationStatus.approved
+                app.sub_scholarship_type = sub_type
+                app.quota_allocation_status = "allocated"
+                app.review_stage = ReviewStage.quota_distributed
+                app.approved_at = datetime.now(timezone.utc)
+                cand.is_allocated = True
+                cand.allocated_sub_type = sub_type
+                cand.allocation_config_id = freed_config_id
+                cand.status = "allocated"
+                cand.allocation_reason = "釋出 slot 候補遞補"
+                filled_app_ids.add(app.id)
+                filled_for_key += 1
+                fill_in_count += 1
+            # Flush per key so the remaining() recount for a later released key
+            # on the same config sees this key's fills.
+            await self.db.flush()
+
+        await self.db.commit()
+
+        return {
+            "approved_challenges": len(approved_challenges),
+            "released_slots": {f"{st}:{cid}": n for (st, cid), n in released.items()},
+            "filled_in": fill_in_count,
+            "unfilled": sum(released.values()) - fill_in_count,
+        }
+
+    async def compute_distribution_state(self, scholarship_type_id: int, academic_year: int) -> dict[str, Any]:
+        """Aggregate the state needed by the manual distribution panel UI.
+
+        Returns a single payload covering:
+
+          * ``renewal_allocations`` — approved renewals grouped by
+            ``(sub_type, renewal_year)``; each entry includes a
+            ``has_challenge`` flag if a downstream challenge application
+            points at the renewal (Application_C).
+          * ``available_quotas`` — per ``(sub_type, allocation_year)``:
+            ``total`` from config, ``used`` from approved renewals, and
+            ``remaining`` = total − used. Legacy non-year-keyed quota maps
+            (e.g. ``{college_code: int}``) are skipped silently — Phase 6
+            only operates on year-keyed quotas (spec Section 9.1).
+          * ``candidates`` — non-renewal applicants ranked via
+            ``CollegeRankingItem.rank_position``. For each candidate,
+            ``is_challenge`` is true when ``challenges_application_id`` is
+            set, and ``challenged_renewal`` carries minimal info about the
+            renewal that would be cancelled if the challenge wins.
+
+        This endpoint never mutates state — it's a read aggregator the
+        admin UI calls to render the panel.
+        """
+        config = await self._get_active_config(scholarship_type_id, academic_year)
+
+        # --- 1. Renewal allocations grouped by (sub_type, renewal_year) --- #
+        renewal_apps_result = await self.db.execute(
+            select(Application)
+            .options(joinedload(Application.student))
+            .where(
+                Application.scholarship_type_id == scholarship_type_id,
+                Application.academic_year == academic_year,
+                Application.is_renewal.is_(True),
+                Application.status == ApplicationStatus.approved,
+            )
+        )
+        renewal_apps = renewal_apps_result.scalars().unique().all()
+
+        # Mark challenges. Use a sentinel (-1) so the IN clause is valid
+        # across dialects when no renewals exist.
+        renewal_ids = [a.id for a in renewal_apps]
+        challenge_rows = (
+            (
+                await self.db.execute(
+                    select(Application).where(Application.challenges_application_id.in_(renewal_ids or [-1]))
+                )
+            )
+            .scalars()
+            .all()
+        )
+        challenged_renewal_ids = {ch.challenges_application_id for ch in challenge_rows}
+
+        renewal_grouped: dict[tuple[str, int], list[dict[str, Any]]] = {}
+        for app in renewal_apps:
+            # Fallback renewal_year → academic_year matches the rest of the
+            # renewal accounting (consumers_count owns approved-renewal counts).
+            year_key = int(app.renewal_year) if app.renewal_year is not None else int(academic_year)
+            key = (app.sub_scholarship_type, year_key)
+            renewal_grouped.setdefault(key, []).append(
+                {
+                    "application_id": app.id,
+                    "student_name": app.student.name if app.student else None,
+                    "has_challenge": app.id in challenged_renewal_ids,
+                }
+            )
+
+        # --- 2. Available quotas per (sub_type, config) — live shared pool --- #
+        available_quotas: list[dict[str, Any]] = []
+        # Collect all sub_types (own + linked sources) to build pool columns.
+        sub_types = set((config.quotas or {}).keys())
+        for entry in config.shared_quota_sources or []:
+            sub_types.update(entry.get("sub_types") or [])
+
+        # Build a lookup of all reachable configs (own + any linked source).
+        # We call _resolve_linked_configs per sub_type since it filters by sub_type.
+        all_configs: dict[int, ScholarshipConfiguration] = {config.id: config}
+        for sub_type in sub_types:
+            for linked_cfg in await self._resolve_linked_configs(config, sub_type):
+                all_configs[linked_cfg.id] = linked_cfg
+
+        for sub_type in sub_types:
+            for col in await self.distributable_pool(config, sub_type):
+                cfg = all_configs.get(col["config_id"])
+                if cfg is None:
+                    continue
+                total = self.pool_total(cfg, sub_type)
+                if total <= 0:
+                    continue
+                remaining = col["remaining"]
+                available_quotas.append(
+                    {
+                        "sub_type": sub_type,
+                        "config_id": col["config_id"],
+                        "config_code": col["config_code"],
+                        "academic_year": col["academic_year"],
+                        "is_own": col["is_own"],
+                        "total": total,
+                        "used": total - remaining,
+                        "remaining": remaining,
+                    }
+                )
+
+        # --- 3. Candidates (general phase, non-renewal) --- #
+        candidates_result = await self.db.execute(
+            select(CollegeRankingItem, Application)
+            .options(joinedload(Application.student))
+            .join(Application, CollegeRankingItem.application_id == Application.id)
+            .where(
+                Application.scholarship_type_id == scholarship_type_id,
+                Application.academic_year == academic_year,
+                Application.is_renewal.is_(False),
+                Application.deleted_at.is_(None),
+            )
+            .order_by(CollegeRankingItem.rank_position)
+        )
+        cands = candidates_result.unique().all()
+
+        # Batch-load the renewal targets of any challenge candidates so we
+        # avoid N+1 lookups for the (typically small) challenge subset.
+        challenge_target_ids = {
+            app.challenges_application_id for _, app in cands if app.challenges_application_id is not None
+        }
+        renewal_by_id: dict[int, Application] = {}
+        if challenge_target_ids:
+            target_rows = (
+                (await self.db.execute(select(Application).where(Application.id.in_(challenge_target_ids))))
+                .scalars()
+                .all()
+            )
+            renewal_by_id = {r.id: r for r in target_rows}
+
+        candidates: list[dict[str, Any]] = []
+        for ri, app in cands:
+            challenged_renewal: Optional[dict[str, Any]] = None
+            if app.challenges_application_id:
+                renewal = renewal_by_id.get(app.challenges_application_id)
+                if renewal is not None:
+                    challenged_renewal = {
+                        "renewal_application_id": renewal.id,
+                        "sub_type": renewal.sub_scholarship_type,
+                        "renewal_year": renewal.renewal_year,
+                    }
+            candidates.append(
+                {
+                    "rank": ri.rank_position,
+                    "application_id": app.id,
+                    "student_name": app.student.name if app.student else None,
+                    "is_challenge": app.challenges_application_id is not None,
+                    "challenged_renewal": challenged_renewal,
+                    "applying_sub_type": app.sub_scholarship_type,
+                }
+            )
+
+        return {
+            "renewal_allocations": [
+                {"sub_type": sub_type, "renewal_year": year, "applications": items}
+                for (sub_type, year), items in renewal_grouped.items()
+            ],
+            "available_quotas": available_quotas,
+            "candidates": candidates,
+        }
+
+    async def preview_release_chain(self, proposed_allocations: list) -> dict[str, Any]:
+        """Dry-run preview: which renewals would be cancelled and who would fill in.
+
+        For each proposed allocation whose application is a challenge (i.e.
+        has challenges_application_id set), returns the renewal that would
+        be cancelled and the next waitlist candidate who would inherit the
+        freed slot. Does not persist anything.
+        """
+        chain: list[dict[str, Any]] = []
+        # Track per-sub_type fill-in suggestions so a single preview call
+        # never suggests the same waitlist candidate twice.
+        used_fill_ids: set[int] = set()
+
+        for alloc in proposed_allocations:
+            # Support both Pydantic schema objects and plain dicts.
+            ranking_item_id = getattr(alloc, "ranking_item_id", None)
+            if ranking_item_id is None and isinstance(alloc, dict):
+                ranking_item_id = alloc.get("ranking_item_id")
+            if ranking_item_id is None:
+                continue
+
+            item = await self.db.scalar(
+                select(CollegeRankingItem)
+                .options(selectinload(CollegeRankingItem.application))
+                .where(CollegeRankingItem.id == ranking_item_id)
+            )
+            if item is None or item.application is None:
+                continue
+            app = item.application
+            if not app.challenges_application_id:
+                continue
+
+            renewal = await self.db.scalar(select(Application).where(Application.id == app.challenges_application_id))
+            if renewal is None:
+                continue
+
+            # limit=None + rejection filter so the preview names the SAME
+            # fill-in candidate the execute path would pick — a suggestion the
+            # rejection gate later skips would show the admin a plan that
+            # execution silently diverges from.
+            waitlist = await self._get_waitlist_candidates(
+                renewal.scholarship_type_id,
+                app.academic_year,
+                renewal.sub_scholarship_type,
+                limit=None,
+            )
+            fill_rejected_map = await self._batch_load_rejected_map(
+                [c.application_id for c in waitlist if c.application_id is not None]
+            )
+            suggested_app: Optional[Application] = None
+            for cand in waitlist:
+                if cand.application is None or cand.application.id in used_fill_ids:
+                    continue
+                if _norm_sub_type(renewal.sub_scholarship_type) in fill_rejected_map.get(cand.application.id, set()):
+                    continue
+                suggested_app = cand.application
+                used_fill_ids.add(suggested_app.id)
+                break
+
+            suggested_name: Optional[str] = None
+            if suggested_app is not None:
+                sd = suggested_app.student_data or {}
+                suggested_name = sd.get("std_cname") or sd.get("name")
+
+            chain.append(
+                {
+                    "challenge_application_id": app.id,
+                    "cancelled_application_id": renewal.id,
+                    "freed_slot": {
+                        "sub_type": renewal.sub_scholarship_type,
+                        "allocation_year": (int(renewal.renewal_year) if renewal.renewal_year is not None else None),
+                    },
+                    "suggested_fill_id": suggested_app.id if suggested_app else None,
+                    "suggested_fill_name": suggested_name,
+                }
+            )
+
+        return {"release_chain": chain}

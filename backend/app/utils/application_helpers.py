@@ -168,7 +168,7 @@ async def get_scholarship_period_student_data(
             raise NotFoundError(f"學生 {student_code} 在 {academic_year} 學年度第二學期無資料")
         return data
 
-    else:  # 學年制 (semester is None)
+    else:  # 學年制 (semester is None OR Semester.yearly)
         # 先查第二學期
         logger.info(f"查詢學生 {student_code} 在 {academic_year} 學年度的資料（學年制，先查第二學期）")
         data = await student_service.get_student_term_info(student_code, academic_year, "2")

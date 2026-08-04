@@ -1,7 +1,7 @@
 // Grafana Alloy Configuration for Staging Database VM
 // Environment: staging
 // Host: db-vm
-// Components: PostgreSQL, MinIO, Redis
+// Components: PostgreSQL, RustFS object storage (service name `minio`), Redis
 
 // =============================================================================
 // LOGGING PIPELINE
@@ -78,15 +78,91 @@ loki.write "default" {
 }
 
 // =============================================================================
-// METRICS PIPELINE - PULL MODE
+// METRICS PIPELINE — PUSH MODE (matches AP-VM Alloy structure)
 // =============================================================================
-// Metrics are exposed via exporters and scraped directly by Prometheus on AP-VM:
-// - Node Exporter: exposed on port 9100
-// - PostgreSQL Exporter: exposed on port 9187
-// - Alloy Self-Monitoring: exposed on port 12345
+// Scrapes local DB-VM exporters and pushes to AP-VM Prometheus via remote_write.
+// Adds environment + vm labels via prometheus.relabel before push so dashboards
+// and alerts can filter on {environment="staging", vm="db-vm"}.
+
+prometheus.scrape "node_exporter" {
+  targets    = [{ __address__ = "node-exporter:9100" }]
+  forward_to = [prometheus.relabel.add_labels.receiver]
+  job_name   = "node"
+  scrape_interval = "15s"
+}
+
+prometheus.scrape "postgres_exporter" {
+  targets    = [{ __address__ = "postgres-exporter:9187" }]
+  forward_to = [prometheus.relabel.add_labels.receiver]
+  job_name   = "postgres"
+  scrape_interval = "15s"
+}
+
+// Object storage is RustFS (S3-compatible MinIO replacement; the service
+// keeps the `minio` DNS name). RustFS serves NONE of MinIO's
+// /minio/v2/metrics/* endpoints, so the three MinIO scrape jobs that used to
+// live here are gone (runbook "Monitoring gap"). Storage-down signal now
+// comes from an embedded blackbox HTTP probe of the S3 API port:
+// probe_success{job="storage"} == 0 → StorageDown Grafana alert. Disk usage
+// stays covered by node-exporter filesystem metrics (DiskSpaceLow/Critical).
 //
-// Prometheus on AP-VM will add environment/vm labels during scrape using
-// relabel_configs in its prometheus.yml configuration.
+// valid_status_codes accepts 4xx too: RustFS answers 200 on /health, while
+// MinIO (pre-cutover window / rollback) answers an S3 error on that path —
+// the probe measures "storage process answering HTTP", so it works on both
+// sides of the cutover without a config change.
+prometheus.exporter.blackbox "storage" {
+  config = "{ modules: { storage_http: { prober: http, timeout: 5s, http: { valid_status_codes: [200, 400, 403, 404] } } } }"
+
+  target {
+    name    = "storage_health"
+    address = "http://minio:9000/health"
+    module  = "storage_http"
+  }
+}
+
+prometheus.scrape "storage" {
+  targets    = prometheus.exporter.blackbox.storage.targets
+  forward_to = [prometheus.relabel.storage_identity.receiver]
+  job_name   = "storage"
+  scrape_interval = "15s"
+}
+
+// prometheus.exporter.blackbox stamps its own job/instance onto every target
+// it emits (job="integrations/blackbox/<target name>", instance=<alloy
+// container id>), and those WIN over prometheus.scrape's job_name. Without
+// this rewrite the series arrive as
+// probe_success{job="integrations/blackbox/storage_health"} and the
+// StorageDown alert — which matches job="storage" — silently never fires.
+// Verified against live staging 2026-07-26.
+prometheus.relabel "storage_identity" {
+  forward_to = [prometheus.relabel.add_labels.receiver]
+  rule {
+    target_label = "job"
+    replacement  = "storage"
+  }
+  rule {
+    target_label = "instance"
+    replacement  = "minio:9000"
+  }
+}
+
+prometheus.relabel "add_labels" {
+  forward_to = [prometheus.remote_write.default.receiver]
+  rule {
+    target_label = "environment"
+    replacement  = "staging"
+  }
+  rule {
+    target_label = "vm"
+    replacement  = "db-vm"
+  }
+}
+
+prometheus.remote_write "default" {
+  endpoint {
+    url = env("MONITORING_SERVER_URL") + ":9090/api/v1/write"
+  }
+}
 
 // =============================================================================
 // SELF-MONITORING

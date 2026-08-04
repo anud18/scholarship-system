@@ -1,10 +1,16 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // SECURITY / PRODUCTION-READINESS: Surface ESLint warnings and TypeScript
+  // errors at build time so they fail the deploy pipeline instead of
+  // silently shipping. The repo's CI also runs `tsc --noEmit` in the
+  // "Verify OpenAPI Types are Up-to-Date" workflow as a backstop, but
+  // these flags add a second guardrail directly to the `next build` path
+  // (used by the "Build Frontend with Generated Types" CI job).
   eslint: {
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: false,
   },
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   images: {
     unoptimized: true,
@@ -35,6 +41,12 @@ const nextConfig = {
         // Keep default splitChunks for code splitting
       };
 
+      // Speed up development builds
+      config.cache = {
+        type: 'filesystem',
+        compression: false, // Disable compression for faster caching
+      };
+
       // Increase chunk loading timeout to handle large chunks
       if (!isServer) {
         config.output = {
@@ -48,10 +60,12 @@ const nextConfig = {
     return config;
   },
 
-  // Enable experimental features for better performance
+  // Experimental features for better performance
   experimental: {
     // Use worker threads for webpack builds (faster compilation)
     webpackBuildWorker: true,
+    // Faster dev builds via package-level import optimization
+    optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
   },
 
   // API Proxy for development environment

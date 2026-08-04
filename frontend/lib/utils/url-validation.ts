@@ -53,7 +53,7 @@ export function buildSecurePreviewUrl(
   // Allowlist of permitted preview/download endpoints
   const allowedEndpoints = [
     '/api/v1/preview',
-    '/api/v1/preview-document-example',
+    '/api/v1/preview/examples',
     '/api/v1/download'
   ];
 

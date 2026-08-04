@@ -8,6 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.models.system_setting import ConfigCategory, ConfigDataType
 from app.services.config_management_service import ConfigurationService
+from app.services.student_history_visibility import (
+    COLLEGE_VISIBILITY_DESCRIPTION,
+    COLLEGE_VISIBILITY_KEY,
+    DEFAULT_ENABLED,
+    STUDENT_VISIBILITY_DESCRIPTION,
+    STUDENT_VISIBILITY_KEY,
+)
 
 
 async def seed_system_settings(db: AsyncSession, system_user_id: int = 1):
@@ -188,6 +195,24 @@ async def seed_system_settings(db: AsyncSession, system_user_id: int = 1):
             "category": ConfigCategory.security,
             "data_type": ConfigDataType.integer,
             "description": "重新整理權杖過期時間（天）",
+            "is_sensitive": False,
+        },
+        # Feature Visibility Settings — 學生領獎紀錄查詢 開放對象
+        # (two independent switches; admin access is never gated by them)
+        {
+            "key": STUDENT_VISIBILITY_KEY,
+            "value": str(DEFAULT_ENABLED).lower(),
+            "category": ConfigCategory.features,
+            "data_type": ConfigDataType.boolean,
+            "description": STUDENT_VISIBILITY_DESCRIPTION,
+            "is_sensitive": False,
+        },
+        {
+            "key": COLLEGE_VISIBILITY_KEY,
+            "value": str(DEFAULT_ENABLED).lower(),
+            "category": ConfigCategory.features,
+            "data_type": ConfigDataType.boolean,
+            "description": COLLEGE_VISIBILITY_DESCRIPTION,
             "is_sensitive": False,
         },
     ]

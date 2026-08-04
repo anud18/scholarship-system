@@ -54,13 +54,13 @@ async def get_available_professors(
         return {"success": True, "message": f"Retrieved {len(serialized)} professors", "data": serialized}
 
     except SQLAlchemyError as exc:
-        logger.error(f"Database error fetching professors: {exc}")
+        logger.exception("Database error fetching professors")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch professors due to a database error.",
         ) from exc
     except Exception as exc:  # pragma: no cover - unexpected failure path
-        logger.error(f"Unexpected error fetching professors: {exc}")
+        logger.exception("Unexpected error fetching professors")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch professors due to an unexpected error.",

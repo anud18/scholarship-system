@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { logger } from "@/lib/utils/logger";
+import { buildFileProxyUrl } from "@/lib/api/modules/system-settings";
+import { previewMimeType } from "@/lib/utils";
 import { ErrorBoundary, useErrorHandler } from "@/components/error-boundary";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,15 +34,50 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Eye, CheckCircle, AlertCircle, Clock, X } from "lucide-react";
+import { Search, Eye, CheckCircle, AlertCircle, Clock, X, FileText } from "lucide-react";
 import apiClient, { Application, ApiResponse } from "@/lib/api";
+import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { User } from "@/types/user";
-import { getDisplayStatusInfo } from "@/lib/utils/application-helpers";
-import { Locale } from "@/lib/validators";
 
 interface ProfessorReviewComponentProps {
   user: User;
 }
+
+// Mirror of backend's LOCKED_STAGES_FOR_PROFESSOR_REVIEW (#64).
+// Once an application's review_stage reaches any of these, the professor's
+// review form is read-only — admins / super_admins keep an escape hatch
+// server-side, regular professors cannot edit or submit.
+const LOCKED_REVIEW_STAGES: ReadonlySet<string> = new Set([
+  "college_review",
+  "college_reviewed",
+  "college_ranking",
+  "college_ranked",
+  "admin_review",
+  "admin_reviewed",
+  "quota_distribution",
+  "quota_distributed",
+  "roster_preparation",
+  "roster_prepared",
+  "roster_submitted",
+  "completed",
+  "archived",
+]);
+
+const STAGE_LABEL_ZH: Record<string, string> = {
+  college_review: "學院審核中",
+  college_reviewed: "學院審核完成",
+  college_ranking: "學院排名中",
+  college_ranked: "學院排名完成",
+  admin_review: "管理員審核中",
+  admin_reviewed: "管理員審核完成",
+  quota_distribution: "配額分發中",
+  quota_distributed: "配額已分發",
+  roster_preparation: "造冊準備中",
+  roster_prepared: "造冊已完成",
+  roster_submitted: "造冊已送出",
+  completed: "流程完成",
+  archived: "已歸檔",
+};
 
 interface SubTypeOption {
   value: string;
@@ -59,6 +97,18 @@ interface ReviewData {
   items: ReviewItem[];
 }
 
+// Existing-review payload returned by GET /professor/.../review.
+// Only fields the component reads are typed; backend may attach more.
+interface ExistingReviewPayload {
+  id: number;
+  items?: ReviewItem[];
+  [key: string]: unknown;
+}
+
+// Response shape from professor.submitReview / .updateReview — opaque
+// success/message envelope; we never inspect `data` content here.
+type ProfessorReviewResponse = ApiResponse<{ [key: string]: unknown } | null>;
+
 function ProfessorReviewComponentInner({
   user,
 }: ProfessorReviewComponentProps) {
@@ -77,12 +127,57 @@ function ProfessorReviewComponentInner({
 
   // Review form states
   const [subTypes, setSubTypes] = useState<SubTypeOption[]>([]);
+  // When the scholarship has no configured sub-types, fall back to a single
+  // "default" entry so the professor can still submit an overall yes/no
+  // recommendation (sub_type_code "default" is accepted by ReviewService —
+  // see backend/app/services/review_service.py:140).
+  const FALLBACK_SUB_TYPE: SubTypeOption = {
+    value: "default",
+    label: "整體推薦",
+    label_en: "Overall recommendation",
+    is_default: true,
+  };
+  const effectiveSubTypes: SubTypeOption[] =
+    subTypes.length > 0 ? subTypes : [FALLBACK_SUB_TYPE];
   const [reviewData, setReviewData] = useState<ReviewData>({
     recommendation: "",
     items: [],
   });
-  const [existingReview, setExistingReview] = useState<any>(null);
+  const [existingReview, setExistingReview] =
+    useState<ExistingReviewPayload | null>(null);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
+
+  // Regulations state
+  const [regulationsUrl, setRegulationsUrl] = useState<string | null>(null);
+  const [showRegulations, setShowRegulations] = useState(false);
+  const [regulationsFile, setRegulationsFile] = useState<{
+    url: string;
+    filename: string;
+    type: string;
+  } | null>(null);
+  const [regulationsFilename, setRegulationsFilename] = useState<string>("");
+
+  useEffect(() => {
+    apiClient.systemSettings.getPublicDocs().then((res) => {
+      if (res.success && res.data?.regulations_url) {
+        setRegulationsUrl(res.data.regulations_url);
+        setRegulationsFilename(
+          res.data.regulations_url_filename || res.data.regulations_url
+        );
+      }
+    });
+  }, []);
+
+  const handleViewRegulations = () => {
+    const url = buildFileProxyUrl("regulations_url", regulationsUrl);
+    if (!url) return;
+    setRegulationsFile({
+      url,
+      filename: regulationsFilename || "獎學金要點",
+      type: previewMimeType(regulationsFilename),
+    });
+    setShowRegulations(true);
+  };
 
   // Load applications
   const fetchApplications = async () => {
@@ -98,8 +193,8 @@ function ProfessorReviewComponentInner({
         setApplications([]);
         setFilteredApplications([]);
       }
-    } catch (e: any) {
-      setError(e.message || "Failed to load applications");
+    } catch (e: unknown) {
+      setError((e instanceof Error ? e.message : "Failed to load applications"));
       setApplications([]);
       setFilteredApplications([]);
     } finally {
@@ -133,15 +228,13 @@ function ProfessorReviewComponentInner({
     }
   }, [searchQuery, applications]);
 
-  // Ensure reviewData.items is always initialized when subTypes change
+  // Ensure reviewData.items is always initialized when the modal opens.
+  // Uses effectiveSubTypes so an empty API response still gets a single
+  // "default" item — otherwise the modal would render with no recommendation
+  // form and a permanently-disabled submit button.
   useEffect(() => {
-    console.log("SubTypes changed, checking reviewData initialization");
-    console.log("SubTypes:", subTypes);
-    console.log("Current reviewData.items:", reviewData.items);
-
-    if (subTypes.length > 0 && reviewData.items.length === 0) {
-      console.log("Initializing reviewData.items from subTypes effect");
-      const initialItems = subTypes.map(subType => ({
+    if (reviewModalOpen && reviewData.items.length === 0) {
+      const initialItems = effectiveSubTypes.map(subType => ({
         sub_type_code: subType.value,
         recommendation: 'pending' as const,
         comments: "",
@@ -151,33 +244,24 @@ function ProfessorReviewComponentInner({
         ...prev,
         items: initialItems,
       }));
-
-      console.log("ReviewData.items initialized:", initialItems);
     }
-  }, [subTypes, reviewData.items.length]);
+    // effectiveSubTypes depends on subTypes.length; tracking subTypes is enough.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reviewModalOpen, subTypes, reviewData.items.length]);
 
-  // Get status badge variant
-  const getStatusVariant = (status: string) => {
-    switch (status) {
-      case "under_review":
-        return "default";
-      case "submitted":
-        return "secondary";
-      default:
-        return "outline";
-    }
-  };
-
-  // Get status display text
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case "under_review":
-        return "審核中";
-      case "submitted":
-        return "已提交";
-      default:
-        return status;
-    }
+  // Render the professor-centric 狀態 badge for a queue row.
+  //
+  // The queue is bucketed by whether THIS professor has reviewed (待審核 vs
+  // 已完成), so the status column shows only that same signal — 待審核 / 已審核.
+  // Downstream stages (學院/管理員/配額分發…) are intentionally NOT shown here:
+  // the professor only cares about their own step.
+  const renderReviewStatusBadge = (app: Application) => {
+    const reviewed = app.has_professor_reviewed === true;
+    return (
+      <Badge variant={reviewed ? "default" : "secondary"}>
+        {reviewed ? "已審核" : "待審核"}
+      </Badge>
+    );
   };
 
   // Open review modal
@@ -187,26 +271,24 @@ function ProfessorReviewComponentInner({
     setError(null);
 
     try {
-      console.log("=== OPENING REVIEW MODAL ===");
-      console.log("Application ID:", application.id);
-
       // Get available sub-types
       const subTypesResponse = await apiClient.professor.getSubTypes(
         application.id
       );
-      console.log("Sub-types response:", subTypesResponse);
 
       let availableSubTypes: SubTypeOption[] = [];
       if (subTypesResponse.success && subTypesResponse.data) {
         availableSubTypes = subTypesResponse.data;
         setSubTypes(availableSubTypes);
-        console.log("Set sub-types:", availableSubTypes);
       }
 
-      // Always initialize items based on available sub-types
+      // Always initialize items based on available sub-types. When the
+      // scholarship has none, fall back to a single "default" item so the
+      // review form is still functional (see FALLBACK_SUB_TYPE at top of
+      // component).
       const initializeItems = (subTypes: SubTypeOption[]) => {
-        console.log("Initializing items for sub-types:", subTypes);
-        return subTypes.map(subType => ({
+        const usable = subTypes.length > 0 ? subTypes : [FALLBACK_SUB_TYPE];
+        return usable.map(subType => ({
           sub_type_code: subType.value,
           recommendation: 'pending' as const,
           comments: "",
@@ -215,13 +297,11 @@ function ProfessorReviewComponentInner({
 
       // Get existing review if any
       const initialItems = initializeItems(availableSubTypes);
-      console.log("Initial items created:", initialItems);
 
       try {
         const reviewResponse = await apiClient.professor.getReview(
           application.id
         );
-        console.log("Existing review response:", reviewResponse);
 
         // Check if this is an actual existing review (id > 0) or a new review (id = 0)
         if (
@@ -230,13 +310,13 @@ function ProfessorReviewComponentInner({
           reviewResponse.data.id &&
           reviewResponse.data.id > 0
         ) {
-          console.log("Found existing review with ID:", reviewResponse.data.id);
-          console.log("Existing review items:", reviewResponse.data.items);
           setExistingReview(reviewResponse.data);
 
           // Merge existing review items with all available sub-types
           const existingItems: ReviewItem[] = reviewResponse.data.items || [];
-          const mergedItems = availableSubTypes.map(subType => {
+          const mergeBase =
+            availableSubTypes.length > 0 ? availableSubTypes : [FALLBACK_SUB_TYPE];
+          const mergedItems = mergeBase.map(subType => {
             const existingItem = existingItems.find(
               item => item.sub_type_code === subType.value
             );
@@ -249,14 +329,12 @@ function ProfessorReviewComponentInner({
             );
           });
 
-          console.log("Merged items with existing review:", mergedItems);
           setReviewData({
             recommendation: reviewResponse.data.recommendation || "",
             items: mergedItems,
           });
         } else {
           // No existing review (id = 0 or no data), use initial items
-          console.log("No existing review found, using initial items");
           setExistingReview(null);
           setReviewData({
             recommendation: "",
@@ -265,7 +343,6 @@ function ProfessorReviewComponentInner({
         }
       } catch (e) {
         // No existing review, use initial items
-        console.log("Error getting existing review, using initial items:", e);
         setExistingReview(null);
         setReviewData({
           recommendation: "",
@@ -273,18 +350,10 @@ function ProfessorReviewComponentInner({
         });
       }
 
-      // Final verification
-      setTimeout(() => {
-        console.log("=== FINAL STATE VERIFICATION ===");
-        console.log("SubTypes length:", availableSubTypes.length);
-        console.log("ReviewData items length:", initialItems.length);
-        console.log("ReviewData items:", initialItems);
-      }, 100);
-
       setReviewModalOpen(true);
-    } catch (e: any) {
-      console.error("Error opening review modal:", e);
-      setError(e.message || "Failed to load review data");
+    } catch (e: unknown) {
+      logger.error("Error opening review modal", { e: e });
+      setError((e instanceof Error ? e.message : "Failed to load review data"));
     } finally {
       setLoading(false);
     }
@@ -299,18 +368,42 @@ function ProfessorReviewComponentInner({
     setSuccess(null);
 
     try {
-      let response: ApiResponse<any>;
+      let response: ProfessorReviewResponse;
 
-      // Filter out pending items - only send approve/reject items to API
-      const filteredItems = reviewData.items
-        .filter(
-          item => item.recommendation === 'approve' || item.recommendation === 'reject'
-        )
-        .map(item => ({
-          sub_type_code: item.sub_type_code,
-          recommendation: item.recommendation as 'approve' | 'reject',
-          comments: item.comments
-        }));
+      // Every applied sub-type must be decided. A review is stored as one row
+      // per reviewer whose items are replaced wholesale on each submit, so a
+      // partial payload would drop the sub-types left out — the backend now
+      // rejects it (422). Gate here to give a clear message instead.
+      const undecidedItems = reviewData.items.filter(
+        item => item.recommendation !== 'approve' && item.recommendation !== 'reject'
+      );
+
+      if (undecidedItems.length > 0) {
+        setError(
+          `請對所有獎學金申請項目進行評估（選擇同意或不同意），尚未評估：${undecidedItems
+            .map(item => getSubTypeLabel(item.sub_type_code))
+            .join('、')}`
+        );
+        setLoading(false);
+        return;
+      }
+
+      const filteredItems = reviewData.items.map(item => ({
+        sub_type_code: item.sub_type_code,
+        recommendation: item.recommendation as 'approve' | 'reject',
+        comments: item.comments
+      }));
+
+      // Validate that all rejected items have comments
+      const rejectedWithoutComments = filteredItems.filter(
+        item => item.recommendation === 'reject' && (!item.comments || item.comments.trim() === '')
+      );
+
+      if (rejectedWithoutComments.length > 0) {
+        setError('當選擇「不同意」時必須填寫評估意見');
+        setLoading(false);
+        return;
+      }
 
       const submissionData = {
         items: filteredItems
@@ -342,50 +435,40 @@ function ProfessorReviewComponentInner({
       } else {
         setError(response.message || "Failed to submit review");
       }
-    } catch (e: any) {
-      setError(e.message || "Failed to submit review");
+    } catch (e: unknown) {
+      setError((e instanceof Error ? e.message : "Failed to submit review"));
     } finally {
       setLoading(false);
     }
   };
 
   // Update review item
-  const updateReviewItem = (subTypeCode: string, field: string, value: any) => {
-    console.log("=== updateReviewItem START ===");
-    console.log("Parameters:", { subTypeCode, field, value });
-    console.log(
-      "Current reviewData before update:",
-      JSON.stringify(reviewData, null, 2)
-    );
-
+  const updateReviewItem = (
+    subTypeCode: string,
+    field: keyof ReviewItem,
+    value: ReviewItem[keyof ReviewItem]
+  ) => {
     setReviewData(prev => {
-      console.log("Previous state in setter:", JSON.stringify(prev, null, 2));
-
-      const itemFound = prev.items.find(
-        item => item.sub_type_code === subTypeCode
-      );
-      console.log("Item found for subTypeCode:", subTypeCode, "=", itemFound);
-
       const newData = {
         ...prev,
         items: prev.items.map(item => {
           if (item.sub_type_code === subTypeCode) {
-            const updatedItem = { ...item, [field]: value };
-            console.log("Updating item from:", item, "to:", updatedItem);
-            return updatedItem;
+            return { ...item, [field]: value };
           }
           return item;
         }),
       };
 
-      console.log("New reviewData:", JSON.stringify(newData, null, 2));
-      console.log("=== updateReviewItem END ===");
       return newData;
     });
   };
 
-  // Get sub-type label
+  // Get sub-type label. Returns the fallback label when the scholarship
+  // has no configured sub-types and we're showing the default recommendation.
   const getSubTypeLabel = (subTypeCode: string) => {
+    if (subTypeCode === FALLBACK_SUB_TYPE.value && subTypes.length === 0) {
+      return FALLBACK_SUB_TYPE.label;
+    }
     const subType = subTypes.find(st => st.value === subTypeCode);
     return subType?.label || subTypeCode;
   };
@@ -399,6 +482,16 @@ function ProfessorReviewComponentInner({
             審查學生獎學金申請並提供推薦意見
           </p>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleViewRegulations}
+          disabled={!regulationsUrl}
+          className="flex items-center gap-2"
+        >
+          <FileText className="h-4 w-4" />
+          查看獎學金要點
+        </Button>
       </div>
 
       {/* Error/Success Messages */}
@@ -482,123 +575,189 @@ function ProfessorReviewComponentInner({
               </div>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>學生資訊</TableHead>
-                  <TableHead>就讀學期數</TableHead>
-                  <TableHead>獎學金類型</TableHead>
-                  <TableHead>提交日期</TableHead>
-                  <TableHead>狀態</TableHead>
-                  <TableHead>操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredApplications.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-12">
-                      <div className="flex flex-col items-center gap-4">
-                        <div className="p-4 bg-muted rounded-full">
-                          <Eye className="h-8 w-8 text-muted-foreground" />
-                        </div>
-                        <div className="text-center space-y-2">
-                          <p className="text-lg font-medium text-muted-foreground">
-                            {error
-                              ? "載入申請時發生錯誤"
-                              : searchQuery
-                                ? "沒有符合搜尋條件的申請"
-                                : "目前沒有需要審查的申請"}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            {error
-                              ? "請重新整理頁面或聯繫系統管理員"
-                              : searchQuery
-                                ? "請嘗試不同的搜尋關鍵字"
-                                : "新的申請提交後會顯示在這裡"}
-                          </p>
-                          {error && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={fetchApplications}
-                              className="mt-2"
-                            >
-                              重新載入
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredApplications.map(app => (
-                    <TableRow key={app.id}>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">
-                            {app.student_name || "未知學生"}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            {app.student_no}
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {app.student_data?.std_termcount || "-"}
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <p>{app.scholarship_name}</p>
-                          {app.is_renewal && (
-                            <Badge variant="outline" className="text-xs mt-1">
-                              續領
-                            </Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {app.submitted_at
-                          ? new Date(app.submitted_at).toLocaleDateString()
-                          : "未提交"}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
-                          {(() => {
-                            const statusInfo = getDisplayStatusInfo(app, "zh");
-                            return (
-                              <>
-                                <Badge variant={statusInfo.statusVariant}>
-                                  {statusInfo.statusLabel}
-                                </Badge>
-                                {statusInfo.showStage && statusInfo.stageLabel && (
-                                  <Badge variant={statusInfo.stageVariant}>
-                                    {statusInfo.stageLabel}
-                                  </Badge>
-                                )}
-                              </>
-                            );
-                          })()}
-                        </div>
-                      </TableCell>
-                      <TableCell>
+            <>
+              {/* Empty state — shown on every viewport */}
+              {filteredApplications.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="p-4 bg-muted rounded-full">
+                      <Eye className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                    <div className="text-center space-y-2">
+                      <p className="text-lg font-medium text-muted-foreground">
+                        {error
+                          ? "載入申請時發生錯誤"
+                          : searchQuery
+                            ? "沒有符合搜尋條件的申請"
+                            : "目前沒有需要審查的申請"}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {error
+                          ? "請重新整理頁面或聯繫系統管理員"
+                          : searchQuery
+                            ? "請嘗試不同的搜尋關鍵字"
+                            : "新的申請提交後會顯示在這裡"}
+                      </p>
+                      {error && (
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => openReviewModal(app)}
-                          disabled={loading}
+                          onClick={fetchApplications}
+                          className="mt-2"
                         >
-                          <Eye className="h-4 w-4 mr-1" />
-                          審查
+                          重新載入
                         </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Desktop / tablet — table layout (md and up) */}
+                  <div className="hidden md:block">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>學生資訊</TableHead>
+                          <TableHead>就讀學期數</TableHead>
+                          <TableHead>獎學金類型</TableHead>
+                          <TableHead>提交日期</TableHead>
+                          <TableHead>狀態</TableHead>
+                          <TableHead>操作</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredApplications.map(app => (
+                          <TableRow key={app.id}>
+                            <TableCell>
+                              <div>
+                                <p className="font-medium">
+                                  {app.student_name || "未知學生"}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  {app.student_no}
+                                </p>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {app.student_data?.std_termcount || "-"}
+                            </TableCell>
+                            <TableCell>
+                              <div>
+                                <p>{app.scholarship_name}</p>
+                                {app.is_renewal && (
+                                  <Badge variant="outline" className="text-xs mt-1">
+                                    續領
+                                  </Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {app.submitted_at
+                                ? new Date(app.submitted_at).toLocaleDateString()
+                                : "未提交"}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-2">
+                                {renderReviewStatusBadge(app)}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openReviewModal(app)}
+                                disabled={loading}
+                              >
+                                <Eye className="h-4 w-4 mr-1" />
+                                審查
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {/* Mobile — card layout (below md breakpoint).
+                      Each application becomes a vertically stacked card with
+                      a full-width "審查" button so the action is never clipped
+                      offscreen as it was in the table layout (P1 audit). */}
+                  <div className="md:hidden divide-y">
+                    {filteredApplications.map(app => {
+                      return (
+                        <div key={app.id} className="p-4 space-y-3">
+                          {/* Header: name + status */}
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium truncate">
+                                {app.student_name || "未知學生"}
+                              </p>
+                              <p className="text-sm text-muted-foreground truncate">
+                                {app.student_no}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap items-start gap-1 justify-end">
+                              {renderReviewStatusBadge(app)}
+                            </div>
+                          </div>
+
+                          {/* Details grid */}
+                          <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                            <div>
+                              <dt className="text-muted-foreground text-xs">獎學金類型</dt>
+                              <dd className="flex flex-wrap items-center gap-1">
+                                <span>{app.scholarship_name}</span>
+                                {app.is_renewal && (
+                                  <Badge variant="outline" className="text-xs">
+                                    續領
+                                  </Badge>
+                                )}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="text-muted-foreground text-xs">就讀學期數</dt>
+                              <dd>{app.student_data?.std_termcount || "-"}</dd>
+                            </div>
+                            <div className="col-span-2">
+                              <dt className="text-muted-foreground text-xs">提交日期</dt>
+                              <dd>
+                                {app.submitted_at
+                                  ? new Date(app.submitted_at).toLocaleDateString()
+                                  : "未提交"}
+                              </dd>
+                            </div>
+                          </dl>
+
+                          {/* Action: full-width so it can never be clipped */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openReviewModal(app)}
+                            disabled={loading}
+                            className="w-full"
+                          >
+                            <Eye className="h-4 w-4 mr-1" />
+                            審查
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
+
+      {/* Regulations Preview */}
+      <FilePreviewDialog
+        isOpen={showRegulations}
+        onClose={() => setShowRegulations(false)}
+        file={regulationsFile}
+        locale="zh"
+      />
 
       {/* Review Modal */}
       <Dialog open={reviewModalOpen} onOpenChange={setReviewModalOpen}>
@@ -612,8 +771,30 @@ function ProfessorReviewComponentInner({
             </DialogDescription>
           </DialogHeader>
 
-          {selectedApplication && (
+          {selectedApplication && (() => {
+            const reviewStageValue = ((selectedApplication as unknown) as { review_stage?: string })?.review_stage;
+            const isLocked = !!reviewStageValue && LOCKED_REVIEW_STAGES.has(reviewStageValue);
+            const lockedStageLabel = reviewStageValue
+              ? STAGE_LABEL_ZH[reviewStageValue] ?? reviewStageValue
+              : "";
+            return (
             <div className="space-y-6">
+              {/* Locked banner — issue #64 */}
+              {isLocked && (
+                <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                  <strong>本申請已進入「{lockedStageLabel}」階段。</strong>
+                  教授審核已鎖定，您無法再修改或提交審核意見。如需更動，請聯繫各學院獎學金承辦人。
+                </div>
+              )}
+
+              {/* Inline error from submit/update (e.g. 403 lock) — issue #92 */}
+              {error && !isLocked && (
+                <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900 flex items-start gap-2">
+                  <span className="flex-1">{error}</span>
+                  <button onClick={() => setError(null)} className="shrink-0 text-red-700 hover:text-red-900">✕</button>
+                </div>
+              )}
+
               {/* Application Info */}
               <Card>
                 <CardHeader>
@@ -641,20 +822,24 @@ function ProfessorReviewComponentInner({
                 </CardContent>
               </Card>
 
-              {/* Sub-type Reviews - SIMPLIFIED VERSION */}
-              {subTypes.length > 0 && (
+              {/* Sub-type Reviews — renders one block per sub-type. Falls
+                  back to a single "default" block when the scholarship has
+                  no configured sub-types (see effectiveSubTypes above). */}
+              {(
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-lg flex items-center gap-2">
                       <CheckCircle className="h-5 w-5 text-blue-600" />
-                      子類型推薦評估
+                      是否同意學生申請
                     </CardTitle>
                     <p className="text-sm text-muted-foreground">
-                      請針對每個獎學金子類型進行評估，並提供您的推薦意見
+                      {subTypes.length > 0
+                        ? "請針對每個獎學金申請進行評估，並提供您的推薦意見"
+                        : "此獎學金未設定子類型，請對整體申請提供推薦意見"}
                     </p>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {subTypes.map(subType => {
+                    {effectiveSubTypes.map(subType => {
                       const reviewItem = reviewData.items.find(
                         item => item.sub_type_code === subType.value
                       );
@@ -665,105 +850,82 @@ function ProfessorReviewComponentInner({
                           key={subType.value}
                           className="border rounded-lg p-4 space-y-4"
                         >
-                          {/* Simple checkbox approach */}
-                          <div className="flex items-start gap-4">
-                            <div className="flex items-center space-x-2 pt-1">
-                              <Checkbox
-                                id={`recommend-${subType.value}`}
-                                checked={isRecommended}
-                                onCheckedChange={checked => {
-                                  console.log(
-                                    "Checkbox changed:",
-                                    subType.value,
-                                    "to:",
-                                    checked
-                                  );
-                                  updateReviewItem(
-                                    subType.value,
-                                    "recommendation",
-                                    checked ? 'approve' : 'reject'
-                                  );
-                                }}
-                              />
-                              <label
-                                htmlFor={`recommend-${subType.value}`}
-                                className="text-sm font-medium cursor-pointer"
-                              >
-                                推薦
-                              </label>
-                            </div>
-                            <div className="flex-1">
-                              <h3 className="font-semibold text-lg mb-1">
-                                {subType.label}
-                              </h3>
-                              {subType.label_en && (
-                                <p className="text-sm text-muted-foreground mb-2">
-                                  {subType.label_en}
-                                </p>
-                              )}
-                              <Badge
-                                variant={
-                                  isRecommended ? "default" : "secondary"
-                                }
-                              >
-                                {isRecommended ? "✓ 推薦" : "未推薦"}
-                              </Badge>
-                            </div>
+                          {/* Sub-type Title */}
+                          <div>
+                            <h3 className="font-semibold text-lg mb-1">
+                              {subType.label}
+                            </h3>
+                            {subType.label_en && (
+                              <p className="text-sm text-muted-foreground mb-2">
+                                {subType.label_en}
+                              </p>
+                            )}
                           </div>
 
-                          {/* Alternative buttons */}
-                          <div className="flex gap-2">
-                            <Button
-                              type="button"
-                              variant={isRecommended ? "default" : "outline"}
-                              size="sm"
-                              onClick={() => {
-                                console.log(
-                                  "Direct recommend button clicked:",
-                                  subType.value
-                                );
-                                updateReviewItem(
-                                  subType.value,
-                                  "recommendation",
-                                  'approve'
-                                );
-                              }}
-                            >
-                              推薦此項目
-                            </Button>
-                            <Button
-                              type="button"
-                              variant={!isRecommended ? "secondary" : "outline"}
-                              size="sm"
-                              onClick={() => {
-                                console.log(
-                                  "Direct not recommend button clicked:",
-                                  subType.value
-                                );
-                                updateReviewItem(
-                                  subType.value,
-                                  "recommendation",
-                                  'reject'
-                                );
-                              }}
-                            >
-                              不推薦
-                            </Button>
+                          {/* Checkbox options */}
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-4">
+                              <div className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`agree-${subType.value}`}
+                                  checked={reviewItem?.recommendation === 'approve'}
+                                  disabled={isLocked}
+                                  onCheckedChange={checked => {
+                                    updateReviewItem(
+                                      subType.value,
+                                      "recommendation",
+                                      checked ? 'approve' : 'pending'
+                                    );
+                                  }}
+                                />
+                                <label
+                                  htmlFor={`agree-${subType.value}`}
+                                  className="text-sm font-medium cursor-pointer"
+                                >
+                                  同意
+                                </label>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`disagree-${subType.value}`}
+                                  checked={reviewItem?.recommendation === 'reject'}
+                                  disabled={isLocked}
+                                  onCheckedChange={checked => {
+                                    updateReviewItem(
+                                      subType.value,
+                                      "recommendation",
+                                      checked ? 'reject' : 'pending'
+                                    );
+                                  }}
+                                />
+                                <label
+                                  htmlFor={`disagree-${subType.value}`}
+                                  className="text-sm font-medium cursor-pointer"
+                                >
+                                  不同意
+                                </label>
+                              </div>
+                            </div>
+                            {reviewItem?.recommendation && reviewItem.recommendation !== 'pending' && (
+                              <Badge
+                                variant={reviewItem.recommendation === 'approve' ? 'default' : 'destructive'}
+                                className="w-fit"
+                              >
+                                {reviewItem.recommendation === 'approve' ? '✓ 同意' : '✗ 不同意'}
+                              </Badge>
+                            )}
                           </div>
 
                           {/* Comments Section */}
                           <div>
                             <label className="text-sm font-medium mb-2 block">
-                              評估意見 (可選)
+                              評估意見 {reviewItem?.recommendation === 'reject' && <span className="text-red-500">*</span>} (當選擇「不同意」時為必填)
                             </label>
                             <Textarea
                               placeholder={`請說明您對「${subType.label}」的評估意見...`}
                               value={reviewItem?.comments || ""}
+                              disabled={isLocked}
                               onChange={e => {
-                                console.log(
-                                  "Comments updated for:",
-                                  subType.value
-                                );
                                 updateReviewItem(
                                   subType.value,
                                   "comments",
@@ -771,54 +933,37 @@ function ProfessorReviewComponentInner({
                                 );
                               }}
                               rows={3}
+                              className={reviewItem?.recommendation === 'reject' && (!reviewItem?.comments || reviewItem.comments.trim() === '') ? 'border-red-500' : ''}
                             />
+                            {reviewItem?.recommendation === 'reject' && (!reviewItem?.comments || reviewItem.comments.trim() === '') && (
+                              <p className="text-sm text-red-600 mt-1">
+                                當選擇「不同意」時必須填寫評估意見
+                              </p>
+                            )}
                           </div>
                         </div>
                       );
                     })}
 
-                    {/* Debug Info */}
-                    <div className="bg-yellow-50 border border-yellow-200 rounded p-3 text-sm">
-                      <p className="font-medium">Debug Info:</p>
-                      <p>Sub-types count: {subTypes.length}</p>
-                      <p>Review items count: {reviewData.items.length}</p>
-                      <p>
-                        Recommended count:{" "}
-                        {
-                          reviewData.items.filter(item => item.recommendation === 'approve')
-                            .length
-                        }
-                      </p>
-                      <div className="mt-2">
-                        <p>Current review data:</p>
-                        <pre className="text-xs bg-white p-2 rounded mt-1">
-                          {JSON.stringify(reviewData.items, null, 2)}
-                        </pre>
-                      </div>
-                    </div>
                   </CardContent>
                 </Card>
               )}
 
-              {/* Overall Recommendation */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">整體推薦意見</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Textarea
-                    placeholder="請提供對此申請的整體推薦意見..."
-                    value={reviewData.recommendation || ""}
-                    onChange={e =>
-                      setReviewData(prev => ({
-                        ...prev,
-                        recommendation: e.target.value,
-                      }))
-                    }
-                    rows={4}
-                  />
-                </CardContent>
-              </Card>
+              {/* Every sub-type must be decided before submitting. Without this
+                  the submit button just sits disabled with no stated reason. */}
+              {!isLocked && reviewData.items.some(
+                item => item.recommendation !== "approve" && item.recommendation !== "reject"
+              ) && (
+                <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-md p-3 mb-3">
+                  <span>
+                    請對所有獎學金申請項目進行評估（選擇同意或不同意），尚未評估：
+                    {reviewData.items
+                      .filter(item => item.recommendation !== "approve" && item.recommendation !== "reject")
+                      .map(item => getSubTypeLabel(item.sub_type_code))
+                      .join("、")}
+                  </span>
+                </div>
+              )}
 
               {/* Actions */}
               <div className="flex justify-end gap-2">
@@ -829,16 +974,34 @@ function ProfessorReviewComponentInner({
                 >
                   取消
                 </Button>
-                <Button onClick={submitReview} disabled={loading}>
-                  {loading
-                    ? "提交中..."
-                    : existingReview
-                      ? "更新推薦"
-                      : "提交推薦"}
+                <Button
+                  onClick={submitReview}
+                  disabled={
+                    isLocked ||
+                    loading ||
+                    reviewData.items.length === 0 ||
+                    // Every sub-type must be decided — a partial submission would
+                    // drop the ones left out (items are replaced wholesale).
+                    reviewData.items.some(
+                      item => item.recommendation !== "approve" && item.recommendation !== "reject"
+                    ) ||
+                    reviewData.items.some(
+                      item => item.recommendation === "reject" && (!item.comments || item.comments.trim() === "")
+                    )
+                  }
+                >
+                  {isLocked
+                    ? "已鎖定"
+                    : loading
+                      ? "提交中..."
+                      : existingReview
+                        ? "更新推薦"
+                        : "提交推薦"}
                 </Button>
               </div>
             </div>
-          )}
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </div>
@@ -852,7 +1015,7 @@ export function ProfessorReviewComponent({
   return (
     <ErrorBoundary
       onError={(error, errorInfo) => {
-        console.error("Professor Review Component Error:", error, errorInfo);
+        logger.error("Professor Review Component Error:", error, errorInfo);
         // In production, send to error reporting service
       }}
     >

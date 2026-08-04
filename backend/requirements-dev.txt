@@ -2,8 +2,9 @@
 -r requirements.txt
 
 # Testing framework
-pytest==8.3.0  # Updated for Python 3.13 compatibility
-pytest-asyncio==0.24.0  # Updated for Python 3.13 compatibility
+pytest==9.0.3  # Security update — multiple medium-severity CVEs (<9.0.3)
+pytest-asyncio==1.3.0  # 0.24/0.25/1.0-1.2 declare pytest<9 → pip resolution fails → CI fallback strips aiosqlite → conftest crash
+
 pytest-cov==6.0.0  # Updated for Python 3.13 compatibility
 pytest-mock==3.14.0  # Updated for Python 3.13 compatibility
 httpx==0.28.1  # Match main requirements
@@ -12,8 +13,14 @@ httpx==0.28.1  # Match main requirements
 pytest-postgresql==6.1.1  # Updated for Python 3.13 compatibility
 aiosqlite==0.20.0  # For SQLite support in testing
 
+# Coverage tooling
+diff-cover==9.2.0  # Per-PR coverage ratchet (Phase 2 of test-surface-hardening plan)
+
+# Property-based testing (Phase 6 of test-surface-hardening plan)
+hypothesis==6.112.0  # Symmetry / none-safety properties for RosterService._evaluate_condition
+
 # Code quality and formatting
-black==24.8.0  # Updated for Python 3.13 compatibility
+black==26.3.1  # Updated for Python 3.13 compatibility
 isort==5.13.2  # Updated for Python 3.13 compatibility
 flake8==7.1.1  # Updated for Python 3.13 compatibility
 mypy==1.11.0  # Updated for Python 3.13 compatibility
@@ -24,4 +31,5 @@ watchdog==5.0.3  # Updated for Python 3.13 compatibility
 
 # API documentation
 mkdocs==1.6.0  # Updated for Python 3.13 compatibility
-mkdocs-material==9.6.0  # Updated for Python 3.13 compatibility
+mkdocs-material==9.7.7  # 9.6.0 caps pymdown-extensions at ~=10.2, blocking the 11.x security fix below
+pymdown-extensions==11.0.1  # Security: CVE-2026-61632 (b64 extension path traversal / arbitrary image-file disclosure, <11.0.0)

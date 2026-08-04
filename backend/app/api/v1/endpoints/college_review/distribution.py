@@ -2,236 +2,42 @@
 Distribution & Quota Management API Endpoints
 
 Handles:
-- Quota-based distribution execution
-- Matrix-based distribution execution
 - Distribution details retrieval
 - Quota status monitoring
+- Roster status checking
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
+from urllib.parse import quote as _url_quote
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.security import require_college
 from app.db.deps import get_db
-from app.models.audit_log import AuditAction, AuditLog
 from app.models.college_review import CollegeRanking, CollegeRankingItem
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User
-from app.schemas.college_review import QuotaDistributionRequest
 from app.schemas.response import ApiResponse
+from app.services.college_distribution_export_service import (
+    CollegeDistributionExportService,
+    flatten_sub_types,
+)
 from app.services.college_review_service import (
     CollegeReviewError,
     CollegeReviewService,
-    RankingModificationError,
-    RankingNotFoundError,
 )
-from app.services.matrix_distribution import MatrixDistributionService
 
-from ._helpers import normalize_semester_value
+from ._helpers import assert_can_manage_ranking, load_college_distribution_results, normalize_semester_value
+from app.utils.export_download import XLSX_MEDIA_TYPE
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-@router.post("/rankings/{ranking_id}/distribute")
-async def execute_quota_distribution(
-    ranking_id: int,
-    distribution_request: QuotaDistributionRequest,
-    current_user: User = Depends(require_college),
-    db: AsyncSession = Depends(get_db),
-    request: Request = None,
-):
-    """Execute quota-based distribution for a ranking"""
-
-    try:
-        service = CollegeReviewService(db)
-        distribution = await service.execute_quota_distribution(
-            ranking_id=ranking_id,
-            executor_id=current_user.id,
-            distribution_rules=distribution_request.distribution_rules,
-        )
-
-        # Log the distribution execution operation
-        new_values = {
-            "distribution_id": distribution.id,
-            "distribution_name": distribution.distribution_name,
-            "ranking_id": ranking_id,
-            "total_applications": distribution.total_applications,
-            "total_quota": distribution.total_quota,
-            "total_allocated": distribution.total_allocated,
-            "success_rate": distribution.success_rate,
-            "distribution_rules": distribution_request.distribution_rules,
-        }
-
-        # Extract request metadata
-        ip_address = request.client.host if request and request.client else None
-        user_agent = request.headers.get("user-agent") if request else None
-
-        audit_log = AuditLog.create_log(
-            user_id=current_user.id,
-            action=AuditAction.execute_distribution.value,
-            resource_type="distribution",
-            resource_id=str(distribution.id),
-            description=f"Executed quota distribution for ranking {ranking_id}: {distribution.distribution_name}",
-            new_values=new_values,
-            ip_address=ip_address,
-            user_agent=user_agent,
-            status="success",
-        )
-        db.add(audit_log)
-        await db.commit()
-
-        return ApiResponse(
-            success=True,
-            message="Quota distribution executed successfully",
-            data={
-                "id": distribution.id,
-                "distribution_name": distribution.distribution_name,
-                "total_applications": distribution.total_applications,
-                "total_quota": distribution.total_quota,
-                "total_allocated": distribution.total_allocated,
-                "success_rate": distribution.success_rate,
-                "distribution_summary": distribution.distribution_summary,
-                "executed_at": distribution.executed_at.isoformat(),
-            },
-        )
-
-    except RankingNotFoundError as e:
-        logger.warning(f"Ranking not found for distribution: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except RankingModificationError as e:
-        logger.warning(f"Cannot execute distribution: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
-    except CollegeReviewError as e:
-        logger.error(f"College review error during distribution: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
-    except Exception as e:
-        logger.error(f"Unexpected error executing distribution: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to execute distribution")
-
-
-@router.post("/rankings/{ranking_id}/execute-matrix-distribution")
-async def execute_matrix_distribution(
-    ranking_id: int,
-    current_user: User = Depends(require_college),
-    db: AsyncSession = Depends(get_db),
-    request: Request = None,
-):
-    """
-    Execute matrix-based quota distribution for a ranking
-
-    This uses the matrix distribution algorithm which:
-    - Processes sub-types in fixed priority order
-    - Allocates students to sub-type × college matrix quotas
-    - Tracks admitted (正取) and backup (備取) positions
-    - Checks eligibility rules before allocation
-    """
-
-    try:
-        logger.info(f"User {current_user.id} executing matrix distribution for ranking_id={ranking_id}")
-
-        # Create matrix distribution service
-        matrix_service = MatrixDistributionService(db)
-
-        # Execute distribution
-        distribution_result = await matrix_service.execute_matrix_distribution(
-            ranking_id=ranking_id, executor_id=current_user.id
-        )
-
-        # Log the matrix distribution execution operation
-        new_values = {
-            "ranking_id": ranking_id,
-            "total_allocated": distribution_result.get("total_allocated", 0),
-            "admitted_count": distribution_result.get("admitted_count", 0),
-            "backup_count": distribution_result.get("backup_count", 0),
-            "rejected_count": distribution_result.get("rejected_count", 0),
-            "distribution_type": "matrix",
-        }
-
-        # Extract request metadata
-        ip_address = request.client.host if request and request.client else None
-        user_agent = request.headers.get("user-agent") if request else None
-
-        audit_log = AuditLog.create_log(
-            user_id=current_user.id,
-            action=AuditAction.execute_distribution.value,
-            resource_type="distribution",
-            resource_id=str(ranking_id),
-            description=f"Executed matrix distribution for ranking {ranking_id}",
-            new_values=new_values,
-            ip_address=ip_address,
-            user_agent=user_agent,
-            status="success",
-        )
-        db.add(audit_log)
-        await db.commit()
-
-        return ApiResponse(
-            success=True,
-            message="Matrix distribution executed successfully",
-            data=distribution_result,
-        )
-
-    except ValueError as e:
-        # Validation errors (missing data, invalid parameters, configuration errors)
-        logger.warning(f"Invalid matrix distribution request for ranking {ranking_id}: {str(e)}")
-
-        # Log failed attempt in audit log
-        audit_log = AuditLog.create_log(
-            user_id=current_user.id,
-            action=AuditAction.execute_distribution.value,
-            resource_type="distribution",
-            resource_id=str(ranking_id),
-            description="Failed to execute matrix distribution: Validation error",
-            new_values={"error": str(e)},
-            ip_address=request.client.host if request and request.client else None,
-            user_agent=request.headers.get("user-agent") if request else None,
-            status="failure",
-        )
-        db.add(audit_log)
-        await db.commit()
-
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-
-    except HTTPException:
-        # Re-raise existing HTTPExceptions (from permission checks, etc.)
-        raise
-
-    except Exception as e:
-        # Unexpected errors (database errors, transaction failures, etc.)
-        logger.error(
-            f"Error executing matrix distribution for ranking {ranking_id}: {str(e)}",
-            exc_info=True,
-            extra={"ranking_id": ranking_id, "user_id": current_user.id},
-        )
-
-        # Log failed attempt in audit log
-        try:
-            audit_log = AuditLog.create_log(
-                user_id=current_user.id,
-                action=AuditAction.execute_distribution.value,
-                resource_type="distribution",
-                resource_id=str(ranking_id),
-                description="Failed to execute matrix distribution: System error",
-                new_values={"error_type": type(e).__name__, "error": str(e)},
-                ip_address=request.client.host if request and request.client else None,
-                user_agent=request.headers.get("user-agent") if request else None,
-                status="failure",
-            )
-            db.add(audit_log)
-            await db.commit()
-        except Exception as audit_error:
-            logger.error(f"Failed to log audit entry for failed distribution: {audit_error}")
-
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to execute matrix distribution: {str(e)}"
-        )
 
 
 @router.get("/quota-status")
@@ -259,14 +65,16 @@ async def get_quota_status(
         return ApiResponse(success=True, message="Quota status retrieved successfully", data=quota_status)
 
     except ValueError as e:
-        logger.warning(f"Invalid quota status parameters: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid parameters: {str(e)}")
+        logger.warning("Invalid quota status parameters", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid parameters") from e
     except CollegeReviewError as e:
-        logger.error(f"College review error retrieving quota status: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        logger.exception("College review error retrieving quota status")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving quota status: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve quota status")
+        logger.exception("Unexpected error retrieving quota status")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve quota status"
+        ) from e
 
 
 @router.get("/rankings/{ranking_id}/roster-status")
@@ -280,16 +88,28 @@ async def get_ranking_roster_status(
     查詢排名的造冊狀態和進展
     """
     try:
+        ranking_row = (
+            await db.execute(select(CollegeRanking).where(CollegeRanking.id == ranking_id))
+        ).scalar_one_or_none()
+        if not ranking_row:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
+
+        # College-scope the read (issue #1081 finding D): a reviewer may only see
+        # their own college's ranking — same guard as ranking_management.get_ranking.
+        assert_can_manage_ranking(ranking_row, current_user)
+
         service = CollegeReviewService(db)
         roster_status = await service.check_ranking_roster_status(ranking_id)
 
         return ApiResponse(success=True, message="Roster status retrieved successfully", data=roster_status)
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error retrieving roster status for ranking {ranking_id}: {str(e)}")
+        logger.exception(f"Error retrieving roster status for ranking {ranking_id}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve roster status"
-        )
+        ) from e
 
 
 @router.get("/rankings/{ranking_id}/distribution-details")
@@ -322,6 +142,12 @@ async def get_distribution_details(
 
         if not ranking:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
+
+        # College-scope the read (issue #1081 finding C): a reviewer may only see
+        # their own college's ranking (admins may see any) — same guard as
+        # ranking_management.get_ranking. Prevents cross-college access to
+        # applicant PII / ranks / rejection reasons via ranking-id enumeration.
+        assert_can_manage_ranking(ranking, current_user)
 
         sub_type_metadata_map: Dict[str, Dict[str, str]] = {}
         if ranking.scholarship_type and getattr(ranking.scholarship_type, "sub_type_configs", None):
@@ -471,11 +297,16 @@ async def get_distribution_details(
                 "student_name": student_name,
                 "application_id": app.id,
                 "app_id": app.app_id,
+                "is_renewal": app.is_renewal,
+                "renewal_year": app.renewal_year,
             }
 
-            # 優先處理被駁回的學生
-            if item.status == "rejected":
-                rejection_reason = item.allocation_reason or "申請已被駁回"
+            # 優先處理被駁回的學生（管理員駁回 status='rejected'，或學院 N college_rejected=True）
+            if item.status == "rejected" or getattr(item, "college_rejected", False):
+                if item.status == "rejected":
+                    rejection_reason = item.allocation_reason or "申請已被駁回"
+                else:
+                    rejection_reason = "學院標記不予分配 (N)"
                 rejected_students.append(
                     {
                         "rank_position": item.rank_position,
@@ -582,8 +413,90 @@ async def get_distribution_details(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error retrieving distribution details: {str(e)}")
+        logger.exception("Error retrieving distribution details")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve distribution details: {str(e)}",
-        )
+            detail="Failed to retrieve distribution details",
+        ) from e
+
+
+@router.get("/distribution-results")
+async def get_college_distribution_results(
+    scholarship_type_id: int,
+    academic_year: int,
+    semester: Optional[str] = None,
+    current_user: User = Depends(require_college),
+    db: AsyncSession = Depends(get_db),
+):
+    """College-facing: this college's own students' distribution outcomes by sub-type.
+
+    All gating, college scoping and grouping live in
+    ``load_college_distribution_results`` so this endpoint and the Excel/PDF export
+    can never disagree about which students a college may see.
+    """
+    data = await load_college_distribution_results(
+        db,
+        current_user=current_user,
+        scholarship_type_id=scholarship_type_id,
+        academic_year=academic_year,
+        semester=semester,
+    )
+    return ApiResponse(
+        success=True,
+        message="分發結果" if data["distribution_executed"] else "尚未分發",
+        data=data,
+    )
+
+
+@router.get("/distribution-results/export")
+async def export_college_distribution_results(
+    scholarship_type_id: int,
+    academic_year: int,
+    semester: Optional[str] = None,
+    format: Literal["xlsx", "pdf"] = Query("xlsx", description="Output format: xlsx (default) or pdf"),
+    current_user: User = Depends(require_college),
+    db: AsyncSession = Depends(get_db),
+):
+    """Export this college's own distribution results as Excel (default) or PDF.
+
+    Reads through the SAME loader as the JSON endpoint, so the file can never show a
+    student the panel would not. Carries no PII (學號/姓名/系所 + outcome only), so
+    unlike the 學生資料彙整表 export it writes no pii_access AuditLog.
+    """
+    data = await load_college_distribution_results(
+        db,
+        current_user=current_user,
+        scholarship_type_id=scholarship_type_id,
+        academic_year=academic_year,
+        semester=semester,
+    )
+    rows = flatten_sub_types(data["sub_types"])
+
+    # scalar_one() not scalar_one_or_none(): the loader above already 403s unless this
+    # ScholarshipType exists and is active, and name is NOT NULL — so a miss here means
+    # a broken invariant that must surface, not be papered over with a default title.
+    scholarship_name = (
+        await db.execute(select(ScholarshipType.name).where(ScholarshipType.id == scholarship_type_id))
+    ).scalar_one()
+
+    college_label = current_user.college_code
+    stem = f"{academic_year}學年度{scholarship_name}分發結果"
+    title = f"{stem}（{college_label}）"
+    encoded = _url_quote(f"{stem}_{college_label}.{format}", safe="")
+
+    service = CollegeDistributionExportService()
+    if format == "pdf":
+        payload = service.build_pdf(rows=rows, title=title)
+        media_type = "application/pdf"
+    else:
+        payload = service.build_workbook(rows=rows, title=title, sheet_name=f"{academic_year}學年")
+        media_type = XLSX_MEDIA_TYPE
+
+    return StreamingResponse(
+        iter([payload]),
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded}",
+            "Content-Length": str(len(payload)),
+        },
+    )

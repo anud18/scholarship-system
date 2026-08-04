@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { logger } from "@/lib/utils/logger";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,10 +62,18 @@ interface UserProfile {
   updated_at: string;
 }
 
+interface StudentInfoSnapshot {
+  std_degree?: string;
+  std_studingstatus?: string;
+  std_enrollyear?: string | number;
+  std_termcount?: string | number;
+  [key: string]: unknown;
+}
+
 interface CompleteUserProfile {
   user_info: UserResponse;
   profile: UserProfile | null;
-  student_info?: any;
+  student_info?: StudentInfoSnapshot | null;
 }
 
 interface ProfileHistory {
@@ -110,7 +119,7 @@ export default function UserProfileManagement() {
   const loadProfile = async () => {
     try {
       const response = await api.userProfiles.getMyProfile();
-      console.log("Profile response:", response); // 調試用
+      logger.debug("Profile response:", response); // 調試用
 
       if (response.success && response.data) {
         setProfile(response.data as unknown as CompleteUserProfile);
@@ -124,7 +133,7 @@ export default function UserProfileManagement() {
         }
       } else {
         // 如果 API 返回失敗，顯示錯誤但不阻止頁面渲染
-        console.warn("Profile API returned error:", response.message);
+        logger.warn("Profile API returned error:", response.message);
         toast(response.message || t("profile_management.profile_may_not_exist"));
 
         // 設置基本的用戶資料結構，即使沒有完整的個人資料
@@ -149,14 +158,14 @@ export default function UserProfileManagement() {
           preferred_language: "zh-TW",
         });
       }
-    } catch (error: any) {
-      console.error("Load profile error:", error);
+    } catch (error: unknown) {
+      logger.error("Load profile error", { error: error });
 
       // 網絡錯誤或其他嚴重錯誤
-      if (error.name === "TypeError" && error.message.includes("fetch")) {
+      if (error instanceof Error && error.name === "TypeError" && error.message.includes("fetch")) {
         toast.error(t("profile_management.connection_error_desc"));
       } else {
-        toast.error(error.message || t("profile_management.load_profile_error"));
+        toast.error(error instanceof Error ? error.message : t("profile_management.load_profile_error"));
       }
 
       // 即使發生錯誤也設置基本結構
@@ -249,7 +258,7 @@ export default function UserProfileManagement() {
     setSaving(true);
     try {
       let endpoint = "/user-profiles/me";
-      let data: any = {};
+      let data: Record<string, unknown> = {};
 
       switch (section) {
         case "bank":
@@ -275,16 +284,20 @@ export default function UserProfileManagement() {
           };
           break;
         default:
-          data = editingProfile;
+          data = { ...editingProfile };
       }
 
       let response;
       switch (section) {
         case "bank":
-          response = await api.userProfiles.updateBankInfo(data);
+          response = await api.userProfiles.updateBankInfo(
+            data as Parameters<typeof api.userProfiles.updateBankInfo>[0]
+          );
           break;
         case "advisor":
-          response = await api.userProfiles.updateAdvisorInfo(data);
+          response = await api.userProfiles.updateAdvisorInfo(
+            data as Parameters<typeof api.userProfiles.updateAdvisorInfo>[0]
+          );
           break;
         default:
           response = await api.userProfiles.updateProfile(editingProfile);
@@ -297,8 +310,9 @@ export default function UserProfileManagement() {
       toast.success(t("profile_management.profile_updated"));
 
       await loadProfile();
-    } catch (error: any) {
-      toast.error(error.response?.data?.detail ||
+    } catch (error: unknown) {
+      const errShape = error as { response?: { data?: { detail?: string } } };
+      toast.error(errShape.response?.data?.detail ||
           t("profile_management.update_profile_error"));
     } finally {
       setSaving(false);
@@ -335,8 +349,9 @@ export default function UserProfileManagement() {
       // 清空已選擇的文件
       setBankDocumentFiles([]);
       await loadProfile();
-    } catch (error: any) {
-      toast.error(error.response?.data?.detail || t("profile_management.upload_error"));
+    } catch (error: unknown) {
+      const errShape = error as { response?: { data?: { detail?: string } } };
+      toast.error(errShape.response?.data?.detail || t("profile_management.upload_error"));
     } finally {
       setUploadingBankDoc(false);
     }
@@ -352,8 +367,8 @@ export default function UserProfileManagement() {
       } else {
         throw new Error(response.message || "Delete failed");
       }
-    } catch (error: any) {
-      toast.error(error.message || t("profile_management.delete_error"));
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : t("profile_management.delete_error"));
     }
   };
 
@@ -392,7 +407,7 @@ export default function UserProfileManagement() {
     // 建立預覽 URL，使用前端路由而不是完整的外部 URL
     const previewUrl = `/api/v1/preview?fileId=${fileId}&filename=${encodeURIComponent(filename)}&type=${fileType}&userId=${userId}&token=${token}`;
 
-    console.log("Preview URL:", previewUrl); // 用於調試
+    logger.debug("Preview URL:", previewUrl); // 用於調試
 
     // 判斷文件類型
     let fileType_display = "other";
@@ -432,8 +447,8 @@ export default function UserProfileManagement() {
       } else {
         throw new Error(response.message || "Failed to load history");
       }
-    } catch (error: any) {
-      toast.error(error.message || t("profile_management.load_history_error"));
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : t("profile_management.load_history_error"));
     }
   };
 

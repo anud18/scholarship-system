@@ -7,11 +7,12 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import DEV_SCHOLARSHIP_SETTINGS, settings
-from app.models.application import Application, ApplicationStatus
+from app.models.application import Application, ApplicationStatus, build_config_match_filters
+from app.models.enums import HIDDEN_APPLICATION_STATUSES
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule
 
 logger = logging.getLogger(__name__)
@@ -148,36 +149,12 @@ class EligibilityService:
         # Existing application check is moved to separate method
         # We want to show scholarships regardless of application status
 
-        # Check application period (unless bypassed in dev mode)
-        if not self._should_bypass_application_period():
-            now = datetime.now(timezone.utc)
-
-            # Check regular application period
-            if config.application_start_date and config.application_end_date:
-                # Handle timezone-aware and naive datetime comparison
-                app_start = config.application_start_date
-                if app_start.tzinfo is None:
-                    app_start = app_start.replace(tzinfo=timezone.utc)
-
-                app_end = config.application_end_date
-                if app_end.tzinfo is None:
-                    app_end = app_end.replace(tzinfo=timezone.utc)
-
-                if not (app_start <= now <= app_end):
-                    # Check renewal application period if applicable
-                    if config.renewal_application_start_date and config.renewal_application_end_date:
-                        renewal_start = config.renewal_application_start_date
-                        if renewal_start.tzinfo is None:
-                            renewal_start = renewal_start.replace(tzinfo=timezone.utc)
-
-                        renewal_end = config.renewal_application_end_date
-                        if renewal_end.tzinfo is None:
-                            renewal_end = renewal_end.replace(tzinfo=timezone.utc)
-
-                        if not (renewal_start <= now <= renewal_end):
-                            reasons.append("不在申請期間內")
-                    else:
-                        reasons.append("不在申請期間內")
+        # Application period is a *timing gate*, NOT an eligibility criterion.
+        # An effective (生效) scholarship stays visible after its application
+        # deadline as view-only, so we expose the current period status in the
+        # details instead of failing eligibility. The apply/submit flow is gated
+        # separately (see check_student_eligibility). Dev-mode bypass keeps it open.
+        details["is_application_period"] = self._should_bypass_application_period() or config.is_application_period
 
         # Check whitelist if enabled (unless bypassed in dev mode)
         if config.scholarship_type.whitelist_enabled and not self._should_bypass_whitelist():
@@ -265,14 +242,17 @@ class EligibilityService:
                     if rule_passed is False or (rule_passed is None and rule.is_hard_rule):
                         subtype_eligibility[rule.sub_type] = False
 
-            if rule_passed is False:
+            if rule_passed is True:
+                if rule.is_warning:
+                    logger.info(f"Warning rule triggered for student: {rule.rule_name}")
+            elif rule_passed is False:
                 if rule.is_hard_rule:
                     # Hard rules are mandatory - prevent showing scholarship
                     message = rule.message or f"不符合規則: {rule.rule_name}"
                     failure_reasons.append(message)
                 elif rule.is_warning:
-                    # Warning rules don't prevent eligibility but could be logged
-                    logger.warning(f"Warning rule failed for student: {rule.rule_name}")
+                    # Warning condition not triggered — no action needed
+                    pass
                 else:
                     # Soft rules don't prevent eligibility - allow display but prevent application
                     pass  # Don't add to failure_reasons, allow scholarship to be shown
@@ -374,8 +354,12 @@ class EligibilityService:
                         subtype_critical_rules[rule.sub_type].append(rule.rule_name)
 
             if rule_passed is True:
-                # Rule passed - add to passed list
-                details["passed"].append(rule_detail)
+                if rule.is_warning:
+                    # Warning condition triggered — alert staff to review this student
+                    details["warnings"].append(rule_detail)
+                    logger.info(f"Warning rule triggered for student: {rule.rule_name}")
+                else:
+                    details["passed"].append(rule_detail)
             elif rule_passed is None:
                 # Cannot verify due to data unavailability
                 error_message = student_data.get("_term_error_message", "學期資料暫時無法取得")
@@ -396,9 +380,8 @@ class EligibilityService:
                     failure_reasons.append(message)
                     details["errors"].append({**rule_detail, "status": "validation_failed"})
                 elif rule.is_warning:
-                    # Warning rules don't prevent eligibility but are shown as warnings
-                    details["warnings"].append(rule_detail)
-                    logger.warning(f"Warning rule failed for student: {rule.rule_name}")
+                    # Warning condition not triggered — student is normal for this check
+                    pass
                 else:
                     # Soft rules - show scholarship card with error tags so students can see why they failed
                     # Don't add to failure_reasons - allow scholarship to be shown with errors
@@ -469,89 +452,26 @@ class EligibilityService:
         # Default to basic student API
         return "student"
 
-    async def get_application_status(self, user_id: int, config: ScholarshipConfiguration) -> Dict[str, Any]:
-        """Get application status for a specific scholarship configuration
+    async def has_blocking_application(self, user_id: int, config) -> bool:
+        """Whether the student already has a submitted-and-beyond application
+        for this scholarship configuration — i.e. one that should HIDE the
+        scholarship from the apply flow.
 
-        Returns:
-            Dictionary with application status info:
-            - has_application: bool - whether user has any application for this config
-            - application_status: str - current application status (draft, submitted, etc.)
-            - can_apply: bool - whether user can submit new/edit existing application
-            - status_display: str - display text for frontend
+        Uses the shared (user, type, year, semester) match key
+        (build_config_match_filters) so it stays consistent with the
+        DUPLICATE_APPLICATION guard ("shown ⟺ submittable"). An EXISTS query:
+        deterministic, no None edge, safe with multiple rows.
         """
-
-        # Check for any existing application
-        active_statuses = [
-            ApplicationStatus.draft.value,
-            ApplicationStatus.submitted.value,
-            ApplicationStatus.under_review.value,
-            ApplicationStatus.approved.value,
-            ApplicationStatus.rejected.value,
-            ApplicationStatus.returned.value,
-            ApplicationStatus.cancelled.value,
-            ApplicationStatus.withdrawn.value,
-        ]
-
-        # Handle semester comparison - use enum name for PostgreSQL compatibility
-        # PostgreSQL stores enum as the name (FIRST, SECOND) not the value (first, second)
-        if config.semester:
-            # Use enum name for comparison
-            semester_filter = Application.semester == config.semester.name
-        else:
-            # If no semester in config, check for NULL
-            semester_filter = Application.semester.is_(None)
-
-        stmt = select(Application).filter(
-            and_(
-                Application.user_id == user_id,
-                Application.scholarship_type_id == config.scholarship_type_id,
-                Application.academic_year == config.academic_year,
-                semester_filter,
-                Application.status.in_(active_statuses),
+        stmt = select(
+            exists().where(
+                and_(
+                    *build_config_match_filters(user_id, config),
+                    Application.status.in_(HIDDEN_APPLICATION_STATUSES),
+                )
             )
         )
-
         result = await self.db.execute(stmt)
-        existing_application = result.scalar_one_or_none()
-
-        if not existing_application:
-            return {
-                "has_application": False,
-                "application_status": None,
-                "can_apply": True,
-                "status_display": "可申請",
-                "application_id": None,
-            }
-
-        status = existing_application.status
-
-        # Determine if user can apply/edit
-        can_apply = status in [
-            ApplicationStatus.draft.value,
-            ApplicationStatus.returned.value,
-        ]
-
-        # Determine display status
-        status_display_mapping = {
-            ApplicationStatus.draft.value: "草稿",
-            ApplicationStatus.submitted.value: "已申請",
-            ApplicationStatus.under_review.value: "審核中",
-            ApplicationStatus.approved.value: "已核准",
-            ApplicationStatus.rejected.value: "已拒絕",
-            ApplicationStatus.returned.value: "已退回",
-            ApplicationStatus.cancelled.value: "已取消",
-            ApplicationStatus.withdrawn.value: "已撤回",
-        }
-
-        status_display = status_display_mapping.get(status, "未知狀態")
-
-        return {
-            "has_application": True,
-            "application_status": status,
-            "can_apply": can_apply,
-            "status_display": status_display,
-            "application_id": existing_application.id,
-        }
+        return bool(result.scalar())
 
     def _evaluate_rule(self, student_data: Dict[str, Any], rule: ScholarshipRule) -> Optional[bool]:
         """Evaluate a single rule against student data
@@ -608,8 +528,8 @@ class EligibilityService:
                 logger.warning(f"Unknown operator: {rule.operator}")
                 return False
 
-        except (ValueError, TypeError) as e:
-            logger.error(f"Error evaluating rule {rule.rule_name}: {e}")
+        except (ValueError, TypeError):
+            logger.exception(f"Error evaluating rule {rule.rule_name}")
             return False
 
     def _get_nested_field_value(self, data: Dict[str, Any], field_path: str) -> Any:

@@ -5,6 +5,10 @@ Centralized college mappings for the scholarship system
 from typing import Dict, List, Optional
 
 # College code to name mappings
+# Numeric codes are the SIS 陽明-campus academy codes (std_academyno); their
+# identities are fixed by the departments.academy_code attribution (e.g.
+# 牙醫學系→2, 護理學系→3, 藥學系→5). Code "4" is intentionally absent: SIS
+# only attributes administrative units (院本部/選讀學分) to it, never students.
 COLLEGE_MAPPINGS = {
     "E": "電機學院",
     "C": "資訊學院",
@@ -14,6 +18,9 @@ COLLEGE_MAPPINGS = {
     "O": "光電學院",
     "D": "半導體學院",
     "1": "醫學院",
+    "2": "牙醫學院",
+    "3": "護理學院",
+    "5": "藥物科學院",
     "6": "生醫工學院",
     "7": "生命科學院",
     "M": "管理學院",
@@ -31,6 +38,9 @@ COLLEGE_MAPPINGS_EN = {
     "O": "College of Photonics",
     "D": "College of Semiconductor Research",
     "1": "College of Medicine",
+    "2": "College of Dentistry",
+    "3": "College of Nursing",
+    "5": "College of Pharmaceutical Sciences",
     "6": "College of Biomedical Engineering",
     "7": "College of Life Science",
     "M": "College of Management",

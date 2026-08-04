@@ -4,7 +4,7 @@ Roster audit logging service
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import Request
@@ -143,7 +143,7 @@ class AuditService:
 
         except Exception as e:
             db.rollback()
-            logger.error(f"Failed to create audit log: {e}")
+            logger.exception("Failed to create audit log")
             # 即使稽核失敗也不應該影響主要業務邏輯
             # 這裡可以考慮將失敗的稽核記錄到檔案系統
             self._fallback_log(roster_id, action, title, str(e))
@@ -233,7 +233,7 @@ class AuditService:
             user_name=user_name,
             request=request,
             description="造冊已被鎖定，無法再進行修改",
-            new_values={"locked_by": user_id, "locked_at": datetime.now().isoformat()},
+            new_values={"locked_by": user_id, "locked_at": datetime.now(timezone.utc).isoformat()},
             level=RosterAuditLevel.INFO,
             tags=["lock"],
             db=db,

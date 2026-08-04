@@ -55,7 +55,13 @@ type UserResponse = {
   last_login_at?: string;
   created_at: string;
   updated_at: string;
-  raw_data?: any;
+  raw_data?: UserRawData;
+};
+
+type UserRawData = {
+  chinese_name?: string;
+  english_name?: string;
+  [key: string]: unknown;
 };
 
 type UserCreate = {
@@ -69,11 +75,7 @@ type UserCreate = {
   dept_name?: string;
   college_code?: string;
   comment?: string;
-  raw_data?: {
-    chinese_name?: string;
-    english_name?: string;
-    [key: string]: any;
-  };
+  raw_data?: UserRawData;
   // Backward compatibility fields
   username?: string;
   full_name?: string;
@@ -133,7 +135,7 @@ export function createUsersApi() {
       studentData: Record<string, any>
     ): Promise<ApiResponse<StudentInfoResponse>> => {
       const response = await typedClient.raw.PUT('/api/v1/users/student-info', {
-        body: studentData as any,
+        body: studentData as never,
       });
       return toApiResponse<StudentInfoResponse>(response);
     },
@@ -171,7 +173,7 @@ export function createUsersApi() {
      */
     create: async (userData: UserCreate) => {
       const response = await typedClient.raw.POST('/api/v1/users', {
-        body: userData as any, // TypeScript undefined vs Python None/null handling difference
+        body: userData as never, // TypeScript undefined vs Python None/null handling difference
       });
       return toApiResponse<UserResponse>(response);
     },

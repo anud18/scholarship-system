@@ -26,18 +26,18 @@ type CompleteUserProfile = {
   bank_document_url?: string;
   advisor_name?: string;
   advisor_email?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 };
 
 type UserProfile = {
   id: number;
   user_id: number;
-  [key: string]: any;
+  [key: string]: unknown;
 };
 
 type UserProfileUpdate = {
   phone?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 };
 
 type BankInfoUpdate = {
@@ -56,7 +56,7 @@ type ProfileHistory = {
   user_id: number;
   changed_at: string;
   changed_by: number;
-  changes: Record<string, any>;
+  changes: Record<string, unknown>;
 };
 
 export function createUserProfilesApi() {
@@ -78,7 +78,7 @@ export function createUserProfilesApi() {
       profileData: UserProfileUpdate
     ): Promise<ApiResponse<UserProfile>> => {
       const response = await typedClient.raw.POST('/api/v1/user-profiles/me', {
-        body: profileData as any, // Frontend allows [key: string]: any for flexible profile updates
+        body: profileData as never, // Frontend allows [key: string]: any for flexible profile updates
       });
       return toApiResponse<UserProfile>(response);
     },
@@ -91,7 +91,7 @@ export function createUserProfilesApi() {
       profileData: UserProfileUpdate
     ): Promise<ApiResponse<UserProfile>> => {
       const response = await typedClient.raw.PUT('/api/v1/user-profiles/me', {
-        body: profileData as any, // Frontend allows [key: string]: any for flexible profile updates
+        body: profileData as never, // Frontend allows [key: string]: any for flexible profile updates
       });
       return toApiResponse<UserProfile>(response);
     },
@@ -102,11 +102,11 @@ export function createUserProfilesApi() {
      */
     updateBankInfo: async (
       bankData: BankInfoUpdate
-    ): Promise<ApiResponse<any>> => {
+    ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.PUT('/api/v1/user-profiles/me/bank-info', {
-        body: bankData as any, // Frontend allows optional fields that may not match exact schema
+        body: bankData as never, // Frontend allows optional fields that may not match exact schema
       });
-      return toApiResponse<any>(response);
+      return toApiResponse<unknown>(response);
     },
 
     /**
@@ -115,7 +115,7 @@ export function createUserProfilesApi() {
      */
     updateAdvisorInfo: async (
       advisorData: AdvisorInfoUpdate
-    ): Promise<ApiResponse<any>> => {
+    ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.PUT('/api/v1/user-profiles/me/advisor-info', {
         body: advisorData,
       });
@@ -162,7 +162,7 @@ export function createUserProfilesApi() {
      * Delete bank document
      * Type-safe: Response type inferred from OpenAPI
      */
-    deleteBankDocument: async (): Promise<ApiResponse<any>> => {
+    deleteBankDocument: async (): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.DELETE('/api/v1/user-profiles/me/bank-document');
       return toApiResponse(response);
     },
@@ -180,7 +180,7 @@ export function createUserProfilesApi() {
      * Delete entire profile
      * Type-safe: Response type inferred from OpenAPI
      */
-    deleteProfile: async (): Promise<ApiResponse<any>> => {
+    deleteProfile: async (): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.DELETE('/api/v1/user-profiles/me');
       return toApiResponse(response);
     },
@@ -193,7 +193,7 @@ export function createUserProfilesApi() {
        * Get incomplete profiles
        * Type-safe: Response type inferred from OpenAPI
        */
-      getIncompleteProfiles: async (): Promise<ApiResponse<any>> => {
+      getIncompleteProfiles: async (): Promise<ApiResponse<unknown>> => {
         const response = await typedClient.raw.GET('/api/v1/user-profiles/admin/incomplete');
         return toApiResponse(response);
       },

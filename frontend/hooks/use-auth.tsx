@@ -25,103 +25,124 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+// Single source of truth for shaping a user object, wherever it came from
+// (JWT stub, /auth/me, stored JSON): backend sends numeric id and may leave
+// name null; the app contract is string id and non-empty name.
+function normalizeUser(raw: User): User {
+  return {
+    ...raw,
+    id: String(raw.id),
+    name: raw.full_name || raw.name || raw.nycu_id,
+    role: raw.role?.toLowerCase() as User["role"],
+  };
+}
+
+function persistUser(normalizedUser: User): void {
+  const json = JSON.stringify(normalizedUser);
+  localStorage.setItem("user", json);
+  localStorage.setItem("dev_user", json);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // SSO logins only carry JWT claims (nycu_id/role) — server-only fields like
+  // college_code stay undefined until this /auth/me refresh lands, and the
+  // college UI (e.g. 系所匯出總表 dropdown) filters on college_code.
+  const refreshUserFromServer = useCallback(async () => {
+    try {
+      const response = await apiClient.auth.getCurrentUser();
+      // The user may have logged out while /me was in flight — applying the
+      // response would resurrect the session.
+      if (!localStorage.getItem("auth_token")) return;
+      if (response?.success && response.data) {
+        const normalizedUser = normalizeUser(response.data as User);
+        // Skip the state write when nothing changed — setUser here re-renders
+        // the whole provider tree on every page load otherwise.
+        if (JSON.stringify(normalizedUser) === localStorage.getItem("user")) {
+          return;
+        }
+        persistUser(normalizedUser);
+        setUser(normalizedUser);
+        logger.debug("User profile refreshed from server", {
+          role: normalizedUser.role,
+          hasCollegeCode: !!normalizedUser.college_code,
+        });
+      }
+    } catch (err) {
+      // Keep the locally stored user — a transient /me failure must not log the user out.
+      logger.warn("Failed to refresh user profile from server", { err });
+    }
+  }, []);
+
   // Check for existing authentication on mount
   useEffect(() => {
     const checkExistingAuth = () => {
-      console.log("Checking existing authentication...");
-      // Check if user is already authenticated (from localStorage)
+      logger.debug("Checking existing authentication");
       const token = localStorage.getItem("auth_token");
       const userJson =
         localStorage.getItem("user") || localStorage.getItem("dev_user");
 
-      console.log("Found token:", !!token, "Found user data:", !!userJson);
+      logger.debug("Auth storage probed", {
+        hasToken: !!token,
+        hasUserJson: !!userJson,
+      });
 
       if (token && userJson) {
         try {
           const userData = JSON.parse(userJson);
-          console.log("Parsed user data:", userData);
           apiClient.setToken(token);
-          // Convert role to lowercase for frontend consistency
-          const normalizedUser = {
-            ...userData,
-            name: userData.full_name || userData.name,
-            role: userData.role?.toLowerCase(),
-          };
+          const normalizedUser = normalizeUser(userData);
           setUser(normalizedUser);
-          console.log("Authentication restored from localStorage");
+          logger.debug("Authentication restored from localStorage", {
+            role: normalizedUser.role,
+          });
+          // Stored user may be a stale JWT-derived stub — re-sync from the server.
+          void refreshUserFromServer();
         } catch (err) {
-          logger.error("Failed to parse stored user data", {});
+          logger.error("Failed to parse stored user data", { err });
           localStorage.removeItem("auth_token");
           localStorage.removeItem("user");
           localStorage.removeItem("dev_user");
         }
       } else {
-        console.log("No existing authentication found");
+        logger.debug("No existing authentication found");
       }
       setIsLoading(false);
     };
 
     checkExistingAuth();
-  }, []);
+  }, [refreshUserFromServer]);
 
   const login = useCallback((token: string, userData: User) => {
-    console.log("🔐 useAuth.login() called with:", {
-      token: !!token,
-      tokenPreview: token ? `${token.substring(0, 20)}...` : "none",
-      userData,
+    logger.debug("useAuth.login() called", {
+      hasToken: !!token,
+      role: userData.role,
     });
 
     try {
-      console.log("🌐 Setting API client token...");
       apiClient.setToken(token);
-      console.log("✅ API client token set");
-
-      console.log("💾 Storing token in localStorage...");
       localStorage.setItem("auth_token", token);
-      console.log("💾 Storing user data in localStorage...");
-      localStorage.setItem("user", JSON.stringify(userData));
-
-      // Also store as dev_user for backwards compatibility
-      const devUser = {
-        ...userData,
-        name: userData.full_name || userData.name,
-        role: userData.role?.toLowerCase(),
-      };
-      console.log("💾 Storing dev_user for backwards compatibility...");
-      localStorage.setItem("dev_user", JSON.stringify(devUser));
-      const finalUser = {
-        ...userData,
-        name: userData.full_name || userData.name,
-        role: userData.role?.toLowerCase() as
-          | "student"
-          | "professor"
-          | "college"
-          | "admin"
-          | "super_admin",
-      };
-      console.log("👤 Setting user state:", finalUser);
+      const finalUser = normalizeUser(userData);
+      persistUser(finalUser);
       setUser(finalUser);
       setError(null);
-      console.log("✅ useAuth.login() completed successfully");
-      console.log("🔍 Final authentication state:", {
-        userSet: !!finalUser,
-        userRole: finalUser.role,
-        errorCleared: true,
+      logger.debug("useAuth.login() completed", {
+        role: finalUser.role,
       });
-    } catch (error) {
-      logger.error("Error in login", {});
-      setError(error instanceof Error ? error.message : "Login failed");
+      // SSO callbacks pass a JWT-derived stub; replace it with the full server profile.
+      void refreshUserFromServer();
+    } catch (err) {
+      logger.error("Error in login", { err });
+      setError(err instanceof Error ? err.message : "Login failed");
     }
-  }, []);
+  }, [refreshUserFromServer]);
 
   const logout = useCallback(() => {
-    console.log("Logging out...");
+    logger.debug("Logging out");
     apiClient.clearToken();
     localStorage.removeItem("auth_token");
     localStorage.removeItem("user");
@@ -140,7 +161,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (isLocalhost) {
         router.push("/dev-login");
       } else {
-        // In production, redirect to home page or SSO login
+        // In production, redirect to home page or SSO login.
+        // Flag that this is a real logout so the login page can warn that the
+        // NYCU Portal SSO session is NOT cleared (it's a host-only cookie on
+        // portal.test we can't touch cross-origin, and the Portal exposes no
+        // app-initiable logout) — otherwise the next click re-logs in instantly.
+        try {
+          sessionStorage.setItem("nycu_portal_logout_notice", "1");
+        } catch {
+          // sessionStorage may be unavailable (private mode); the notice is best-effort.
+        }
         router.push("/");
       }
     }
@@ -152,11 +182,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await apiClient.users.updateProfile(userData);
 
       if (response.success && response.data) {
-        // Map full_name to name for component compatibility
-        const updatedUser = {
-          ...response.data,
-          name: response.data.full_name ?? response.data.name,
-        };
+        const updatedUser = normalizeUser(response.data);
+        persistUser(updatedUser);
         setUser(updatedUser);
       } else {
         throw new Error(response.message || "Update failed");

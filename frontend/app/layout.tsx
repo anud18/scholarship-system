@@ -6,11 +6,12 @@ import { DebugPanelWrapper } from "@/components/debug-panel-wrapper";
 import { AppProvider } from "@/components/providers/app-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { getNonce } from "./NonceProvider";
+import { CspNonceProvider } from "@/components/providers/csp-nonce";
 
 export const metadata: Metadata = {
-  title: "獎學金申請與簽核系統 | 國立陽明交通大學教務處",
+  title: "獎學金申請與審核系統 | 國立陽明交通大學教務處",
   description:
-    "國立陽明交通大學獎學金申請與簽核系統，提供學生獎學金申請、教師推薦、行政審核等完整流程管理",
+    "國立陽明交通大學獎學金申請與審核系統，提供學生獎學金申請、教師推薦、行政審核等完整流程管理",
   keywords: "獎學金, 申請, 審核, 陽明交通大學, NYCU, 教務處",
   authors: [{ name: "國立陽明交通大學教務處" }],
   robots: "noindex, nofollow", // 系統內部使用
@@ -46,13 +47,17 @@ export default async function RootLayout({
         {/* Next.js will automatically apply nonce to all injected scripts */}
       </head>
       <body className="antialiased" nonce={nonce}>
-        <AppProvider>
-          <SessionExpiredProvider>
-            {children}
-            <DebugPanelWrapper />
-            <Toaster />
-          </SessionExpiredProvider>
-        </AppProvider>
+        {/* Outermost: sets __webpack_nonce__ and serves useCspNonce() to every
+            Radix primitive that renders its own <style> — see csp-nonce.tsx */}
+        <CspNonceProvider nonce={nonce}>
+          <AppProvider>
+            <SessionExpiredProvider>
+              {children}
+              <DebugPanelWrapper />
+              <Toaster />
+            </SessionExpiredProvider>
+          </AppProvider>
+        </CspNonceProvider>
       </body>
     </html>
   );

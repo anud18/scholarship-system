@@ -5,6 +5,7 @@ import * as SelectPrimitive from "@radix-ui/react-select";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { useCspNonce } from "@/components/providers/csp-nonce";
 
 const Select = SelectPrimitive.Root;
 
@@ -70,24 +71,29 @@ SelectScrollDownButton.displayName =
 const SelectContent = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
->(({ className, children, ...props }, ref) => (
-  <SelectPrimitive.Portal>
-    <SelectPrimitive.Content
-      ref={ref}
-      className={cn(
-        "overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md z-50 min-w-[8rem] max-h-96",
-        className
-      )}
-      {...props}
-    >
-      <SelectScrollUpButton />
-      <SelectPrimitive.Viewport className="p-1">
-        {children}
-      </SelectPrimitive.Viewport>
-      <SelectScrollDownButton />
-    </SelectPrimitive.Content>
-  </SelectPrimitive.Portal>
-));
+>(({ className, children, ...props }, ref) => {
+  // Viewport renders its own <style> (scrollbar hiding). Under the nonce-gated
+  // production style-src it is blocked without this — issue #1273.
+  const nonce = useCspNonce();
+  return (
+    <SelectPrimitive.Portal>
+      <SelectPrimitive.Content
+        ref={ref}
+        className={cn(
+          "overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md z-50 min-w-[8rem] max-h-96",
+          className
+        )}
+        {...props}
+      >
+        <SelectScrollUpButton />
+        <SelectPrimitive.Viewport className="p-1" nonce={nonce}>
+          {children}
+        </SelectPrimitive.Viewport>
+        <SelectScrollDownButton />
+      </SelectPrimitive.Content>
+    </SelectPrimitive.Portal>
+  );
+});
 SelectContent.displayName = SelectPrimitive.Content.displayName;
 
 const SelectLabel = React.forwardRef<

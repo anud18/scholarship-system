@@ -21,7 +21,11 @@ class DeveloperProfile(BaseModel):
     chinese_name: Optional[str] = None
     english_name: Optional[str] = None
     role: UserRole
-    email_domain: str = "dev.local"
+    # dev.example.com (RFC-2606 reserved, non-routable — keeps dev users from
+    # impersonating real ones) NOT dev.local: EmailStr rejects the special-use
+    # ".local" TLD, so an @dev.local dev user could never be serialized by
+    # UserResponse → mock-sso login returned HTTP 400 (dev quick-setup unusable).
+    email_domain: str = "dev.example.com"
     custom_attributes: Dict = {}
 
 
@@ -216,7 +220,7 @@ class DeveloperProfileManager:
                 english_name=f"{developer_id.title()} PhD Student",
                 role=UserRole.student,
                 custom_attributes={
-                    "student_type": "graduate",
+                    "student_type": "phd",
                     "year": "phd",
                     "gpa": 3.9,
                 },

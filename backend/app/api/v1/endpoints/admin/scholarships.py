@@ -38,7 +38,7 @@ router = APIRouter()
 
 @router.get("/scholarships/{scholarship_identifier}/applications")
 async def get_applications_by_scholarship(
-    scholarship_identifier: str = Path(..., regex=r"^(\d+|[a-z_]{1,50})$"),
+    scholarship_identifier: str = Path(..., pattern=r"^(\d+|[a-z_]{1,50})$"),
     sub_type: Optional[str] = Query(None, description="Filter by sub-type"),
     status: Optional[str] = Query(None, description="Filter by status"),
     current_user: User = Depends(require_admin),
@@ -190,12 +190,12 @@ async def get_applications_by_scholarship(
             "scholarship_configuration": (
                 {
                     "requires_professor_recommendation": (
-                        app.scholarship_configuration.requires_professor_recommendation
+                        app.scholarship_configuration.requires_professor_review_for(bool(app.is_renewal))
                         if app.scholarship_configuration
                         else False
                     ),
                     "requires_college_review": (
-                        app.scholarship_configuration.requires_college_review
+                        app.scholarship_configuration.requires_college_review_for(bool(app.is_renewal))
                         if app.scholarship_configuration
                         else False
                     ),
@@ -228,7 +228,7 @@ async def get_applications_by_scholarship(
 
 @router.get("/scholarships/{scholarship_identifier}/audit-trail")
 async def get_scholarship_audit_trail(
-    scholarship_identifier: str = Path(..., regex=r"^(\d+|[a-z_]{1,50})$"),
+    scholarship_identifier: str = Path(..., pattern=r"^(\d+|[a-z_]{1,50})$"),
     action_filter: Optional[str] = Query(None, description="Filter by action type"),
     limit: int = Query(500, le=1000, description="Maximum number of audit logs to return"),
     offset: int = Query(0, ge=0, description="Number of audit logs to skip"),
@@ -287,7 +287,7 @@ async def get_scholarship_audit_trail(
 
 @router.get("/scholarships/{scholarship_code}/sub-types")
 async def get_scholarship_sub_types(
-    scholarship_code: str = Path(..., regex=r"^[a-z_]{1,50}$"),
+    scholarship_code: str = Path(..., pattern=r"^[a-z_]{1,50}$"),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -447,10 +447,15 @@ async def get_scholarship_sub_type_configs(
                 "description": "一般獎學金",
                 "description_en": "General Scholarship",
                 "amount": None,
-                "currency": scholarship.currency,
+                # #1117: ScholarshipType has NO currency/amount columns (they live
+                # on ScholarshipConfiguration — the documented split). Reading them
+                # here raised AttributeError → 500 for the DEFAULT sub_type_list
+                # ["general"]. A general sub-type with no explicit config has no
+                # configured amount, so default currency + a null effective amount.
+                "currency": "TWD",
                 "display_order": 0,
                 "is_active": True,
-                "effective_amount": scholarship.amount,
+                "effective_amount": None,
                 "created_at": now,
                 "updated_at": now,
             }

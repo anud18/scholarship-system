@@ -97,10 +97,11 @@ async def render_email_via_frontend(
         logger.error(f"Timeout calling frontend email renderer at {render_endpoint} " f"(template: {template_name})")
         return None
 
-    except httpx.ConnectError as e:
-        logger.error(
-            f"Connection error calling frontend at {render_endpoint}: {e}. "
-            f"Make sure frontend container is running and FRONTEND_URL is correct."
+    except httpx.ConnectError:
+        logger.exception(
+            "Connection error calling frontend at %s. "
+            "Make sure frontend container is running and FRONTEND_URL is correct.",
+            render_endpoint,
         )
         return None
 

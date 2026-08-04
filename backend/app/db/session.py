@@ -11,54 +11,56 @@ from sqlalchemy.pool import QueuePool
 
 from app.core.config import settings
 
+# Pool tuning kwargs are PostgreSQL-only — SQLite/StaticPool (used by tests)
+# rejects them with TypeError under SQLAlchemy 2.0+.
+_async_pool_kwargs = (
+    {"pool_size": 10, "max_overflow": 20, "pool_timeout": 60} if "postgresql" in settings.database_url else {}
+)
+_sync_pool_kwargs = (
+    {"pool_size": 10, "max_overflow": 20, "pool_timeout": 60, "poolclass": QueuePool}
+    if "postgresql" in settings.database_url_sync
+    else {}
+)
+
 # Enhanced async engine configuration for PostgreSQL with better error handling
 # Note: Async engines use AsyncAdaptedQueuePool by default (no need to specify poolclass)
-# Python 3.13 + SQLAlchemy 2.0+ requires proper async pool handling
 async_engine = create_async_engine(
     settings.database_url,
-    echo=False,  # 關閉詳細 SQL 日誌
-    pool_pre_ping=True,  # Test connections before using them
-    pool_recycle=300,  # Recycle connections after 5 minutes
-    pool_size=10,  # Increased from 5 to 10 for better concurrency
-    max_overflow=20,  # Increased from 10 to 20 for burst traffic
-    pool_timeout=60,  # Increased timeout to 60 seconds
-    # poolclass is omitted - async engines use AsyncAdaptedQueuePool by default
-    # Additional async engine parameters for better connection management
+    echo=False,
+    pool_pre_ping=True,
+    pool_recycle=300,
     connect_args=(
         {
-            "prepared_statement_cache_size": 0,  # Disable prepared statement cache
-            "statement_cache_size": 0,  # Disable statement cache
-            "command_timeout": 60,  # Command timeout in seconds
-            "timeout": 30,  # Connection timeout in seconds
+            "prepared_statement_cache_size": 0,
+            "statement_cache_size": 0,
+            "command_timeout": 60,
+            "timeout": 30,
             "server_settings": {
                 "application_name": "scholarship_system_async",
-                "jit": "off",  # Disable JIT compilation for faster query startup
+                "jit": "off",
             },
         }
         if "postgresql" in settings.database_url
         else {}
     ),
+    **_async_pool_kwargs,
 )
 
 # Enhanced sync engine configuration for PostgreSQL
 sync_engine = create_engine(
     settings.database_url_sync,
-    echo=False,  # 關閉詳細 SQL 日誌
-    pool_pre_ping=True,  # Test connections before using them
-    pool_recycle=300,  # Recycle connections after 5 minutes
-    pool_size=10,  # Increased from 5 to 10 for better concurrency
-    max_overflow=20,  # Increased from 10 to 20 for burst traffic
-    pool_timeout=60,  # Increased timeout to 60 seconds
-    poolclass=QueuePool,
-    # Additional sync engine parameters for better connection management
+    echo=False,
+    pool_pre_ping=True,
+    pool_recycle=300,
     connect_args=(
         {
-            "connect_timeout": 30,  # Connection timeout in seconds
+            "connect_timeout": 30,
             "options": "-c application_name=scholarship_system_sync -c jit=off",
         }
         if "postgresql" in settings.database_url_sync
         else {}
     ),
+    **_sync_pool_kwargs,
 )
 
 # Async session maker (SQLAlchemy 2.0 style)
@@ -86,16 +88,16 @@ async def handle_cached_statement_error(session: AsyncSession, operation_func, *
     This function addresses the PostgreSQL asyncpg cached statement plan invalidation
     issue that occurs after schema or configuration changes.
     """
-    from sqlalchemy.dialects.postgresql.asyncpg import InvalidCachedStatementError
+    from asyncpg.exceptions import InvalidCachedStatementError
 
     try:
         return await operation_func(*args, **kwargs)
-    except InvalidCachedStatementError as e:
+    except InvalidCachedStatementError:
         # Log the error for monitoring
         import logging
 
         logger = logging.getLogger(__name__)
-        logger.warning(f"Cached statement plan invalidated, retrying operation: {e}")
+        logger.warning("Cached statement plan invalidated, retrying operation", exc_info=True)
 
         # Invalidate the connection and get a fresh one
         await session.invalidate()
@@ -107,12 +109,12 @@ async def handle_cached_statement_error(session: AsyncSession, operation_func, *
         except Exception as retry_error:
             logger.error(f"Operation failed even after connection refresh: {retry_error}")
             raise
-    except Exception as e:
+    except Exception:
         # Handle other database errors
         import logging
 
         logger = logging.getLogger(__name__)
-        logger.error(f"Database operation failed: {e}")
+        logger.exception("Database operation failed")
         raise
 
 
@@ -193,8 +195,8 @@ async def invalidate_connection_pools():
         sync_engine.dispose()
         logger.info("Sync engine connection pool disposed and will be recreated")
 
-    except Exception as e:
-        logger.error(f"Failed to invalidate connection pools: {e}")
+    except Exception:
+        logger.exception("Failed to invalidate connection pools")
 
 
 def invalidate_connection_pools_sync():
@@ -216,8 +218,8 @@ def invalidate_connection_pools_sync():
             "invalidate_connection_pools() in async context"
         )
 
-    except Exception as e:
-        logger.error(f"Failed to invalidate sync connection pool: {e}")
+    except Exception:
+        logger.exception("Failed to invalidate sync connection pool")
 
 
 # Event listeners for connection management (for sync engine only)
@@ -231,3 +233,55 @@ def set_postgresql_connection_options(dbapi_connection, connection_record):
     if hasattr(dbapi_connection, "autocommit"):
         # Configure connection settings for better error handling
         pass  # Configuration is handled via connect_args
+
+
+# =============================================================================
+# Prometheus query-duration instrumentation (issue #159)
+# =============================================================================
+# The db_query_duration_seconds Histogram in app.core.metrics is observed via
+# SQLAlchemy `before_cursor_execute` / `after_cursor_execute` hooks on both
+# the async and sync engines. Operation label is the first SQL keyword
+# (SELECT / INSERT / UPDATE / DELETE / OTHER) so the dashboard can split
+# read vs write latency without high-cardinality statement labels.
+
+# Imported here so a metrics-init failure cannot break engine creation above.
+from app.core.metrics import db_query_duration_seconds  # noqa: E402
+
+
+def _classify_operation(statement: str) -> str:
+    """Best-effort SQL verb extraction for the metric label."""
+    if not statement:
+        return "other"
+    head = statement.lstrip().split(" ", 1)[0].upper()
+    if head in {"SELECT", "INSERT", "UPDATE", "DELETE"}:
+        return head.lower()
+    return "other"
+
+
+def _install_query_timing_listeners(engine) -> None:
+    """
+    Wire before/after cursor-execute hooks so query latency lands in the
+    db_query_duration_seconds histogram. Idempotent — re-installing on the
+    same engine is harmless because SQLAlchemy's event subsystem dedupes by
+    (target, identifier, listener) tuple.
+    """
+    import time
+
+    @event.listens_for(engine.sync_engine if hasattr(engine, "sync_engine") else engine, "before_cursor_execute")
+    def _before(conn, cursor, statement, parameters, context, executemany):  # noqa: ARG001
+        context._metric_start_time = time.perf_counter()
+
+    @event.listens_for(engine.sync_engine if hasattr(engine, "sync_engine") else engine, "after_cursor_execute")
+    def _after(conn, cursor, statement, parameters, context, executemany):  # noqa: ARG001
+        start = getattr(context, "_metric_start_time", None)
+        if start is None:
+            return
+        elapsed = time.perf_counter() - start
+        db_query_duration_seconds.labels(operation=_classify_operation(statement)).observe(elapsed)
+
+
+# Async engines expose their sync core via `.sync_engine`; the connect-level
+# hooks below intercept all queries regardless of which session the call
+# went through.
+_install_query_timing_listeners(async_engine)
+_install_query_timing_listeners(sync_engine)

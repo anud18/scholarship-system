@@ -2,18 +2,20 @@
 Application management API endpoints
 """
 
+import enum
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, File, HTTPException, Path, Query, Request, UploadFile, status
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Path, Query, Request, Response, UploadFile, status
+from sqlalchemy import inspect as sa_inspect
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import AuthorizationError, NotFoundError
+from app.core.exceptions import AuthorizationError, NotFoundError, ScholarshipException
 from app.core.security import get_current_user, require_staff, require_student
 from app.db.deps import get_db
-from app.models.audit_log import AuditAction
+from app.models.enums import REAPPLY_ALLOWED_APPLICATION_STATUSES
 from app.models.user import User
 from app.schemas.application import (
     ApplicationCreate,
@@ -22,12 +24,29 @@ from app.schemas.application import (
     ApplicationUpdate,
     StudentDataSchema,
 )
-from app.schemas.review import ReviewCreate
 from app.services.application_audit_service import ApplicationAuditService
 from app.services.application_service import ApplicationService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _serialize_result(result):
+    """Serialize a Pydantic model, dict, or SQLAlchemy model to dict."""
+    if isinstance(result, dict):
+        return result
+    if hasattr(result, "model_dump"):
+        return result.model_dump()
+    if hasattr(result, "dict"):
+        return result.dict()
+    # SQLAlchemy model fallback — extract column values only (no relationship loading)
+    try:
+        mapper = sa_inspect(type(result))
+        return {
+            c.key: (v.value if isinstance(v := getattr(result, c.key), enum.Enum) else v) for c in mapper.column_attrs
+        }
+    except Exception as exc:
+        raise TypeError(f"Cannot serialize {type(result).__name__}: {exc}") from exc
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -37,6 +56,7 @@ async def create_application(
     current_user: User = Depends(require_student),
     db: AsyncSession = Depends(get_db),
     request: Request = None,
+    response: Response = None,
 ):
     """Create a new scholarship application (draft or submitted)"""
     logger.debug(f"Received application creation request from user: {current_user.id}, is_draft: {is_draft}")
@@ -73,7 +93,6 @@ async def create_application(
                 detail={
                     "message": "Scholarship type is required",
                     "error_code": "MISSING_SCHOLARSHIP_TYPE",
-                    "received_data": application_data.dict(exclude_none=True),
                 },
             )
 
@@ -86,7 +105,6 @@ async def create_application(
                 detail={
                     "message": "Form data is required",
                     "error_code": "MISSING_FORM_DATA",
-                    "received_data": application_data.dict(exclude_none=True),
                 },
             )
 
@@ -96,23 +114,24 @@ async def create_application(
             application_data.form_data.dict()
             logger.debug("Form data validated successfully")
         except Exception as e:
-            logger.error(f"Form data validation failed: {str(e)}")
-            # Do not log raw form data as it may contain sensitive information
+            logger.exception("Form data validation failed")
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail={
                     "message": "Invalid form data structure",
                     "error_code": "INVALID_FORM_DATA",
-                    "error": str(e),
-                    "received_form_data": str(application_data.form_data),
                 },
-            )
+            ) from e
 
         # Get scholarship configuration to extract scholarship_type_id, academic_year, semester
         logger.debug(f"Fetching scholarship configuration: {application_data.configuration_id}")
         from sqlalchemy import and_, select
 
-        from app.models.application import Application, ApplicationStatus
+        from app.models.application import (
+            Application,
+            ApplicationStatus,
+            build_config_match_filters,
+        )
         from app.models.scholarship import ScholarshipConfiguration
 
         config_stmt = select(ScholarshipConfiguration).where(
@@ -135,21 +154,14 @@ async def create_application(
         # Check for duplicate applications (同一獎學金類型、學年度、學期只能有一個申請)
         logger.debug("Checking for duplicate applications")
 
-        # 排除已撤回/拒絕/取消/刪除的申請
-        excluded_statuses = [
-            ApplicationStatus.withdrawn.value,
-            ApplicationStatus.rejected.value,
-            ApplicationStatus.cancelled.value,
-            ApplicationStatus.deleted.value,  # 允許刪除後重新申請
-        ]
+        # 排除已撤回/拒絕/取消/刪除的申請 (shared set — see app.models.enums)
+        excluded_statuses = REAPPLY_ALLOWED_APPLICATION_STATUSES
 
-        # 查詢是否已有申請 - using values from scholarship configuration
+        # 查詢是否已有申請 - shared (user, type, year, semester) key, see
+        # build_config_match_filters
         duplicate_check_stmt = select(Application).where(
             and_(
-                Application.user_id == current_user.id,
-                Application.scholarship_type_id == scholarship_config.scholarship_type_id,
-                Application.academic_year == scholarship_config.academic_year,
-                Application.semester == scholarship_config.semester,
+                *build_config_match_filters(current_user.id, scholarship_config),
                 Application.status.notin_(excluded_statuses),
             )
         )
@@ -157,12 +169,42 @@ async def create_application(
         existing_application = duplicate_result.scalar_one_or_none()
 
         if existing_application:
+            existing_status = existing_application.status
+            existing_status_str = existing_status.value if hasattr(existing_status, "value") else existing_status
+
+            # If existing application is a draft, return it so frontend can continue
+            if existing_status == ApplicationStatus.draft:
+                logger.info(
+                    f"Returning existing draft application: user_id={current_user.id}, "
+                    f"app_id={existing_application.app_id}"
+                )
+                if response:
+                    response.status_code = 200
+                return {
+                    "success": True,
+                    "message": "已返回現有草稿",
+                    "data": {
+                        "id": existing_application.id,
+                        "app_id": existing_application.app_id,
+                        "status": existing_status_str,
+                        "scholarship_type_id": existing_application.scholarship_type_id,
+                        "academic_year": existing_application.academic_year,
+                        "semester": (
+                            existing_application.semester.value
+                            if hasattr(existing_application.semester, "value")
+                            else existing_application.semester
+                        ),
+                    },
+                }
+
             logger.warning(
                 f"Duplicate application detected: user_id={current_user.id}, "
                 f"scholarship_type_id={scholarship_config.scholarship_type_id}, "
                 f"existing_app_id={existing_application.app_id}, "
-                f"status={existing_application.status}"
+                f"status={existing_status}"
             )
+            if response:
+                response.status_code = 200
             return {
                 "success": False,
                 "message": f"您已有此獎學金的申請記錄（{existing_application.app_id}），無法重複申請",
@@ -170,7 +212,7 @@ async def create_application(
                     "error_code": "DUPLICATE_APPLICATION",
                     "existing_application_id": existing_application.id,
                     "existing_app_id": existing_application.app_id,
-                    "existing_status": existing_application.status,
+                    "existing_status": existing_status_str,
                     "scholarship_name": existing_application.scholarship_name,
                 },
             }
@@ -210,7 +252,7 @@ async def create_application(
         }
 
     except ValidationError as e:
-        logger.error(f"Validation error: {str(e)}")
+        logger.exception("Validation error")
         if hasattr(e, "errors"):
             logger.debug(f"Validation error details: {[error.get('loc', []) for error in e.errors()]}")
         raise HTTPException(
@@ -219,38 +261,34 @@ async def create_application(
                 "message": "Validation error",
                 "error_code": "VALIDATION_ERROR",
                 "errors": e.errors() if hasattr(e, "errors") else str(e),
-                "received_data": application_data.dict(exclude_none=True),
             },
-        )
+        ) from e
     except HTTPException:
         # Re-raise HTTPException directly as they are already properly formatted
         raise
+    except ScholarshipException:
+        # Let custom business exceptions bubble to the global scholarship_exception_handler
+        # which maps each subclass (ValidationError→422, NotFoundError→404, etc.) correctly.
+        raise
     except IntegrityError as e:
-        logger.error(f"Database integrity error during application creation: {str(e)}")
-        # Check for specific constraint violations if needed, e.g., unique constraint
+        logger.exception("Database integrity error during application creation")
         if "duplicate key value violates unique constraint" in str(e):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
                     "message": "Duplicate entry: An application with these details already exists.",
                     "error_code": "DUPLICATE_ENTRY",
-                    "detail": str(e),
                 },
-            )
+            ) from e
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
                 "message": "A database integrity error occurred.",
                 "error_code": "DATABASE_INTEGRITY_ERROR",
-                "detail": str(e),
             },
-        )
+        ) from e
     except Exception as e:
-        logger.error(f"Unexpected error during application creation: {str(e)}")
-        import traceback
-
-        error_trace = traceback.format_exc()
-        logger.debug(f"Full traceback: {error_trace}")
+        logger.exception("Unexpected error during application creation")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -258,7 +296,7 @@ async def create_application(
                 "error_code": "UNEXPECTED_ERROR",
                 "error_type": type(e).__name__,
             },
-        )
+        ) from e
 
 
 @router.get("")
@@ -273,7 +311,7 @@ async def get_my_applications(
     return {
         "success": True,
         "message": "查詢成功",
-        "data": [item.dict() if hasattr(item, "dict") else item.model_dump() for item in result],
+        "data": [_serialize_result(item) for item in result],
     }
 
 
@@ -285,7 +323,7 @@ async def get_dashboard_stats(current_user: User = Depends(require_student), db:
     return {
         "success": True,
         "message": "查詢成功",
-        "data": result.dict() if hasattr(result, "dict") else result.model_dump(),
+        "data": _serialize_result(result),
     }
 
 
@@ -300,6 +338,13 @@ async def get_application(
     service = ApplicationService(db)
     result = await service.get_application_by_id(id, current_user)
 
+    # `get_application_by_id` returns None when the row does not exist or the
+    # caller may not see it. Falling through passed None to _serialize_result,
+    # which raised TypeError -> 500 instead of 404 (issue #1225). Returning the
+    # same 404 in both cases also avoids confirming that a hidden id exists.
+    if result is None:
+        raise NotFoundError(f"Application {id} not found")
+
     # Log audit trail for viewing application
     audit_service = ApplicationAuditService(db)
     await audit_service.log_view_application(
@@ -312,7 +357,7 @@ async def get_application(
     return {
         "success": True,
         "message": "查詢成功",
-        "data": result.dict() if hasattr(result, "dict") else result.model_dump(),
+        "data": _serialize_result(result),
     }
 
 
@@ -347,7 +392,7 @@ async def update_application(
     return {
         "success": True,
         "message": "更新成功",
-        "data": result.dict() if hasattr(result, "dict") else result.model_dump(),
+        "data": _serialize_result(result),
     }
 
 
@@ -374,7 +419,7 @@ async def submit_application(
     return {
         "success": True,
         "message": "申請已提交",
-        "data": result.dict() if hasattr(result, "dict") else result.model_dump(),
+        "data": _serialize_result(result),
     }
 
 
@@ -424,8 +469,8 @@ async def delete_application(
                 else deleted_app.model_dump() if hasattr(deleted_app, "model_dump") else {"id": id}
             ),
         }
-    except Exception as e:
-        logger.error(f"Error deleting application {id}: {str(e)}")
+    except Exception:
+        logger.exception(f"Error deleting application {id}")
         raise
 
 
@@ -452,7 +497,7 @@ async def withdraw_application(
     return {
         "success": True,
         "message": "申請已撤回",
-        "data": result.dict() if hasattr(result, "dict") else result.model_dump(),
+        "data": _serialize_result(result),
     }
 
 
@@ -504,7 +549,7 @@ async def restore_application(
                 else status.HTTP_404_NOT_FOUND if isinstance(e, NotFoundError) else status.HTTP_403_FORBIDDEN
             ),
             detail=str(e),
-        )
+        ) from e
 
 
 @router.get("/{id}/files")
@@ -602,20 +647,31 @@ async def upload_file_alias(
 @router.get("/review/list")
 async def get_applications_for_review(
     status: Optional[str] = Query(None, description="Filter by status"),
-    scholarship_type_id: Optional[int] = Query(None, description="Filter by scholarship type ID"),
+    scholarship_type: Optional[str] = Query(None, description="Filter by scholarship type code"),
     current_user: User = Depends(require_staff),
     db: AsyncSession = Depends(get_db),
 ):
     """Get applications for review (staff only)"""
+    # Keyword args are load-bearing: passing these positionally once sent
+    # status into `skip` and the type filter into `limit` (issue #1131).
     service = ApplicationService(db)
-    result = await service.get_applications_for_review(current_user, status, scholarship_type_id)
+    result = await service.get_applications_for_review(current_user, status=status, scholarship_type=scholarship_type)
     return {
         "success": True,
         "message": "查詢成功",
-        "data": [item.dict() if hasattr(item, "dict") else item.model_dump() for item in result],
+        "data": [_serialize_result(item) for item in result],
     }
 
 
+@router.patch(
+    "/{id}/status",
+    responses={
+        200: {
+            "description": "Application status updated successfully",
+            "model": ApplicationStatusUpdateResponse,
+        }
+    },
+)
 @router.put(
     "/{id}/status",
     responses={
@@ -646,16 +702,6 @@ async def update_application_status(
     # Update status
     result = await service.update_application_status(id, current_user, status_update)
 
-    # Check and execute auto-redistribution if status changed to approved/rejected
-    redistribution_info = {"auto_redistributed": False}
-    if status_update.status in ["approved", "rejected"]:
-        from app.services.college_review_service import CollegeReviewService
-
-        review_service = CollegeReviewService(db)
-        redistribution_info = await review_service.auto_redistribute_after_status_change(
-            application_id=id, executor_id=current_user.id
-        )
-
     # Log audit trail for status update
     audit_service = ApplicationAuditService(db)
     await audit_service.log_status_update(
@@ -668,54 +714,11 @@ async def update_application_status(
         request=request,
     )
 
-    # Prepare result data with redistribution info
     result_dict = result.model_dump() if hasattr(result, "model_dump") else result.dict()
     return {
         "success": True,
         "message": "狀態已更新",
-        "data": {
-            **result_dict,
-            "redistribution_info": redistribution_info,
-        },
-    }
-
-
-@router.post("/{id}/review")
-async def submit_professor_review(
-    id: int = Path(..., description="Application ID"),
-    review_data: ReviewCreate = ...,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    request: Request = None,
-):
-    """Submit professor's review and selected awards for an application"""
-    if not current_user.is_professor():
-        from fastapi import HTTPException
-
-        raise HTTPException(status_code=403, detail="Only professors can submit this review.")
-    service = ApplicationService(db)
-    result = await service.create_professor_review(id, current_user, review_data)
-
-    # Log audit trail for professor review
-    audit_service = ApplicationAuditService(db)
-    await audit_service.log_application_operation(
-        application_id=id,
-        action=AuditAction.approve,
-        user=current_user,
-        request=request,
-        description=f"指導教授提交審查意見 {result.app_id if hasattr(result, 'app_id') else f'APP-{id}'}",
-        new_values={
-            "professor_id": current_user.id,
-            "professor_name": current_user.name,
-            "review_comment": review_data.professor_comment if hasattr(review_data, "professor_comment") else None,
-        },
-        meta_data={"app_id": result.app_id if hasattr(result, "app_id") else f"APP-{id}", "review_type": "professor"},
-    )
-
-    return {
-        "success": True,
-        "message": "審查已提交",
-        "data": result.dict() if hasattr(result, "dict") else result.model_dump(),
+        "data": result_dict,
     }
 
 
@@ -745,7 +748,7 @@ async def get_college_applications_for_review(
     return {
         "success": True,
         "message": "查詢成功",
-        "data": [item.dict() if hasattr(item, "dict") else item.model_dump() for item in result],
+        "data": [_serialize_result(item) for item in result],
     }
 
 
@@ -802,7 +805,7 @@ async def update_student_data(
                 else status.HTTP_404_NOT_FOUND if isinstance(e, NotFoundError) else status.HTTP_403_FORBIDDEN
             ),
             detail=str(e),
-        )
+        ) from e
 
 
 @router.get("/{id}/student-data")
@@ -859,9 +862,15 @@ async def get_application_audit_trail(
     # Verify application exists and user has access
     service = ApplicationService(db)
     try:
-        await service.get_application_by_id(id, current_user)
-    except Exception:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+        # get_application_by_id RETURNS None on a permission miss — it does not
+        # raise — so the except below could never fire and the audit trail was
+        # served regardless. Check the value (#1223 A).
+        if await service.get_application_by_id(id, current_user) is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found") from exc
 
     # Get audit trail
     audit_service = ApplicationAuditService(db)

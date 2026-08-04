@@ -4,7 +4,8 @@ Handles system configuration with encryption for sensitive values
 """
 
 import json
-from datetime import datetime
+import logging
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from cryptography.fernet import Fernet
@@ -14,6 +15,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.regex_validator import RegexValidationError, safe_regex_match
 from app.models.system_setting import ConfigCategory, ConfigDataType, ConfigurationAuditLog, SystemSetting
+
+logger = logging.getLogger(__name__)
+
+# Fernet tokens are base64url of a payload whose first byte is the 0x80 version
+# marker, so every one of them starts with this prefix. Used to tell "this was
+# encrypted and we can no longer read it" apart from "this predates encryption".
+_FERNET_PREFIX = "gAAAAA"
 
 
 class ConfigEncryption:
@@ -71,8 +79,23 @@ class ConfigurationService:
             try:
                 value = self.encryption.decrypt_value(value)
             except Exception:
-                # If decryption fails, return as-is (might be unencrypted legacy value or empty)
-                pass
+                if isinstance(value, str) and value.startswith(_FERNET_PREFIX):
+                    # This IS a Fernet token, so the key no longer matches it —
+                    # almost always SECRET_KEY rotated without re-encrypting, since
+                    # ConfigEncryption derives its key from SECRET_KEY. Returning the
+                    # ciphertext as though it were plaintext is the dangerous outcome:
+                    # an SMTP password silently becomes a garbage string and mail
+                    # delivery fails with no clear cause. Surface it and hand back an
+                    # empty value so the credential is unusable rather than wrong.
+                    logger.error(
+                        "Failed to decrypt sensitive configuration; SECRET_KEY may have been "
+                        "rotated without re-encrypting. Re-enter this value in the admin UI.",
+                        extra={"config_key": setting.key},
+                        exc_info=True,
+                    )
+                    value = ""
+                # Otherwise it predates encryption and is stored as plaintext;
+                # returning it unchanged is correct.
 
         # Convert to appropriate type
         if setting.data_type == ConfigDataType.boolean:
@@ -141,7 +164,7 @@ class ConfigurationService:
                     if not match:
                         raise ValueError(f"Value does not match validation pattern: {validation_regex}")
                 except RegexValidationError as e:
-                    raise ValueError(f"Invalid validation pattern: {str(e)}")
+                    raise ValueError(f"Invalid validation pattern: {str(e)}") from e
 
         # Encrypt if sensitive (but NOT if empty when allow_empty=True)
         stored_value = string_value
@@ -162,7 +185,7 @@ class ConfigurationService:
             existing.value = stored_value
             existing.allow_empty = allow_empty
             existing.last_modified_by = user_id
-            existing.updated_at = datetime.utcnow()
+            existing.updated_at = datetime.now(timezone.utc)
             setting = existing
             action = "UPDATE"
         else:
@@ -248,7 +271,7 @@ class ConfigurationService:
             return updated_settings
         except Exception as e:
             await self.db.rollback()
-            raise e
+            raise e from e
 
     async def validate_configuration(self, key: str, value: Any, data_type: ConfigDataType) -> Tuple[bool, str]:
         """Validate a configuration value"""
@@ -415,18 +438,6 @@ class ConfigurationService:
                 "data_type": ConfigDataType.string,
                 "is_sensitive": True,
                 "description": "NYCU Employee API HMAC key in hex format",
-            },
-            "student_api_account": {
-                "category": ConfigCategory.integrations,
-                "data_type": ConfigDataType.string,
-                "is_sensitive": True,
-                "description": "Student API account for data retrieval",
-            },
-            "student_api_hmac_key": {
-                "category": ConfigCategory.integrations,
-                "data_type": ConfigDataType.string,
-                "is_sensitive": True,
-                "description": "Student API HMAC key for authentication",
             },
             # Feature Flags
             "enable_mock_sso": {

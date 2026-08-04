@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { AlertCircle, CheckCircle, Clock, Mail, RefreshCw, Shield, ChevronDown, ChevronUp, Send } from "lucide-react";
 import { api } from "@/lib/api";
+import { logger } from "@/lib/utils/logger";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -45,8 +46,11 @@ interface AuditLog {
   event_type: string;
   timestamp: string;
   user_id: number | null;
-  config_before: any;
-  config_after: any;
+  // Free-form JSON snapshots of test-mode config before/after the audit event.
+  // The UI never inspects these (only renders presence indicators), so we keep
+  // them as opaque records.
+  config_before: Record<string, unknown> | null;
+  config_after: Record<string, unknown> | null;
   original_recipient: string | null;
   actual_recipient: string | null;
   email_subject: string | null;
@@ -100,7 +104,7 @@ export function EmailTestModePanel() {  const [status, setStatus] = useState<Tes
         setStatus(response.data);
       }
     } catch (error) {
-      console.error("Failed to load test mode status:", error);
+      logger.error("Failed to load test mode status", { error });
       toast.error("無法載入測試模式狀態",
       );
     } finally {
@@ -115,7 +119,7 @@ export function EmailTestModePanel() {  const [status, setStatus] = useState<Tes
         setAuditLogs(response.data.items);
       }
     } catch (error) {
-      console.error("Failed to load audit logs:", error);
+      logger.error("Failed to load audit logs", { error });
     }
   };
 
@@ -127,7 +131,7 @@ export function EmailTestModePanel() {  const [status, setStatus] = useState<Tes
         setEmailHistory(response.data.items);
       }
     } catch (error) {
-      console.error("Failed to load email history:", error);
+      logger.error("Failed to load email history", { error });
       toast.error("無法載入郵件歷史紀錄",
       );
     } finally {
@@ -163,8 +167,8 @@ export function EmailTestModePanel() {  const [status, setStatus] = useState<Tes
       } else {
         throw new Error(response.data?.error || "無法發送測試郵件");
       }
-    } catch (error: any) {
-      toast.error(error.message || "無法發送測試郵件",
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : "無法發送測試郵件"),
       );
     } finally {
       setSendingTestEmail(false);
@@ -192,8 +196,8 @@ export function EmailTestModePanel() {  const [status, setStatus] = useState<Tes
         setRedirectEmails([]);
         toast.success(`所有郵件將重定向到 ${redirectEmails.length} 個測試信箱，將於 ${durationHours} 小時後自動關閉`);
       }
-    } catch (error: any) {
-      toast.error(error.message || "無法啟用測試模式",
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : "無法啟用測試模式"),
       );
     } finally {
       setLoading(false);
@@ -210,8 +214,8 @@ export function EmailTestModePanel() {  const [status, setStatus] = useState<Tes
         setShowDisableDialog(false);
         toast.success("郵件將正常發送至實際收件人");
       }
-    } catch (error: any) {
-      toast.error(error.message || "無法停用測試模式",
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : "無法停用測試模式"),
       );
     } finally {
       setLoading(false);

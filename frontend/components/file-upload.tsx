@@ -10,6 +10,19 @@ import { Badge } from "@/components/ui/badge";
 import { Upload, File, X, CheckCircle, AlertCircle, Eye } from "lucide-react";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { Locale } from "@/lib/validators";
+import { getTranslation } from "@/lib/i18n";
+import { resolveFilePreviewUrl } from "@/lib/file-preview";
+
+// Files passed as `initialFiles` may have been previously uploaded — the
+// caller attaches server-side metadata (id, url, file_path, originalSize)
+// onto the File-shaped object. We narrow each access site via this type
+// instead of widening File globally.
+type UploadedFileLike = File & {
+  id?: string | number;
+  url?: string;
+  file_path?: string;
+  originalSize?: number;
+};
 
 interface FileUploadProps {
   onFilesChange: (files: File[]) => void;
@@ -21,15 +34,24 @@ interface FileUploadProps {
   locale?: Locale; // 添加語言支持
 }
 
+// UNCONTROLLED-USAGE FIX (issue #1096):
+// The default must be a stable module-scope constant. A literal `[]` default
+// parameter creates a fresh array identity every render, so the sync-effect
+// below (keyed on `initialFiles`) re-fires after every internal `setFiles`
+// and wipes a just-selected file back to []. With a stable identity the
+// effect only runs on mount for uncontrolled usage.
+const EMPTY_FILES: File[] = [];
+
 export function FileUpload({
   onFilesChange,
   acceptedTypes = [".pdf", ".jpg", ".jpeg", ".png"],
   maxSize = 10 * 1024 * 1024, // 10MB
   maxFiles = 5,
-  initialFiles = [],
+  initialFiles = EMPTY_FILES,
   fileType = "",
   locale = "zh",
 }: FileUploadProps) {
+  const t = (key: string) => getTranslation(locale, key);
   const [files, setFiles] = useState<File[]>(initialFiles);
   const [dragActive, setDragActive] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{
@@ -56,12 +78,30 @@ export function FileUpload({
 
   // 檢查文件是否為已上傳的文件
   const isUploadedFile = (file: File) => {
-    return (file as any).id || (file as any).file_path || (file as any).url;
+    const f = file as UploadedFileLike;
+    return f.id || f.file_path || f.url;
   };
 
   // 初始化和同步外部文件
+  //
+  // INFINITE-LOOP FIX (PR #509):
+  // If a controlled parent recreates the `initialFiles` array every render,
+  // a naive `setFiles([...initialFiles])` here would fire every render,
+  // schedule a state update, trigger another render, and loop indefinitely.
+  // Compare contents before setting state — if they match, return the
+  // previous reference so React's bailout breaks the cycle. (Uncontrolled
+  // usage is covered by the stable EMPTY_FILES default above, which keeps
+  // this effect from re-firing at all.)
   useEffect(() => {
-    setFiles([...initialFiles]);
+    setFiles((prev) => {
+      if (
+        prev.length === initialFiles.length &&
+        prev.every((f, i) => f === initialFiles[i])
+      ) {
+        return prev;
+      }
+      return [...initialFiles];
+    });
   }, [initialFiles]);
 
   const handleDrag = useCallback((e: React.DragEvent) => {
@@ -107,7 +147,10 @@ export function FileUpload({
       return true;
     });
 
-    const updatedFiles = [...files, ...validFiles].slice(0, maxFiles);
+    // Keep the NEWEST maxFiles: picking a file into a full slot replaces the
+    // oldest one instead of silently discarding the new pick (which used to
+    // play the upload animation for a file that was never kept).
+    const updatedFiles = [...files, ...validFiles].slice(-maxFiles);
     setFiles(updatedFiles);
     onFilesChange(updatedFiles);
 
@@ -166,26 +209,17 @@ export function FileUpload({
 
   // 獲取文件的顯示大小
   const getFileDisplaySize = (file: File) => {
+    const uploaded = file as UploadedFileLike;
     // 如果是已上傳的文件，優先使用 originalSize
-    if (isUploadedFile(file) && (file as any).originalSize) {
-      return formatFileSize((file as any).originalSize);
+    if (isUploadedFile(file) && uploaded.originalSize) {
+      return formatFileSize(uploaded.originalSize);
     }
     return formatFileSize(file.size);
   };
 
-  // 獲取文件的預覽URL
-  const getFilePreviewUrl = (file: File) => {
-    if (isUploadedFile(file)) {
-      // 如果是已上傳的文件，使用其URL
-      return (
-        (file as any).url ||
-        (file as any).file_path ||
-        URL.createObjectURL(file)
-      );
-    }
-    // 如果是本地文件，創建臨時URL
-    return URL.createObjectURL(file);
-  };
+  // 獲取文件的預覽URL — pure logic lives in lib/file-preview so it can be
+  // unit-tested without rendering this component (see lib/__tests__/file-preview).
+  const getFilePreviewUrl = (file: File) => resolveFilePreviewUrl(file, window.location.origin);
 
   // 獲取文件類型
   const getFileType = (file: File) => {
@@ -202,9 +236,22 @@ export function FileUpload({
     return "other";
   };
 
+  // Blob object URLs created for previews — revoked on unmount (issue #1096).
+  const createdObjectUrlsRef = useRef<string[]>([]);
+
   // 處理文件預覽
   const handleFilePreview = (file: File) => {
     const previewUrl = getFilePreviewUrl(file);
+    if (!previewUrl) {
+      // No previewable URL (e.g. a restored file lacking a same-origin path);
+      // nothing to show, and opening the dialog with an empty src renders blank.
+      return;
+    }
+    if (previewUrl.startsWith("blob:")) {
+      // Object URL freshly created by resolveFilePreviewUrl — remember it so
+      // the unmount effect below can revoke it.
+      createdObjectUrlsRef.current.push(previewUrl);
+    }
     const fileType = getFileType(file);
 
     setPreviewFile({
@@ -222,16 +269,15 @@ export function FileUpload({
     }
   }, []);
 
-  // 組件卸載時清理臨時URL
-  useState(() => {
+  // 組件卸載時清理臨時URL (issue #1096: this was previously a `useState`
+  // lazy initializer whose returned "cleanup" React never invoked — the
+  // object URLs created for previews leaked for the lifetime of the page).
+  useEffect(() => {
     return () => {
-      files.forEach(file => {
-        if (!isUploadedFile(file)) {
-          cleanupTempUrl(URL.createObjectURL(file));
-        }
-      });
+      createdObjectUrlsRef.current.forEach(cleanupTempUrl);
+      createdObjectUrlsRef.current = [];
     };
-  });
+  }, [cleanupTempUrl]);
 
   return (
     <div className="space-y-4">
@@ -249,10 +295,10 @@ export function FileUpload({
         <CardContent className="flex flex-col items-center justify-center p-6 text-center">
           <Upload className="h-10 w-10 text-muted-foreground mb-4" />
           <div className="space-y-2">
-            <p className="text-sm font-medium">拖放檔案到此處或點擊上傳</p>
+            <p className="text-sm font-medium">{t("form_upload.drag_drop")}</p>
             <p className="text-xs text-muted-foreground">
-              支援格式: {acceptedTypes.join(", ")} | 最大檔案大小:{" "}
-              {formatFileSize(maxSize)}
+              {t("form_upload.supported_formats")}: {acceptedTypes.join(", ")} |{" "}
+              {t("form_upload.max_file_size")}: {formatFileSize(maxSize)}
             </p>
           </div>
 
@@ -266,7 +312,7 @@ export function FileUpload({
           />
           <Button asChild className="mt-4">
             <label htmlFor={inputId} className="cursor-pointer">
-              選擇檔案
+              {t("form_upload.choose_file")}
             </label>
           </Button>
         </CardContent>
@@ -275,7 +321,8 @@ export function FileUpload({
       {files.length > 0 && (
         <div className="space-y-2">
           <h4 className="text-sm font-medium">
-            已上傳檔案 ({files.length}/{maxFiles}) - {fileType || "未指定類型"}
+            {t("form_upload.uploaded_files")} ({files.length}/{maxFiles}) -{" "}
+            {fileType || "未指定類型"}
           </h4>
           {files.map((file, index) => (
             <Card key={index}>
@@ -287,7 +334,9 @@ export function FileUpload({
                     <p className="text-xs text-muted-foreground">
                       {getFileDisplaySize(file)}
                       {isUploadedFile(file) && (
-                        <span className="ml-1 text-blue-600">已上傳</span>
+                        <span className="ml-1 text-blue-600">
+                          {t("form_upload.uploaded")}
+                        </span>
                       )}
                     </p>
                   </div>
@@ -312,7 +361,7 @@ export function FileUpload({
                       return (
                         <Badge variant="outline" className="text-xs">
                           <CheckCircle className="h-3 w-3 mr-1" />
-                          已存在
+                          {t("form_upload.exists")}
                         </Badge>
                       );
                     }
@@ -335,14 +384,14 @@ export function FileUpload({
                         {uploadStatus[fileName] === "success" && (
                           <Badge variant="default" className="text-xs">
                             <CheckCircle className="h-3 w-3 mr-1" />
-                            完成
+                            {t("form_upload.complete")}
                           </Badge>
                         )}
 
                         {uploadStatus[fileName] === "error" && (
                           <Badge variant="destructive" className="text-xs">
                             <AlertCircle className="h-3 w-3 mr-1" />
-                            失敗
+                            {t("form_upload.failed")}
                           </Badge>
                         )}
                       </>

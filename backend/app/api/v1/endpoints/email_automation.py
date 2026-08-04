@@ -7,12 +7,13 @@ import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.regex_validator import RegexValidationError, safe_regex_search
 from app.core.security import require_admin
+from app.core.sql_read_only_guard import describe_if_unsafe
 from app.db.deps import get_db
 from app.models.email_management import EmailAutomationRule, TriggerEvent
 from app.models.user import User
@@ -38,15 +39,11 @@ def validate_condition_query(query: Optional[str]) -> None:
     if not query:
         return
 
-    # SECURITY LAYER 1: Pre-validation checks to prevent obvious ReDoS attacks
-    MAX_QUERY_LENGTH = 5000
+    # SECURITY LAYER 1: Pre-validation checks to prevent obvious ReDoS attacks.
+    # The LENGTH check lives in sql_read_only_guard (layer 2) and is not repeated
+    # here — a second local MAX_QUERY_LENGTH constant is exactly how the old
+    # inline blacklist drifted away from the executor's own rules.
     MAX_CONSECUTIVE_BRACES = 50
-
-    if len(query) > MAX_QUERY_LENGTH:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"condition_query exceeds maximum length of {MAX_QUERY_LENGTH} characters",
-        )
 
     # Check for excessive consecutive braces (potential ReDoS attack pattern)
     consecutive_open_braces = re.search(r"\{{50,}", query)
@@ -57,55 +54,26 @@ def validate_condition_query(query: Optional[str]) -> None:
             detail=f"condition_query contains suspicious pattern: excessive consecutive braces (max {MAX_CONSECUTIVE_BRACES})",
         )
 
-    # Convert to uppercase for case-insensitive checking
-    query_upper = query.upper()
-
-    # SECURITY LAYER 2: SQL Injection Prevention
-    # Whitelist: Only allow SELECT statements
-    if not query_upper.strip().startswith("SELECT"):
+    # SECURITY LAYER 2: shape + keyword checks, delegated to the SHARED guard that
+    # also runs at execution time (app/core/sql_read_only_guard.py). Keeping a second
+    # private copy here is what let the two drift: the old inline blacklist did plain
+    # substring matching on the uppercased query, so it
+    #   * rejected legitimate columns — CREATE ⊂ created_at, UPDATE ⊂ updated_at,
+    #     SET ⊂ OFFSET — which made the seeded 申請提交確認郵件 rule unsaveable;
+    #   * rejected UNION, which that same seeded rule uses; and
+    #   * let `SELECT 1; LOCK TABLE users;` through, because its multi-statement test
+    #     only fired when the query did NOT end in a semicolon.
+    # The shared guard masks string literals and comments before matching and uses
+    # word boundaries, so none of those hold.
+    # describe_if_unsafe returns a CURATED, documented client-safe reason (or None)
+    # rather than tunnelling str(exc) into the body — see
+    # test_no_exception_leak_in_endpoints for why endpoints must not echo exception
+    # text. The admin needs the specific reason to fix their query.
+    rejection = describe_if_unsafe(query)
+    if rejection is not None:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="condition_query must be a SELECT statement only"
-        )
-
-    # Blacklist dangerous SQL keywords that could modify data
-    dangerous_keywords = [
-        "DROP",
-        "DELETE",
-        "UPDATE",
-        "INSERT",
-        "ALTER",
-        "CREATE",
-        "TRUNCATE",
-        "REPLACE",
-        "MERGE",
-        "GRANT",
-        "REVOKE",
-        "EXEC",
-        "EXECUTE",
-        "CALL",
-        "DECLARE",
-        "SET",
-        "INTO OUTFILE",
-        "INTO DUMPFILE",
-        "LOAD_FILE",
-        ";--",
-        "/*",
-        "*/",
-        "XP_",
-        "SP_",
-        "WAITFOR",
-    ]
-
-    for keyword in dangerous_keywords:
-        if keyword in query_upper:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail=f"condition_query contains forbidden keyword: {keyword}"
-            )
-
-    # Check for multiple statements (semicolon followed by non-comment)
-    if ";" in query and not query.strip().endswith(";"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="condition_query cannot contain multiple SQL statements"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"condition_query {rejection}",
         )
 
     # SECURITY LAYER 3: Placeholder validation with ReDoS protection
@@ -142,11 +110,11 @@ def validate_condition_query(query: Optional[str]) -> None:
 
     except RegexValidationError as e:
         # Regex pattern itself is malicious or causes ReDoS
-        logger.error(f"Regex validation error in condition_query: {e}")
+        logger.exception("Regex validation error in condition_query")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"condition_query contains invalid pattern that cannot be safely validated: {str(e)}",
-        )
+            detail="condition_query contains invalid pattern that cannot be safely validated",
+        ) from e
 
     logger.info(f"✓ Query validation passed: {query[:100]}...")
 
@@ -182,8 +150,7 @@ class EmailAutomationRuleResponse(EmailAutomationRuleBase):
     created_at: str
     updated_at: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 @router.get("")
@@ -232,8 +199,8 @@ async def get_automation_rules(
         return ApiResponse(success=True, message=f"成功獲取 {len(rules_data)} 條自動化規則", data=rules_data)
 
     except Exception as e:
-        logger.error(f"獲取自動化規則失敗: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"獲取自動化規則失敗: {str(e)}")
+        logger.exception("獲取自動化規則失敗")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="獲取自動化規則失敗") from e
 
 
 @router.post("")
@@ -251,10 +218,10 @@ async def create_automation_rule(
         # Validate trigger event
         try:
             trigger_enum = TriggerEvent(rule_data.trigger_event)
-        except ValueError:
+        except ValueError as exc:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail=f"無效的觸發事件: {rule_data.trigger_event}"
-            )
+            ) from exc
 
         # SECURITY: Validate condition_query to prevent SQL injection
         validate_condition_query(rule_data.condition_query)
@@ -275,6 +242,18 @@ async def create_automation_rule(
         await db.commit()
         await db.refresh(new_rule)
 
+        logger.info(
+            "Email automation rule created",
+            extra={
+                "rule_id": new_rule.id,
+                "rule_name": new_rule.name,
+                "trigger_event": new_rule.trigger_event.value,
+                "template_key": new_rule.template_key,
+                "is_active": new_rule.is_active,
+                "actor_user_id": current_user.id,
+            },
+        )
+
         response_data = {
             "id": new_rule.id,
             "name": new_rule.name,
@@ -294,9 +273,12 @@ async def create_automation_rule(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"創建自動化規則失敗: {e}")
+        logger.exception(
+            "Failed to create email automation rule",
+            extra={"actor_user_id": current_user.id, "rule_name": rule_data.name},
+        )
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"創建自動化規則失敗: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="創建自動化規則失敗") from e
 
 
 @router.put("/{rule_id}")
@@ -328,10 +310,10 @@ async def update_automation_rule(
         if rule_data.trigger_event is not None:
             try:
                 rule.trigger_event = TriggerEvent(rule_data.trigger_event)
-            except ValueError:
+            except ValueError as exc:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST, detail=f"無效的觸發事件: {rule_data.trigger_event}"
-                )
+                ) from exc
         if rule_data.template_key is not None:
             rule.template_key = rule_data.template_key
         if rule_data.delay_hours is not None:
@@ -345,6 +327,16 @@ async def update_automation_rule(
 
         await db.commit()
         await db.refresh(rule)
+
+        logger.info(
+            "Email automation rule updated",
+            extra={
+                "rule_id": rule.id,
+                "rule_name": rule.name,
+                "is_active": rule.is_active,
+                "actor_user_id": current_user.id,
+            },
+        )
 
         response_data = {
             "id": rule.id,
@@ -365,9 +357,12 @@ async def update_automation_rule(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"更新自動化規則失敗: {e}")
+        logger.exception(
+            "Failed to update email automation rule",
+            extra={"actor_user_id": current_user.id, "rule_id": rule_id},
+        )
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"更新自動化規則失敗: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="更新自動化規則失敗") from e
 
 
 @router.delete("/{rule_id}")
@@ -388,17 +383,26 @@ async def delete_automation_rule(
         if not rule:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"找不到 ID 為 {rule_id} 的自動化規則")
 
+        deleted_name = rule.name
         await db.delete(rule)
         await db.commit()
+
+        logger.info(
+            "Email automation rule deleted",
+            extra={"rule_id": rule_id, "rule_name": deleted_name, "actor_user_id": current_user.id},
+        )
 
         return ApiResponse(success=True, message="成功刪除自動化規則", data=None)
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"刪除自動化規則失敗: {e}")
+        logger.exception(
+            "Failed to delete email automation rule",
+            extra={"actor_user_id": current_user.id, "rule_id": rule_id},
+        )
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"刪除自動化規則失敗: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="刪除自動化規則失敗") from e
 
 
 @router.patch("/{rule_id}/toggle")
@@ -419,11 +423,29 @@ async def toggle_automation_rule(
         if not rule:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"找不到 ID 為 {rule_id} 的自動化規則")
 
+        # SECURITY (#1223 A): re-validate before ACTIVATING. This endpoint used to
+        # flip is_active without looking at condition_query, so a rule whose query
+        # was written by a seed, a migration or direct DB access could be switched on
+        # having never passed the validator. (Deactivating is always allowed — that
+        # can only reduce what runs.)
+        if not rule.is_active and rule.condition_query:
+            validate_condition_query(rule.condition_query)
+
         # Toggle is_active
         rule.is_active = not rule.is_active
 
         await db.commit()
         await db.refresh(rule)
+
+        logger.info(
+            "Email automation rule toggled",
+            extra={
+                "rule_id": rule.id,
+                "rule_name": rule.name,
+                "is_active": rule.is_active,
+                "actor_user_id": current_user.id,
+            },
+        )
 
         response_data = {
             "id": rule.id,
@@ -446,11 +468,12 @@ async def toggle_automation_rule(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"切換自動化規則狀態失敗: {e}")
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"切換自動化規則狀態失敗: {str(e)}"
+        logger.exception(
+            "Failed to toggle email automation rule",
+            extra={"actor_user_id": current_user.id, "rule_id": rule_id},
         )
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="切換自動化規則狀態失敗") from e
 
 
 @router.get("/trigger-events")

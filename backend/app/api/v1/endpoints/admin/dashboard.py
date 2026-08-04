@@ -18,6 +18,7 @@ from sqlalchemy import case, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.cache import cached
 from app.core.config import settings
 from app.core.security import require_admin
 from app.db.deps import get_db
@@ -42,30 +43,17 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/dashboard/stats")
-async def get_dashboard_stats(current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+@cached(
+    key_fn=lambda current_user, db, **__: f"dashboard:stats:{current_user.id}",
+    ttl=60,
+)
+async def _get_dashboard_stats_cached(current_user: User, db: AsyncSession) -> dict:
+    """Body of get_dashboard_stats — cached by admin user_id for 60s.
+
+    Front-end auto-polls every 30s; 60s cache means alternating polls hit
+    cache. Invalidated from application_service after every status change
+    and from users/permissions after admin scope changes.
     """
-    Get dashboard statistics for admin
-
-    Returns system overview data including:
-
-    Primary statistics (matching frontend DashboardStats interface):
-    - total_applications: Total non-draft applications
-    - pending_review: Applications pending review (submitted/under_review)
-    - approved: Approved applications
-    - rejected: Rejected applications
-    - avg_processing_time: Average processing time in days
-
-    Additional statistics (for backward compatibility):
-    - totalUsers: Total registered users
-    - activeApplications: Active applications (same as pending_review)
-    - completedReviews: Completed reviews (approved + rejected)
-    - pendingReviews: Pending reviews (same as pending_review)
-    - totalScholarships: Total scholarship types
-    - systemUptime: System uptime percentage
-    - avgResponseTime: Average response time (same as avg_processing_time)
-    """
-
     # Get user's scholarship permissions
     allowed_scholarship_ids = await get_allowed_scholarship_ids(current_user, db)
 
@@ -150,6 +138,12 @@ async def get_dashboard_stats(current_user: User = Depends(require_admin), db: A
             "totalScholarships": total_scholarships,
         },
     }
+
+
+@router.get("/dashboard/stats")
+async def get_dashboard_stats(current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    """Get dashboard statistics for admin (60s cache, scoped to admin user)."""
+    return await _get_dashboard_stats_cached(current_user, db)
 
 
 @router.get("/system/health")
@@ -261,44 +255,50 @@ async def debug_nycu_employee_api(
         }
 
     except NYCUEmpAuthenticationError as e:
+        logger.warning("NYCU Employee API authentication error during debug request", exc_info=True)
         debug_info["test_results"] = {
             "status": "authentication_error",
-            "error": str(e),
+            "error": "Authentication with NYCU Employee API failed",
             "type": "NYCUEmpAuthenticationError",
             "suggestion": "Check NYCU_EMP_ACCOUNT and NYCU_EMP_KEY_HEX/NYCU_EMP_KEY_RAW",
         }
     except NYCUEmpConnectionError as e:
+        logger.warning("NYCU Employee API connection error during debug request", exc_info=True)
         debug_info["test_results"] = {
             "status": "connection_error",
-            "error": str(e),
+            "error": "Unable to connect to NYCU Employee API",
             "type": "NYCUEmpConnectionError",
             "suggestion": "Check NYCU_EMP_ENDPOINT and network connectivity",
         }
     except NYCUEmpTimeoutError as e:
+        logger.warning("NYCU Employee API timeout during debug request", exc_info=True)
         debug_info["test_results"] = {
             "status": "timeout_error",
-            "error": str(e),
+            "error": "NYCU Employee API request timed out",
             "type": "NYCUEmpTimeoutError",
             "suggestion": "Consider increasing NYCU_EMP_TIMEOUT value",
         }
     except NYCUEmpValidationError as e:
+        logger.warning("NYCU Employee API validation error during debug request", exc_info=True)
         debug_info["test_results"] = {
             "status": "validation_error",
-            "error": str(e),
+            "error": "Invalid NYCU Employee API request parameters",
             "type": "NYCUEmpValidationError",
             "suggestion": "Check page and status parameter values",
         }
     except NYCUEmpError as e:
+        logger.warning("NYCU Employee API error during debug request", exc_info=True)
         debug_info["test_results"] = {
             "status": "api_error",
-            "error": str(e),
+            "error": "NYCU Employee API returned an error",
             "type": type(e).__name__,
             "suggestion": "Check API endpoint and credentials",
         }
     except Exception as e:
+        logger.exception("Unexpected error during NYCU Employee API debug request")
         debug_info["test_results"] = {
             "status": "unexpected_error",
-            "error": str(e),
+            "error": "An unexpected error occurred while testing NYCU Employee API",
             "type": type(e).__name__,
             "suggestion": "Check system logs for more details",
         }
@@ -387,14 +387,12 @@ async def get_recent_applications(
     }
 
 
-@router.get("/scholarships/stats")
-async def get_scholarship_stats(current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
-    """
-    Get scholarship statistics grouped by scholarship type
-
-    Returns applications count and status breakdown for each scholarship type
-    """
-
+@cached(
+    key_fn=lambda current_user, db, **__: f"dashboard:scholarship_stats:{current_user.id}",
+    ttl=60,
+)
+async def _get_scholarship_stats_cached(current_user: User, db: AsyncSession) -> dict:
+    """Body of get_scholarship_stats — cached by admin user_id for 60s."""
     # Get user's scholarship permissions
     allowed_scholarship_ids = await get_allowed_scholarship_ids(current_user, db)
 
@@ -416,7 +414,12 @@ async def get_scholarship_stats(current_user: User = Depends(require_admin), db:
         )
 
         result = await db.execute(stmt)
-        status_counts = {row[0]: row[1] for row in result.fetchall()}
+        # row[0] is an ApplicationStatus enum; cast to its string value so the
+        # surrounding dict can be JSON-serialised by the Redis cache layer
+        # (json.dumps rejects enum keys; the response was previously fine
+        # because FastAPI's jsonable_encoder normalises them, but the cache
+        # path uses plain json.dumps and would log an error every call).
+        status_counts = {row[0].value: row[1] for row in result.fetchall()}
 
         # Get unique sub-types for this scholarship
         stmt = select(Application.scholarship_subtype_list).where(
@@ -444,6 +447,12 @@ async def get_scholarship_stats(current_user: User = Depends(require_admin), db:
         "message": "Scholarship statistics retrieved successfully",
         "data": stats,
     }
+
+
+@router.get("/scholarships/stats")
+async def get_scholarship_stats(current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    """Get scholarship statistics grouped by scholarship type (60s cache)."""
+    return await _get_scholarship_stats_cached(current_user, db)
 
 
 @router.get("/system-announcements")

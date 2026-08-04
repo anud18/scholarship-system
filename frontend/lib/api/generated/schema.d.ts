@@ -104,7 +104,16 @@ export interface paths {
         put?: never;
         /**
          * Register
-         * @description Register a new user
+         * @description Create a user account. Admin-only — `UserCreate.role` is caller-supplied.
+         *
+         *     SECURITY: this endpoint used to be anonymous while `UserCreate` accepts a
+         *     `role` field, so anyone could POST {"nycu_id": <their own id>, "role":
+         *     "super_admin"} to plant a privileged row. That row survives a *legitimate*
+         *     Portal SSO login, because `_find_or_create_user` deliberately preserves
+         *     pre-authorized super_admin/admin/college roles
+         *     (portal_sso_service.py:285-290) — turning self-registration into a full
+         *     privilege escalation. Account creation must therefore stay behind the same
+         *     role-assignment permission as POST /pre-authorize/user.
          */
         post: operations["register_api_v1_auth_register_post"];
         delete?: never;
@@ -124,7 +133,16 @@ export interface paths {
         put?: never;
         /**
          * Login
-         * @description Login user and return access token
+         * @description Development-only login: exchanges a known nycu_id/email for a token.
+         *
+         *     SECURITY: `AuthService.authenticate_user` performs NO credential check —
+         *     `UserLogin` carries only `username`, and the User model has no password
+         *     column at all (real authentication is NYCU Portal SSO). Left ungated, a
+         *     single anonymous POST with a guessable identifier such as
+         *     "admin@nycu.edu.tw" mints a valid admin JWT. It is therefore hard-gated
+         *     behind `enable_mock_sso`, exactly like /mock-sso/login and /dev-profiles/*
+         *     below, so it 404s wherever ENABLE_MOCK_SSO=false (production and staging)
+         *     while dev/E2E/pytest keep working.
          */
         post: operations["login_api_v1_auth_login_post"];
         delete?: never;
@@ -839,27 +857,15 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/applications/{id}/review": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
         /**
-         * Submit Professor Review
-         * @description Submit professor's review and selected awards for an application
+         * Update Application Status
+         * @description Update application status (staff only)
+         *
+         *     This endpoint updates an application's status and automatically triggers redistribution
+         *     if the status changes to 'approved' or 'rejected'. The response includes information
+         *     about any auto-redistribution that was performed.
          */
-        post: operations["submit_professor_review_api_v1_applications__id__review_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
+        patch: operations["update_application_status_api_v1_applications__id__status_patch"];
         trace?: never;
     };
     "/api/v1/applications/college/review": {
@@ -1040,25 +1046,7 @@ export interface paths {
         };
         /**
          * Get Dashboard Stats
-         * @description Get dashboard statistics for admin
-         *
-         *     Returns system overview data including:
-         *
-         *     Primary statistics (matching frontend DashboardStats interface):
-         *     - total_applications: Total non-draft applications
-         *     - pending_review: Applications pending review (submitted/under_review)
-         *     - approved: Approved applications
-         *     - rejected: Rejected applications
-         *     - avg_processing_time: Average processing time in days
-         *
-         *     Additional statistics (for backward compatibility):
-         *     - totalUsers: Total registered users
-         *     - activeApplications: Active applications (same as pending_review)
-         *     - completedReviews: Completed reviews (approved + rejected)
-         *     - pendingReviews: Pending reviews (same as pending_review)
-         *     - totalScholarships: Total scholarship types
-         *     - systemUptime: System uptime percentage
-         *     - avgResponseTime: Average response time (same as avg_processing_time)
+         * @description Get dashboard statistics for admin (60s cache, scoped to admin user).
          */
         get: operations["get_dashboard_stats_api_v1_admin_dashboard_stats_get"];
         put?: never;
@@ -1138,9 +1126,7 @@ export interface paths {
         };
         /**
          * Get Scholarship Stats
-         * @description Get scholarship statistics grouped by scholarship type
-         *
-         *     Returns applications count and status breakdown for each scholarship type
+         * @description Get scholarship statistics grouped by scholarship type (60s cache).
          */
         get: operations["get_scholarship_stats_api_v1_admin_scholarships_stats_get"];
         put?: never;
@@ -1185,7 +1171,12 @@ export interface paths {
         get: operations["get_system_setting_api_v1_admin_system_setting_get"];
         /**
          * Set System Setting
-         * @description Update system setting (admin only)
+         * @description Update system setting (admin only).
+         *
+         *     SECURITY: System-config mutation. Audit-logged with actor_user_id /
+         *     actor_role / key / value-length so any unexpected change to runtime
+         *     settings (e.g., feature flags, integration toggles) is traceable
+         *     back to an admin actor.
          */
         put: operations["set_system_setting_api_v1_admin_system_setting_put"];
         post?: never;
@@ -1224,9 +1215,41 @@ export interface paths {
         };
         /**
          * Get Historical Applications
-         * @description Get historical applications with advanced filtering (admin only)
+         * @description Get historical applications with advanced filtering (admin only).
+         *
+         *     Deleted-records policy (issue #974 / G12): soft-deleted applications are
+         *     INCLUDED here on purpose — the history view is the retention surface, and
+         *     a 獎學金 record must stay reviewable for its statutory retention period.
+         *     Each row carries deleted_at/deletion_reason + is_deleted so the UI badges
+         *     them; the operational list endpoint (GET /applications) keeps excluding
+         *     them via deleted_at IS NULL.
          */
         get: operations["get_historical_applications_api_v1_admin_applications_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/applications/history/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Historical Applications
+         * @description Export the filtered 歷史申請 view to XLSX (issue #985 / G23).
+         *
+         *     Same filters and deleted-records policy as GET /applications/history
+         *     (soft-deleted rows are included and flagged), but unpaginated — the
+         *     export is the audit-friendly artifact 財務稽核 previously had to
+         *     screenshot together by hand.
+         */
+        get: operations["export_historical_applications_api_v1_admin_applications_history_export_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1295,6 +1318,37 @@ export interface paths {
          *     This is a wrapper around the applications endpoint for admin-specific access.
          */
         patch: operations["admin_update_application_status_api_v1_admin_applications__id__status_patch"];
+        trace?: never;
+    };
+    "/api/v1/admin/applications/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Application
+         * @description Hard-delete an application (admin only).
+         *
+         *     Only allowed while the application is still in the student-facing stage
+         *     (draft / submitted). Once review has started the row must be preserved.
+         *
+         *     Performs a cascade delete:
+         *     - Removes related CollegeRankingItem and PaymentRosterItem rows explicitly.
+         *     - SQLAlchemy cascades remove ApplicationReview, ApplicationFile, DocumentRequest rows.
+         *     - The application row itself is permanently removed.
+         *
+         *     Records an AuditLog entry describing the deletion so the operation
+         *     history persists even after the application row is gone.
+         */
+        delete: operations["delete_application_api_v1_admin_applications__id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/admin/announcements": {
@@ -1835,7 +1889,11 @@ export interface paths {
         };
         /**
          * Get Scholarship Email Templates
-         * @description Get all email templates for a scholarship type
+         * @description Get all per-scholarship email-template overrides for a scholarship type.
+         *
+         *     Returns only rows where ``scholarship_type_id`` matches — generic
+         *     NULL-scoped templates are excluded because clients asking for
+         *     "this scholarship's templates" shouldn't see the fallback set.
          */
         get: operations["get_scholarship_email_templates_api_v1_admin_scholarship_email_templates__scholarship_type_id__get"];
         put?: never;
@@ -1855,18 +1913,18 @@ export interface paths {
         };
         /**
          * Get Scholarship Email Template
-         * @description Get a specific email template
+         * @description Get a specific per-scholarship email template (404 if not configured).
          */
         get: operations["get_scholarship_email_template_api_v1_admin_scholarship_email_templates__scholarship_type_id___template_key__get"];
         /**
          * Update Scholarship Email Template
-         * @description Update an email template
+         * @description Update an existing per-scholarship email template (404 if not configured).
          */
         put: operations["update_scholarship_email_template_api_v1_admin_scholarship_email_templates__scholarship_type_id___template_key__put"];
         post?: never;
         /**
          * Delete Scholarship Email Template
-         * @description Delete an email template
+         * @description Delete a per-scholarship email template (404 if not configured).
          */
         delete: operations["delete_scholarship_email_template_api_v1_admin_scholarship_email_templates__scholarship_type_id___template_key__delete"];
         options?: never;
@@ -1885,7 +1943,7 @@ export interface paths {
         put?: never;
         /**
          * Create Scholarship Email Template
-         * @description Create a new email template
+         * @description Create a new per-scholarship email template (409 if already exists).
          */
         post: operations["create_scholarship_email_template_api_v1_admin_scholarship_email_templates_post"];
         delete?: never;
@@ -1905,7 +1963,7 @@ export interface paths {
         put?: never;
         /**
          * Bulk Create Scholarship Email Templates
-         * @description Bulk create email templates
+         * @description Create multiple per-scholarship templates in one call (idempotent on conflict).
          */
         post: operations["bulk_create_scholarship_email_templates_api_v1_admin_scholarship_email_templates__scholarship_type_id__bulk_create_post"];
         delete?: never;
@@ -2226,6 +2284,11 @@ export interface paths {
          * Get All Students
          * @description Get all students with pagination, search, and filters
          *
+         *     Each student item includes applied_scholarships: the scholarship
+         *     configurations (獎學金配置) the student has submitted applications for
+         *     (drafts and deleted applications excluded), with per-configuration
+         *     application counts.
+         *
          *     Requires admin or super_admin role.
          */
         get: operations["get_all_students_api_v1_admin_students_get"];
@@ -2274,6 +2337,10 @@ export interface paths {
          * @description Get detailed information for a specific student
          *
          *     Returns basic user info from database.
+         *
+         *     SECURITY: Admin PII lookup. Audit-logged with actor_user_id +
+         *     target user_id + target nycu_id so directed lookups of specific
+         *     students are traceable to an admin actor.
          */
         get: operations["get_student_detail_api_v1_admin_students__user_id__get"];
         put?: never;
@@ -2297,8 +2364,167 @@ export interface paths {
          *
          *     This endpoint fetches fresh data from the external Student Information System.
          *     Requires the student's NYCU ID.
+         *
+         *     SECURITY: Live SIS PII fetch (basic info + multi-semester term data).
+         *     Audit-logged with actor + target identifiers + SIS-fetch outcome.
+         *     Per-semester fetch failures are also counted so the SIS API's
+         *     availability is visible without spamming the log on legitimate
+         *     gap-year terms.
          */
         get: operations["get_student_sis_data_api_v1_admin_students__user_id__sis_data_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/student-history/{student_number}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Student Scholarship History
+         * @description Single-student scholarship history lookup. See spec for response shape.
+         *
+         *     NotFoundError (and any ScholarshipException) is mapped to its HTTP status by
+         *     the global handler in app.main; no per-endpoint try/except needed.
+         */
+        get: operations["get_student_scholarship_history_api_v1_admin_student_history__student_number__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/received-months/template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Received Months Template
+         * @description Download the example workbook for 匯入已領月份數.
+         *
+         *     Binary download, so this returns the file rather than the usual
+         *     {success, message, data} envelope.
+         */
+        get: operations["download_received_months_template_api_v1_admin_received_months_template_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/received-months/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Received Months Import
+         * @description Parse an upload and stage it for review. Writes nothing to the ledger.
+         *
+         *     ScholarshipException is mapped to its HTTP status by the global handler in
+         *     app.main; only the extension check needs to raise directly.
+         */
+        post: operations["preview_received_months_import_api_v1_admin_received_months_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/received-months/{import_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm Received Months Import
+         * @description Commit a staged import into the ledger.
+         */
+        post: operations["confirm_received_months_import_api_v1_admin_received_months__import_id__confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/received-months/{import_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Received Months Import
+         * @description Discard a staged import without touching the ledger.
+         */
+        post: operations["cancel_received_months_import_api_v1_admin_received_months__import_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/cache/nycu-employees/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh Nycu Employee Cache
+         * @description Drop the cached NYCU employee directory.
+         *
+         *     The next /employees/all, /employees/search, or /employees/{no} call
+         *     will re-paginate the upstream directory. Useful right after a known
+         *     HR data change.
+         */
+        post: operations["refresh_nycu_employee_cache_api_v1_admin_cache_nycu_employees_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/audit-logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Audit Logs
+         * @description Paginated, filterable system-wide audit-log listing (admin only).
+         */
+        get: operations["list_audit_logs_api_v1_admin_audit_logs_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2511,86 +2737,6 @@ export interface paths {
          *         Updated scholarship type with whitelist status
          */
         patch: operations["toggle_scholarship_whitelist_api_v1_scholarships__id__whitelist_patch"];
-        trace?: never;
-    };
-    "/api/v1/scholarship-management/applications/create-comprehensive": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Create Comprehensive Application
-         * @description Create a comprehensive scholarship application with all new features
-         */
-        post: operations["create_comprehensive_application_api_v1_scholarship_management_applications_create_comprehensive_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/scholarship-management/applications/{application_id}/submit-comprehensive": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Submit Comprehensive Application
-         * @description Submit application with comprehensive workflow management
-         */
-        post: operations["submit_comprehensive_application_api_v1_scholarship_management_applications__application_id__submit_comprehensive_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/scholarship-management/applications/by-priority": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Applications By Priority
-         * @description Get applications ordered by priority score
-         */
-        get: operations["get_applications_by_priority_api_v1_scholarship_management_applications_by_priority_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/scholarship-management/renewals/process-priority": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Process Renewal Applications
-         * @description Process renewal applications with priority
-         */
-        post: operations["process_renewal_applications_api_v1_scholarship_management_renewals_process_priority_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
         trace?: never;
     };
     "/api/v1/scholarship-management/analytics/dashboard": {
@@ -2936,58 +3082,6 @@ export interface paths {
          */
         post: operations["createTestNotifications_api_v1_notifications_admin_create_test_notifications_post"];
         delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/notifications/admin/announcements": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Getallannouncements
-         * @description 獲取所有系統公告（分頁）
-         */
-        get: operations["getAllAnnouncements_api_v1_notifications_admin_announcements_get"];
-        put?: never;
-        /**
-         * Createannouncement
-         * @description 創建系統公告
-         */
-        post: operations["createAnnouncement_api_v1_notifications_admin_announcements_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/notifications/admin/announcements/{announcement_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Getannouncement
-         * @description 獲取特定系統公告詳情
-         */
-        get: operations["getAnnouncement_api_v1_notifications_admin_announcements__announcement_id__get"];
-        /**
-         * Updateannouncement
-         * @description 更新系統公告
-         */
-        put: operations["updateAnnouncement_api_v1_notifications_admin_announcements__announcement_id__put"];
-        post?: never;
-        /**
-         * Deleteannouncement
-         * @description 刪除系統公告
-         */
-        delete: operations["deleteAnnouncement_api_v1_notifications_admin_announcements__announcement_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3372,7 +3466,7 @@ export interface paths {
         get: operations["get_scholarship_configuration_api_v1_scholarship_configurations_configurations__id__get"];
         /**
          * Update Scholarship Configuration
-         * @description Update a scholarship configuration (excluding quota fields)
+         * @description Update a scholarship configuration (quota fields included; matrix validated).
          */
         put: operations["update_scholarship_configuration_api_v1_scholarship_configurations_configurations__id__put"];
         post?: never;
@@ -3384,6 +3478,50 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/scholarship-configurations/configurations/{id}/supplementary-import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Toggle Configuration Supplementary Import
+         * @description Admin toggle: open or close supplementary import for a scholarship configuration.
+         *
+         *     Applies to all colleges' rankings under this (scholarship_type, academic_year, semester).
+         */
+        patch: operations["toggle_configuration_supplementary_import_api_v1_scholarship_configurations_configurations__id__supplementary_import_patch"];
+        trace?: never;
+    };
+    "/api/v1/scholarship-configurations/configurations/{id}/college-view-distribution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Toggle Configuration College View Distribution
+         * @description Admin toggle: open or close college visibility of distribution results.
+         *
+         *     Applies to all colleges' rankings under this (scholarship_type, academic_year, semester).
+         */
+        patch: operations["toggle_configuration_college_view_distribution_api_v1_scholarship_configurations_configurations__id__college_view_distribution_patch"];
         trace?: never;
     };
     "/api/v1/scholarship-configurations/configurations/{id}/duplicate": {
@@ -3700,7 +3838,10 @@ export interface paths {
          * Get All Reference Data
          * @description Get all reference data in a single request.
          *
-         *     SECURITY: Sets no-cache headers to prevent sensitive organizational data from being cached.
+         *     SECURITY: Sets no-cache headers to prevent sensitive organizational data from
+         *     being cached by browsers / CDNs. Server-side Redis caching (24h) is still
+         *     applied — it's an internal performance optimisation that never leaks into
+         *     HTTP cache layers.
          */
         get: operations["get_all_reference_data_api_v1_reference_data_all_get"];
         put?: never;
@@ -3956,7 +4097,15 @@ export interface paths {
         };
         /**
          * Get Bank Document
-         * @description Serve bank documents from MinIO
+         * @description Serve bank documents from MinIO.
+         *
+         *     SECURITY: Bank passbook photos are highly sensitive PII (account
+         *     numbers, holder names). Requires:
+         *     1. A valid JWT (passed via ?token=... since browsers can't set
+         *        Authorization headers on <img src> / <iframe src>).
+         *     2. The requesting user must own the document OR be an authorized
+         *        reviewer (professor with student relationship, college, admin,
+         *        super_admin).
          */
         get: operations["get_bank_document_api_v1_user_profiles_files_bank_documents__filename__get"];
         put?: never;
@@ -4194,7 +4343,10 @@ export interface paths {
         };
         /**
          * Get Professor Applications
-         * @description Get applications requiring professor review with pagination
+         * @description Get applications requiring professor review.
+         *
+         *     Returns ALL assigned applications by default; pass ``page``/``size``
+         *     for explicit pagination.
          */
         get: operations["get_professor_applications_api_v1_professor_applications_get"];
         put?: never;
@@ -4258,7 +4410,11 @@ export interface paths {
         };
         /**
          * Get Application Sub Types
-         * @description Get available sub-types for an application (config-driven)
+         * @description Get available sub-types for an application (config-driven, role-filtered).
+         *
+         *     Implementation landed in ``ApplicationService.get_application_available_sub_types``;
+         *     closes issue #649 for the professor route. For professors this returns
+         *     every active sub-type configured on the scholarship.
          */
         get: operations["get_application_sub_types_api_v1_professor_applications__application_id__sub_types_get"];
         put?: never;
@@ -4381,6 +4537,46 @@ export interface paths {
          *     College users can only preview students in applications they manage.
          */
         get: operations["get_student_preview_api_v1_college_review_students__student_id__preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/applications/department-summary-export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Department Summary Single
+         * @description Generate the 申請總表 Excel for one department.
+         */
+        get: operations["export_department_summary_single_api_v1_college_review_applications_department_summary_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/applications/department-summary-export-bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Department Summary Bulk
+         * @description Generate a ZIP archive containing one 申請總表 xlsx per department.
+         */
+        get: operations["export_department_summary_bulk_api_v1_college_review_applications_department_summary_export_bulk_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4515,10 +4711,12 @@ export interface paths {
         put?: never;
         /**
          * Import Ranking From Excel
-         * @description Import ranking data from Excel
+         * @description Import ranking data parsed from the 學生資料彙整表 Excel.
          *
-         *     Expected Excel columns: 學號, 姓名, 排名
-         *     This endpoint updates the rank_position of existing ranking items based on student IDs
+         *     Takes a JSON body (List[RankingImportItem]); the frontend parses the workbook
+         *     (學號 → student_id, 學生中文姓名 → student_name, 學院初審會議之學院排序 → rank_position).
+         *     rank_position accepts positive integers (1-based, consecutive, no duplicates) or "N" (rejected).
+         *     Student IDs must exactly match the ranking's application set.
          */
         post: operations["import_ranking_from_excel_api_v1_college_review_rankings__ranking_id__import_excel_post"];
         delete?: never;
@@ -4527,46 +4725,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/college-review/rankings/{ranking_id}/distribute": {
+    "/api/v1/college-review/rankings/{ranking_id}/export-excel": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
         /**
-         * Execute Quota Distribution
-         * @description Execute quota-based distribution for a ranking
-         */
-        post: operations["execute_quota_distribution_api_v1_college_review_rankings__ranking_id__distribute_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/college-review/rankings/{ranking_id}/execute-matrix-distribution": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Execute Matrix Distribution
-         * @description Execute matrix-based quota distribution for a ranking
+         * Export Ranking Excel
+         * @description Generate the 學生資料彙整表 for a ranking, as Excel (default) or PDF.
          *
-         *     This uses the matrix distribution algorithm which:
-         *     - Processes sub-types in fixed priority order
-         *     - Allocates students to sub-type × college matrix quotas
-         *     - Tracks admitted (正取) and backup (備取) positions
-         *     - Checks eligibility rules before allocation
+         *     Auth: admin/super_admin OR a college user whose `college_code` matches the
+         *     ranking's own `college_code` (authoritative per-college ownership).
          */
-        post: operations["execute_matrix_distribution_api_v1_college_review_rankings__ranking_id__execute_matrix_distribution_post"];
+        get: operations["export_ranking_excel_api_v1_college_review_rankings__ranking_id__export_excel_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4641,6 +4816,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/college-review/distribution-results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get College Distribution Results
+         * @description College-facing: this college's own students' distribution outcomes by sub-type.
+         *
+         *     All gating, college scoping and grouping live in
+         *     ``load_college_distribution_results`` so this endpoint and the Excel/PDF export
+         *     can never disagree about which students a college may see.
+         */
+        get: operations["get_college_distribution_results_api_v1_college_review_distribution_results_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/distribution-results/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export College Distribution Results
+         * @description Export this college's own distribution results as Excel (default) or PDF.
+         *
+         *     Reads through the SAME loader as the JSON endpoint, so the file can never show a
+         *     student the panel would not. Carries no PII (學號/姓名/系所 + outcome only), so
+         *     unlike the 學生資料彙整表 export it writes no pii_access AuditLog.
+         */
+        get: operations["export_college_distribution_results_api_v1_college_review_distribution_results_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/statistics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Review Statistics
+         * @description College review statistics scoped to the caller's scholarship permissions.
+         *
+         *     Aggregates reviewer-recommendation counts from the unified ApplicationReview
+         *     + ApplicationReviewItem tables (CLAUDE.md §7: no scoring system, recommendation-only).
+         *
+         *     Filters to scholarship_types this college user has permission for (via
+         *     AdminScholarship). Returns per-scholarship totals plus a system-wide rollup.
+         */
+        get: operations["get_review_statistics_api_v1_college_review_statistics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/college-review/available-combinations": {
         parameters: {
             query?: never;
@@ -4653,6 +4902,34 @@ export interface paths {
          * @description Get available combinations of scholarship types, academic years, and semesters from configurations
          */
         get: operations["get_available_combinations_api_v1_college_review_available_combinations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/active-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Active Config
+         * @description Return active scholarship configuration metadata (currently the
+         *     college-review deadline) for a specific (scholarship_type, year, semester).
+         *
+         *     Used by the ranking page to surface the deadline banner before any
+         *     ranking has been selected or created — the deadline is a property of
+         *     the configuration, not of any individual ranking.
+         *
+         *     Returns success=True with `data.college_review_end=None` when no config
+         *     matches; the caller decides whether to display a banner.
+         */
+        get: operations["get_active_config_api_v1_college_review_active_config_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4698,6 +4975,31 @@ export interface paths {
          *     when college users are created or assigned to colleges.
          */
         get: operations["get_managed_college_api_v1_college_review_managed_college_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/export-package": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Application Package
+         * @description Download a ZIP package of all application materials for a scholarship period.
+         *
+         *     SECURITY: Bulk PII export. Every call is audit-logged with the actor's
+         *     user_id and role, scholarship/period filters, and the resulting file
+         *     size. 403 (permission-denied) paths are also logged at warning level
+         *     so repeated denials can be flagged as potential bypass attempts.
+         */
+        get: operations["export_application_package_api_v1_college_review_export_package_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4866,15 +5168,16 @@ export interface paths {
         };
         /**
          * Get Application Reviewable Sub Types
-         * @description Get reviewable sub-types for an application (multi-role)
+         * @description Get reviewable sub-types for an application (multi-role, role-filtered).
          *
-         *     Returns sub-types that the current user is authorized to review,
-         *     with localized labels (zh/en) from database configuration.
+         *     Returns sub-types that the current user is authorized to review:
          *
-         *     Role-based filtering:
-         *     - Professor: all sub-types
-         *     - College: sub-types not rejected by professor
-         *     - Admin: sub-types not rejected by professor or college
+         *     - Professor: all active sub-types.
+         *     - College: sub-types not rejected by any professor.
+         *     - Admin / super_admin: sub-types not rejected by any professor or college.
+         *
+         *     Implementation lives in ``ApplicationService.get_application_available_sub_types``
+         *     (closes issue #649 for the multi-role review route).
          */
         get: operations["get_application_reviewable_sub_types_api_v1_reviews_applications__application_id__sub_types_get"];
         put?: never;
@@ -4904,7 +5207,7 @@ export interface paths {
          *     3. 返回預覽資料與驗證摘要
          *     4. 待確認後執行匯入
          *
-         *     **權限**: 僅限 college 角色
+         *     **權限**: 僅限管理員角色
          */
         post: operations["upload_batch_import_data_api_v1_college_review_batch_import_upload_data_post"];
         delete?: never;
@@ -4935,7 +5238,7 @@ export interface paths {
          *     2. 更新指定索引的記錄
          *     3. 返回更新結果
          *
-         *     **權限**: College 角色僅能編輯自己上傳的批次
+         *     **權限**: 一般管理員僅能編輯自己上傳的批次
          */
         patch: operations["update_batch_record_api_v1_college_review_batch_import__batch_id__records_patch"];
         trace?: never;
@@ -4959,7 +5262,7 @@ export interface paths {
          *     3. 更新 parsed_data 中的錯誤列表
          *     4. 返回驗證摘要
          *
-         *     **權限**: College 角色僅能驗證自己上傳的批次
+         *     **權限**: 一般管理員僅能驗證自己上傳的批次
          */
         post: operations["revalidate_batch_import_api_v1_college_review_batch_import__batch_id__validate_post"];
         delete?: never;
@@ -4988,7 +5291,7 @@ export interface paths {
          *     3. 更新總筆數
          *     4. 返回刪除結果
          *
-         *     **權限**: College 角色僅能刪除自己上傳的批次中的記錄
+         *     **權限**: 一般管理員僅能刪除自己上傳的批次中的記錄
          */
         delete: operations["delete_batch_record_api_v1_college_review_batch_import__batch_id__records__record_index__delete"];
         options?: never;
@@ -5025,7 +5328,7 @@ export interface paths {
          *     4. 上傳文件到 MinIO
          *     5. 建立 ApplicationFile 記錄
          *
-         *     **權限**: College 角色僅能為自己的批次上傳文件
+         *     **權限**: 一般管理員僅能為自己的批次上傳文件
          */
         post: operations["upload_batch_documents_api_v1_college_review_batch_import__batch_id__documents_post"];
         delete?: never;
@@ -5049,11 +5352,11 @@ export interface paths {
          *
          *     **流程**:
          *     1. 驗證批次記錄
-         *     2. 檢查權限（College 角色僅能確認自己上傳的批次，Super Admin 可確認所有批次）
+         *     2. 檢查權限（一般管理員僅能確認自己上傳的批次，Super Admin 可確認所有批次）
          *     3. 建立所有申請記錄
          *     4. 更新批次狀態
          *
-         *     **權限**: College 角色僅能確認自己上傳的批次，Super Admin 可確認所有批次
+         *     **權限**: 一般管理員僅能確認自己上傳的批次，Super Admin 可確認所有批次
          */
         post: operations["confirm_batch_import_api_v1_college_review_batch_import__batch_id__confirm_post"];
         delete?: never;
@@ -5073,7 +5376,7 @@ export interface paths {
          * Get Batch Import History
          * @description 查詢批次匯入歷史記錄
          *
-         *     **權限**: College 角色僅能查看自己上傳的記錄，Super Admin 可查看所有記錄
+         *     **權限**: 一般管理員僅能查看自己上傳的記錄，Super Admin 可查看所有記錄
          */
         get: operations["get_batch_import_history_api_v1_college_review_batch_import_history_get"];
         put?: never;
@@ -5095,7 +5398,7 @@ export interface paths {
          * Get Batch Import Details
          * @description 查詢批次匯入詳細資訊
          *
-         *     **權限**: College 角色僅能查看自己上傳的記錄，Super Admin 可查看所有記錄
+         *     **權限**: 一般管理員僅能查看自己上傳的記錄，Super Admin 可查看所有記錄
          */
         get: operations["get_batch_import_details_api_v1_college_review_batch_import__batch_id__details_get"];
         put?: never;
@@ -5117,7 +5420,7 @@ export interface paths {
          * Download Batch Import File
          * @description 下載批次匯入的原始 Excel 檔案
          *
-         *     **權限**: College 角色僅能下載自己上傳的檔案，Super Admin 可下載所有檔案
+         *     **權限**: 一般管理員僅能下載自己上傳的檔案，Super Admin 可下載所有檔案
          */
         get: operations["download_batch_import_file_api_v1_college_review_batch_import__batch_id__download_get"];
         put?: never;
@@ -5142,7 +5445,7 @@ export interface paths {
          * Delete Batch Import
          * @description 刪除批次匯入記錄及其所有相關申請
          *
-         *     **權限**: College 角色僅能刪除自己上傳的批次，Admin/Super Admin 可刪除所有批次
+         *     **權限**: Admin / Super Admin 皆可刪除所有批次（不限自己上傳的）
          */
         delete: operations["delete_batch_import_api_v1_college_review_batch_import__batch_id__delete"];
         options?: never;
@@ -5164,16 +5467,200 @@ export interface paths {
          *     **範例檔案包含**:
          *     - 必要欄位: 學號, 學生姓名
          *     - 可選欄位: 郵局帳號
-         *     - 子類型欄位: 根據獎學金類型動態生成（使用繁體中文）
+         *     - 子類型欄位: 根據獎學金類型動態生成（使用繁體中文），1 = 有申請、0 或空白 = 未申請
          *     - 自訂欄位: 根據 ApplicationField 配置動態生成（使用繁體中文）
          *
          *     **注意**: 系所代碼會自動從學籍系統獲取，不需要在檔案中提供
          *
-         *     **權限**: 僅限 college 角色
+         *     **權限**: 僅限管理員角色
          */
         get: operations["download_batch_import_template_api_v1_college_review_batch_import_template_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/renewal-import/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Renewal Import
+         * @description 上傳續領生名單，解析並回傳預覽（僅保留「是 + 通過」的續領生）。
+         */
+        post: operations["upload_renewal_import_api_v1_college_review_renewal_import_upload_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/renewal-import/{batch_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm Renewal Import
+         * @description 確認匯入續領生，建立已核准的續領申請（供造冊使用）。
+         */
+        post: operations["confirm_renewal_import_api_v1_college_review_renewal_import__batch_id__confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/renewal-import/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Renewal Import History
+         * @description 查詢續領匯入歷史記錄（僅顯示已確認的批次）。
+         */
+        get: operations["get_renewal_import_history_api_v1_college_review_renewal_import_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/renewal-import/{batch_id}/details": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Renewal Import Details
+         * @description 查詢續領匯入詳細資訊。
+         */
+        get: operations["get_renewal_import_details_api_v1_college_review_renewal_import__batch_id__details_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/renewal-import/template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Renewal Import Template
+         * @description 下載續領匯入範例 Excel 檔案。
+         *
+         *     **固定欄位**（繁體中文）：編號、學院、系所、學生姓名、學號、學生年級、
+         *     學生是否申請續領、續領審核結果、獎學金類別、郵局帳號、指導教授本校人事編號。
+         *
+         *     **注意**: 「獎學金類別」欄位可填 `國科會` 或 `教育部`；僅「學生是否申請續領=是」
+         *     且「續領審核結果=通過」的列會被匯入。
+         *
+         *     **權限**: 僅限 admin / super_admin 角色。
+         */
+        get: operations["download_renewal_import_template_api_v1_college_review_renewal_import_template_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/supplementary-import/availability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Supplementary Import Availability
+         * @description 查詢某學年期是否已開放補充匯入。
+         *
+         *     不因未開放而回 403 — 回傳 allowed=false 讓前端顯示說明，避免學院上傳後才被擋。
+         *
+         *     **權限**: 僅限學院角色
+         */
+        get: operations["get_supplementary_import_availability_api_v1_college_review_supplementary_import_availability_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/supplementary-import/template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Supplementary Import Template
+         * @description 下載補充匯入範本。
+         *
+         *     內容與管理員的批次匯入範例檔完全相同（同一個產生器），因為兩者讀的是同一種
+         *     檔案格式。不受 allow_supplementary_import 限制 — 學院可先準備資料，等管理員
+         *     開放再上傳。
+         *
+         *     **權限**: 僅限學院角色
+         */
+        get: operations["download_supplementary_import_template_api_v1_college_review_supplementary_import_template_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/supplementary-import/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Supplementary Import
+         * @description 學院上傳批次匯入格式的 Excel，為新的申請學生建立申請。
+         *
+         *     接受的檔案與管理員的批次匯入完全相同（同一個解析器），從本頁下載的範本即可。
+         *     建立的是一般「已送出」申請：不帶名次、不寫入排名名單，學生依一般流程進入
+         *     教授審查與學院排名。
+         *
+         *     **權限**: 僅限學院角色，且該學年期需由管理員開放補充匯入
+         */
+        post: operations["upload_supplementary_import_api_v1_college_review_supplementary_import_upload_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5471,32 +5958,6 @@ export interface paths {
          *         retention_days: 保留天數，預設 90 天（會刪除超過此天數的記錄）
          */
         delete: operations["cleanup_old_audit_logs_api_v1_email_management_test_mode_audit_logs_cleanup_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/email-management/send-test": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Send Test Email
-         * @description 手動發送測試郵件
-         *
-         *     Args:
-         *         request: 測試郵件請求，包含模板鍵名、收件人和測試數據
-         *
-         *     Returns:
-         *         測試郵件發送結果，包含渲染後的主旨和內容
-         */
-        post: operations["send_test_email_api_v1_email_management_send_test_post"];
-        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -5858,8 +6319,13 @@ export interface paths {
         put?: never;
         /**
          * Generate Payment Roster
-         * @description 產生造冊
-         *     Generate payment roster
+         * @description 產生造冊 / Generate payment roster.
+         *
+         *     Wraps the generation in a Redis SET-NX-EX mutex so a double-click on
+         *     "產生造冊" can't produce two parallel rosters for the same
+         *     (scholarship_configuration_id, period_label). The 300s TTL also acts
+         *     as a safety net if the backend dies mid-generation — the lock auto-
+         *     expires and the next attempt succeeds.
          */
         post: operations["generate_payment_roster_api_v1_payment_rosters_generate_post"];
         delete?: never;
@@ -6158,6 +6624,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/payment-rosters/{roster_id}/items/{item_id}/exclude": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exclude Roster Item
+         * @description 從造冊明細中排除指定項目(學生繳回 / 放棄獎學金等情境)。
+         *
+         *     Soft-deletes by setting `is_included=False` + `exclusion_reason` so the
+         *     item still appears in audit trails / re-exports with the exclusion
+         *     metadata, rather than being hard-deleted (#66).
+         *
+         *     Notes:
+         *       - Only admins / super admins may exclude items. Roster must NOT be LOCKED.
+         *       - This does NOT decrement the student's cumulative received_months;
+         *         if the funds are actually being returned, the admin should adjust
+         *         received_months separately (it lives on CollegeRankingItem and the
+         *         update path is intentionally manual).
+         *       - A RosterAuditLog row is created with action=ITEM_REMOVE.
+         */
+        post: operations["exclude_roster_item_api_v1_payment_rosters__roster_id__items__item_id__exclude_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/payment-rosters/{roster_id}/audit-logs": {
         parameters: {
             query?: never;
@@ -6173,6 +6671,142 @@ export interface paths {
         get: operations["get_roster_audit_logs_api_v1_payment_rosters__roster_id__audit_logs_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payment-rosters/{roster_id}/revoked-suspended": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Revoked Suspended
+         * @description List students still embedded in this roster whose allocation was
+         *     later revoked or suspended.
+         */
+        get: operations["get_revoked_suspended_api_v1_payment_rosters__roster_id__revoked_suspended_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payment-rosters/{roster_id}/items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Locked Roster Item
+         * @description Soft-remove a single item from a LOCKED roster (sets is_included=False;
+         *     row survives for restore). Roster stays LOCKED; excel_stale is set to True;
+         *     audit log written.
+         */
+        delete: operations["remove_locked_roster_item_api_v1_payment_rosters__roster_id__items__item_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payment-rosters/{roster_id}/items/{item_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Roster Item
+         * @description Re-include a soft-removed roster item (回復). Admin only. Works on
+         *     COMPLETED and LOCKED rosters; sets excel_stale; audits ITEM_RESTORE.
+         */
+        post: operations["restore_roster_item_api_v1_payment_rosters__roster_id__items__item_id__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payment-rosters/{roster_id}/distribution-diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Distribution Diff
+         * @description Compare a generated roster against its slice of the distribution.
+         *     Returns allocated-but-missing (to_add) and in-roster-but-unallocated
+         *     (to_remove) lists for the admin to selectively reconcile.
+         */
+        get: operations["get_distribution_diff_api_v1_payment_rosters__roster_id__distribution_diff_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payment-rosters/{roster_id}/reconcile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reconcile Roster Endpoint
+         * @description Selectively add allocated students missing from the roster (補充人) and/or
+         *     remove items no longer allocated. Works on COMPLETED and LOCKED rosters;
+         *     sets excel_stale; audits each change. Presentation-layer only — does not
+         *     touch quota.
+         */
+        post: operations["reconcile_roster_endpoint_api_v1_payment_rosters__roster_id__reconcile_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payment-rosters/{roster_id}/regenerate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Regenerate Roster Endpoint
+         * @description 重新生成造冊：依當下的分發名單、學生資料、獎學金規則與配置重建全部明細。
+         *
+         *     不需要人員有異動即可執行——「比對分發名單」(reconcile) 只在名單有差異時
+         *     才有動作可做，本端點則刷新每一筆明細的內容（金額、計畫編號、學籍驗證、
+         *     規則判定、郵局帳號…）並重新匯出 Excel。
+         *
+         *     管理員的人為排除／移除與人工銀行覆核狀態會跨重建保留。已鎖定的造冊不可
+         *     重新生成（400），請先解鎖。
+         */
+        post: operations["regenerate_roster_endpoint_api_v1_payment_rosters__roster_id__regenerate_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6347,6 +6981,168 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/system-settings/public-docs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Public Docs
+         * @description Return object_names for 獎學金要點 and 申請文件範例檔.
+         *     Accessible by any authenticated user.
+         */
+        get: operations["get_public_docs_api_v1_system_settings_public_docs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system-settings/application-notices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Application Notices
+         * @description 取得學生申請精靈的「獎學金申請注意事項」內容（zh/en）。
+         *     所有登入使用者皆可讀取；尚未設定時回傳系統預設內容。
+         */
+        get: operations["get_application_notices_api_v1_system_settings_application_notices_get"];
+        /**
+         * Update Application Notices
+         * @description 更新「獎學金申請注意事項」內容。僅限管理員。
+         *     整份 zh/en 內容一次覆寫，變更會寫入設定稽核日誌。
+         */
+        put: operations["update_application_notices_api_v1_system_settings_application_notices_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system-settings/upload/{doc_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload System Doc
+         * @description Upload a global system document (獎學金要點 or 申請文件範例檔). Admin only.
+         *     Stores object_name in system_settings under the given key.
+         */
+        post: operations["upload_system_doc_api_v1_system_settings_upload__doc_key__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system-settings/file/{doc_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get System Doc File
+         * @description Proxy a global system document from MinIO. Any authenticated user.
+         */
+        get: operations["get_system_doc_file_api_v1_system_settings_file__doc_key__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system-settings/supplementary-docs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Supplementary Docs
+         * @description List all supplementary docs sorted by sort_order then id.
+         *     Accessible by any authenticated user.
+         */
+        get: operations["list_supplementary_docs_api_v1_system_settings_supplementary_docs_get"];
+        put?: never;
+        /** Create Supplementary Doc */
+        post: operations["create_supplementary_doc_api_v1_system_settings_supplementary_docs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system-settings/supplementary-docs/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Reorder Supplementary Docs */
+        patch: operations["reorder_supplementary_docs_api_v1_system_settings_supplementary_docs_reorder_patch"];
+        trace?: never;
+    };
+    "/api/v1/system-settings/supplementary-docs/{doc_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Supplementary Doc */
+        delete: operations["delete_supplementary_doc_api_v1_system_settings_supplementary_docs__doc_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Supplementary Doc */
+        patch: operations["update_supplementary_doc_api_v1_system_settings_supplementary_docs__doc_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/system-settings/supplementary-docs/{doc_id}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stream Supplementary Doc File */
+        get: operations["stream_supplementary_doc_file_api_v1_system_settings_supplementary_docs__doc_id__file_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/system-settings/{id}": {
         parameters: {
             query?: never;
@@ -6455,6 +7251,121 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/footer-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Footer Links
+         * @description List footer links ordered by sort_order then id.
+         *
+         *     Any authenticated user may read. ``include_inactive`` is honoured for
+         *     admins only — a non-admin always gets the active (publicly shown) set,
+         *     so a hidden link cannot leak through the query parameter.
+         */
+        get: operations["list_footer_links_api_v1_footer_links_get"];
+        put?: never;
+        /**
+         * Create Footer Link
+         * @description Create an external-URL footer link. Admin only.
+         */
+        post: operations["create_footer_link_api_v1_footer_links_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/footer-links/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Footer Link File
+         * @description Create a file-backed footer link by uploading a document. Admin only.
+         */
+        post: operations["upload_footer_link_file_api_v1_footer_links_upload_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/footer-links/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Reorder Footer Links
+         * @description Persist a new display order. Admin only.
+         */
+        patch: operations["reorder_footer_links_api_v1_footer_links_reorder_patch"];
+        trace?: never;
+    };
+    "/api/v1/footer-links/{link_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Footer Link
+         * @description Delete a footer link, removing its stored file when present. Admin only.
+         */
+        delete: operations["delete_footer_link_api_v1_footer_links__link_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Footer Link
+         * @description Update a footer link's titles, URL, or visibility. Admin only.
+         */
+        patch: operations["update_footer_link_api_v1_footer_links__link_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/footer-links/{link_id}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream Footer Link File
+         * @description Stream a file-backed footer link's document. Any authenticated user.
+         *
+         *     Inactive links stay readable for admins only so a hidden document isn't
+         *     still fetchable by a student holding a stale URL.
+         */
+        get: operations["stream_footer_link_file_api_v1_footer_links__link_id__file_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/student-bank-accounts/my-verified-account": {
         parameters: {
             query?: never;
@@ -6471,6 +7382,78 @@ export interface paths {
          */
         get: operations["get_my_verified_account_api_v1_student_bank_accounts_my_verified_account_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/student-history/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Batch Student Scholarship History
+         * @description Multi-student history lookup. Failures are strictly per-student
+         *     (not found, out of college scope, lookup error) inside data.results —
+         *     one bad 學號 or one failed lookup never sinks the rest of the batch.
+         */
+        post: operations["batch_student_scholarship_history_api_v1_student_history_batch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/student-history/me/months": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get My Received Months
+         * @description A student's own 總領月份數 (匯入 + 系統, summed across every scholarship
+         *     type). DB-only — no SIS round trip — and an empty history is a valid
+         *     0-month state, not an error.
+         */
+        get: operations["get_my_received_months_api_v1_student_history_me_months_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/student-history/visibility": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Visibility
+         * @description Read both switches. Open to any authenticated user on purpose: the
+         *     student card and the college tab hide themselves when their switch is off,
+         *     which needs the flag BEFORE the gated request is attempted. The payload is
+         *     two booleans about the system, never about a person.
+         */
+        get: operations["get_visibility_api_v1_student_history_visibility_get"];
+        /**
+         * Update Visibility
+         * @description Admin-only. Each audience is decided separately — an omitted field keeps
+         *     its current value rather than being reset.
+         */
+        put: operations["update_visibility_api_v1_student_history_visibility_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -6508,6 +7491,552 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/renewals/eligible": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Eligible Renewals
+         * @description Return the user's prior-year approved applications that may be renewed.
+         *
+         *     "May be renewed" means the current-year `ScholarshipConfiguration` for the
+         *     same scholarship_type has its `renewal_application_*` window open.
+         */
+        get: operations["list_eligible_renewals_api_v1_renewals_eligible_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/renewals/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Renewal Application
+         * @description Create a renewal application from a prior approved application.
+         *
+         *     Validations:
+         *       1. Previous application exists.
+         *       2. It belongs to the current user.
+         *       3. Its status is `approved`.
+         *       4. The current-year ScholarshipConfiguration has an active renewal window.
+         *       5. No existing renewal application for the same (user, type, year, semester).
+         */
+        post: operations["create_renewal_application_api_v1_renewals__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/renewals/challenge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Challenge Application
+         * @description Create a challenge application from an approved renewal.
+         *
+         *     Validations:
+         *       1. Renewal application exists.
+         *       2. It belongs to the current user.
+         *       3. It is in fact a renewal (`is_renewal=True`).
+         *       4. Its status is `approved`.
+         *       5. `target_sub_type` differs from renewal's `sub_scholarship_type`.
+         *       6. The renewal-year ScholarshipConfiguration has an active general
+         *          application window.
+         *       7. `target_sub_type` exists in `ScholarshipConfiguration.quotas`.
+         *       8. No existing challenge application for the same renewal.
+         */
+        post: operations["create_challenge_application_api_v1_renewals_challenge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/renewals/{scholarship_type_id}/auto-distribute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Trigger Renewal Auto Distribution
+         * @description Admin-triggered: auto-approve renewal applications past their review stage.
+         *
+         *     Renewals skip the college_ranking phase by design — once they have cleared
+         *     the reviews the admin enabled for renewals (`renewal_requires_professor_review`
+         *     / `renewal_requires_college_review` on `ScholarshipConfiguration`; possibly
+         *     none), this endpoint flips them from `under_review` (or `submitted` when no
+         *     review is required) to `approved` with `review_stage = quota_distributed`.
+         *
+         *     Args:
+         *         scholarship_type_id: Path — scholarship type to process.
+         *         academic_year:        Query — ROC academic year (e.g. 114).
+         *
+         *     Returns:
+         *         ApiResponse with data = {approved_count, approved_ids}.
+         */
+        post: operations["trigger_renewal_auto_distribution_api_v1_renewals__scholarship_type_id__auto_distribute_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/renewals/distribution-result": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Renewal Distribution Result
+         * @description Return renewal distribution grouped by (sub_type, renewal_year).
+         *
+         *     Admin-only. For the given `(scholarship_type_id, academic_year)`:
+         *       - Approved renewals are bucketed into `groups` keyed by
+         *         `(sub_scholarship_type, renewal_year)`. Each application carries
+         *         a `has_challenge` flag indicating whether a downstream challenge
+         *         application (Application_C, `is_renewal=False` with
+         *         `challenges_application_id` set) points at it.
+         *       - Rejected renewals are returned in a flat `rejected` list.
+         *       - A `summary` block totals approved + rejected counts.
+         *
+         *     Other statuses (draft, under_review, etc.) are intentionally ignored;
+         *     this endpoint reports a *finalised* distribution view.
+         */
+        get: operations["get_renewal_distribution_result_api_v1_renewals_distribution_result_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/renewals/audit/renewal-violations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Audit Renewal Violations
+         * @description Admin audit: list approved challenges whose renewal isn't cancelled_by_challenge.
+         *
+         *     Implements the spec §12 invariant check. Empty `data` means the system
+         *     is consistent. A non-empty list points at data drift that needs manual
+         *     investigation — typically a renewal that wasn't transitioned during
+         *     `execute_general_distribution`.
+         *
+         *     Returns:
+         *         ApiResponse with `data` = list of
+         *         ``{challenge_id, renewal_id, actual_renewal_status}`` dicts.
+         */
+        get: operations["audit_renewal_violations_api_v1_renewals_audit_renewal_violations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/available-combinations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Admin Available Combinations
+         * @description Get all active scholarship types and configurations for admin distribution.
+         */
+        get: operations["get_admin_available_combinations_api_v1_manual_distribution_available_combinations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/students": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Students For Distribution
+         * @description Get ranked students with allocation status for manual distribution.
+         */
+        get: operations["get_students_for_distribution_api_v1_manual_distribution_students_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/quota-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Quota Status
+         * @description Get real-time quota status per sub-type per college.
+         */
+        get: operations["get_quota_status_api_v1_manual_distribution_quota_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Distribution State
+         * @description Return the full state needed by the manual distribution panel UI.
+         *
+         *     Aggregates three views in one round trip:
+         *       * ``renewal_allocations`` — approved renewals grouped by
+         *         ``(sub_type, renewal_year)``, each marked ``has_challenge`` if a
+         *         downstream challenge targets it.
+         *       * ``available_quotas`` — per ``(sub_type, allocation_year)``: total /
+         *         used / remaining where ``used`` comes from approved renewals.
+         *       * ``candidates`` — non-renewal applicants in ranking order, with
+         *         ``is_challenge`` and a ``challenged_renewal`` block when present.
+         *
+         *     See ``ManualDistributionService.compute_distribution_state`` for details.
+         */
+        get: operations["get_distribution_state_api_v1_manual_distribution_state_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/auto-allocate-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Auto Allocate Preview
+         * @description Generate auto-allocation suggestions without persisting.
+         *
+         *     Pass `college_code` to run the distribution for a single college; quotas are
+         *     still evaluated against the global live remaining, so the result matches what
+         *     a whole-scholarship run would suggest for that college.
+         *
+         *     Pass `staged` — the caller's on-screen allocations for every row it renders,
+         *     every college — to have the suggestions computed against that state instead
+         *     of the saved one. Unticked rows free their slot immediately; hand-ticked rows
+         *     are treated as decided. POST rather than GET because that state is a body,
+         *     not a query string; nothing is written either way.
+         */
+        post: operations["auto_allocate_preview_api_v1_manual_distribution_auto_allocate_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/preview-distribution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Distribution
+         * @description Dry-run: compute the release_chain for the proposed allocations.
+         *
+         *     For each proposed allocation whose application is a challenge, returns
+         *     the renewal that would be cancelled and the next pure-new waitlist
+         *     candidate who would inherit the freed slot. Nothing is persisted.
+         *
+         *     Used by the admin Manual Distribution panel to surface release-chain
+         *     impact before commit (spec Section 14.2).
+         */
+        post: operations["preview_distribution_api_v1_manual_distribution_preview_distribution_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/allocate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Allocate
+         * @description Save manual allocation selections.
+         */
+        post: operations["allocate_api_v1_manual_distribution_allocate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/finalize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finalize
+         * @description Finalize distribution - lock and update application statuses.
+         */
+        post: operations["finalize_api_v1_manual_distribution_finalize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/{scholarship_type_id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Distribution History
+         * @description Get allocation history for a scholarship/year/semester combination.
+         */
+        get: operations["get_distribution_history_api_v1_manual_distribution__scholarship_type_id__history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/{scholarship_type_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore From History
+         * @description Restore allocations from a specific history record.
+         */
+        post: operations["restore_from_history_api_v1_manual_distribution__scholarship_type_id__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/distribution-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Distribution Summary
+         * @description 取得分發結果摘要：所有被分發的學生及其分配到的獎學金子類型。
+         *     回傳所有已分配學生，按 sub_type × allocation_year 分組。
+         */
+        get: operations["get_distribution_summary_api_v1_manual_distribution_distribution_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/distribution-summary/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Distribution Summary
+         * @description Export the 分發結果名單 as Excel (default) or PDF — 受獎名冊 layout.
+         *
+         *     Reads through the SAME ``_load_allocated_groups`` loader as the JSON
+         *     endpoint, so the file can never show a student the panel would not.
+         *
+         *     Carries no 身分證字號 and no 匯款帳號, but it is NOT the PII-free case the
+         *     college 分發結果 export is: on top of 學號/姓名/系所 it emits 國籍, 性別,
+         *     碩士畢業院/校/系所 and 首次註冊入學日期, plus three derived flags that label a
+         *     student as 在職生 / 陸港澳生 / 休學. That is personal data about identified
+         *     students leaving the system in bulk, so it writes a ``pii_access`` AuditLog
+         *     like the 學生資料彙整表 export does.
+         */
+        get: operations["export_distribution_summary_api_v1_manual_distribution_distribution_summary_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/generate-rosters-from-distribution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate Rosters From Distribution
+         * @description 從矩陣分發結果批次產生造冊。
+         *
+         *     針對每個唯一的 (allocation_year, sub_type) 組合建立獨立的造冊。
+         *     例如：115 年度分發後，可能產生 nstc-115、nstc-114、moe_1w-115 等多個造冊。
+         */
+        post: operations["generate_rosters_from_distribution_api_v1_manual_distribution_generate_rosters_from_distribution_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/applications/{application_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke Application Allocation
+         * @description 撤銷學生獎學金：從未鎖定造冊移除 + 標記 application 為 cancelled/revoked。
+         *
+         *     分發前後皆可執行——分發前撤銷等同把該生排除於本次分發（預設分發不再建議、
+         *     確認分發會略過）。復原時會回到撤銷當下的狀態。
+         */
+        post: operations["revoke_application_allocation_api_v1_manual_distribution_applications__application_id__revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/applications/{application_id}/suspend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Suspend Application Allocation
+         * @description 停發學生獎學金：從未鎖定造冊移除 + 標記 application 為 cancelled/suspended。
+         *
+         *     分發前後皆可執行——分發前停發（休學/退學/畢業）等同把該生排除於本次分發。
+         *     復原時會回到停發當下的狀態。
+         */
+        post: operations["suspend_application_allocation_api_v1_manual_distribution_applications__application_id__suspend_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/applications/{application_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Application Allocation
+         * @description 恢復已撤銷/停發學生：回到撤銷/停發當下的狀態。
+         *
+         *     分發後撤銷者回到 approved/allocated 並重新佔用名額；分發前撤銷者回到當時的
+         *     申請狀態，重新成為可分發的候選人。不會自動還原造冊項目，需重新生成造冊。
+         */
+        post: operations["restore_application_allocation_api_v1_manual_distribution_applications__application_id__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -6538,6 +8067,26 @@ export interface components {
              */
             change_reason?: string | null;
         };
+        /** AllocateRequest */
+        AllocateRequest: {
+            /** Scholarship Type Id */
+            scholarship_type_id: number;
+            /** Academic Year */
+            academic_year: number;
+            /** Semester */
+            semester: string;
+            /** Allocations */
+            allocations: components["schemas"]["AllocationItem"][];
+        };
+        /** AllocationItem */
+        AllocationItem: {
+            /** Ranking Item Id */
+            ranking_item_id: number;
+            /** Sub Type Code */
+            sub_type_code?: string | null;
+            /** Allocation Config Id */
+            allocation_config_id?: number | null;
+        };
         /** ApiResponse[List[dict]] */
         ApiResponse_List_dict__: {
             /**
@@ -6548,7 +8097,9 @@ export interface components {
             /** Message */
             message: string;
             /** Data */
-            data?: Record<string, never>[] | null;
+            data?: {
+                [key: string]: unknown;
+            }[] | null;
             /** Errors */
             errors?: string[] | null;
             /** Trace Id */
@@ -6564,7 +8115,22 @@ export interface components {
             /** Message */
             message: string;
             /** Data */
-            data?: Record<string, never> | null;
+            data?: {
+                [key: string]: unknown;
+            } | null;
+            /** Errors */
+            errors?: string[] | null;
+            /** Trace Id */
+            trace_id?: string | null;
+        };
+        /** ApiResponse[list[EligibleScholarshipResponse]] */
+        ApiResponse_list_EligibleScholarshipResponse__: {
+            /** Success */
+            success: boolean;
+            /** Message */
+            message: string;
+            /** Data */
+            data?: components["schemas"]["EligibleScholarshipResponse"][] | null;
             /** Errors */
             errors?: string[] | null;
             /** Trace Id */
@@ -6637,7 +8203,17 @@ export interface components {
              * @default false
              */
             is_renewal: boolean | null;
+            /**
+             * Sub Type Preferences
+             * @description Ordered sub-type preference list
+             */
+            sub_type_preferences?: string[] | null;
         };
+        /**
+         * ApplicationCycleEnum
+         * @enum {string}
+         */
+        ApplicationCycleEnum: "semester" | "yearly";
         /**
          * ApplicationDocumentCreate
          * @description Schema for creating application document
@@ -6674,6 +8250,18 @@ export interface components {
              * @default true
              */
             is_required: boolean;
+            /**
+             * Display In List
+             * @description Show in scholarship-list document boxes
+             * @default true
+             */
+            display_in_list: boolean;
+            /**
+             * Requires Upload
+             * @description Student must upload this document in step 3
+             * @default true
+             */
+            requires_upload: boolean;
             /**
              * Accepted File Types
              * @description Accepted file types
@@ -6725,7 +8313,9 @@ export interface components {
              * Validation Rules
              * @description Validation rules
              */
-            validation_rules?: Record<string, never> | null;
+            validation_rules?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * ApplicationDocumentUpdate
@@ -6742,6 +8332,10 @@ export interface components {
             description_en?: string | null;
             /** Is Required */
             is_required?: boolean | null;
+            /** Display In List */
+            display_in_list?: boolean | null;
+            /** Requires Upload */
+            requires_upload?: boolean | null;
             /** Accepted File Types */
             accepted_file_types?: string[] | null;
             /** Max File Size */
@@ -6759,7 +8353,9 @@ export interface components {
             /** Example File Url */
             example_file_url?: string | null;
             /** Validation Rules */
-            validation_rules?: Record<string, never> | null;
+            validation_rules?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * ApplicationFieldCreate
@@ -6832,7 +8428,9 @@ export interface components {
              * Field Options
              * @description Field options
              */
-            field_options?: Record<string, never>[] | null;
+            field_options?: {
+                [key: string]: unknown;
+            }[] | null;
             /**
              * Display Order
              * @description Display order
@@ -6859,12 +8457,27 @@ export interface components {
              * Validation Rules
              * @description Validation rules
              */
-            validation_rules?: Record<string, never> | null;
+            validation_rules?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Conditional Rules
              * @description Conditional rules
              */
-            conditional_rules?: Record<string, never> | null;
+            conditional_rules?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Include In College Export
+             * @description Whether this field appears in the college Excel export
+             * @default false
+             */
+            include_in_college_export: boolean;
+            /**
+             * Export Column Label
+             * @description Override label for the college export column header
+             */
+            export_column_label?: string | null;
         };
         /**
          * ApplicationFieldUpdate
@@ -6892,7 +8505,9 @@ export interface components {
             /** Step Value */
             step_value?: number | null;
             /** Field Options */
-            field_options?: Record<string, never>[] | null;
+            field_options?: {
+                [key: string]: unknown;
+            }[] | null;
             /** Display Order */
             display_order?: number | null;
             /** Is Active */
@@ -6902,9 +8517,17 @@ export interface components {
             /** Help Text En */
             help_text_en?: string | null;
             /** Validation Rules */
-            validation_rules?: Record<string, never> | null;
+            validation_rules?: {
+                [key: string]: unknown;
+            } | null;
             /** Conditional Rules */
-            conditional_rules?: Record<string, never> | null;
+            conditional_rules?: {
+                [key: string]: unknown;
+            } | null;
+            /** Include In College Export */
+            include_in_college_export?: boolean | null;
+            /** Export Column Label */
+            export_column_label?: string | null;
         };
         /**
          * ApplicationFormData
@@ -6941,6 +8564,24 @@ export interface components {
              *     ]
              */
             documents: components["schemas"]["DocumentData"][];
+        };
+        /**
+         * ApplicationNoticeItem
+         * @description One numbered notice item (e.g. 申請資格, 申請期限).
+         */
+        ApplicationNoticeItem: {
+            /** Title */
+            title: string;
+            /** Content */
+            content: string;
+        };
+        /**
+         * ApplicationNotices
+         * @description Full bilingual notice content shown in the application wizard.
+         */
+        ApplicationNotices: {
+            zh: components["schemas"]["LocalizedApplicationNotices"];
+            en: components["schemas"]["LocalizedApplicationNotices"];
         };
         /**
          * ApplicationReviewResponse
@@ -7026,6 +8667,11 @@ export interface components {
              * @default []
              */
             scholarship_subtype_list: string[] | null;
+            /**
+             * Sub Scholarship Type
+             * @description 本申請的代表性 sub_type（單一字串；若為續領則承襲自前一申請）
+             */
+            sub_scholarship_type?: string | null;
             /** Status */
             status: string;
             /** Status Name */
@@ -7036,14 +8682,38 @@ export interface components {
              * @default false
              */
             is_renewal: boolean;
+            /**
+             * Renewal Year
+             * @description 續領年份 (民國年，如 113)；批次匯入指定，或承接自前一申請
+             */
+            renewal_year?: number | null;
+            /**
+             * Previous Application Id
+             * @description 承接的前一份核可申請 ID（續領申請填）
+             */
+            previous_application_id?: number | null;
+            /**
+             * Challenges Application Id
+             * @description 挑戰的目標續領申請 ID（挑戰申請填）— 一旦挑戰核可，被挑戰之續領自動取消
+             */
+            challenges_application_id?: number | null;
+            /**
+             * Cancelled Due To Application Id
+             * @description 因哪份挑戰申請而被取消（被取代之續領申請填）
+             */
+            cancelled_due_to_application_id?: number | null;
             /** Academic Year */
             academic_year: number;
             /** Semester */
             semester?: string | null;
             /** Student Data */
-            student_data: Record<string, never>;
+            student_data: {
+                [key: string]: unknown;
+            };
             /** Submitted Form Data */
-            submitted_form_data: Record<string, never>;
+            submitted_form_data: {
+                [key: string]: unknown;
+            };
             /**
              * Agree Terms
              * @default false
@@ -7072,7 +8742,9 @@ export interface components {
              */
             updated_at: string;
             /** Meta Data */
-            meta_data?: Record<string, never> | null;
+            meta_data?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Reviews
              * @default []
@@ -7112,6 +8784,8 @@ export interface components {
             enroll_type?: number | null;
             /** Term Count */
             term_count?: number | null;
+            /** Student Nationality */
+            student_nationality?: string | null;
             /** Student Identity */
             student_identity?: number | null;
             /** School Identity */
@@ -7144,11 +8818,6 @@ export interface components {
             /** @description 表單資料 */
             form_data?: components["schemas"]["ApplicationFormData"] | null;
             /**
-             * Status
-             * @description 申請狀態
-             */
-            status?: string | null;
-            /**
              * Agree Terms
              * @description 同意條款
              */
@@ -7158,6 +8827,11 @@ export interface components {
              * @description 是否為續領申請
              */
             is_renewal?: boolean | null;
+            /**
+             * Sub Type Preferences
+             * @description Ordered sub-type preference list
+             */
+            sub_type_preferences?: string[] | null;
         };
         /**
          * ApplyTemplateRequest
@@ -7187,6 +8861,19 @@ export interface components {
              * @default false
              */
             overwrite_existing: boolean;
+        };
+        /** AutoAllocatePreviewRequest */
+        AutoAllocatePreviewRequest: {
+            /** Scholarship Type Id */
+            scholarship_type_id: number;
+            /** Academic Year */
+            academic_year: number;
+            /** Semester */
+            semester: string;
+            /** College Code */
+            college_code?: string | null;
+            /** Staged */
+            staged?: components["schemas"]["AllocationItem"][] | null;
         };
         /**
          * BankInfoUpdate
@@ -7268,7 +8955,20 @@ export interface components {
              * Updates
              * @description 要更新的欄位
              */
-            updates: Record<string, never>;
+            updates: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * BatchStudentHistoryRequest
+         * @description Multi-student lookup request body for POST /student-history/batch.
+         *
+         *     Size and per-number format limits are enforced in the endpoint (uniform
+         *     400s with zh-TW messages) rather than as Field constraints (422s).
+         */
+        BatchStudentHistoryRequest: {
+            /** Student Numbers */
+            student_numbers: string[];
         };
         /** Body_create_ranking_api_v1_college_review_rankings_post */
         Body_create_ranking_api_v1_college_review_rankings_post: {
@@ -7304,28 +9004,39 @@ export interface components {
              */
             force_new: boolean;
         };
+        /** Body_create_supplementary_doc_api_v1_system_settings_supplementary_docs_post */
+        Body_create_supplementary_doc_api_v1_system_settings_supplementary_docs_post: {
+            /** File */
+            file: string;
+            /** Title */
+            title: string;
+        };
+        /** Body_exclude_roster_item_api_v1_payment_rosters__roster_id__items__item_id__exclude_post */
+        Body_exclude_roster_item_api_v1_payment_rosters__roster_id__items__item_id__exclude_post: {
+            /**
+             * Reason Category
+             * @description 排除原因分類:'returned'(繳回) / 'declined'(放棄) / 'other'(其他)
+             */
+            reason_category: string;
+            /**
+             * Reason Note
+             * @description 補充說明,自由文字
+             */
+            reason_note?: string | null;
+        };
         /** Body_extract_bank_info_from_passbook_api_v1_user_profiles_bank_passbook_ocr_post */
         Body_extract_bank_info_from_passbook_api_v1_user_profiles_bank_passbook_ocr_post: {
-            /**
-             * File
-             * Format: binary
-             */
+            /** File */
             file: string;
         };
         /** Body_extract_text_from_document_api_v1_user_profiles_document_ocr_post */
         Body_extract_text_from_document_api_v1_user_profiles_document_ocr_post: {
-            /**
-             * File
-             * Format: binary
-             */
+            /** File */
             file: string;
         };
         /** Body_import_whitelist_excel_api_v1_scholarship_configurations__id__whitelist_import_post */
         Body_import_whitelist_excel_api_v1_scholarship_configurations__id__whitelist_import_post: {
-            /**
-             * File
-             * Format: binary
-             */
+            /** File */
             file: string;
         };
         /** Body_portal_sso_verify_api_v1_auth_portal_sso_verify_post */
@@ -7351,6 +9062,19 @@ export interface components {
             /** Student Id */
             student_id?: string | null;
         };
+        /** Body_preview_received_months_import_api_v1_admin_received_months_preview_post */
+        Body_preview_received_months_import_api_v1_admin_received_months_preview_post: {
+            /**
+             * Scholarship Type Id
+             * @description Scholarship type the file belongs to
+             */
+            scholarship_type_id: number;
+            /**
+             * File
+             * @description 國科會 獲獎生已領月份統計表 (.xlsx)
+             */
+            file: string;
+        };
         /** Body_simulate_priority_processing_api_v1_scholarship_management_dev_simulate_priority_processing_post */
         Body_simulate_priority_processing_api_v1_scholarship_management_dev_simulate_priority_processing_post: {
             /** Academic Year */
@@ -7375,17 +9099,13 @@ export interface components {
         };
         /** Body_upload_bank_document_file_api_v1_user_profiles_me_bank_document_file_post */
         Body_upload_bank_document_file_api_v1_user_profiles_me_bank_document_file_post: {
-            /**
-             * File
-             * Format: binary
-             */
+            /** File */
             file: string;
         };
         /** Body_upload_batch_documents_api_v1_college_review_batch_import__batch_id__documents_post */
         Body_upload_batch_documents_api_v1_college_review_batch_import__batch_id__documents_post: {
             /**
              * File
-             * Format: binary
              * @description 包含所有文件的 ZIP 檔案
              */
             file: string;
@@ -7394,41 +9114,58 @@ export interface components {
         Body_upload_batch_import_data_api_v1_college_review_batch_import_upload_data_post: {
             /**
              * File
-             * Format: binary
              * @description Excel或CSV檔案
              */
             file: string;
         };
         /** Body_upload_document_example_api_v1_application_fields_documents__document_id__upload_example_post */
         Body_upload_document_example_api_v1_application_fields_documents__document_id__upload_example_post: {
-            /**
-             * File
-             * Format: binary
-             */
+            /** File */
             file: string;
         };
         /** Body_upload_file_alias_api_v1_applications__id__files_post */
         Body_upload_file_alias_api_v1_applications__id__files_post: {
-            /**
-             * File
-             * Format: binary
-             */
+            /** File */
             file: string;
         };
         /** Body_upload_file_api_v1_applications__id__files_upload_post */
         Body_upload_file_api_v1_applications__id__files_upload_post: {
+            /** File */
+            file: string;
+        };
+        /** Body_upload_footer_link_file_api_v1_footer_links_upload_post */
+        Body_upload_footer_link_file_api_v1_footer_links_upload_post: {
+            /** File */
+            file: string;
+            /** Title Zh */
+            title_zh: string;
+            /** Title En */
+            title_en?: string | null;
+        };
+        /** Body_upload_renewal_import_api_v1_college_review_renewal_import_upload_post */
+        Body_upload_renewal_import_api_v1_college_review_renewal_import_upload_post: {
             /**
              * File
-             * Format: binary
+             * @description 續領生 Excel 或 CSV 檔案
              */
+            file: string;
+        };
+        /** Body_upload_supplementary_import_api_v1_college_review_supplementary_import_upload_post */
+        Body_upload_supplementary_import_api_v1_college_review_supplementary_import_upload_post: {
+            /**
+             * File
+             * @description 批次匯入格式的 Excel (.xlsx)
+             */
+            file: string;
+        };
+        /** Body_upload_system_doc_api_v1_system_settings_upload__doc_key__post */
+        Body_upload_system_doc_api_v1_system_settings_upload__doc_key__post: {
+            /** File */
             file: string;
         };
         /** Body_upload_terms_document_api_v1_scholarships__scholarship_type__upload_terms_post */
         Body_upload_terms_document_api_v1_scholarships__scholarship_type__upload_terms_post: {
-            /**
-             * File
-             * Format: binary
-             */
+            /** File */
             file: string;
         };
         /**
@@ -7446,12 +9183,6 @@ export interface components {
              * @description Optional approval notes
              */
             comments?: string | null;
-            /**
-             * Send Notifications
-             * @description Whether to notify applicants
-             * @default true
-             */
-            send_notifications: boolean;
         };
         /**
          * BulkRuleOperation
@@ -7472,7 +9203,9 @@ export interface components {
              * Parameters
              * @description Operation-specific parameters
              */
-            parameters?: Record<string, never> | null;
+            parameters?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * BulkScholarshipAssignRequest
@@ -7490,6 +9223,11 @@ export interface components {
              * @default set
              */
             operation: string;
+        };
+        /** CollegeViewDistributionToggle */
+        CollegeViewDistributionToggle: {
+            /** Allow */
+            allow: boolean;
         };
         /**
          * ConfigCategory
@@ -7637,6 +9375,29 @@ export interface components {
             validation_regex?: string | null;
         };
         /**
+         * CreateChallengeRequest
+         * @description Body for POST /api/v1/renewals/challenge — create challenge from an approved renewal.
+         */
+        CreateChallengeRequest: {
+            /** Renewal Application Id */
+            renewal_application_id: number;
+            /** Target Sub Type */
+            target_sub_type: string;
+        };
+        /**
+         * CreateRenewalRequest
+         * @description Body for POST /api/v1/renewals/ — create renewal from a prior approved app.
+         */
+        CreateRenewalRequest: {
+            /** Previous Application Id */
+            previous_application_id: number;
+        };
+        /** DeleteApplicationRequest */
+        DeleteApplicationRequest: {
+            /** Reason */
+            reason: string;
+        };
+        /**
          * DeveloperProfileRequest
          * @description Developer profile creation request schema
          */
@@ -7650,11 +9411,13 @@ export interface components {
             role: components["schemas"]["UserRole"];
             /**
              * Email Domain
-             * @default dev.local
+             * @default dev.example.com
              */
             email_domain: string | null;
             /** Custom Attributes */
-            custom_attributes?: Record<string, never> | null;
+            custom_attributes?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * DocumentData
@@ -7736,6 +9499,11 @@ export interface components {
              * @example 請於一週內上傳，並確保文件清晰可讀
              */
             notes?: string | null;
+            /**
+             * Deadline
+             * @description When the student must fulfill this request by; null = no hard deadline.
+             */
+            deadline?: string | null;
         };
         /**
          * DocumentRequestFulfill
@@ -7778,7 +9546,85 @@ export interface components {
              * Validation Rules
              * @description 驗證規則
              */
-            validation_rules?: Record<string, never> | null;
+            validation_rules?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /** EligibleScholarshipResponse */
+        EligibleScholarshipResponse: {
+            /** Id */
+            id: number;
+            /** Configuration Id */
+            configuration_id: number;
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+            /** Name En */
+            name_en: string;
+            /** Eligible Sub Types */
+            eligible_sub_types: components["schemas"]["SubTypeOption"][];
+            application_cycle: components["schemas"]["ApplicationCycleEnum"];
+            /** Description */
+            description?: string | null;
+            /** Description En */
+            description_en?: string | null;
+            /** Amount */
+            amount: string;
+            /** Currency */
+            currency: string;
+            /** Application Start Date */
+            application_start_date?: string | null;
+            /** Application End Date */
+            application_end_date?: string | null;
+            /** Professor Review Start */
+            professor_review_start?: string | null;
+            /** Professor Review End */
+            professor_review_end?: string | null;
+            /** College Review Start */
+            college_review_start?: string | null;
+            /** College Review End */
+            college_review_end?: string | null;
+            sub_type_selection_mode: components["schemas"]["SubTypeSelectionModeEnum"];
+            /** Terms Document Url */
+            terms_document_url?: string | null;
+            /** Application Document Note */
+            application_document_note?: string | null;
+            /** Application Document Note En */
+            application_document_note_en?: string | null;
+            /** Passed */
+            passed: components["schemas"]["RuleMessage"][];
+            /** Warnings */
+            warnings: components["schemas"]["RuleMessage"][];
+            /** Errors */
+            errors: components["schemas"]["RuleMessage"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * All Sub Type List
+             * @default []
+             */
+            all_sub_type_list: string[];
+            /**
+             * Subtype Eligibility
+             * @default {}
+             */
+            subtype_eligibility: {
+                [key: string]: components["schemas"]["SubtypeEligibilityInfo"];
+            };
+            /**
+             * Already Submitted
+             * @default false
+             */
+            already_submitted: boolean;
+            /**
+             * Is Application Period
+             * @default true
+             */
+            is_application_period: boolean;
         };
         /** EmailAutomationRuleCreate */
         EmailAutomationRuleCreate: {
@@ -7897,20 +9743,110 @@ export interface components {
          * @enum {string}
          */
         EmployeeStatus: "在職" | "退休" | "在學" | "畢業";
+        /** FinalizeRequest */
+        FinalizeRequest: {
+            /** Scholarship Type Id */
+            scholarship_type_id: number;
+            /** Academic Year */
+            academic_year: number;
+            /** Semester */
+            semester: string;
+        };
+        /**
+         * FooterLinkCreate
+         * @description Create an external-URL footer link (file links use the upload endpoint).
+         */
+        FooterLinkCreate: {
+            /** Title Zh */
+            title_zh: string;
+            /** Title En */
+            title_en?: string | null;
+            /** Url */
+            url: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+        };
+        /** FooterLinkReorderItem */
+        FooterLinkReorderItem: {
+            /** Id */
+            id: number;
+            /** Sort Order */
+            sort_order: number;
+        };
+        /** FooterLinkReorderRequest */
+        FooterLinkReorderRequest: {
+            /** Items */
+            items: components["schemas"]["FooterLinkReorderItem"][];
+        };
+        /**
+         * FooterLinkUpdate
+         * @description Partial update. ``url`` is only accepted for link_type == url rows,
+         *     which the endpoint enforces against the persisted row.
+         */
+        FooterLinkUpdate: {
+            /** Title Zh */
+            title_zh?: string | null;
+            /** Title En */
+            title_en?: string | null;
+            /** Url */
+            url?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
+        };
         /**
          * FormConfigSaveRequest
          * @description Schema for saving form configuration
          */
         FormConfigSaveRequest: {
             /** Fields */
-            fields: Record<string, never>[];
+            fields: {
+                [key: string]: unknown;
+            }[];
             /** Documents */
-            documents: Record<string, never>[];
+            documents: {
+                [key: string]: unknown;
+            }[];
+            /** Application Document Note */
+            application_document_note?: string | null;
+            /** Application Document Note En */
+            application_document_note_en?: string | null;
+        };
+        /** GenerateRostersRequest */
+        GenerateRostersRequest: {
+            /** Scholarship Type Id */
+            scholarship_type_id: number;
+            /** Academic Year */
+            academic_year: number;
+            /** Semester */
+            semester: string;
+            /**
+             * Student Verification Enabled
+             * @default false
+             */
+            student_verification_enabled: boolean;
+            /**
+             * Force Regenerate
+             * @default false
+             */
+            force_regenerate: boolean;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * LocalizedApplicationNotices
+         * @description Notice content for a single locale.
+         */
+        LocalizedApplicationNotices: {
+            /** Items */
+            items: components["schemas"]["ApplicationNoticeItem"][];
+            /** Important Notice */
+            important_notice: string;
         };
         /**
          * ManualBankReviewRequestSchema
@@ -7999,7 +9935,9 @@ export interface components {
              * Metadata
              * @description 額外資料
              */
-            metadata?: Record<string, never> | null;
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * NotificationUpdate
@@ -8023,7 +9961,9 @@ export interface components {
             /** Expires At */
             expires_at?: string | null;
             /** Metadata */
-            metadata?: Record<string, never> | null;
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Is Dismissed
              * @description 是否已關閉
@@ -8054,17 +9994,6 @@ export interface components {
             professor_nycu_id: string;
         };
         /**
-         * QuotaDistributionRequest
-         * @description Schema for quota distribution request
-         */
-        QuotaDistributionRequest: {
-            /**
-             * Distribution Rules
-             * @description Custom distribution rules
-             */
-            distribution_rules?: Record<string, never> | null;
-        };
-        /**
          * RankingImportItem
          * @description Schema for importing ranking data from Excel
          */
@@ -8081,9 +10010,9 @@ export interface components {
             student_name: string;
             /**
              * Rank Position
-             * @description Ranking position (排名)
+             * @description Ranking position (排名): positive integer or 'N' for rejected
              */
-            rank_position: number;
+            rank_position: number | "N";
         };
         /**
          * RankingOrderUpdate
@@ -8105,6 +10034,18 @@ export interface components {
              * @description New ranking name
              */
             ranking_name: string;
+        };
+        /**
+         * ReconcileRequest
+         * @description Body for POST /payment-rosters/{roster_id}/reconcile.
+         */
+        ReconcileRequest: {
+            /** Add Application Ids */
+            add_application_ids?: number[];
+            /** Remove Item Ids */
+            remove_item_ids?: number[];
+            /** Reason */
+            reason?: string | null;
         };
         /**
          * RedistributionInfo
@@ -8184,6 +10125,65 @@ export interface components {
             roster_code?: string | null;
         };
         /**
+         * RegenerateRosterRequest
+         * @description Body for POST /payment-rosters/{roster_id}/regenerate.
+         */
+        RegenerateRosterRequest: {
+            /**
+             * Student Verification Enabled
+             * @description 本次是否重新驗證學籍（單次覆寫，不會寫回造冊設定）；未提供則沿用造冊原本的設定
+             */
+            student_verification_enabled?: boolean | null;
+        };
+        /**
+         * RemoveLockedItemRequest
+         * @description Body for DELETE /payment-rosters/{roster_id}/items/{item_id}
+         */
+        RemoveLockedItemRequest: {
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Reason Category
+             * @description 結構化移除理由分類 (G26/#988)
+             */
+            reason_category?: ("withdrawal" | "verification_failed" | "duplicate" | "revoked" | "admin_decision" | "other") | null;
+        };
+        /** RenewalImportConfirmRequest */
+        RenewalImportConfirmRequest: {
+            /** Batch Id */
+            batch_id: number;
+            /**
+             * Confirm
+             * @default true
+             */
+            confirm: boolean;
+        };
+        /** ReorderItem */
+        ReorderItem: {
+            /** Id */
+            id: number;
+            /** Sort Order */
+            sort_order: number;
+        };
+        /** ReorderRequest */
+        ReorderRequest: {
+            /** Items */
+            items: components["schemas"]["ReorderItem"][];
+        };
+        /**
+         * RestoreItemRequest
+         * @description Body for POST /payment-rosters/{roster_id}/items/{item_id}/restore
+         */
+        RestoreItemRequest: {
+            /** Reason Note */
+            reason_note?: string | null;
+        };
+        /** RestoreRequest */
+        RestoreRequest: {
+            /** History Id */
+            history_id: number;
+        };
+        /**
          * ReviewCreate
          * @description 審查創建 schema（完整版本，用於內部服務調用）
          */
@@ -8230,6 +10230,17 @@ export interface components {
              * @description 子項目審查列表
              */
             items: components["schemas"]["ReviewItemCreate"][];
+        };
+        /**
+         * RevokeRequest
+         * @description Request body for revoking a scholarship allocation.
+         */
+        RevokeRequest: {
+            /**
+             * Reason
+             * @description Reason for revocation
+             */
+            reason: string;
         };
         /**
          * RosterCreateRequest
@@ -8379,7 +10390,9 @@ export interface components {
              * Notification Settings
              * @description 通知設定
              */
-            notification_settings?: Record<string, never> | null;
+            notification_settings?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * RosterScheduleStatus
@@ -8392,7 +10405,6 @@ export interface components {
          * @description 更新排程狀態模型
          */
         RosterScheduleStatusUpdate: {
-            /** @description 排程狀態 */
             status: components["schemas"]["RosterScheduleStatus"];
         };
         /**
@@ -8441,7 +10453,9 @@ export interface components {
              * Notification Settings
              * @description 通知設定
              */
-            notification_settings?: Record<string, never> | null;
+            notification_settings?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * RosterStatus
@@ -8484,6 +10498,42 @@ export interface components {
              * @default false
              */
             overwrite_existing: boolean;
+        };
+        /** RuleMessage */
+        RuleMessage: {
+            /** Rule Id */
+            rule_id: number | string;
+            /** Rule Name */
+            rule_name: string;
+            /** Rule Type */
+            rule_type: string;
+            /** Tag */
+            tag?: string | null;
+            /** Message */
+            message: string;
+            /** Message En */
+            message_en?: string | null;
+            /** Sub Type */
+            sub_type?: string | null;
+            /**
+             * Priority
+             * @default 0
+             */
+            priority: number;
+            /**
+             * Is Warning
+             * @default false
+             */
+            is_warning: boolean;
+            /**
+             * Is Hard Rule
+             * @default false
+             */
+            is_hard_rule: boolean;
+            /** Status */
+            status?: string | null;
+            /** System Message */
+            system_message?: string | null;
         };
         /**
          * RuleTemplateRequest
@@ -8817,37 +10867,6 @@ export interface components {
          */
         Semester: "first" | "second" | "yearly";
         /**
-         * SendTestEmailRequest
-         * @description Schema for sending test email
-         */
-        SendTestEmailRequest: {
-            /**
-             * Template Key
-             * @description 郵件模板鍵名
-             */
-            template_key: string;
-            /**
-             * Recipient Email
-             * @description 測試收件人信箱
-             */
-            recipient_email: string;
-            /**
-             * Test Data
-             * @description 測試數據（用於模板變數替換）
-             */
-            test_data?: Record<string, never>;
-            /**
-             * Subject Override
-             * @description 覆蓋主旨（可選）
-             */
-            subject_override?: string | null;
-            /**
-             * Body Override
-             * @description 覆蓋內容（可選）
-             */
-            body_override?: string | null;
-        };
-        /**
          * SendingType
          * @enum {string}
          */
@@ -8965,11 +10984,75 @@ export interface components {
             account_holder_name?: string | null;
         };
         /**
+         * StudentHistoryVisibilityUpdate
+         * @description Admin toggle body for PUT /student-history/visibility.
+         *
+         *     Both fields are optional and applied independently: omitting one leaves
+         *     that audience's setting untouched, so the two switches never clobber each
+         *     other. Sending neither is a 422 (nothing to do).
+         *
+         *     The response shape (both switches) is produced by
+         *     ``StudentHistoryVisibility.to_dict()`` in the service layer; endpoints in
+         *     this project return plain ApiResponse dicts, never a ``response_model``.
+         */
+        StudentHistoryVisibilityUpdate: {
+            /** Student Enabled */
+            student_enabled?: boolean | null;
+            /** College Enabled */
+            college_enabled?: boolean | null;
+        };
+        /**
          * StudentVerificationStatus
          * @description 學生身分驗證狀態
          * @enum {string}
          */
         StudentVerificationStatus: "verified" | "graduated" | "suspended" | "withdrawn" | "api_error" | "not_found";
+        /**
+         * SubTypeOption
+         * @description Schema for scholarship sub-type options
+         */
+        SubTypeOption: {
+            /** Value */
+            value: string | null;
+            /** Label */
+            label: string;
+            /** Label En */
+            label_en: string;
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+        };
+        /**
+         * SubTypeSelectionModeEnum
+         * @enum {string}
+         */
+        SubTypeSelectionModeEnum: "single" | "multiple" | "hierarchical";
+        /** SubtypeEligibilityInfo */
+        SubtypeEligibilityInfo: {
+            /** Eligible */
+            eligible: boolean;
+            /**
+             * Failed Rules
+             * @default []
+             */
+            failed_rules: components["schemas"]["SubtypeRuleDetail"][];
+            /**
+             * Warning Rules
+             * @default []
+             */
+            warning_rules: components["schemas"]["SubtypeRuleDetail"][];
+        };
+        /** SubtypeRuleDetail */
+        SubtypeRuleDetail: {
+            /** Rule Name */
+            rule_name: string;
+            /** Message */
+            message?: string | null;
+            /** Tag */
+            tag?: string | null;
+        };
         /**
          * SupervisorInfo
          * @description Supervisor information schema
@@ -8995,6 +11078,27 @@ export interface components {
              * @description 指導教授所屬系所
              */
             supervisor_department?: string | null;
+        };
+        /** SupplementaryDocUpdate */
+        SupplementaryDocUpdate: {
+            /** Title */
+            title: string;
+        };
+        /** SupplementaryImportToggle */
+        SupplementaryImportToggle: {
+            /** Allow */
+            allow: boolean;
+        };
+        /**
+         * SuspendRequest
+         * @description Request body for suspending a scholarship allocation.
+         */
+        SuspendRequest: {
+            /**
+             * Reason
+             * @description Reason for suspension
+             */
+            reason: string;
         };
         /**
          * SystemSettingCreate
@@ -9151,9 +11255,13 @@ export interface components {
              */
             preferred_language: string;
             /** Privacy Settings */
-            privacy_settings?: Record<string, never> | null;
+            privacy_settings?: {
+                [key: string]: unknown;
+            } | null;
             /** Custom Fields */
-            custom_fields?: Record<string, never> | null;
+            custom_fields?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * UserProfileUpdate
@@ -9171,9 +11279,13 @@ export interface components {
             /** Preferred Language */
             preferred_language?: string | null;
             /** Privacy Settings */
-            privacy_settings?: Record<string, never> | null;
+            privacy_settings?: {
+                [key: string]: unknown;
+            } | null;
             /** Custom Fields */
-            custom_fields?: Record<string, never> | null;
+            custom_fields?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * UserRole
@@ -9216,6 +11328,10 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+            /** Input */
+            input?: unknown;
+            /** Context */
+            ctx?: Record<string, never>;
         };
         /**
          * WhitelistBatchAddRequest
@@ -9226,7 +11342,9 @@ export interface components {
              * Students
              * @description 學生列表 [{'nycu_id': '0856001', 'sub_type': 'nstc'}, ...]
              */
-            students: Record<string, never>[];
+            students: {
+                [key: string]: unknown;
+            }[];
         };
         /**
          * WhitelistBatchRemoveRequest
@@ -9914,7 +12032,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -10631,8 +12751,8 @@ export interface operations {
             query?: {
                 /** @description Filter by status */
                 status?: string | null;
-                /** @description Filter by scholarship type ID */
-                scholarship_type_id?: number | null;
+                /** @description Filter by scholarship type code */
+                scholarship_type?: string | null;
             };
             header?: never;
             path?: never;
@@ -10696,7 +12816,7 @@ export interface operations {
             };
         };
     };
-    submit_professor_review_api_v1_applications__id__review_post: {
+    update_application_status_api_v1_applications__id__status_patch: {
         parameters: {
             query?: never;
             header?: never;
@@ -10708,17 +12828,17 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ReviewCreate"];
+                "application/json": components["schemas"]["ApplicationStatusUpdate"];
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description Application status updated successfully */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ApplicationStatusUpdateResponse"];
                 };
             };
             /** @description Validation Error */
@@ -11283,6 +13403,8 @@ export interface operations {
                 status?: string | null;
                 /** @description Search by student name or ID */
                 search?: string | null;
+                /** @description Filter apps awaiting professor assignment */
+                missing_professor?: boolean | null;
             };
             header?: never;
             path?: never;
@@ -11317,6 +13439,46 @@ export interface operations {
                 page?: number;
                 /** @description Page size */
                 size?: number;
+                /** @description Filter by status */
+                status?: string | null;
+                /** @description Filter by scholarship type */
+                scholarship_type?: string | null;
+                /** @description Filter by academic year */
+                academic_year?: number | null;
+                /** @description Filter by semester */
+                semester?: string | null;
+                /** @description Search by student name or ID */
+                search?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_historical_applications_api_v1_admin_applications_history_export_get: {
+        parameters: {
+            query?: {
                 /** @description Filter by status */
                 status?: string | null;
                 /** @description Filter by scholarship type */
@@ -11434,6 +13596,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ApplicationStatusUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_application_api_v1_admin_applications__id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteApplicationRequest"];
             };
         };
         responses: {
@@ -11963,7 +14160,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -12018,7 +14217,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -12697,7 +14898,10 @@ export interface operations {
     };
     create_scholarship_email_template_api_v1_admin_scholarship_email_templates_post: {
         parameters: {
-            query?: never;
+            query: {
+                /** @description Scholarship type to attach the template to */
+                scholarship_type_id: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -12709,7 +14913,7 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -12744,7 +14948,7 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -13296,6 +15500,10 @@ export interface operations {
                 dept_code?: string | null;
                 /** @description Filter by status (在學/畢業) */
                 status?: string | null;
+                /** @description Filter by scholarship type the student has applied for */
+                scholarship_type_id?: number | null;
+                /** @description Filter by whether the student has applied for any scholarship */
+                has_application?: boolean | null;
             };
             header?: never;
             path?: never;
@@ -13405,6 +15613,216 @@ export interface operations {
             };
         };
     };
+    get_student_scholarship_history_api_v1_admin_student_history__student_number__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                student_number: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_received_months_template_api_v1_admin_received_months_template_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    preview_received_months_import_api_v1_admin_received_months_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_preview_received_months_import_api_v1_admin_received_months_preview_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_received_months_import_api_v1_admin_received_months__import_id__confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                import_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_received_months_import_api_v1_admin_received_months__import_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                import_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refresh_nycu_employee_cache_api_v1_admin_cache_nycu_employees_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    list_audit_logs_api_v1_admin_audit_logs_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+                /** @description e.g. application / college_ranking / batch_import */
+                resource_type?: string | null;
+                /** @description Exact resource id (string match) */
+                resource_id?: string | null;
+                /** @description AuditAction value, e.g. revoke / delete / import */
+                action?: string | null;
+                /** @description Acting user id */
+                user_id?: number | null;
+                date_from?: string | null;
+                date_to?: string | null;
+                /** @description Substring match on description / resource_name */
+                search?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_all_scholarships_api_v1_scholarships_get: {
         parameters: {
             query?: {
@@ -13454,7 +15872,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ApiResponse_list_EligibleScholarshipResponse__"];
                 };
             };
         };
@@ -13654,137 +16072,6 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["WhitelistToggleRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_comprehensive_application_api_v1_scholarship_management_applications_create_comprehensive_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": Record<string, never>;
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    submit_comprehensive_application_api_v1_scholarship_management_applications__application_id__submit_comprehensive_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                application_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_applications_by_priority_api_v1_scholarship_management_applications_by_priority_get: {
-        parameters: {
-            query?: {
-                scholarship_type_id?: number | null;
-                semester?: string | null;
-                status?: string | null;
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    process_renewal_applications_api_v1_scholarship_management_renewals_process_priority_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": string;
             };
         };
         responses: {
@@ -14325,174 +16612,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
-                };
-            };
-        };
-    };
-    getAllAnnouncements_api_v1_notifications_admin_announcements_get: {
-        parameters: {
-            query?: {
-                /** @description 頁碼 */
-                page?: number;
-                /** @description 每頁數量 */
-                size?: number;
-                /** @description 通知類型篩選 */
-                notification_type?: string | null;
-                /** @description 優先級篩選 */
-                priority?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    createAnnouncement_api_v1_notifications_admin_announcements_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["NotificationCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    getAnnouncement_api_v1_notifications_admin_announcements__announcement_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                announcement_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    updateAnnouncement_api_v1_notifications_admin_announcements__announcement_id__put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                announcement_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["NotificationCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    deleteAnnouncement_api_v1_notifications_admin_announcements__announcement_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                announcement_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -15138,7 +17257,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -15204,7 +17325,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -15259,6 +17382,76 @@ export interface operations {
             };
         };
     };
+    toggle_configuration_supplementary_import_api_v1_scholarship_configurations_configurations__id__supplementary_import_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupplementaryImportToggle"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    toggle_configuration_college_view_distribution_api_v1_scholarship_configurations_configurations__id__college_view_distribution_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollegeViewDistributionToggle"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     duplicate_scholarship_configuration_api_v1_scholarship_configurations_configurations__id__duplicate_post: {
         parameters: {
             query?: never;
@@ -15270,7 +17463,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -15507,7 +17702,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>[];
+                    "application/json": components["schemas"]["ApiResponse_List_dict__"];
                 };
             };
         };
@@ -15527,7 +17722,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>[];
+                    "application/json": components["schemas"]["ApiResponse_List_dict__"];
                 };
             };
         };
@@ -15547,7 +17742,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>[];
+                    "application/json": components["schemas"]["ApiResponse_List_dict__"];
                 };
             };
         };
@@ -15567,7 +17762,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>[];
+                    "application/json": components["schemas"]["ApiResponse_List_dict__"];
                 };
             };
         };
@@ -15587,7 +17782,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>[];
+                    "application/json": components["schemas"]["ApiResponse_List_dict__"];
                 };
             };
         };
@@ -15627,7 +17822,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>[];
+                    "application/json": components["schemas"]["ApiResponse_List_dict__"];
                 };
             };
         };
@@ -15650,7 +17845,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>[];
+                    "application/json": components["schemas"]["ApiResponse_List_dict__"];
                 };
             };
             /** @description Validation Error */
@@ -15679,7 +17874,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": components["schemas"]["ApiResponse_dict_"];
                 };
             };
         };
@@ -15699,7 +17894,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": components["schemas"]["ApiResponse_dict_"];
                 };
             };
         };
@@ -15722,7 +17917,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": components["schemas"]["ApiResponse_dict_"];
                 };
             };
             /** @description Validation Error */
@@ -15751,7 +17946,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": components["schemas"]["ApiResponse_dict_"];
                 };
             };
         };
@@ -15807,7 +18002,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": components["schemas"]["ApiResponse_dict_"];
                 };
             };
         };
@@ -16092,7 +18287,10 @@ export interface operations {
     };
     get_bank_document_api_v1_user_profiles_files_bank_documents__filename__get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Access token */
+                token?: string | null;
+            };
             header?: never;
             path: {
                 filename: string;
@@ -16557,8 +18755,8 @@ export interface operations {
                 status_filter?: string | null;
                 /** @description Page number */
                 page?: number;
-                /** @description Items per page */
-                size?: number;
+                /** @description Items per page; omit to return all applications */
+                size?: number | null;
             };
             header?: never;
             path?: never;
@@ -16757,8 +18955,8 @@ export interface operations {
                 status?: string | null;
                 /** @description Page number */
                 page?: number;
-                /** @description Items per page */
-                size?: number;
+                /** @description Items per page; omit to return all relationships */
+                size?: number | null;
             };
             header?: never;
             path?: never;
@@ -16792,6 +18990,7 @@ export interface operations {
                 professor_id: number;
                 student_id: number;
                 relationship_type: string;
+                /** @description active|inactive */
                 status?: string | null;
                 start_date?: string | null;
                 notes?: string | null;
@@ -16826,6 +19025,7 @@ export interface operations {
         parameters: {
             query?: {
                 relationship_type?: string | null;
+                /** @description active|inactive */
                 status?: string | null;
                 end_date?: string | null;
                 notes?: string | null;
@@ -16941,6 +19141,80 @@ export interface operations {
             path: {
                 student_id: string;
             };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_department_summary_single_api_v1_college_review_applications_department_summary_export_get: {
+        parameters: {
+            query: {
+                /** @description Scholarship type ID */
+                scholarship_type_id: number;
+                /** @description Academic year */
+                academic_year: number;
+                /** @description first / second / yearly / null */
+                semester?: string | null;
+                /** @description Department code(s) — Department.code; comma-separated to bundle a name group */
+                department_code: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_department_summary_bulk_api_v1_college_review_applications_department_summary_export_bulk_get: {
+        parameters: {
+            query: {
+                scholarship_type_id: number;
+                academic_year: number;
+                semester?: string | null;
+                scope: "college" | "all";
+                /** @description Academy (學院) code to export when scope='college'; admins may pick any college */
+                academy_code?: string | null;
+            };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -17261,44 +19535,14 @@ export interface operations {
             };
         };
     };
-    execute_quota_distribution_api_v1_college_review_rankings__ranking_id__distribute_post: {
+    export_ranking_excel_api_v1_college_review_rankings__ranking_id__export_excel_get: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                ranking_id: number;
+            query?: {
+                /** @description Render the rank column blank, as a fill-in import template */
+                template?: boolean;
+                /** @description Output format: xlsx (default) or pdf */
+                format?: "xlsx" | "pdf";
             };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["QuotaDistributionRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    execute_matrix_distribution_api_v1_college_review_rankings__ranking_id__execute_matrix_distribution_post: {
-        parameters: {
-            query?: never;
             header?: never;
             path: {
                 ranking_id: number;
@@ -17425,6 +19669,94 @@ export interface operations {
             };
         };
     };
+    get_college_distribution_results_api_v1_college_review_distribution_results_get: {
+        parameters: {
+            query: {
+                scholarship_type_id: number;
+                academic_year: number;
+                semester?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_college_distribution_results_api_v1_college_review_distribution_results_export_get: {
+        parameters: {
+            query: {
+                scholarship_type_id: number;
+                academic_year: number;
+                semester?: string | null;
+                /** @description Output format: xlsx (default) or pdf */
+                format?: "xlsx" | "pdf";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_review_statistics_api_v1_college_review_statistics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     get_available_combinations_api_v1_college_review_available_combinations_get: {
         parameters: {
             query?: never;
@@ -17441,6 +19773,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_active_config_api_v1_college_review_active_config_get: {
+        parameters: {
+            query: {
+                /** @description Scholarship type ID */
+                scholarship_type_id: number;
+                /** @description Academic year (民國) */
+                academic_year: number;
+                /** @description Semester: first / second / yearly (or omit for yearly) */
+                semester?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -17485,6 +19853,42 @@ export interface operations {
             };
         };
     };
+    export_application_package_api_v1_college_review_export_package_get: {
+        parameters: {
+            query: {
+                /** @description Scholarship type ID */
+                scholarship_type_id: number;
+                /** @description Academic year */
+                academic_year: number;
+                /** @description Semester (first/second/null for annual) */
+                semester?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_review_api_v1_reviews_reviews_post: {
         parameters: {
             query?: never;
@@ -17504,7 +19908,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
@@ -17535,7 +19941,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
@@ -17566,7 +19974,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
@@ -17597,7 +20007,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
@@ -17628,7 +20040,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
@@ -18106,6 +20520,286 @@ export interface operations {
             };
         };
     };
+    upload_renewal_import_api_v1_college_review_renewal_import_upload_post: {
+        parameters: {
+            query: {
+                /** @description 獎學金類型代碼 */
+                scholarship_type: string;
+                /** @description 學年度 */
+                academic_year: number;
+                /** @description 學期 */
+                semester?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_renewal_import_api_v1_college_review_renewal_import_upload_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_renewal_import_api_v1_college_review_renewal_import__batch_id__confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RenewalImportConfirmRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_renewal_import_history_api_v1_college_review_renewal_import_history_get: {
+        parameters: {
+            query?: {
+                /** @description 跳過筆數 */
+                skip?: number;
+                /** @description 每頁筆數 */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_renewal_import_details_api_v1_college_review_renewal_import__batch_id__details_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_renewal_import_template_api_v1_college_review_renewal_import_template_get: {
+        parameters: {
+            query: {
+                /** @description 獎學金類型代碼 */
+                scholarship_type: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_supplementary_import_availability_api_v1_college_review_supplementary_import_availability_get: {
+        parameters: {
+            query: {
+                /** @description 獎學金類型代碼 */
+                scholarship_type: string;
+                /** @description 學年度 */
+                academic_year: number;
+                /** @description 學期 */
+                semester?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_supplementary_import_template_api_v1_college_review_supplementary_import_template_get: {
+        parameters: {
+            query: {
+                /** @description 獎學金類型代碼 */
+                scholarship_type: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_supplementary_import_api_v1_college_review_supplementary_import_upload_post: {
+        parameters: {
+            query: {
+                /** @description 獎學金類型代碼 */
+                scholarship_type: string;
+                /** @description 學年度 */
+                academic_year: number;
+                /** @description 學期 */
+                semester?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_supplementary_import_api_v1_college_review_supplementary_import_upload_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_email_history_api_v1_email_management_history_get: {
         parameters: {
             query?: {
@@ -18500,39 +21194,6 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    send_test_email_api_v1_email_management_send_test_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SendTestEmailRequest"];
-            };
-        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -19084,6 +21745,8 @@ export interface operations {
                 skip?: number;
                 limit?: number;
                 scholarship_configuration_id?: number | null;
+                /** @description 依獎學金類型過濾（透過所屬配置） */
+                scholarship_type_id?: number | null;
                 status_filter?: components["schemas"]["RosterStatus"] | null;
                 period_label?: string | null;
                 academic_year?: number | null;
@@ -19254,7 +21917,7 @@ export interface operations {
                 skip?: number;
                 limit?: number;
                 verification_status?: components["schemas"]["StudentVerificationStatus"] | null;
-                is_qualified?: boolean | null;
+                is_included?: boolean | null;
             };
             header?: never;
             path: {
@@ -19521,6 +22184,42 @@ export interface operations {
             };
         };
     };
+    exclude_roster_item_api_v1_payment_rosters__roster_id__items__item_id__exclude_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roster_id: number;
+                item_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Body_exclude_roster_item_api_v1_payment_rosters__roster_id__items__item_id__exclude_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_roster_audit_logs_api_v1_payment_rosters__roster_id__audit_logs_get: {
         parameters: {
             query?: {
@@ -19534,6 +22233,210 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_revoked_suspended_api_v1_payment_rosters__roster_id__revoked_suspended_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roster_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_locked_roster_item_api_v1_payment_rosters__roster_id__items__item_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roster_id: number;
+                item_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemoveLockedItemRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_roster_item_api_v1_payment_rosters__roster_id__items__item_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roster_id: number;
+                item_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreItemRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_distribution_diff_api_v1_payment_rosters__roster_id__distribution_diff_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roster_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reconcile_roster_endpoint_api_v1_payment_rosters__roster_id__reconcile_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roster_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReconcileRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    regenerate_roster_endpoint_api_v1_payment_rosters__roster_id__regenerate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roster_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RegenerateRosterRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -19910,6 +22813,328 @@ export interface operations {
             };
         };
     };
+    get_public_docs_api_v1_system_settings_public_docs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_application_notices_api_v1_system_settings_application_notices_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    update_application_notices_api_v1_system_settings_application_notices_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplicationNotices"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_system_doc_api_v1_system_settings_upload__doc_key__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_system_doc_api_v1_system_settings_upload__doc_key__post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_system_doc_file_api_v1_system_settings_file__doc_key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_supplementary_docs_api_v1_system_settings_supplementary_docs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    create_supplementary_doc_api_v1_system_settings_supplementary_docs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_create_supplementary_doc_api_v1_system_settings_supplementary_docs_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reorder_supplementary_docs_api_v1_system_settings_supplementary_docs_reorder_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReorderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_supplementary_doc_api_v1_system_settings_supplementary_docs__doc_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_supplementary_doc_api_v1_system_settings_supplementary_docs__doc_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupplementaryDocUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_supplementary_doc_file_api_v1_system_settings_supplementary_docs__doc_id__file_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_configuration_api_v1_system_settings__id__get: {
         parameters: {
             query?: {
@@ -20115,6 +23340,233 @@ export interface operations {
             };
         };
     };
+    list_footer_links_api_v1_footer_links_get: {
+        parameters: {
+            query?: {
+                include_inactive?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_footer_link_api_v1_footer_links_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FooterLinkCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_footer_link_file_api_v1_footer_links_upload_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_footer_link_file_api_v1_footer_links_upload_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reorder_footer_links_api_v1_footer_links_reorder_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FooterLinkReorderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_footer_link_api_v1_footer_links__link_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                link_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_footer_link_api_v1_footer_links__link_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                link_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FooterLinkUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_footer_link_file_api_v1_footer_links__link_id__file_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                link_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_my_verified_account_api_v1_student_bank_accounts_my_verified_account_get: {
         parameters: {
             query?: never;
@@ -20131,6 +23583,112 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    batch_student_scholarship_history_api_v1_student_history_batch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchStudentHistoryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_my_received_months_api_v1_student_history_me_months_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_visibility_api_v1_student_history_visibility_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    update_visibility_api_v1_student_history_visibility_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudentHistoryVisibilityUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -20170,6 +23728,699 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    list_eligible_renewals_api_v1_renewals_eligible_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    create_renewal_application_api_v1_renewals__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateRenewalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_challenge_application_api_v1_renewals_challenge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateChallengeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trigger_renewal_auto_distribution_api_v1_renewals__scholarship_type_id__auto_distribute_post: {
+        parameters: {
+            query: {
+                academic_year: number;
+            };
+            header?: never;
+            path: {
+                scholarship_type_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_renewal_distribution_result_api_v1_renewals_distribution_result_get: {
+        parameters: {
+            query: {
+                scholarship_type_id: number;
+                academic_year: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    audit_renewal_violations_api_v1_renewals_audit_renewal_violations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_admin_available_combinations_api_v1_manual_distribution_available_combinations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_students_for_distribution_api_v1_manual_distribution_students_get: {
+        parameters: {
+            query: {
+                scholarship_type_id: number;
+                academic_year: number;
+                semester: string;
+                college_code?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_quota_status_api_v1_manual_distribution_quota_status_get: {
+        parameters: {
+            query: {
+                scholarship_type_id: number;
+                academic_year: number;
+                semester: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_distribution_state_api_v1_manual_distribution_state_get: {
+        parameters: {
+            query: {
+                scholarship_type_id: number;
+                academic_year: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    auto_allocate_preview_api_v1_manual_distribution_auto_allocate_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutoAllocatePreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_distribution_api_v1_manual_distribution_preview_distribution_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AllocateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    allocate_api_v1_manual_distribution_allocate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AllocateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    finalize_api_v1_manual_distribution_finalize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FinalizeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_distribution_history_api_v1_manual_distribution__scholarship_type_id__history_get: {
+        parameters: {
+            query: {
+                academic_year: number;
+                semester: string;
+            };
+            header?: never;
+            path: {
+                scholarship_type_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_from_history_api_v1_manual_distribution__scholarship_type_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scholarship_type_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_distribution_summary_api_v1_manual_distribution_distribution_summary_get: {
+        parameters: {
+            query: {
+                scholarship_type_id: number;
+                academic_year: number;
+                semester: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_distribution_summary_api_v1_manual_distribution_distribution_summary_export_get: {
+        parameters: {
+            query: {
+                scholarship_type_id: number;
+                academic_year: number;
+                semester: string;
+                /** @description Output format: xlsx (default) or pdf */
+                format?: "xlsx" | "pdf";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_rosters_from_distribution_api_v1_manual_distribution_generate_rosters_from_distribution_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GenerateRostersRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_application_allocation_api_v1_manual_distribution_applications__application_id__revoke_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevokeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    suspend_application_allocation_api_v1_manual_distribution_applications__application_id__suspend_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SuspendRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_application_allocation_api_v1_manual_distribution_applications__application_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };

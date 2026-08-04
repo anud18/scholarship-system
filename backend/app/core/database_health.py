@@ -38,13 +38,16 @@ async def check_database_health() -> Dict[str, Any]:
                 health_info["connection"] = True
                 health_info["status"] = "healthy"
 
-            # Get pool information
+            # Get pool information. StaticPool (used by SQLite tests) doesn't
+            # expose size/checkedin/etc — guard each attribute so the health
+            # check stays honest about connection success regardless of
+            # pool flavor.
             pool = async_engine.pool
             health_info["pool_info"] = {
-                "size": pool.size(),
-                "checked_in": pool.checkedin(),
-                "checked_out": pool.checkedout(),
-                "overflow": pool.overflow(),
+                "size": pool.size() if hasattr(pool, "size") else 0,
+                "checked_in": pool.checkedin() if hasattr(pool, "checkedin") else 0,
+                "checked_out": pool.checkedout() if hasattr(pool, "checkedout") else 0,
+                "overflow": pool.overflow() if hasattr(pool, "overflow") else 0,
                 "invalid": pool.invalidated_count() if hasattr(pool, "invalidated_count") else 0,
             }
 
@@ -58,7 +61,7 @@ async def check_database_health() -> Dict[str, Any]:
             health_info["cached_statement_error"] = True
             logger.warning(f"Detected cached statement error during health check: {error_message}")
 
-        logger.error(f"Database health check failed: {e}")
+        logger.exception("Database health check failed")
 
     return health_info
 
@@ -88,8 +91,8 @@ async def recover_from_cached_statement_error() -> bool:
                 logger.info("Successfully recovered from cached statement error")
                 return True
 
-    except Exception as e:
-        logger.error(f"Failed to recover from cached statement error: {e}")
+    except Exception:
+        logger.exception("Failed to recover from cached statement error")
 
     return False
 
@@ -131,11 +134,14 @@ async def handle_database_operation_with_retry(operation_func, max_retries: int 
 
             else:
                 # For non-cached statement errors, don't retry
-                logger.error(f"Non-recoverable database error: {error_message}")
-                raise e
+                logger.exception("Non-recoverable database error")
+                raise e from e
 
     # If we get here, all retry attempts failed
-    logger.error(f"All retry attempts failed, raising last exception: {last_exception}")
+    logger.error(
+        "All retry attempts failed, raising last exception",
+        exc_info=last_exception,
+    )
     raise last_exception
 
 

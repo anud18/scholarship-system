@@ -63,8 +63,6 @@ download_dashboard() {
                         .uid = "prometheus-uid"
                     elif .type == "loki" then
                         .uid = "loki-staging-uid"
-                    elif .type == "alertmanager" then
-                        .uid = "alertmanager-uid"
                     else
                         .
                     end

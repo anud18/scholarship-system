@@ -8,7 +8,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { toast } from "sonner";
+import { logger } from "@/lib/utils/logger";
 import { Calendar } from "lucide-react"
+import { apiClient } from "@/lib/api"
 
 interface RosterSchedule {
   id: number
@@ -64,11 +66,10 @@ export function EditScheduleDialog({
 
   const fetchScholarshipConfigurations = async () => {
     try {
-      const response = await fetch("/api/v1/scholarship-configurations")
-      const data = await response.json()
-      setScholarshipConfigs(data.configurations || [])
+      const response = await apiClient.admin.getScholarshipConfigurations()
+      setScholarshipConfigs((response.data || []) as ScholarshipConfiguration[])
     } catch (error) {
-      console.error("獲取獎學金設定失敗:", error)
+      logger.error("獲取獎學金設定失敗", { error: error })
       toast.error("無法載入獎學金設定")
     }
   }
@@ -95,28 +96,23 @@ export function EditScheduleDialog({
       setLoading(true)
 
       const submitData = {
-        ...formData,
-        scholarship_configuration_id: parseInt(formData.scholarship_configuration_id),
+        schedule_name: formData.schedule_name,
+        description: formData.description,
+        roster_cycle: formData.roster_cycle as "monthly" | "semi_yearly" | "yearly",
+        cron_expression: formData.cron_expression,
       }
 
-      const response = await fetch(`/api/v1/roster-schedules/${schedule.id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(submitData),
-      })
+      const response = await apiClient.rosterSchedules.updateSchedule(schedule.id, submitData)
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || "更新排程失敗")
+      if (!response.success) {
+        throw new Error(response.message || "更新排程失敗")
       }
 
       toast.success("排程已更新")
 
       onScheduleUpdated()
     } catch (error) {
-      console.error("更新排程失敗:", error)
+      logger.error("更新排程失敗", { error: error })
       toast.error(error instanceof Error ? error.message : "無法更新排程")
     } finally {
       setLoading(false)
@@ -179,7 +175,7 @@ export function EditScheduleDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="monthly">月度</SelectItem>
-                  <SelectItem value="half_yearly">半年度</SelectItem>
+                  <SelectItem value="semi_yearly">半年度</SelectItem>
                   <SelectItem value="yearly">年度</SelectItem>
                 </SelectContent>
               </Select>

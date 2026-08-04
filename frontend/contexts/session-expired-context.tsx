@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { SessionExpiredModal } from "@/components/session-expired-modal";
 import { Locale } from "@/lib/validators";
+import { logger } from "@/lib/utils/logger";
 
 interface SessionExpiredContextType {
   isSessionExpired: boolean;
@@ -27,7 +28,7 @@ export function SessionExpiredProvider({ children }: { children: ReactNode }) {
     const handleSessionExpired = (event: CustomEvent) => {
       const { type, status, endpoint } = event.detail;
 
-      console.warn(`Session expired event received:`, {
+      logger.warn("Session expired event received", {
         type,
         status,
         endpoint,
@@ -58,7 +59,7 @@ export function SessionExpiredProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const handleRelogin = useCallback(() => {
-    console.log("Session expired - redirecting to login");
+    logger.info("Session expired - redirecting to login");
 
     // Clear session expired state
     setIsSessionExpired(false);

@@ -1,14 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { logger } from "@/lib/utils/logger";
+import { buildFileProxyUrl } from "@/lib/api/modules/system-settings";
+import { previewMimeType } from "@/lib/utils";
 import { User } from "@/types/user";
 import { useCollegeManagement } from "@/contexts/college-management-context";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -48,22 +46,42 @@ import {
   Grid,
   List,
   Download,
+  FileArchive,
   GraduationCap,
   School,
   Award,
   Building,
   Info,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useReferenceData, getStudyingStatusName, getAcademyName, getDepartmentName } from "@/hooks/use-reference-data";
+import {
+  useReferenceData,
+  getStudyingStatusName,
+  getAcademyName,
+  getDepartmentName,
+} from "@/hooks/use-reference-data";
 import { useScholarshipData } from "@/hooks/use-scholarship-data";
-import * as XLSX from "xlsx";
 import { apiClient } from "@/lib/api";
+import { FilePreviewDialog } from "@/components/file-preview-dialog";
+import {
+  exportDepartmentSummary,
+  exportDepartmentSummaryBulk,
+} from "@/lib/api/modules/college";
+import { ApplicationCardView } from "./ApplicationCardView";
+import {
+  NationalityIdentity,
+  ProfessorRecommendation,
+  formatAppliedDate,
+} from "./application-summary-fields";
 
 interface ApplicationReviewPanelProps {
   user: User;
   scholarshipType: { code: string; name: string };
 }
+
+const ALL_DEPTS_OWN = "__college_all__";
+const ALL_DEPTS_SYSTEM = "__all__";
 
 export function ApplicationReviewPanel({
   user,
@@ -113,6 +131,57 @@ export function ApplicationReviewPanel({
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
+  // Summary export state
+  const [summaryDept, setSummaryDept] = useState<string>("");
+
+  const visibleDepartments = useMemo(() => {
+    if (!departments) return [];
+    if (user.role === "admin" || user.role === "super_admin") return departments;
+    return departments.filter(
+      (d: { code: string; name: string; academy_code?: string | null }) =>
+        d.academy_code === user.college_code
+    );
+  }, [departments, user]);
+
+  // Bundle departments that share a display name (e.g. 資訊工程學系 = 117/217/317/1550)
+  // into one option, keyed within academy. Selecting it exports every code in the
+  // group as a single 總表. value = the comma-joined codes (backend splits on ",").
+  const departmentGroups = useMemo(() => {
+    const groups = new Map<
+      string,
+      { name: string; academyCode: string | null; codes: string[] }
+    >();
+    for (const d of visibleDepartments as Array<{
+      code: string;
+      name: string;
+      academy_code?: string | null;
+    }>) {
+      const academyCode = d.academy_code ?? null;
+      const key = `${academyCode ?? ""}__${d.name}`;
+      const existing = groups.get(key);
+      if (existing) existing.codes.push(d.code);
+      else groups.set(key, { name: d.name, academyCode, codes: [d.code] });
+    }
+    return Array.from(groups.values());
+  }, [visibleDepartments]);
+
+  // A program name can exist under more than one academy (only reachable by admins,
+  // whose visibleDepartments spans academies). Those need the academy appended so the
+  // two same-named options stay distinguishable; college views never hit this.
+  const ambiguousGroupNames = useMemo(() => {
+    const academiesByName = new Map<string, Set<string>>();
+    for (const g of departmentGroups) {
+      const set = academiesByName.get(g.name) ?? new Set<string>();
+      set.add(g.academyCode ?? "");
+      academiesByName.set(g.name, set);
+    }
+    return new Set(
+      Array.from(academiesByName.entries())
+        .filter(([, codes]) => codes.size > 1)
+        .map(([name]) => name)
+    );
+  }, [departmentGroups]);
+
   // Fetch college quota when scholarship type, year, or semester changes
   const fetchCollegeQuota = useCallback(async () => {
     if (!activeScholarshipTab || !selectedAcademicYear) {
@@ -127,12 +196,15 @@ export function ApplicationReviewPanel({
       );
 
       if (!scholarshipType || !scholarshipType.id) {
-        console.warn("Scholarship type ID not found for:", activeScholarshipTab);
+        logger.warn(
+          "Scholarship type ID not found for:",
+          activeScholarshipTab
+        );
         setCollegeQuotaInfo(null);
         return;
       }
 
-      console.log("Fetching college quota for:", {
+      logger.debug("Fetching college quota for:", {
         scholarshipTypeId: scholarshipType.id,
         academicYear: selectedAcademicYear,
         semester: selectedSemester,
@@ -145,16 +217,20 @@ export function ApplicationReviewPanel({
       );
 
       if (response.success && response.data) {
+        const quotaData = response.data as {
+          college_quota?: number | null;
+          college_quota_breakdown?: Record<string, unknown>;
+        };
         setCollegeQuotaInfo({
-          collegeQuota: response.data.college_quota ?? null,
-          breakdown: response.data.college_quota_breakdown ?? {},
+          collegeQuota: quotaData.college_quota ?? null,
+          breakdown: (quotaData.college_quota_breakdown as Record<string, number>) ?? {},
         });
-        console.log("College quota fetched:", response.data.college_quota);
+        logger.debug("College quota fetched:", quotaData.college_quota);
       } else {
         setCollegeQuotaInfo(null);
       }
     } catch (error) {
-      console.error("Failed to fetch college quota:", error);
+      logger.error("Failed to fetch college quota", { error: error });
       setCollegeQuotaInfo(null);
     }
   }, [
@@ -176,12 +252,24 @@ export function ApplicationReviewPanel({
     // 1. Current tab is "review"
     // 2. Data version has changed (indicating updates from other tabs)
     if (activeTab === "review") {
-      console.log(`[ApplicationReviewPanel] Auto-refreshing applications (dataVersion: ${dataVersion})`);
-      fetchCollegeApplications(selectedAcademicYear, selectedSemester, activeScholarshipTab);
+      logger.debug(
+        `[ApplicationReviewPanel] Auto-refreshing applications (dataVersion: ${dataVersion})`
+      );
+      fetchCollegeApplications(
+        selectedAcademicYear,
+        selectedSemester,
+        activeScholarshipTab
+      );
     }
     // Note: fetchCollegeApplications is stable from hook, no need in deps
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, dataVersion, selectedAcademicYear, selectedSemester, activeScholarshipTab]);
+  }, [
+    activeTab,
+    dataVersion,
+    selectedAcademicYear,
+    selectedSemester,
+    activeScholarshipTab,
+  ]);
 
   // Filter applications based on status and search query
   const filteredApplications = applications.filter(app => {
@@ -211,8 +299,12 @@ export function ApplicationReviewPanel({
 
   const handleApprove = async (appId: number, comments?: string) => {
     try {
-      const result = await updateApplicationStatus(appId, "approved", comments || "學院核准通過");
-      console.log(`College approved application ${appId}`, result);
+      const result = await updateApplicationStatus(
+        appId,
+        "approved",
+        comments || "學院核准通過"
+      );
+      logger.debug(`College approved application ${appId}`, result);
 
       // 檢查是否自動重新執行了分發
       const redistribution = result?.redistribution_info;
@@ -227,12 +319,10 @@ export function ApplicationReviewPanel({
         );
       } else {
         // 顯示成功提示
-        toast.success(
-          locale === "zh" ? "核准成功" : "Approval Successful",
-          {
-            description: locale === "zh" ? "申請已核准" : "Application has been approved",
-          }
-        );
+        toast.success(locale === "zh" ? "核准成功" : "Approval Successful", {
+          description:
+            locale === "zh" ? "申請已核准" : "Application has been approved",
+        });
       }
 
       // 關閉 dialog
@@ -248,20 +338,26 @@ export function ApplicationReviewPanel({
       // 觸發 dataVersion 更新，通知其他 tab 重新載入數據
       incrementDataVersion();
     } catch (error) {
-      console.error("Failed to approve application:", error);
-      toast.error(
-        locale === "zh" ? "核准失敗" : "Approval Failed",
-        {
-          description: error instanceof Error ? error.message : (locale === "zh" ? "無法核准此申請" : "Could not approve this application"),
-        }
-      );
+      logger.error("Failed to approve application", { error: error });
+      toast.error(locale === "zh" ? "核准失敗" : "Approval Failed", {
+        description:
+          error instanceof Error
+            ? error.message
+            : locale === "zh"
+              ? "無法核准此申請"
+              : "Could not approve this application",
+      });
     }
   };
 
   const handleReject = async (appId: number, comments?: string) => {
     try {
-      const result = await updateApplicationStatus(appId, "rejected", comments || "學院駁回申請");
-      console.log(`College rejected application ${appId}`, result);
+      const result = await updateApplicationStatus(
+        appId,
+        "rejected",
+        comments || "學院駁回申請"
+      );
+      logger.debug(`College rejected application ${appId}`, result);
 
       // 檢查是否自動重新執行了分發
       const redistribution = result?.redistribution_info;
@@ -276,12 +372,10 @@ export function ApplicationReviewPanel({
         );
       } else {
         // 顯示成功提示
-        toast.success(
-          locale === "zh" ? "駁回成功" : "Rejection Successful",
-          {
-            description: locale === "zh" ? "申請已駁回" : "Application has been rejected",
-          }
-        );
+        toast.success(locale === "zh" ? "駁回成功" : "Rejection Successful", {
+          description:
+            locale === "zh" ? "申請已駁回" : "Application has been rejected",
+        });
       }
 
       // 關閉 dialog
@@ -297,37 +391,50 @@ export function ApplicationReviewPanel({
       // 觸發 dataVersion 更新，通知其他 tab 重新載入數據
       incrementDataVersion();
     } catch (error) {
-      console.error("Failed to reject application:", error);
-      toast.error(
-        locale === "zh" ? "駁回失敗" : "Rejection Failed",
-        {
-          description: error instanceof Error ? error.message : (locale === "zh" ? "無法駁回此申請" : "Could not reject this application"),
-        }
-      );
+      logger.error("Failed to reject application", { error: error });
+      toast.error(locale === "zh" ? "駁回失敗" : "Rejection Failed", {
+        description:
+          error instanceof Error
+            ? error.message
+            : locale === "zh"
+              ? "無法駁回此申請"
+              : "Could not reject this application",
+      });
     }
   };
 
-  const handleExportApplications = () => {
+  const handleExportApplications = async () => {
     try {
+      // Lazy-load the heavy sheetjs lib only when an export actually happens
+      const XLSX = await import("xlsx");
       if (applications.length === 0) {
-        toast.error(
-          locale === "zh" ? "無資料可匯出" : "No data to export",
-          {
-            description: locale === "zh" ? "目前沒有申請資料" : "No applications available",
-          }
-        );
+        toast.error(locale === "zh" ? "無資料可匯出" : "No data to export", {
+          description:
+            locale === "zh" ? "目前沒有申請資料" : "No applications available",
+        });
         return;
       }
 
+      // Guard against CSV/Excel formula injection (OWASP): prefix a single quote
+      // when a cell value starts with =, +, -, @, tab or CR.
+      const sanitizeCell = (value: string): string =>
+        /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+
       // Prepare export data
-      const exportData = applications.map((app) => {
+      const exportData = applications.map(app => {
         // Format status
-        const statusText = app.status_zh || getApplicationStatusLabel(app.status as ApplicationStatus, locale);
+        const statusText =
+          app.status_zh ||
+          getApplicationStatusLabel(app.status as ApplicationStatus, locale);
 
         // Format application type
         const applicationType = app.is_renewal
-          ? (locale === "zh" ? "續領" : "Renewal")
-          : (locale === "zh" ? "初領" : "New");
+          ? locale === "zh"
+            ? "續領"
+            : "Renewal"
+          : locale === "zh"
+            ? "初領"
+            : "New";
 
         // Format date
         const applicationDate = app.created_at
@@ -339,21 +446,41 @@ export function ApplicationReviewPanel({
           : "-";
 
         // Format scholarship period status (獎學金期間在學狀態)
-        const studyingStatus = app.scholarship_period_status !== undefined && app.scholarship_period_status !== null
-          ? getStudyingStatusName(app.scholarship_period_status, studyingStatuses)
-          : "-";
+        const studyingStatus =
+          app.scholarship_period_status !== undefined &&
+          app.scholarship_period_status !== null
+            ? getStudyingStatusName(
+                app.scholarship_period_status,
+                studyingStatuses
+              )
+            : "-";
+
+        const professorRecommendation = (app.professor_review_items || [])
+          .map((item: { sub_type_code?: string; recommendation?: string; comments?: string }) => {
+            const label = getSubTypeName(item.sub_type_code, locale);
+            const rec = item.recommendation === "approve"
+              ? (locale === "zh" ? "推薦" : "Approve")
+              : (locale === "zh" ? "不推薦" : "Reject");
+            const reasonLabel = locale === "zh" ? "不同意理由" : "Reason";
+            const reason = item.recommendation === "reject" && item.comments
+              ? ` (${reasonLabel}: ${sanitizeCell(item.comments)})`
+              : "";
+            return `${label}: ${rec}${reason}`;
+          })
+          .join("; ") || "-";
 
         return {
-          '學生姓名': app.student_name || "-",
-          '學號': app.student_id || "-",
-          '學院': getAcademyName(app.academy_code, academies),
-          '系所': getDepartmentName(app.department_code, departments),
-          '在學學期數': app.student_termcount || "-",
-          '在學狀態': studyingStatus,
-          '獎學金類型': app.scholarship_type_zh || app.scholarship_type || "-",
-          '申請類別': applicationType,
-          '狀態': statusText,
-          '申請時間': applicationDate,
+          學生姓名: sanitizeCell(app.student_name || "-"),
+          學號: sanitizeCell(app.student_id || "-"),
+          學院: sanitizeCell(getAcademyName(app.academy_code, academies)),
+          系所: sanitizeCell(getDepartmentName(app.department_code, departments)),
+          在學學期數: sanitizeCell(String(app.student_termcount || "-")),
+          在學狀態: sanitizeCell(studyingStatus),
+          獎學金類型: sanitizeCell(app.scholarship_type_zh || app.scholarship_type || "-"),
+          申請類別: applicationType,
+          教授推薦: professorRecommendation,
+          狀態: sanitizeCell(statusText),
+          申請時間: applicationDate,
         };
       });
 
@@ -361,7 +488,7 @@ export function ApplicationReviewPanel({
       const worksheet = XLSX.utils.json_to_sheet(exportData);
 
       // Set column widths
-      worksheet['!cols'] = [
+      worksheet["!cols"] = [
         { wch: 20 }, // 學生姓名
         { wch: 15 }, // 學號
         { wch: 25 }, // 學院
@@ -370,16 +497,17 @@ export function ApplicationReviewPanel({
         { wch: 12 }, // 在學狀態
         { wch: 25 }, // 獎學金類型
         { wch: 12 }, // 申請類別
+        { wch: 30 }, // 教授推薦
         { wch: 15 }, // 狀態
         { wch: 12 }, // 申請時間
       ];
 
       // Create workbook
       const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, '申請審核清單');
+      XLSX.utils.book_append_sheet(workbook, worksheet, "申請審核清單");
 
       // Generate filename
-      const timestamp = new Date().toISOString().split('T')[0];
+      const timestamp = new Date().toISOString().split("T")[0];
       const scholarshipTypeCode = activeScholarshipTab || "all";
       const year = selectedAcademicYear || "all";
       const semester = selectedSemester || "all";
@@ -388,24 +516,165 @@ export function ApplicationReviewPanel({
       // Download file
       XLSX.writeFile(workbook, filename);
 
-      toast.success(
-        locale === "zh" ? "匯出成功" : "Export successful",
-        {
-          description: locale === "zh"
+      toast.success(locale === "zh" ? "匯出成功" : "Export successful", {
+        description:
+          locale === "zh"
             ? `已匯出 ${exportData.length} 筆申請資料`
             : `Exported ${exportData.length} applications`,
-        }
-      );
+      });
     } catch (error) {
-      console.error('Export error:', error);
-      toast.error(
-        locale === "zh" ? "匯出失敗" : "Export failed",
-        {
-          description: error instanceof Error ? error.message : (locale === "zh" ? "無法匯出資料" : "Failed to export data"),
-        }
-      );
+      logger.error("Export error", { error: error });
+      toast.error(locale === "zh" ? "匯出失敗" : "Export failed", {
+        description:
+          error instanceof Error
+            ? error.message
+            : locale === "zh"
+              ? "無法匯出資料"
+              : "Failed to export data",
+      });
     }
   };
+
+  const [isExportingPackage, setIsExportingPackage] = useState(false);
+
+  // Regulations state
+  const [regulationsUrl, setRegulationsUrl] = useState<string | null>(null);
+  const [showRegulations, setShowRegulations] = useState(false);
+  const [regulationsFile, setRegulationsFile] = useState<{
+    url: string;
+    filename: string;
+    type: string;
+  } | null>(null);
+  const [regulationsFilename, setRegulationsFilename] = useState<string>("");
+
+  useEffect(() => {
+    apiClient.systemSettings.getPublicDocs().then(res => {
+      if (res.success && res.data?.regulations_url) {
+        setRegulationsUrl(res.data.regulations_url);
+        setRegulationsFilename(
+          res.data.regulations_url_filename || res.data.regulations_url
+        );
+      }
+    });
+  }, []);
+
+  const handleViewRegulations = () => {
+    const url = buildFileProxyUrl("regulations_url", regulationsUrl);
+    if (!url) return;
+    setRegulationsFile({
+      url,
+      filename: regulationsFilename || "獎學金要點",
+      type: previewMimeType(regulationsFilename),
+    });
+    setShowRegulations(true);
+  };
+
+  const handleExportPackage = async () => {
+    if (!activeScholarshipTab || !selectedAcademicYear) {
+      toast.error(
+        locale === "zh"
+          ? "請先選擇獎學金類型和學年"
+          : "Please select scholarship type and academic year"
+      );
+      return;
+    }
+
+    const activeConfig = availableOptions?.scholarship_types?.find(
+      type => type.code === activeScholarshipTab
+    );
+    if (!activeConfig) {
+      toast.error(
+        locale === "zh" ? "找不到獎學金配置" : "Scholarship config not found"
+      );
+      return;
+    }
+
+    setIsExportingPackage(true);
+    try {
+      // Get token from localStorage
+      const token = localStorage.getItem("auth_token");
+
+      if (!token) {
+        toast.error(locale === "zh" ? "請重新登入" : "Please re-login");
+        return;
+      }
+
+      // Normalize semester: "yearly" or other non-standard values → undefined
+      const normalizedSemester =
+        selectedSemester &&
+        ["first", "second", "annual"].includes(selectedSemester)
+          ? selectedSemester
+          : undefined;
+
+      const { blob, filename } = await apiClient.college.exportPackage({
+        scholarship_type_id: activeConfig.id,
+        academic_year: selectedAcademicYear,
+        semester: normalizedSemester,
+        token,
+      });
+
+      // Trigger browser download using backend-provided filename
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      a.remove();
+
+      toast.success(locale === "zh" ? "匯出成功" : "Export successful");
+    } catch (error) {
+      toast.error(locale === "zh" ? "匯出申請資料失敗" : "Export failed", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setIsExportingPackage(false);
+    }
+  };
+
+  const handleDownloadSummary = useCallback(async () => {
+    if (!summaryDept || !selectedCombination) return;
+    const scholarshipTypeObj = availableOptions?.scholarship_types?.find(
+      (st: { code: string; id?: number }) => st.code === activeScholarshipTab
+    );
+    if (!scholarshipTypeObj?.id || !selectedAcademicYear) {
+      toast.error("缺少獎學金或學年資訊");
+      return;
+    }
+    try {
+      const common = {
+        scholarship_type_id: scholarshipTypeObj.id,
+        academic_year: selectedAcademicYear,
+        semester: selectedSemester ?? null,
+      };
+      let result: { blob: Blob; filename: string };
+      if (summaryDept === ALL_DEPTS_OWN) {
+        result = await exportDepartmentSummaryBulk({ ...common, scope: "college" });
+      } else if (summaryDept === ALL_DEPTS_SYSTEM) {
+        result = await exportDepartmentSummaryBulk({ ...common, scope: "all" });
+      } else {
+        result = await exportDepartmentSummary({ ...common, department_code: summaryDept });
+      }
+      const url = URL.createObjectURL(result.blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = result.filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error(`匯出失敗：${(err as Error).message}`);
+    }
+  }, [
+    summaryDept,
+    selectedCombination,
+    selectedAcademicYear,
+    selectedSemester,
+    availableOptions,
+    activeScholarshipTab,
+  ]);
 
   return (
     <>
@@ -413,10 +682,7 @@ export function ApplicationReviewPanel({
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">
-            {locale === "zh"
-              ? "學院審核管理"
-              : "College Review Management"}{" "}
-            -{" "}
+            {locale === "zh" ? "學院審核管理" : "College Review Management"} -{" "}
             {availableOptions?.scholarship_types?.find(
               type => type.code === scholarshipType.code
             )?.name || scholarshipType.name}
@@ -434,7 +700,7 @@ export function ApplicationReviewPanel({
             selectedCombination={selectedCombination}
             availableYears={availableOptions?.academic_years || []}
             availableSemesters={availableOptions?.semesters || []}
-            onCombinationChange={(value) => {
+            onCombinationChange={value => {
               setSelectedCombination(value);
               const [year, semester] = value.split("-");
               setSelectedAcademicYear(parseInt(year));
@@ -449,15 +715,96 @@ export function ApplicationReviewPanel({
             locale={locale}
           />
 
-          <Button variant="outline" size="sm" onClick={handleExportApplications}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleViewRegulations}
+            disabled={!regulationsUrl}
+            className="flex items-center gap-2"
+          >
+            <FileText className="h-4 w-4" />
+            查看獎學金要點
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportApplications}
+          >
             <Download className="h-4 w-4 mr-1" />
             {locale === "zh" ? "匯出" : "Export"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportPackage}
+            disabled={
+              isExportingPackage ||
+              !activeScholarshipTab ||
+              !selectedAcademicYear
+            }
+          >
+            <FileArchive className="h-4 w-4 mr-1" />
+            {isExportingPackage
+              ? locale === "zh"
+                ? "匯出中..."
+                : "Exporting..."
+              : locale === "zh"
+                ? "匯出申請資料"
+                : "Export Package"}
+          </Button>
+          <Select value={summaryDept} onValueChange={setSummaryDept}>
+            <SelectTrigger className="w-[200px] h-9">
+              <SelectValue placeholder="選擇系所匯出總表" />
+            </SelectTrigger>
+            <SelectContent>
+              {departmentGroups.length === 0 &&
+                !user.college_code &&
+                user.role !== "admin" &&
+                user.role !== "super_admin" && (
+                  <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                    無可選系所（帳號未設定所屬學院，請聯絡管理員）
+                  </div>
+                )}
+              {departmentGroups.map(group => {
+                const value = group.codes.join(",");
+                const label = ambiguousGroupNames.has(group.name)
+                  ? `${group.name}（${getAcademyName(group.academyCode, academies)}）`
+                  : group.name;
+                return (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                );
+              })}
+              {user.college_code && (
+                <SelectItem value={ALL_DEPTS_OWN}>
+                  本學院全部 (ZIP)
+                </SelectItem>
+              )}
+              {(user.role === "admin" || user.role === "super_admin") && (
+                <SelectItem value={ALL_DEPTS_SYSTEM}>
+                  全部系所 (ZIP)
+                </SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!summaryDept || !selectedCombination}
+            onClick={handleDownloadSummary}
+          >
+            <Download className="h-4 w-4 mr-1" />
+            {locale === "zh" ? "匯出申請總表" : "Export Application Summary"}
           </Button>
           <div className="flex items-center border rounded-md">
             <Button
               variant={viewMode === "card" ? "default" : "ghost"}
               size="sm"
               onClick={() => setViewMode("card")}
+              title={locale === "zh" ? "卡片檢視" : "Card view"}
+              aria-label={locale === "zh" ? "卡片檢視" : "Card view"}
+              aria-pressed={viewMode === "card"}
             >
               <Grid className="h-4 w-4" />
             </Button>
@@ -465,6 +812,9 @@ export function ApplicationReviewPanel({
               variant={viewMode === "table" ? "default" : "ghost"}
               size="sm"
               onClick={() => setViewMode("table")}
+              title={locale === "zh" ? "表格檢視" : "Table view"}
+              aria-label={locale === "zh" ? "表格檢視" : "Table view"}
+              aria-pressed={viewMode === "table"}
             >
               <List className="h-4 w-4" />
             </Button>
@@ -483,17 +833,10 @@ export function ApplicationReviewPanel({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {
-                applications.filter(
-                  app =>
-                    app.status === "submitted"
-                ).length
-              }
+              {applications.filter(app => app.status === "submitted").length}
             </div>
             <p className="text-xs text-muted-foreground">
-              {locale === "zh"
-                ? "需要學院審核"
-                : "Requires college review"}
+              {locale === "zh" ? "需要學院審核" : "Requires college review"}
             </p>
           </CardContent>
         </Card>
@@ -507,12 +850,7 @@ export function ApplicationReviewPanel({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {
-                applications.filter(
-                  app =>
-                    app.status === "under_review"
-                ).length
-              }
+              {applications.filter(app => app.status === "under_review").length}
             </div>
             <p className="text-xs text-muted-foreground">
               {locale === "zh" ? "學院審核中" : "College reviewing"}
@@ -530,43 +868,50 @@ export function ApplicationReviewPanel({
           <CardContent>
             <div className="flex items-center gap-2">
               <div className="text-2xl font-bold">
-                {collegeQuotaInfo?.collegeQuota !== null && collegeQuotaInfo?.collegeQuota !== undefined
+                {collegeQuotaInfo?.collegeQuota !== null &&
+                collegeQuotaInfo?.collegeQuota !== undefined
                   ? collegeQuotaInfo.collegeQuota.toLocaleString()
                   : "-"}
               </div>
-              {collegeQuotaInfo?.breakdown && Object.keys(collegeQuotaInfo.breakdown).length > 0 && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Info className="h-4 w-4 text-slate-400 hover:text-slate-600 cursor-help transition-colors" />
-                    </TooltipTrigger>
-                    <TooltipContent side="right" className="max-w-sm bg-white border-slate-200 shadow-xl">
-                      <div className="p-2">
-                        <p className="font-semibold text-sm mb-3 text-slate-700">
-                          {locale === "zh" ? "配額細項" : "Quota Breakdown"}
-                        </p>
-                        <div className="space-y-2">
-                          {Object.entries(collegeQuotaInfo.breakdown).map(([subType, quota]) => (
-                            <div
-                              key={subType}
-                              className="bg-slate-50 border border-slate-200 rounded-md p-3"
-                            >
-                              <div className="flex items-center justify-between space-x-5">
-                                <p className="text-xs font-medium text-slate-700">
-                                  {getSubTypeName(subType, locale)}
-                                </p>
-                                <p className="text-base font-semibold text-slate-800">
-                                  {quota}
-                                </p>
-                              </div>
-                            </div>
-                          ))}
+              {collegeQuotaInfo?.breakdown &&
+                Object.keys(collegeQuotaInfo.breakdown).length > 0 && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-4 w-4 text-slate-400 hover:text-slate-600 cursor-help transition-colors" />
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side="right"
+                        className="max-w-sm bg-white border-slate-200 shadow-xl"
+                      >
+                        <div className="p-2">
+                          <p className="font-semibold text-sm mb-3 text-slate-700">
+                            {locale === "zh" ? "配額細項" : "Quota Breakdown"}
+                          </p>
+                          <div className="space-y-2">
+                            {Object.entries(collegeQuotaInfo.breakdown).map(
+                              ([subType, quota]) => (
+                                <div
+                                  key={subType}
+                                  className="bg-slate-50 border border-slate-200 rounded-md p-3"
+                                >
+                                  <div className="flex items-center justify-between space-x-5">
+                                    <p className="text-xs font-medium text-slate-700">
+                                      {getSubTypeName(subType, locale)}
+                                    </p>
+                                    <p className="text-base font-semibold text-slate-800">
+                                      {quota}
+                                    </p>
+                                  </div>
+                                </div>
+                              )
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
             </div>
             <p className="text-xs text-muted-foreground">
               {locale === "zh"
@@ -618,7 +963,7 @@ export function ApplicationReviewPanel({
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={e => setSearchQuery(e.target.value)}
                 placeholder={
                   locale === "zh"
                     ? "搜尋學生或學號..."
@@ -645,7 +990,10 @@ export function ApplicationReviewPanel({
                   {locale === "zh" ? "已核准" : "Approved"}
                 </SelectItem>
                 <SelectItem value="partial_approved">
-                  {locale === "zh" ? "部分核准" : "Partial Approval"}
+                  {getApplicationStatusLabel(
+                    ApplicationStatus.PARTIAL_APPROVED,
+                    locale
+                  )}
                 </SelectItem>
                 <SelectItem value="rejected">
                   {locale === "zh" ? "已駁回" : "Rejected"}
@@ -662,6 +1010,14 @@ export function ApplicationReviewPanel({
               </CardTitle>
             </CardHeader>
             <CardContent>
+              {viewMode === "card" ? (
+                <ApplicationCardView
+                  applications={filteredApplications}
+                  locale={locale}
+                  getSubTypeName={getSubTypeName}
+                  onView={setSelectedApplication}
+                />
+              ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -670,6 +1026,9 @@ export function ApplicationReviewPanel({
                     </TableHead>
                     <TableHead>
                       {locale === "zh" ? "學院系所" : "College/Dept"}
+                    </TableHead>
+                    <TableHead>
+                      {locale === "zh" ? "國籍 / 身分" : "Nationality / Identity"}
                     </TableHead>
                     <TableHead>
                       {locale === "zh" ? "在學學期數" : "Terms"}
@@ -684,8 +1043,9 @@ export function ApplicationReviewPanel({
                       {locale === "zh" ? "申請類別" : "Type"}
                     </TableHead>
                     <TableHead>
-                      {locale === "zh" ? "狀態" : "Status"}
+                      {locale === "zh" ? "教授推薦" : "Prof. Review"}
                     </TableHead>
+                    <TableHead>{locale === "zh" ? "狀態" : "Status"}</TableHead>
                     <TableHead>
                       {locale === "zh" ? "申請時間" : "Applied"}
                     </TableHead>
@@ -716,20 +1076,30 @@ export function ApplicationReviewPanel({
                             {getAcademyName(app.academy_code, academies)}
                           </span>
                           <span className="text-xs text-muted-foreground">
-                            {getDepartmentName(app.department_code, departments)}
+                            {getDepartmentName(
+                              app.department_code,
+                              departments
+                            )}
                           </span>
                         </div>
                       </TableCell>
 
-                      {/* 3. 在學學期數 */}
+                      {/* 3. 國籍/身分 — #68 */}
                       <TableCell>
-                        {app.student_termcount || "-"}
+                        <NationalityIdentity app={app} locale={locale} />
                       </TableCell>
+
+                      {/* 4. 在學學期數 */}
+                      <TableCell>{app.student_termcount || "-"}</TableCell>
 
                       {/* 4. 在學狀態（獎學金期間） */}
                       <TableCell>
-                        {app.scholarship_period_status !== undefined && app.scholarship_period_status !== null
-                          ? getStudyingStatusName(app.scholarship_period_status, studyingStatuses)
+                        {app.scholarship_period_status !== undefined &&
+                        app.scholarship_period_status !== null
+                          ? getStudyingStatusName(
+                              app.scholarship_period_status,
+                              studyingStatuses
+                            )
                           : "-"}
                       </TableCell>
 
@@ -740,30 +1110,39 @@ export function ApplicationReviewPanel({
 
                       {/* 6. 申請類別 */}
                       <TableCell>
-                        <Badge variant={app.is_renewal ? "secondary" : "default"}>
+                        <Badge
+                          variant={app.is_renewal ? "secondary" : "default"}
+                        >
                           {app.is_renewal ? "續領" : "初領"}
                         </Badge>
+                      </TableCell>
+
+                      {/* 6.5 教授推薦 */}
+                      <TableCell>
+                        <ProfessorRecommendation
+                          app={app}
+                          locale={locale}
+                          getSubTypeName={getSubTypeName}
+                        />
                       </TableCell>
 
                       {/* 7. 狀態 */}
                       <TableCell>
                         <Badge
-                          variant={getApplicationStatusBadgeVariant(app.status as ApplicationStatus)}
+                          variant={getApplicationStatusBadgeVariant(
+                            app.status as ApplicationStatus
+                          )}
                         >
-                          {app.status_zh || getApplicationStatusLabel(app.status as ApplicationStatus, locale)}
+                          {app.status_zh ||
+                            getApplicationStatusLabel(
+                              app.status as ApplicationStatus,
+                              locale
+                            )}
                         </Badge>
                       </TableCell>
 
                       {/* 8. 申請時間 */}
-                      <TableCell>
-                        {app.created_at
-                          ? new Date(app.created_at).toLocaleDateString("zh-TW", {
-                              year: "numeric",
-                              month: "2-digit",
-                              day: "2-digit",
-                            })
-                          : "-"}
-                      </TableCell>
+                      <TableCell>{formatAppliedDate(app.created_at)}</TableCell>
 
                       {/* 9. 操作 */}
                       <TableCell>
@@ -779,6 +1158,7 @@ export function ApplicationReviewPanel({
                   ))}
                 </TableBody>
               </Table>
+              )}
             </CardContent>
           </Card>
         </>
@@ -789,17 +1169,17 @@ export function ApplicationReviewPanel({
         application={selectedApplication}
         role="college"
         open={!!selectedApplication}
-        onOpenChange={(open) => !open && setSelectedApplication(null)}
+        onOpenChange={open => !open && setSelectedApplication(null)}
         locale={locale}
         academicYear={selectedAcademicYear}
         user={user}
         onApprove={handleApprove}
         onReject={handleReject}
-        onRequestDocs={(app) => {
+        onRequestDocs={app => {
           setApplicationToRequestDocs(app);
           setShowDocumentRequestDialog(true);
         }}
-        onDelete={(app) => {
+        onDelete={app => {
           setApplicationToDelete(app);
           setShowDeleteDialog(true);
         }}
@@ -812,12 +1192,12 @@ export function ApplicationReviewPanel({
       {/* Dialogs */}
       <DeleteApplicationDialog
         open={showDeleteDialog}
-        onOpenChange={(open) => {
+        onOpenChange={open => {
           setShowDeleteDialog(open);
           if (!open) setApplicationToDelete(null);
         }}
-        applicationId={applicationToDelete?.id}
-        applicationName={applicationToDelete?.student_name}
+        applicationId={applicationToDelete?.id ?? 0}
+        applicationName={applicationToDelete?.student_name ?? ""}
         onSuccess={() => {
           // Close the ApplicationReviewDialog
           setSelectedApplication(null);
@@ -836,12 +1216,19 @@ export function ApplicationReviewPanel({
 
       <DocumentRequestForm
         open={showDocumentRequestDialog}
-        onOpenChange={(open) => {
+        onOpenChange={open => {
           setShowDocumentRequestDialog(open);
           if (!open) setApplicationToRequestDocs(null);
         }}
-        applicationId={applicationToRequestDocs?.id}
-        applicationName={applicationToRequestDocs?.student_name}
+        applicationId={applicationToRequestDocs?.id ?? 0}
+        applicationName={applicationToRequestDocs?.student_name ?? ""}
+      />
+
+      <FilePreviewDialog
+        isOpen={showRegulations}
+        onClose={() => setShowRegulations(false)}
+        file={regulationsFile}
+        locale="zh"
       />
     </>
   );

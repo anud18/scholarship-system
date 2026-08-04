@@ -17,21 +17,24 @@ import {
   Award,
 } from "lucide-react";
 
+export interface RankingCardData {
+  id: number;
+  ranking_name: string;
+  is_finalized: boolean;
+  distribution_executed: boolean;
+  total_applications: number;
+  allocated_count?: number;
+  distribution_date?: string;
+  [key: string]: unknown;
+}
+
 interface RankingCardProps {
-  ranking: {
-    id: number;
-    ranking_name: string;
-    is_finalized: boolean;
-    distribution_executed: boolean;
-    total_applications: number;
-    allocated_count?: number;
-    distribution_date?: string;
-  };
+  ranking: RankingCardData;
   isSelected?: boolean;
   showActions?: boolean;
   onSelect: (rankingId: number) => void;
-  onEdit?: (ranking: any) => void;
-  onDelete?: (ranking: any) => void;
+  onEdit?: (ranking: RankingCardData) => void;
+  onDelete?: (ranking: RankingCardData) => void;
   onToggleLock?: (rankingId: number) => void;
   editingId?: number | null;
   editingName?: string;

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { apiClient, Application, ApplicationCreate } from "@/lib/api";
+import { logger } from "@/lib/utils/logger";
 import { useAuth } from "./use-auth";
 
 export function useApplications() {
@@ -11,7 +12,7 @@ export function useApplications() {
   const fetchApplications = useCallback(
     async (status?: string) => {
       if (!isAuthenticated) {
-        console.log("User not authenticated, skipping application fetch");
+        logger.debug("User not authenticated, skipping application fetch");
         return;
       }
 
@@ -29,7 +30,7 @@ export function useApplications() {
           throw new Error(response.message || "Failed to fetch applications");
         }
       } catch (err) {
-        console.error("Error fetching applications:", err);
+        logger.error("Error fetching applications", { err });
         setError(
           err instanceof Error ? err.message : "Failed to fetch applications"
         );
@@ -144,7 +145,13 @@ export function useApplications() {
   );
 
   const uploadDocument = useCallback(
-    async (applicationId: number, file: File, fileType: string = "other") => {
+    async (
+      applicationId: number,
+      file: File,
+      fileType: string = "other",
+      options: { refreshList?: boolean } = {}
+    ) => {
+      const { refreshList = true } = options;
       try {
         setError(null);
 
@@ -155,8 +162,12 @@ export function useApplications() {
         );
 
         if (response.success) {
-          // Refresh applications to get updated document info
-          await fetchApplications();
+          // Refresh applications to get updated document info. Callers that
+          // upload several files in a row pass refreshList: false and refetch
+          // once at the end — a full list fetch per file is pure latency.
+          if (refreshList) {
+            await fetchApplications();
+          }
           return response.data;
         } else {
           throw new Error(response.message || "Failed to upload document");

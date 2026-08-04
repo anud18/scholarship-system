@@ -1,10 +1,10 @@
-FROM python:3.12-slim
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy
 
 # Set work directory
 WORKDIR /app
@@ -12,8 +12,8 @@ WORKDIR /app
 # Install system dependencies
 # Security: Use trusted Debian repositories with package authentication
 # Allows automatic security updates while maintaining repository trust
-RUN echo "deb http://deb.debian.org/debian trixie main" > /etc/apt/sources.list && \
-    echo "deb http://deb.debian.org/debian-security trixie-security main" >> /etc/apt/sources.list && \
+RUN echo "deb http://deb.debian.org/debian bookworm main" > /etc/apt/sources.list && \
+    echo "deb http://deb.debian.org/debian-security bookworm-security main" >> /etc/apt/sources.list && \
     apt-get update && \
     apt-get install -y --no-install-recommends --allow-unauthenticated=false \
     curl \
@@ -23,20 +23,29 @@ RUN echo "deb http://deb.debian.org/debian trixie main" > /etc/apt/sources.list 
     tesseract-ocr-eng \
     libpq-dev \
     libmagic-dev \
+    # CJK fonts for Chinese PDF generation (reportlab)
+    fonts-wqy-zenhei \
     && rm -rf /var/lib/apt/lists/* \
     && dpkg --get-selections > /installed-packages.list
 
-# Copy requirements
-COPY requirements.txt .
+# Copy project files
+COPY pyproject.toml .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies using uv
+RUN uv pip install --system -r pyproject.toml
 
 # Copy application code
 COPY . .
 
-# Copy frontend email templates
-COPY emails /frontend/emails
+# Copy frontend email templates from the repo's frontend/emails dir.
+# The build context is ./backend (see docker-compose.*.yml), which does
+# not contain an emails/ subdir, so we depend on the named build context
+# `frontend_emails` provided by compose (additional_contexts:) or by
+# `docker buildx build --build-context frontend_emails=./frontend/emails ...`
+# in CI. The image bakes templates at /frontend/emails so prod (which has
+# no bind mount) finds them; dev compose still bind-mounts ./frontend/emails
+# at /react-email-templates and points REACT_EMAIL_TEMPLATES_DIR there.
+COPY --from=frontend_emails . /frontend/emails
 
 # Create uploads directory
 RUN mkdir -p uploads

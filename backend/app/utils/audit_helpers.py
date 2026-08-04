@@ -68,8 +68,8 @@ async def log_college_review_action(
         try:
             ip_address = request.client.host if request.client else None
             user_agent = request.headers.get("user-agent")
-        except Exception as e:
-            logger.warning(f"Failed to extract request metadata: {e}")
+        except Exception:
+            logger.warning("Failed to extract request metadata", exc_info=True)
 
     # Create and save audit log
     audit_log = AuditLog.create_log(
@@ -89,8 +89,8 @@ async def log_college_review_action(
         await db.commit()
         logger.info(f"Audit log created for {action.value} by user {user.id} on {resource_type} {resource_id}")
         return audit_log
-    except Exception as e:
-        logger.error(f"Failed to create audit log: {e}")
+    except Exception:
+        logger.exception("Failed to create audit log")
         await db.rollback()
         # Don't raise - audit logging should not break the operation
         raise
@@ -143,8 +143,8 @@ async def log_college_review_action_with_changes(
         try:
             ip_address = request.client.host if request.client else None
             user_agent = request.headers.get("user-agent")
-        except Exception as e:
-            logger.warning(f"Failed to extract request metadata: {e}")
+        except Exception:
+            logger.warning("Failed to extract request metadata", exc_info=True)
 
     # Create and save audit log
     audit_log = AuditLog.create_log(
@@ -164,8 +164,8 @@ async def log_college_review_action_with_changes(
         await db.commit()
         logger.info(f"Audit log created for {action.value} by user {user.id} on {resource_type} {resource_id}")
         return audit_log
-    except Exception as e:
-        logger.error(f"Failed to create audit log: {e}")
+    except Exception:
+        logger.exception("Failed to create audit log")
         await db.rollback()
         # Don't raise - audit logging should not break the operation
         raise

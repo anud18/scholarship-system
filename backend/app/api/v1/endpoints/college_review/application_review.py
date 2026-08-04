@@ -11,11 +11,13 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import select
 from sqlalchemy.exc import DatabaseError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import require_college, require_roles
 from app.db.deps import get_db
+from app.models.application import Application
 
 # Note: CollegeReview model removed - replaced by unified ApplicationReview system
 # from app.models.college_review import CollegeReview
@@ -24,6 +26,8 @@ from app.schemas.college_review import StudentTermData
 from app.schemas.response import ApiResponse
 from app.services.college_review_service import CollegeReviewService, ReviewPermissionError
 from app.services.student_service import StudentService
+from app.utils.application_helpers import get_college_code_from_data
+from app.utils.pii_masking import mask_id_number
 
 from ._helpers import _check_academic_year_permission, _check_scholarship_permission
 
@@ -61,18 +65,21 @@ async def get_applications_for_review(
         if not semester or semester not in ["first", "second", "annual"]:
             semester = None
 
-    # Granular authorization checks
-    if not current_user.is_college() and not current_user.is_admin() and not current_user.is_super_admin():
-        raise ReviewPermissionError("College role required for application review access")
-
-    # Additional checks for specific operations
-    if scholarship_type_id and not await _check_scholarship_permission(current_user, scholarship_type_id, db):
-        raise ReviewPermissionError(f"User {current_user.id} not authorized for scholarship type {scholarship_type_id}")
-
-    if academic_year and not await _check_academic_year_permission(current_user, academic_year, db):
-        raise ReviewPermissionError(f"User {current_user.id} not authorized for academic year {academic_year}")
-
     try:
+        # Granular authorization checks (must be inside try so ReviewPermissionError
+        # is caught by the handler below and returned as 403, not propagated as 500).
+        if not current_user.is_college() and not current_user.is_admin() and not current_user.is_super_admin():
+            raise ReviewPermissionError("College role required for application review access")
+
+        # Additional checks for specific operations
+        if scholarship_type_id and not await _check_scholarship_permission(current_user, scholarship_type_id, db):
+            raise ReviewPermissionError(
+                f"User {current_user.id} not authorized for scholarship type {scholarship_type_id}"
+            )
+
+        if academic_year and not await _check_academic_year_permission(current_user, academic_year, db):
+            raise ReviewPermissionError(f"User {current_user.id} not authorized for academic year {academic_year}")
+
         # Get college code for filtering (None for super_admin to see all)
         college_code = current_user.college_code if current_user.role == UserRole.college else None
 
@@ -101,22 +108,22 @@ async def get_applications_for_review(
     except HTTPException:
         raise
     except ValueError as e:
-        logger.warning(f"Invalid request parameters for college applications: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid request parameters: {str(e)}")
+        logger.warning("Invalid request parameters for college applications", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid request parameters") from e
     except ReviewPermissionError as e:
-        logger.warning(f"Permission denied for college applications access: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        logger.warning("Permission denied for college applications access", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except DatabaseError as e:
-        logger.error(f"Database error retrieving applications: {str(e)}")
+        logger.exception("Database error retrieving applications")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database service temporarily unavailable"
-        )
+        ) from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving applications: {str(e)}")
+        logger.exception("Unexpected error retrieving applications")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while retrieving applications",
-        )
+        ) from e
 
 
 # NOTE: Review endpoints moved to /api/v1/reviews/* for multi-role support
@@ -149,6 +156,33 @@ async def get_student_preview(
 
     try:
         logger.info(f"User {current_user.id} requesting preview for student {student_id}")
+
+        # Authorization scoping (issue #1081 finding E): a college reviewer may
+        # only preview students who have at least one application managed by
+        # their college; admins/super_admins bypass. Runs BEFORE the SIS lookup.
+        # Unrelated students get 404 (not 403) so an out-of-scope student ID is
+        # indistinguishable from a nonexistent one — otherwise this endpoint is
+        # a student-existence oracle.
+        if current_user.role == UserRole.college:
+            college_code = (current_user.college_code or "").strip()
+            if not college_code:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="使用者未綁定學院")
+
+            scope_stmt = (
+                select(Application.student_data)
+                .join(User, User.id == Application.user_id)
+                .where(User.nycu_id == student_id, Application.deleted_at.is_(None))
+            )
+            snapshots = (await db.execute(scope_stmt)).scalars().all()
+            # College scoping is resolved Python-side from the student_data
+            # snapshot via the canonical accessor (same discipline as the
+            # distribution-results endpoint).
+            if not any(get_college_code_from_data(sd) == college_code for sd in snapshots):
+                logger.warning(
+                    "SECURITY: college user requested preview for student outside their college scope",
+                    extra={"user_id": current_user.id, "college_code": college_code},
+                )
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Student {student_id} not found")
 
         # Initialize student service
         student_service = StudentService()
@@ -202,11 +236,17 @@ async def get_student_preview(
                         logger.debug(f"Could not fetch term data for {student_id} {year}-{term}: {str(term_err)}")
                         continue
 
+        # Mask 身分證字號 at the response boundary — the preview is display
+        # only, so the full national ID never leaves the server.
+        basic = dict(student_data)
+        if "std_pid" in basic:
+            basic["std_pid"] = mask_id_number(basic.get("std_pid"))
+
         return ApiResponse(
             success=True,
             message="Student preview retrieved successfully",
             data={
-                "basic": student_data,
+                "basic": basic,
                 "recent_terms": [term.model_dump() for term in recent_terms],
             },
         )
@@ -214,7 +254,7 @@ async def get_student_preview(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error retrieving student preview for {student_id}: {str(e)}")
+        logger.exception(f"Error retrieving student preview for {student_id}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve student preview: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve student preview"
+        ) from e

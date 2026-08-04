@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -11,10 +12,13 @@ from app.core.deps import get_db
 from app.core.path_security import validate_upload_file
 from app.core.security import get_current_user, require_admin
 from app.models.enums import Semester
+from app.models.audit_log import AuditAction, AuditLog
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User
 from app.schemas.response import ApiResponse
 from app.schemas.scholarship import EligibleScholarshipResponse, ScholarshipTypeResponse, WhitelistToggleRequest
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -40,6 +44,8 @@ async def get_all_scholarships(
         semester_enum = Semester.first
     elif display_semester == "second":
         semester_enum = Semester.second
+    elif display_semester == "yearly":
+        semester_enum = Semester.yearly
 
     # Batch load all configurations to avoid N+1 query
     # Get scholarship IDs for batch query
@@ -135,6 +141,8 @@ async def get_all_scholarships(
                     "renewal_college_review_end": (
                         config.renewal_college_review_end.isoformat() if config.renewal_college_review_end else None
                     ),
+                    "renewal_requires_professor_review": config.renewal_requires_professor_review,
+                    "renewal_requires_college_review": config.renewal_requires_college_review,
                     "requires_professor_recommendation": config.requires_professor_recommendation,
                     "professor_review_start": (
                         config.professor_review_start.isoformat() if config.professor_review_start else None
@@ -165,6 +173,8 @@ async def get_all_scholarships(
                     "renewal_professor_review_end": None,
                     "renewal_college_review_start": None,
                     "renewal_college_review_end": None,
+                    "renewal_requires_professor_review": False,
+                    "renewal_requires_college_review": False,
                     "requires_professor_recommendation": False,
                     "professor_review_start": None,
                     "professor_review_end": None,
@@ -188,7 +198,7 @@ async def get_all_scholarships(
 @router.get("/eligible")
 async def get_scholarship_eligibility(
     db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
-):
+) -> ApiResponse[list[EligibleScholarshipResponse]]:
     """Get scholarships that the current student is eligible for"""
     from app.services.application_service import get_student_data_from_user
     from app.services.scholarship_service import ScholarshipService
@@ -223,6 +233,8 @@ async def get_scholarship_eligibility(
             name=scholarship["name"],
             name_en=scholarship.get("name_en") or scholarship["name"],
             eligible_sub_types=sub_type_list,
+            all_sub_type_list=scholarship.get("all_sub_type_list", []),
+            subtype_eligibility=scholarship.get("subtype_eligibility", {}),
             academic_year=scholarship.get("academic_year"),
             semester=scholarship.get("semester"),
             application_cycle=scholarship.get("application_cycle", "semester"),
@@ -238,10 +250,14 @@ async def get_scholarship_eligibility(
             college_review_end=scholarship.get("college_review_end"),
             sub_type_selection_mode=scholarship.get("sub_type_selection_mode", "single"),
             terms_document_url=scholarship.get("terms_document_url"),
+            application_document_note=scholarship.get("application_document_note"),
+            application_document_note_en=scholarship.get("application_document_note_en"),
             passed=scholarship.get("passed", []),  # Rules passed from eligibility check
             warnings=[],  # Hide warnings from student view - they don't need to see these
             errors=scholarship.get("errors", []),  # Error messages from eligibility check
             created_at=scholarship.get("created_at"),
+            already_submitted=scholarship.get("already_submitted", False),
+            is_application_period=scholarship.get("is_application_period", True),
         )
         response_data.append(response_item)
 
@@ -288,7 +304,7 @@ async def get_scholarship_detail(id: int, db: AsyncSession = Depends(get_db)):
         "description_en": scholarship.description_en,
         "application_cycle": scholarship.application_cycle.value if scholarship.application_cycle else "semester",
         "sub_type_list": scholarship.sub_type_list or [],
-        "amount": active_config.amount if active_config else 0,  # Get amount from active configuration
+        "amount": active_config.amount if active_config else None,  # None when no active config (#1115)
         "currency": active_config.currency if active_config else "TWD",  # Get currency from active configuration
         "whitelist_enabled": scholarship.whitelist_enabled if hasattr(scholarship, "whitelist_enabled") else False,
         "whitelist_student_ids": [
@@ -345,6 +361,21 @@ async def reset_application_periods(current_user: User = Depends(require_admin),
         scholarship.application_start_date = start_date
         scholarship.application_end_date = end_date
     await db.commit()
+
+    logger.warning(
+        "Application periods reset for %d scholarship(s) by admin user_id=%s (start=%s end=%s)",
+        len(scholarships),
+        current_user.id,
+        start_date.isoformat(),
+        end_date.isoformat(),
+        extra={
+            "scholarships_updated": len(scholarships),
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+            "actor_user_id": current_user.id,
+        },
+    )
+
     return ApiResponse(
         success=True,
         message=f"Reset {len(scholarships)} scholarship application periods",
@@ -408,6 +439,18 @@ async def add_student_to_whitelist(
     if student_id not in scholarship.whitelist_student_ids:
         scholarship.whitelist_student_ids.append(student_id)
         scholarship.whitelist_enabled = True
+    # 白名單控制誰能申請 — 異動必須留稽核軌跡 (issue #972 / G10)。
+    db.add(
+        AuditLog.create_log(
+            user_id=current_user.id,
+            action=AuditAction.update.value,
+            resource_type="scholarship_type",
+            resource_id=str(id),
+            resource_name=scholarship.name,
+            description=f"whitelist: add student {student_id} to {scholarship.code} (dev endpoint)",
+            new_values={"added_student_id": student_id, "whitelist_size": len(scholarship.whitelist_student_ids)},
+        )
+    )
     await db.commit()
     return ApiResponse(
         success=True,
@@ -422,7 +465,7 @@ async def add_student_to_whitelist(
 
 @router.post("/{scholarship_type}/upload-terms")
 async def upload_terms_document(
-    scholarship_type: str = Path(..., regex=r"^[a-z_]{1,50}$"),
+    scholarship_type: str = Path(..., pattern=r"^[a-z_]{1,50}$"),
     file: UploadFile = File(...),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -537,12 +580,16 @@ async def upload_terms_document(
 
     except Exception as e:
         await db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to upload terms document: {str(e)}")
+        logger.exception(
+            "Failed to upload terms document",
+            extra={"scholarship_type": scholarship_type, "actor_user_id": current_user.id},
+        )
+        raise HTTPException(status_code=500, detail="Failed to upload terms document") from e
 
 
 @router.get("/{scholarship_type}/terms")
 async def get_terms_document(
-    scholarship_type: str = Path(..., regex=r"^[a-z_]{1,50}$"),
+    scholarship_type: str = Path(..., pattern=r"^[a-z_]{1,50}$"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -596,7 +643,11 @@ async def get_terms_document(
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve terms document: {str(e)}")
+        logger.exception(
+            "Failed to retrieve terms document",
+            extra={"scholarship_type": scholarship_type},
+        )
+        raise HTTPException(status_code=500, detail="Failed to retrieve terms document") from e
 
 
 @router.patch("/{id}/whitelist")
@@ -627,11 +678,41 @@ async def toggle_scholarship_whitelist(
         raise HTTPException(status_code=404, detail=f"找不到ID為 {id} 的獎學金類型")
 
     # Update whitelist_enabled
+    previous_state = scholarship.whitelist_enabled
     scholarship.whitelist_enabled = request.enabled
     scholarship.updated_by = current_user.id
 
+    # 白名單開關決定資格 gate — 異動必須留稽核軌跡 (issue #972 / G10)。
+    db.add(
+        AuditLog.create_log(
+            user_id=current_user.id,
+            action=AuditAction.update.value,
+            resource_type="scholarship_type",
+            resource_id=str(id),
+            resource_name=scholarship.name,
+            description=f"whitelist: toggle {scholarship.code} enabled {previous_state} -> {request.enabled}",
+            old_values={"whitelist_enabled": previous_state},
+            new_values={"whitelist_enabled": request.enabled},
+        )
+    )
     await db.commit()
     await db.refresh(scholarship)
+
+    logger.warning(
+        "Scholarship whitelist %s → %s for scholarship_id=%d (%s) by admin user_id=%s",
+        previous_state,
+        scholarship.whitelist_enabled,
+        id,
+        scholarship.code,
+        current_user.id,
+        extra={
+            "scholarship_id": id,
+            "scholarship_code": scholarship.code,
+            "previous_whitelist_enabled": previous_state,
+            "new_whitelist_enabled": scholarship.whitelist_enabled,
+            "actor_user_id": current_user.id,
+        },
+    )
 
     # Get active configuration for amount and other details
     config_stmt = (
@@ -660,7 +741,7 @@ async def toggle_scholarship_whitelist(
         "description_en": scholarship.description_en,
         "application_cycle": scholarship.application_cycle.value if scholarship.application_cycle else "semester",
         "sub_type_list": scholarship.sub_type_list or [],
-        "amount": active_config.amount if active_config else 0,
+        "amount": active_config.amount if active_config else None,  # None when no active config (#1115)
         "currency": active_config.currency if active_config else "TWD",
         "whitelist_enabled": scholarship.whitelist_enabled,
         "whitelist_student_ids": [

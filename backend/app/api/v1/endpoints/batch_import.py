@@ -15,13 +15,14 @@ import magic
 import pandas as pd
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import desc, select, update
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.path_security import validate_object_name_minio
 from app.core.security import get_current_user
 from app.db.deps import get_db
-from app.models.application import Application, ApplicationStatus
+from app.models.application import Application, ApplicationFile
+from app.models.audit_log import AuditAction, AuditLog
 from app.models.batch_import import BatchImport
 from app.models.enums import BatchImportStatus
 from app.models.scholarship import ScholarshipType
@@ -39,17 +40,22 @@ from app.schemas.batch_import import (
     BatchImportUploadResponse,
 )
 from app.services.batch_import_service import BatchImportService
+from app.services.batch_import_template_service import build_batch_import_template
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-def require_college_role(current_user: User = Depends(get_current_user)) -> User:
-    """Dependency to require college role or super admin"""
-    if current_user.role not in [UserRole.college, UserRole.super_admin]:
+def require_admin_role(current_user: User = Depends(get_current_user)) -> User:
+    """Dependency to require admin or super admin role.
+
+    Colleges no longer use 批次匯入 — they import students through 補充匯入
+    (app/api/v1/endpoints/supplementary_import.py).
+    """
+    if current_user.role not in [UserRole.admin, UserRole.super_admin]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="此功能僅限學院角色使用",
+            detail="此功能僅限管理員角色使用",
         )
     return current_user
 
@@ -57,10 +63,12 @@ def require_college_role(current_user: User = Depends(get_current_user)) -> User
 @router.post("/upload-data")
 async def upload_batch_import_data(
     file: UploadFile = File(..., description="Excel或CSV檔案"),
-    scholarship_type: str = Query(..., description="獎學金類型代碼", regex=r"^[a-z_]{1,50}$"),
+    scholarship_type: str = Query(..., description="獎學金類型代碼", pattern=r"^[a-z_]{1,50}$"),
     academic_year: int = Query(..., description="學年度", ge=100, le=200),
-    semester: Optional[str] = Query(None, description="學期"),
-    current_user: User = Depends(require_college_role),
+    # Empty string is accepted and normalized to None below — the frontend
+    # sends semester="" for yearly scholarships whose period has no semester.
+    semester: Optional[str] = Query(None, description="學期", pattern=r"^(first|second|yearly)?$"),
+    current_user: User = Depends(require_admin_role),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -72,7 +80,7 @@ async def upload_batch_import_data(
     3. 返回預覽資料與驗證摘要
     4. 待確認後執行匯入
 
-    **權限**: 僅限 college 角色
+    **權限**: 僅限管理員角色
     """
     service = BatchImportService(db)
 
@@ -87,13 +95,9 @@ async def upload_batch_import_data(
             detail=f"獎學金類型 {scholarship_type} 不存在",
         )
 
-    # Get college code from user (skip for super_admin)
+    # Admins are not bound to a single college, so there is no college scope to
+    # validate against — the batch is recorded under the "admin" sentinel below.
     college_code = current_user.college_code
-    if not college_code and current_user.role != UserRole.super_admin:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="使用者未設定學院代碼",
-        )
 
     # Read file content
     file_content = await file.read()
@@ -135,10 +139,7 @@ async def upload_batch_import_data(
             # Verify it's a valid CSV/text file
             pd.read_csv(BytesIO(file_content), nrows=0)
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail=f"檔案結構驗證失敗: {str(e)}",
-        )
+        raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="檔案結構驗證失敗") from e
 
     # Parse and validate
     normalized_semester = (semester.strip() if isinstance(semester, str) else semester) or None
@@ -174,6 +175,14 @@ async def upload_batch_import_data(
 
         validation_warnings.extend(permission_warnings)
 
+        eligibility_warnings = await service.bulk_check_eligibility(
+            parsed_data=parsed_data,
+            scholarship_type_id=scholarship.id,
+            academic_year=academic_year,
+            semester=normalized_semester,
+        )
+        validation_warnings.extend(eligibility_warnings)
+
         for row_data in parsed_data:
             student_id = row_data["student_id"]
             row_number = row_data.get("row_number") or 0
@@ -206,7 +215,7 @@ async def upload_batch_import_data(
     # Create batch import record
     batch_import = await service.create_batch_import_record(
         importer_id=current_user.id,
-        college_code=college_code or "admin",  # Use special value for super_admin (max 10 chars)
+        college_code=college_code or "admin",  # Sentinel for admins, who own no college (max 10 chars)
         scholarship_type_id=scholarship.id,
         academic_year=academic_year,
         semester=normalized_semester,
@@ -235,11 +244,9 @@ async def upload_batch_import_data(
             content_type=content_type,
         )
         batch_import.file_path = object_name
-    except Exception as e:
+    except Exception:
         # Log error but don't fail the upload if MinIO is unavailable
-        import logging
-
-        logging.error(f"Failed to upload batch import file to MinIO: {e}")
+        logger.warning("Failed to upload batch import file to MinIO", exc_info=True)
 
     # Store parsed data for confirm step
     batch_import.parsed_data = {
@@ -266,6 +273,24 @@ async def upload_batch_import_data(
         ],
     }
 
+    # 批次匯入可大量建立申請 — 從上傳起留稽核軌跡 (issue #964 / G2)。
+    db.add(
+        AuditLog.create_log(
+            user_id=current_user.id,
+            action=AuditAction.create.value,
+            resource_type="batch_import",
+            resource_id=str(batch_import.id),
+            resource_name=file.filename,
+            description=f"batch import upload: {file.filename} ({len(parsed_data)} records)",
+            new_values={
+                "scholarship_type_id": scholarship.id,
+                "academic_year": academic_year,
+                "semester": normalized_semester,
+                "total_records": len(parsed_data),
+                "error_count": len(validation_errors),
+            },
+        )
+    )
     await db.commit()
 
     # Return preview (first 10 rows) and validation summary
@@ -320,7 +345,7 @@ async def upload_batch_import_data(
 async def update_batch_record(
     batch_id: int,
     request: BatchImportUpdateRecordRequest,
-    current_user: User = Depends(require_college_role),
+    current_user: User = Depends(require_admin_role),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -331,11 +356,11 @@ async def update_batch_record(
     2. 更新指定索引的記錄
     3. 返回更新結果
 
-    **權限**: College 角色僅能編輯自己上傳的批次
+    **權限**: 一般管理員僅能編輯自己上傳的批次
     """
     # Get batch import record
     batch_import = await db.get(BatchImport, batch_id)
-    if not batch_import:
+    if not batch_import or batch_import.import_type != "application":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"批次匯入記錄 {batch_id} 不存在",
@@ -377,6 +402,16 @@ async def update_batch_record(
 
     # Update in database
     batch_import.parsed_data["data"] = parsed_data
+    db.add(
+        AuditLog.create_log(
+            user_id=current_user.id,
+            action=AuditAction.update.value,
+            resource_type="batch_import",
+            resource_id=str(batch_id),
+            description=f"batch import: update record #{request.record_index}",
+            new_values={"record_index": request.record_index, "updates": request.updates},
+        )
+    )
     await db.commit()
 
     return {
@@ -389,7 +424,7 @@ async def update_batch_record(
 @router.post("/{batch_id}/validate")
 async def revalidate_batch_import(
     batch_id: int,
-    current_user: User = Depends(require_college_role),
+    current_user: User = Depends(require_admin_role),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -401,11 +436,11 @@ async def revalidate_batch_import(
     3. 更新 parsed_data 中的錯誤列表
     4. 返回驗證摘要
 
-    **權限**: College 角色僅能驗證自己上傳的批次
+    **權限**: 一般管理員僅能驗證自己上傳的批次
     """
     # Get batch import record
     batch_import = await db.get(BatchImport, batch_id)
-    if not batch_import:
+    if not batch_import or batch_import.import_type != "application":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"批次匯入記錄 {batch_id} 不存在",
@@ -437,8 +472,12 @@ async def revalidate_batch_import(
     validation_errors: List[Dict[str, Any]] = []
     validation_warnings: List[Dict[str, Any]] = []
 
-    # Get college code from user
-    college_code = current_user.college_code
+    # Get college code from user. `batch_import.college_code` holds the literal
+    # "admin" sentinel for admin-created batches (see create_batch_import_record
+    # below) — passing that through would make every student look like a
+    # cross-college mismatch, so it must resolve to "no college scope" instead.
+    raw_college_code = current_user.college_code or batch_import.college_code or ""
+    college_code = "" if raw_college_code == "admin" else raw_college_code
 
     student_ids = [row["student_id"] for row in parsed_data]
     student_dept_map = {row["student_id"]: row.get("dept_code") for row in parsed_data}
@@ -450,7 +489,7 @@ async def revalidate_batch_import(
         permission_warnings,
     ) = await service.bulk_validate_permissions_and_duplicates(
         student_ids=student_ids,
-        college_code=college_code or batch_import.college_code or "",
+        college_code=college_code,
         scholarship_type_id=batch_import.scholarship_type_id,
         academic_year=batch_import.academic_year,
         semester=batch_import.semester,
@@ -459,6 +498,14 @@ async def revalidate_batch_import(
     )
 
     validation_warnings.extend(permission_warnings)
+
+    eligibility_warnings = await service.bulk_check_eligibility(
+        parsed_data=parsed_data,
+        scholarship_type_id=batch_import.scholarship_type_id,
+        academic_year=batch_import.academic_year,
+        semester=batch_import.semester,
+    )
+    validation_warnings.extend(eligibility_warnings)
 
     for row_data in parsed_data:
         student_id = row_data.get("student_id")
@@ -534,7 +581,7 @@ async def revalidate_batch_import(
 async def delete_batch_record(
     batch_id: int,
     record_index: int,
-    current_user: User = Depends(require_college_role),
+    current_user: User = Depends(require_admin_role),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -546,11 +593,11 @@ async def delete_batch_record(
     3. 更新總筆數
     4. 返回刪除結果
 
-    **權限**: College 角色僅能刪除自己上傳的批次中的記錄
+    **權限**: 一般管理員僅能刪除自己上傳的批次中的記錄
     """
     # Get batch import record
     batch_import = await db.get(BatchImport, batch_id)
-    if not batch_import:
+    if not batch_import or batch_import.import_type != "application":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"批次匯入記錄 {batch_id} 不存在",
@@ -612,6 +659,16 @@ async def delete_batch_record(
                 w["row_number"] -= 1
         batch_import.parsed_data["warnings"] = warnings
 
+    db.add(
+        AuditLog.create_log(
+            user_id=current_user.id,
+            action=AuditAction.delete.value,
+            resource_type="batch_import",
+            resource_id=str(batch_id),
+            description=f"batch import: delete record #{record_index}",
+            old_values={"record_index": record_index, "deleted_record": deleted_record},
+        )
+    )
     await db.commit()
 
     return {
@@ -628,7 +685,7 @@ async def delete_batch_record(
 async def upload_batch_documents(
     batch_id: int,
     file: UploadFile = File(..., description="包含所有文件的 ZIP 檔案"),
-    current_user: User = Depends(require_college_role),
+    current_user: User = Depends(require_admin_role),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -650,7 +707,7 @@ async def upload_batch_documents(
     4. 上傳文件到 MinIO
     5. 建立 ApplicationFile 記錄
 
-    **權限**: College 角色僅能為自己的批次上傳文件
+    **權限**: 一般管理員僅能為自己的批次上傳文件
     """
     import zipfile
     from io import BytesIO
@@ -661,7 +718,7 @@ async def upload_batch_documents(
 
     # Get batch import record
     batch_import = await db.get(BatchImport, batch_id)
-    if not batch_import:
+    if not batch_import or batch_import.import_type != "application":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"批次匯入記錄 {batch_id} 不存在",
@@ -694,11 +751,11 @@ async def upload_batch_documents(
     # Validate ZIP file
     try:
         zip_file = zipfile.ZipFile(BytesIO(zip_content))
-    except zipfile.BadZipFile:
+    except zipfile.BadZipFile as e:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             detail="無效的 ZIP 檔案",
-        )
+        ) from e
 
     # ZIP bomb protection
     # 1. Check file count limit (max 1000 files)
@@ -931,6 +988,16 @@ async def upload_batch_documents(
             error_count += 1
 
     # Commit all ApplicationFile records
+    db.add(
+        AuditLog.create_log(
+            user_id=current_user.id,
+            action=AuditAction.update.value,
+            resource_type="batch_import",
+            resource_id=str(batch_id),
+            description=f"batch import: upload documents ZIP ({matched_count} matched, {unmatched_count} unmatched)",
+            new_values={"matched_count": matched_count, "unmatched_count": unmatched_count, "error_count": error_count},
+        )
+    )
     await db.commit()
 
     response_data = BatchDocumentUploadResponse(
@@ -953,7 +1020,7 @@ async def upload_batch_documents(
 async def confirm_batch_import(
     batch_id: int,
     request: BatchImportConfirmRequest | None = Body(None),
-    current_user: User = Depends(require_college_role),
+    current_user: User = Depends(require_admin_role),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -961,15 +1028,15 @@ async def confirm_batch_import(
 
     **流程**:
     1. 驗證批次記錄
-    2. 檢查權限（College 角色僅能確認自己上傳的批次，Super Admin 可確認所有批次）
+    2. 檢查權限（一般管理員僅能確認自己上傳的批次，Super Admin 可確認所有批次）
     3. 建立所有申請記錄
     4. 更新批次狀態
 
-    **權限**: College 角色僅能確認自己上傳的批次，Super Admin 可確認所有批次
+    **權限**: 一般管理員僅能確認自己上傳的批次，Super Admin 可確認所有批次
     """
     # Get batch import record
     batch_import = await db.get(BatchImport, batch_id)
-    if not batch_import:
+    if not batch_import or batch_import.import_type != "application":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"批次匯入記錄 {batch_id} 不存在",
@@ -1080,11 +1147,28 @@ async def confirm_batch_import(
             status="completed" if len(creation_errors) == 0 else "partial",
         )
 
-        # Ensure applications created via batch import are visible for college review
-        await db.execute(
-            update(Application)
-            .where(Application.batch_import_id == batch_id)
-            .values(status=ApplicationStatus.under_review.value)
+        # 每筆由批次建立的申請各留一筆稽核 (issue #964 / G2) — 沒有這些紀錄，
+        # 數百筆申請的「誰建立、來自哪個檔案」將無從追溯。
+        for created_id in created_ids:
+            db.add(
+                AuditLog.create_log(
+                    user_id=current_user.id,
+                    action=AuditAction.import_.value,
+                    resource_type="application",
+                    resource_id=str(created_id),
+                    description=f"application created via batch import {batch_id} ({batch_import.file_name})",
+                    meta_data={"batch_id": batch_id, "file_name": batch_import.file_name},
+                )
+            )
+        db.add(
+            AuditLog.create_log(
+                user_id=current_user.id,
+                action=AuditAction.import_.value,
+                resource_type="batch_import",
+                resource_id=str(batch_id),
+                description=f"batch import confirmed: {len(created_ids)} application(s) created, {len(creation_errors)} failed",
+                new_values={"created_application_ids": list(created_ids), "failed_count": len(creation_errors)},
+            )
         )
         await db.commit()
 
@@ -1105,6 +1189,20 @@ async def confirm_batch_import(
             created_application_ids=created_ids,
         )
 
+        logger.warning(
+            "Batch import %d confirmed by user_id=%s: %d applications created, %d errors",
+            batch_id,
+            current_user.id,
+            len(created_ids),
+            len(creation_errors),
+            extra={
+                "batch_id": batch_id,
+                "created_application_count": len(created_ids),
+                "creation_error_count": len(creation_errors),
+                "actor_user_id": current_user.id,
+            },
+        )
+
         return {
             "success": True,
             "message": (
@@ -1118,23 +1216,27 @@ async def confirm_batch_import(
     except BatchImportError as e:
         # Re-raise to let the global exception handler deal with it
         # Batch status has already been updated to 'failed' in the service
+        logger.exception(
+            "Batch import confirmation failed",
+            extra={"batch_id": batch_id, "actor_user_id": current_user.id},
+        )
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=e.message,
-        )
+        ) from e
 
 
 @router.get("/history")
 async def get_batch_import_history(
     skip: int = Query(0, ge=0, description="跳過筆數"),
     limit: int = Query(20, ge=1, le=100, description="每頁筆數"),
-    current_user: User = Depends(require_college_role),
+    current_user: User = Depends(require_admin_role),
     db: AsyncSession = Depends(get_db),
 ):
     """
     查詢批次匯入歷史記錄
 
-    **權限**: College 角色僅能查看自己上傳的記錄，Super Admin 可查看所有記錄
+    **權限**: 一般管理員僅能查看自己上傳的記錄，Super Admin 可查看所有記錄
     """
     # Query batch imports - only show confirmed imports (exclude pending)
     # Pending imports are temporary and should not appear in history until confirmed
@@ -1149,12 +1251,18 @@ async def get_batch_import_history(
         # Super admin can see all confirmed batch imports
         stmt = (
             select(BatchImport)
-            .where(BatchImport.import_status.in_(confirmed_statuses))
+            .where(
+                BatchImport.import_status.in_(confirmed_statuses),
+                BatchImport.import_type == "application",
+            )
             .order_by(desc(BatchImport.created_at))
             .offset(skip)
             .limit(limit)
         )
-        count_stmt = select(BatchImport).where(BatchImport.import_status.in_(confirmed_statuses))
+        count_stmt = select(BatchImport).where(
+            BatchImport.import_status.in_(confirmed_statuses),
+            BatchImport.import_type == "application",
+        )
     else:
         # College role can only see their own confirmed imports
         stmt = (
@@ -1162,6 +1270,7 @@ async def get_batch_import_history(
             .where(
                 BatchImport.importer_id == current_user.id,
                 BatchImport.import_status.in_(confirmed_statuses),
+                BatchImport.import_type == "application",
             )
             .order_by(desc(BatchImport.created_at))
             .offset(skip)
@@ -1170,6 +1279,7 @@ async def get_batch_import_history(
         count_stmt = select(BatchImport).where(
             BatchImport.importer_id == current_user.id,
             BatchImport.import_status.in_(confirmed_statuses),
+            BatchImport.import_type == "application",
         )
 
     result = await db.execute(stmt)
@@ -1218,17 +1328,17 @@ async def get_batch_import_history(
 @router.get("/{batch_id}/details")
 async def get_batch_import_details(
     batch_id: int,
-    current_user: User = Depends(require_college_role),
+    current_user: User = Depends(require_admin_role),
     db: AsyncSession = Depends(get_db),
 ):
     """
     查詢批次匯入詳細資訊
 
-    **權限**: College 角色僅能查看自己上傳的記錄，Super Admin 可查看所有記錄
+    **權限**: 一般管理員僅能查看自己上傳的記錄，Super Admin 可查看所有記錄
     """
     # Get batch import
     batch_import = await db.get(BatchImport, batch_id)
-    if not batch_import:
+    if not batch_import or batch_import.import_type != "application":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"批次匯入記錄 {batch_id} 不存在",
@@ -1284,19 +1394,19 @@ async def get_batch_import_details(
 @router.get("/{batch_id}/download")
 async def download_batch_import_file(
     batch_id: int,
-    current_user: User = Depends(require_college_role),
+    current_user: User = Depends(require_admin_role),
     db: AsyncSession = Depends(get_db),
 ):
     """
     下載批次匯入的原始 Excel 檔案
 
-    **權限**: College 角色僅能下載自己上傳的檔案，Super Admin 可下載所有檔案
+    **權限**: 一般管理員僅能下載自己上傳的檔案，Super Admin 可下載所有檔案
     """
     from app.services.minio_service import MinIOService
 
     # Get batch import
     batch_import = await db.get(BatchImport, batch_id)
-    if not batch_import:
+    if not batch_import or batch_import.import_type != "application":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"批次匯入記錄 {batch_id} 不存在",
@@ -1319,12 +1429,12 @@ async def download_batch_import_file(
     # SECURITY: Validate MinIO object name (CLAUDE.md requirement)
     try:
         validate_object_name_minio(batch_import.file_path)
-    except HTTPException:
+    except HTTPException as exc:
         logger.error(f"Invalid file_path from database: {batch_import.file_path}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="檔案路徑驗證失敗",
-        )
+        ) from exc
 
     # Get file from MinIO
     try:
@@ -1353,51 +1463,43 @@ async def download_batch_import_file(
             headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"},
         )
     except Exception as e:
-        import logging
-
-        logging.error(f"Failed to download batch import file from MinIO: {e}")
+        logger.exception(
+            "Failed to download batch import file from MinIO",
+            extra={"batch_id": batch_id, "file_path": batch_import.file_path},
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="下載檔案時發生錯誤",
-        )
+        ) from e
 
 
 @router.delete("/{batch_id}")
 async def delete_batch_import(
     batch_id: int,
-    current_user: User = Depends(require_college_role),
+    current_user: User = Depends(require_admin_role),
     db: AsyncSession = Depends(get_db),
 ):
     """
     刪除批次匯入記錄及其所有相關申請
 
-    **權限**: College 角色僅能刪除自己上傳的批次，Admin/Super Admin 可刪除所有批次
+    **權限**: Admin / Super Admin 皆可刪除所有批次（不限自己上傳的）
     """
-    import logging
-
     from app.core.config import settings
     from app.services.minio_service import MinIOService
 
-    logger = logging.getLogger(__name__)
+    # Note: `logger` is already configured at module top (line 44); the
+    # local re-import shadowed it for no reason — removed in PR #511.
 
     # Get batch import with related applications
     stmt = select(BatchImport).where(BatchImport.id == batch_id)
     result = await db.execute(stmt)
     batch_import = result.scalar_one_or_none()
 
-    if not batch_import:
+    if not batch_import or batch_import.import_type != "application":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"批次匯入記錄 {batch_id} 不存在",
         )
-
-    # Verify ownership (skip for admin/super_admin)
-    if current_user.role not in [UserRole.admin, UserRole.super_admin]:
-        if batch_import.importer_id != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="僅能刪除自己上傳的批次匯入記錄",
-            )
 
     # Get applications using explicit query (avoid lazy loading)
     from app.models.application import Application
@@ -1409,22 +1511,101 @@ async def delete_batch_import(
     # Get application count for response
     application_count = len(applications)
 
+    # Collect the applications' uploaded files BEFORE deleting — the DB rows
+    # cascade away with the applications, but the MinIO objects do not
+    # (issue #964 / G2: orphaned objects accumulated silently).
+    application_ids = [a.id for a in applications]
+    orphan_candidates = []
+    if application_ids:
+        files_result = await db.execute(
+            select(ApplicationFile).where(ApplicationFile.application_id.in_(application_ids))
+        )
+        orphan_candidates = [(f.application_id, f.object_name) for f in files_result.scalars().all() if f.object_name]
+
+    # 每筆被刪除的申請各留一筆稽核 (G2) — 批次刪除後仍能解釋申請為何消失。
+    for application in applications:
+        db.add(
+            AuditLog.create_log(
+                user_id=current_user.id,
+                action=AuditAction.delete.value,
+                resource_type="application",
+                resource_id=str(application.id),
+                description=f"application hard-deleted with batch import {batch_id} ({batch_import.file_name})",
+                meta_data={
+                    "batch_id": batch_id,
+                    "app_id": application.app_id,
+                    "scholarship_type_id": application.scholarship_type_id,
+                    "academic_year": application.academic_year,
+                },
+            )
+        )
+
     # Delete related applications
     for application in applications:
         await db.delete(application)
+
+    # Delete the applications' MinIO objects (best-effort, logged on failure).
+    if orphan_candidates:
+        minio_cleanup = MinIOService()
+        for app_db_id, object_name in orphan_candidates:
+            try:
+                minio_cleanup.delete_file(bucket_name=settings.minio_bucket, object_name=object_name)
+            except Exception:
+                logger.error(
+                    "Failed to delete MinIO object %s for application %s during batch %s deletion",
+                    object_name,
+                    app_db_id,
+                    batch_id,
+                    exc_info=True,
+                )
 
     # Delete MinIO file if exists
     if batch_import.file_path:
         try:
             minio_service = MinIOService()
-            minio_service.delete_file(bucket_name=settings.minio_bucket, object_name=batch_import.file_path)
-        except Exception as e:
-            logger.warning(f"Failed to delete batch import file from MinIO: {e}")
+            # delete_file takes only object_name (targets the default bucket). The old
+            # bucket_name= kwarg raised TypeError on EVERY call — swallowed by the
+            # except below — so batch deletes silently orphaned the uploaded PII
+            # file in storage while reporting success (surfaced by the RustFS
+            # migration audit; identical on MinIO).
+            minio_service.delete_file(object_name=batch_import.file_path)
+        except Exception:
+            logger.warning("Failed to delete batch import file from MinIO", exc_info=True)
             # Continue with batch deletion even if MinIO deletion fails
 
     # Delete batch import record
+    db.add(
+        AuditLog.create_log(
+            user_id=current_user.id,
+            action=AuditAction.delete.value,
+            resource_type="batch_import",
+            resource_id=str(batch_id),
+            resource_name=batch_import.file_name,
+            description=f"batch import deleted with {application_count} application(s)",
+            old_values={
+                "file_name": batch_import.file_name,
+                "scholarship_type_id": batch_import.scholarship_type_id,
+                "academic_year": batch_import.academic_year,
+                "deleted_application_count": application_count,
+            },
+        )
+    )
     await db.delete(batch_import)
     await db.commit()
+
+    logger.warning(
+        "Batch import %d (%s) deleted by user_id=%s; %d related applications removed",
+        batch_id,
+        batch_import.file_name,
+        current_user.id,
+        application_count,
+        extra={
+            "batch_id": batch_id,
+            "file_name": batch_import.file_name,
+            "deleted_application_count": application_count,
+            "actor_user_id": current_user.id,
+        },
+    )
 
     return {
         "success": True,
@@ -1438,8 +1619,8 @@ async def delete_batch_import(
 
 @router.get("/template")
 async def download_batch_import_template(
-    scholarship_type: str = Query(..., description="獎學金類型代碼", regex=r"^[a-z_]{1,50}$"),
-    current_user: User = Depends(require_college_role),
+    scholarship_type: str = Query(..., description="獎學金類型代碼", pattern=r"^[a-z_]{1,50}$"),
+    current_user: User = Depends(require_admin_role),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -1448,12 +1629,12 @@ async def download_batch_import_template(
     **範例檔案包含**:
     - 必要欄位: 學號, 學生姓名
     - 可選欄位: 郵局帳號
-    - 子類型欄位: 根據獎學金類型動態生成（使用繁體中文）
+    - 子類型欄位: 根據獎學金類型動態生成（使用繁體中文），1 = 有申請、0 或空白 = 未申請
     - 自訂欄位: 根據 ApplicationField 配置動態生成（使用繁體中文）
 
     **注意**: 系所代碼會自動從學籍系統獲取，不需要在檔案中提供
 
-    **權限**: 僅限 college 角色
+    **權限**: 僅限管理員角色
     """
     from app.models.application_field import ApplicationField
 
@@ -1468,169 +1649,7 @@ async def download_batch_import_template(
             detail=f"獎學金類型 {scholarship_type} 不存在",
         )
 
-    # Define base columns (Traditional Chinese)
-    columns = [
-        "學號",  # student_id - 必填
-        "學生姓名",  # student_name - 必填
-        "郵局帳號",  # postal_account - 可選
-    ]
-
-    # Mapping for internal use (Chinese to English)
-    column_mapping = {
-        "學號": "student_id",
-        "學生姓名": "student_name",
-        "郵局帳號": "postal_account",
-    }
-
-    # Check if scholarship requires professor recommendation for advisor fields
-    from app.services.application_field_service import ApplicationFieldService
-
-    field_service = ApplicationFieldService(db)
-    requires_advisor = await field_service.check_requires_professor_recommendation(scholarship.code)
-
-    # Add advisor fixed fields if required (after postal_account, before sub_types)
-    if requires_advisor:
-        columns.extend(
-            [
-                "指導教授姓名",  # advisor_name
-                "指導教授Email",  # advisor_email
-                "指導教授本校人事編號",  # advisor_nycu_id
-            ]
-        )
-        column_mapping.update(
-            {
-                "指導教授姓名": "advisor_name",
-                "指導教授Email": "advisor_email",
-                "指導教授本校人事編號": "advisor_nycu_id",
-            }
-        )
-
-    # Sub-type label mapping
-    sub_type_labels = {
-        "nstc": "國科會",
-        "moe_1w": "教育部配合款1萬",
-        "moe_2w": "教育部配合款2萬",
-    }
-
-    # Add sub_type columns if scholarship has sub types (Traditional Chinese)
-    if scholarship.sub_type_list:
-        for sub_type_code in scholarship.sub_type_list:
-            label = sub_type_labels.get(sub_type_code, sub_type_code)
-            columns.append(label)
-            column_mapping[label] = f"sub_type_{sub_type_code}"
-
-    # Query custom fields for this scholarship type
-    custom_fields_stmt = (
-        select(ApplicationField)
-        .where(ApplicationField.scholarship_type == scholarship.code)
-        .where(ApplicationField.is_active)
-        .order_by(ApplicationField.display_order)
-    )
-    custom_fields_result = await db.execute(custom_fields_stmt)
-    custom_fields = custom_fields_result.scalars().all()
-
-    # Add custom field columns (Traditional Chinese)
-    for field in custom_fields:
-        columns.append(field.field_label)  # Use Chinese label
-        column_mapping[field.field_label] = f"custom_{field.field_name}"
-
-    # Create sample data (2 example rows)
-    sample_data = [
-        {
-            "學號": "111111111",
-            "學生姓名": "王小明",
-            "郵局帳號": "1234567890123",
-        },
-        {
-            "學號": "222222222",
-            "學生姓名": "陳小華",
-            "郵局帳號": "9876543210987",
-        },
-    ]
-
-    # Add advisor field sample values if required
-    if requires_advisor:
-        sample_data[0].update(
-            {
-                "指導教授姓名": "張教授",
-                "指導教授Email": "professor.chang@nycu.edu.tw",
-                "指導教授本校人事編號": "P001234",
-            }
-        )
-        sample_data[1].update(
-            {
-                "指導教授姓名": "李教授",
-                "指導教授Email": "professor.lee@nycu.edu.tw",
-                "指導教授本校人事編號": "P005678",
-            }
-        )
-
-    # Add sub_type sample values if applicable
-    if scholarship.sub_type_list:
-        for i, row in enumerate(sample_data):
-            for j, sub_type_code in enumerate(scholarship.sub_type_list):
-                label = sub_type_labels.get(sub_type_code, sub_type_code)
-                # First row has first sub_type as Y, second row has second sub_type as Y
-                row[label] = "Y" if i == j else ""
-
-    # Add custom field sample values
-    for field in custom_fields:
-        for i, row in enumerate(sample_data):
-            # Provide sample values based on field type
-            if field.field_type == "text":
-                row[field.field_label] = f"範例{field.field_label}{i + 1}"
-            elif field.field_type == "number":
-                row[field.field_label] = 100 + i
-            elif field.field_type == "select":
-                # Use first option if available
-                if field.field_options and len(field.field_options) > 0:
-                    row[field.field_label] = field.field_options[0].get("label", "")
-                else:
-                    row[field.field_label] = ""
-            elif field.field_type == "checkbox":
-                row[field.field_label] = "Y" if i == 0 else ""
-            else:
-                row[field.field_label] = ""
-
-    # Create DataFrame
-    df = pd.DataFrame(sample_data, columns=columns)
-
-    # Create Excel file in memory
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="批次匯入範例")
-
-        # Auto-adjust column widths
-        from openpyxl.utils import get_column_letter
-
-        worksheet = writer.sheets["批次匯入範例"]
-        for idx, col in enumerate(df.columns, 1):
-            # Calculate max length for this column
-            column_values = df[col].astype(str).tolist()
-
-            # Collect all content in this column (header + all data)
-            all_content = [str(col)] + column_values
-
-            # Calculate max character length
-            max_length = max(len(text) for text in all_content) if all_content else 0
-
-            # Count Chinese characters in each cell and find the max
-            # Chinese characters need approximately 2x the width of English characters
-            max_chinese_in_cell = (
-                max(sum(1 for c in text if "\u4e00" <= c <= "\u9fff") for text in all_content) if all_content else 0
-            )
-
-            # Adjusted width calculation:
-            # - Base width from character count
-            # - Add extra width for Chinese characters (they're wider)
-            # - Add padding
-            adjusted_width = max_length + max_chinese_in_cell * 1.2 + 2
-
-            # Apply width to column
-            column_letter = get_column_letter(idx)
-            worksheet.column_dimensions[column_letter].width = adjusted_width
-
-    output.seek(0)
+    payload = await build_batch_import_template(db, scholarship)
 
     # Return as downloadable file with Chinese filename
     from urllib.parse import quote
@@ -1639,7 +1658,10 @@ async def download_batch_import_template(
     encoded_filename = quote(filename, encoding="utf-8")
 
     return StreamingResponse(
-        output,
+        iter([payload]),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"},
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+            "Content-Length": str(len(payload)),
+        },
     )

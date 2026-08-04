@@ -6,15 +6,20 @@ MinIO文件儲存服務
 import hashlib
 import io
 import logging
+import os
 import uuid
 from datetime import datetime, timedelta
 from typing import Dict, Optional, Tuple
 
+from fastapi import HTTPException
 from minio import Minio
+from minio.commonconfig import CopySource
 from minio.error import S3Error
 
 from app.core.config import settings
 from app.core.exceptions import FileStorageError
+from app.core.metrics import file_uploads_total
+from app.core.path_security import secure_filename
 
 logger = logging.getLogger(__name__)
 
@@ -79,38 +84,21 @@ class MinIOService:
                     self.client.make_bucket(bucket_name)
                     logger.info(f"Created MinIO bucket: {bucket_name}")
 
-                    # Set bucket policy for roster files (private by default)
-                    if bucket_name == self.roster_bucket:
-                        self._set_bucket_policy(bucket_name, private=True)
+                    # NOTE: no explicit deny-all bucket policy here anymore.
+                    # Buckets are private by default (anonymous GET → 403 with
+                    # no policy attached — verified against RustFS 1.0.0-beta.8
+                    # by app/scripts/storage_compat_check.py). The old
+                    # deny-all s3:GetObject policy was written for MinIO,
+                    # where root credentials bypass bucket policies; RustFS
+                    # enforces an explicit Deny against the OWNER as well
+                    # (AWS-faithful semantics), which 403'd the backend's own
+                    # roster downloads.
 
         except Exception as e:
-            logger.error(f"Failed to ensure buckets exist: {e}")
+            logger.exception("Failed to ensure buckets exist")
             from fastapi import HTTPException
 
-            raise HTTPException(status_code=500, detail=f"MinIO bucket initialization failed: {str(e)}")
-
-    def _set_bucket_policy(self, bucket_name: str, private: bool = True):
-        """設定bucket政策"""
-        try:
-            if private:
-                # Private bucket policy - no public access
-                policy = {
-                    "Version": "2012-10-17",
-                    "Statement": [
-                        {
-                            "Effect": "Deny",
-                            "Principal": "*",
-                            "Action": "s3:GetObject",
-                            "Resource": f"arn:aws:s3:::{bucket_name}/*",
-                        }
-                    ],
-                }
-                import json
-
-                self.client.set_bucket_policy(bucket_name, json.dumps(policy))
-
-        except Exception as e:
-            logger.warning(f"Failed to set bucket policy for {bucket_name}: {e}")
+            raise HTTPException(status_code=500, detail="MinIO bucket initialization failed") from e
 
     def upload_roster_file(
         self,
@@ -178,8 +166,8 @@ class MinIOService:
             }
 
         except Exception as e:
-            logger.error(f"Failed to upload roster file {filename}: {e}")
-            raise FileStorageError(f"檔案上傳失敗: {str(e)}")
+            logger.exception(f"Failed to upload roster file {filename}")
+            raise FileStorageError(f"檔案上傳失敗: {str(e)}") from e
 
     async def upload_file(self, file, application_id: int, file_type: str) -> Tuple[str, int]:
         """
@@ -200,31 +188,37 @@ class MinIOService:
 
             # 檢查檔案大小
             if file_size > settings.max_file_size:
-                from fastapi import HTTPException
-
-                raise HTTPException(status_code=500, detail="File too large")
+                raise HTTPException(status_code=413, detail="File too large")
 
             # 檢查檔案類型
             if not file.filename:
-                from fastapi import HTTPException
+                raise HTTPException(status_code=400, detail="No filename provided")
 
-                raise HTTPException(status_code=500, detail="No filename provided")
-
-            file_extension = file.filename.split(".")[-1].lower()
+            # Validate the final extension of the ORIGINAL filename — the
+            # sanitizer strips a fully non-ASCII name like 勞保證明.pdf down
+            # to "pdf" (no dot), which made valid uploads fail with 415.
+            # Trailing spaces/dots are trimmed so "report.pdf " still passes;
+            # splitext keeps only the final extension (double-extension defense).
+            stem, ext = os.path.splitext(file.filename.strip().rstrip(". "))
+            file_extension = ext[1:].lower()
             if file_extension not in settings.allowed_file_types_list:
-                from fastapi import HTTPException
+                raise HTTPException(status_code=415, detail="Invalid file type")
 
-                raise HTTPException(status_code=500, detail="Invalid file type")
+            # Sanitize the stem (a fully non-ASCII stem falls back to
+            # "unnamed_file") and re-attach the validated extension.
+            safe_filename = f"{secure_filename(stem)}.{file_extension}"
 
-            # 生成object名稱
+            # 生成object名稱 — the uuid suffix keeps same-second uploads of
+            # identically-sanitized names (e.g. two Chinese filenames that
+            # both collapse to "unnamed_file") from overwriting each other.
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            safe_filename = file.filename.replace(" ", "_")
+            unique_suffix = uuid.uuid4().hex[:8]
             # 標準化 file_type 為複數形式
             if file_type == "doc":
                 folder_name = "documents"
             else:
                 folder_name = f"{file_type}s"
-            object_name = f"applications/{application_id}/{folder_name}/{timestamp}_{safe_filename}"
+            object_name = f"applications/{application_id}/{folder_name}/{timestamp}_{unique_suffix}_{safe_filename}"
 
             # 上傳到MinIO
             self.client.put_object(
@@ -235,14 +229,33 @@ class MinIOService:
                 content_type=file.content_type,
             )
 
-            logger.info(f"Uploaded file {file.filename} as {object_name}")
+            # Log the sanitized filename (object_name is already safe) to avoid
+            # log injection from control characters in the client-supplied name.
+            logger.info(f"Uploaded file {safe_filename} as {object_name}")
+
+            # Business metric: count successful application-file uploads.
+            # file_type already discriminates document categories (doc,
+            # transcript, etc.); status "success" pairs with the failure
+            # increment in the except block (issue #159).
+            file_uploads_total.labels(file_type=str(file_type), status="success").inc()
+
             return object_name, file_size
 
+        except HTTPException:
+            # Validation errors (size/type/filename) carry their own status code
+            # and must not be masked as a generic 500.
+            file_uploads_total.labels(file_type=str(file_type), status="failed").inc()
+            raise
         except Exception as e:
-            logger.error(f"Failed to upload file {file.filename}: {e}")
-            from fastapi import HTTPException
+            # SECURITY: sanitize the client-supplied filename before logging to
+            # avoid log injection / control-character confusion.
+            logger.exception(f"Failed to upload file {secure_filename(file.filename or '')}")
 
-            raise HTTPException(status_code=500, detail=str(e))
+            # Business metric: count failures so the dashboard can show
+            # the success-rate ratio without needing log-scraping.
+            file_uploads_total.labels(file_type=str(file_type), status="failed").inc()
+
+            raise HTTPException(status_code=500, detail="File upload failed") from e
 
     def get_file_stream(self, object_name: str):
         """
@@ -257,10 +270,10 @@ class MinIOService:
         try:
             return self.client.get_object(self.default_bucket, object_name)
         except Exception as e:
-            logger.error(f"Failed to get file stream for {object_name}: {e}")
+            logger.exception(f"Failed to get file stream for {object_name}")
             from fastapi import HTTPException
 
-            raise HTTPException(status_code=404, detail="File not found")
+            raise HTTPException(status_code=404, detail="File not found") from e
 
     def delete_file(self, object_name: str) -> bool:
         """
@@ -276,8 +289,8 @@ class MinIOService:
             self.client.remove_object(self.default_bucket, object_name)
             logger.info(f"Deleted file {object_name}")
             return True
-        except Exception as e:
-            logger.error(f"Failed to delete file {object_name}: {e}")
+        except Exception:
+            logger.exception(f"Failed to delete file {object_name}")
             return False
 
     def clone_file_to_application(self, source_object_name: str, application_id: str) -> str:
@@ -296,33 +309,23 @@ class MinIOService:
             file_extension = source_object_name.split(".")[-1] if "." in source_object_name else ""
             new_object_name = f"applications/{application_id}/documents/{uuid.uuid4().hex}.{file_extension}"
 
-            # 嘗試複製檔案
-            try:
-                self.client.copy_object(
-                    bucket_name=self.default_bucket,
-                    object_name=new_object_name,
-                    copy_source=f"{self.default_bucket}/{source_object_name}",
-                )
-                logger.info(f"Cloned file {source_object_name} to {new_object_name}")
-                return new_object_name
-            except Exception:
-                # 如果複製失敗，創建一個placeholder
-                placeholder_content = b"Placeholder content"
-                self.client.put_object(
-                    bucket_name=self.default_bucket,
-                    object_name=new_object_name,
-                    data=io.BytesIO(placeholder_content),
-                    length=len(placeholder_content),
-                    content_type="application/pdf",
-                )
-                logger.info(f"Created placeholder file {new_object_name}")
-                return new_object_name
+            # 複製檔案到申請路徑。
+            # 注意：minio 7.x 的 copy_object 參數為 source（必須是 CopySource 物件），
+            # 不是字串 copy_source。若複製失敗必須直接 raise，
+            # 嚴禁寫入 placeholder 假檔（違反 CLAUDE.md 原則 #1，會產生污染資料）。
+            self.client.copy_object(
+                bucket_name=self.default_bucket,
+                object_name=new_object_name,
+                source=CopySource(self.default_bucket, source_object_name),
+            )
+            logger.info(f"Cloned file {source_object_name} to {new_object_name}")
+            return new_object_name
 
         except Exception as e:
-            logger.error(f"Failed to clone file {source_object_name}: {e}")
+            logger.exception(f"Failed to clone file {source_object_name}")
             from fastapi import HTTPException
 
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=500, detail="File clone failed") from e
 
     def extract_object_name_from_url(self, url: str) -> Optional[str]:
         """
@@ -368,8 +371,11 @@ class MinIOService:
             response.close()
             response.release_conn()
 
-            # 驗證檔案hash (如果metadata中有的話)
-            stored_hash = stat.metadata.get("file-hash")
+            # 驗證檔案hash (如果metadata中有的話)。
+            # Custom metadata comes back PREFIXED (x-amz-meta-*) from the SDK's
+            # stat headers — the bare "file-hash" lookup was always None, so
+            # this integrity check had silently never run (on MinIO either).
+            stored_hash = stat.metadata.get("x-amz-meta-file-hash")
             if stored_hash:
                 actual_hash = hashlib.sha256(file_content).hexdigest()
                 if stored_hash != actual_hash:
@@ -381,13 +387,13 @@ class MinIOService:
 
         except S3Error as e:
             if e.code == "NoSuchKey":
-                raise FileStorageError(f"檔案不存在: {object_name}")
+                raise FileStorageError(f"檔案不存在: {object_name}") from e
             else:
-                logger.error(f"Failed to download roster file {object_name}: {e}")
-                raise FileStorageError(f"檔案下載失敗: {str(e)}")
+                logger.exception(f"Failed to download roster file {object_name}")
+                raise FileStorageError(f"檔案下載失敗: {str(e)}") from e
         except Exception as e:
-            logger.error(f"Failed to download roster file {object_name}: {e}")
-            raise FileStorageError(f"檔案下載失敗: {str(e)}")
+            logger.exception(f"Failed to download roster file {object_name}")
+            raise FileStorageError(f"檔案下載失敗: {str(e)}") from e
 
     def delete_roster_file(self, object_name: str) -> bool:
         """
@@ -409,10 +415,10 @@ class MinIOService:
                 logger.warning(f"File already deleted or does not exist: {object_name}")
                 return True  # 檔案不存在也算成功
             else:
-                logger.error(f"Failed to delete roster file {object_name}: {e}")
+                logger.exception(f"Failed to delete roster file {object_name}")
                 return False
-        except Exception as e:
-            logger.error(f"Failed to delete roster file {object_name}: {e}")
+        except Exception:
+            logger.exception(f"Failed to delete roster file {object_name}")
             return False
 
     def get_presigned_url(self, object_name: str, expires: timedelta = timedelta(hours=1), method: str = "GET") -> str:
@@ -428,7 +434,10 @@ class MinIOService:
             str: 預簽名URL
         """
         try:
-            url = self.client.presigned_url(
+            # SDK method is get_presigned_url — `client.presigned_url` does
+            # not exist (this wrapper had zero callers, so the AttributeError
+            # never fired; surfaced by storage_compat_check).
+            url = self.client.get_presigned_url(
                 method=method,
                 bucket_name=self.roster_bucket,
                 object_name=object_name,
@@ -439,8 +448,8 @@ class MinIOService:
             return url
 
         except Exception as e:
-            logger.error(f"Failed to generate presigned URL for {object_name}: {e}")
-            raise FileStorageError(f"下載連結產生失敗: {str(e)}")
+            logger.exception(f"Failed to generate presigned URL for {object_name}")
+            raise FileStorageError(f"下載連結產生失敗: {str(e)}") from e
 
     def health_check(self) -> Dict[str, bool]:
         """
@@ -484,7 +493,7 @@ class MinIOService:
             }
 
         except Exception as e:
-            logger.error(f"MinIO health check failed: {e}")
+            logger.exception("MinIO health check failed")
             return {
                 "connection": False,
                 "bucket_exists": False,
