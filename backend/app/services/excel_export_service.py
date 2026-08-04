@@ -6,9 +6,9 @@ Excel export service for payment roster generation
 import hashlib
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 from openpyxl import Workbook, load_workbook
@@ -17,10 +17,27 @@ from openpyxl.utils import get_column_letter
 
 from app.core.config import settings
 from app.core.exceptions import FileStorageError
-from app.models.payment_roster import PaymentRoster, PaymentRosterItem
+from app.models.payment_roster import (
+    MANUAL_REMOVAL_PREFIXES,
+    STUDENT_VERIFICATION_STATUS_LABELS,
+    PaymentRoster,
+    PaymentRosterItem,
+    StudentVerificationStatus,
+)
 from app.services.minio_service import MinIOService
+from app.utils.excel_safety import sanitize_excel_cell
 
 logger = logging.getLogger(__name__)
+
+# 造冊畫面/匯出用的子項目簡短標籤。
+# Keep in sync with ALLOCATED_SUB_TYPE_SHORT_LABELS in
+# frontend/lib/allocation-display.ts — the roster screens must show the
+# same label as the Excel export finance receives.
+SUB_TYPE_SHORT_LABELS = {
+    "nstc": "國科會",
+    "moe_1w": "教育部(5000)",
+    "moe_2w": "教育部(2萬)",
+}
 
 
 class ExcelExportService:
@@ -32,6 +49,21 @@ class ExcelExportService:
         "payment_roster_template.xlsx",
         "scholarship_roster.xlsx",
     }
+
+    # 資格驗證欄名（附加於 base 30 欄之後）。逐條規則欄為動態，介於
+    # COL_RULE_SUMMARY 與 COL_INCLUDED 之間（見 _collect_rule_columns）。
+    COL_VERIFICATION = "學籍驗證"  # verification_status 標籤
+    COL_RULE_SUMMARY = "規則資格"  # is_eligible → 符合/不符合/—
+    COL_INCLUDED = "納入造冊"  # is_included → 是/否
+    COL_EXCLUSION = "排除原因"  # exclusion_reason
+    COL_BANK_ACCOUNT = "帳號"  # base 第 3 欄（缺帳號時標紅）
+
+    # 不符合 → 紅底（FFC7CE）；警告 → 琥珀底（FFEB9C），Excel 標準條件格式色。
+    RED_FILL = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+    AMBER_FILL = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
+
+    # 需千分位數字格式的欄位（皆為金額欄）
+    NUMERIC_FORMAT_COLUMNS = frozenset({"單價", "免稅給付"})
 
     def __init__(self):
         self.export_base_path = getattr(settings, "roster_export_dir", "./exports")
@@ -59,7 +91,7 @@ class ExcelExportService:
 
                 # Extract headers from template
                 self.template_columns = []
-                for col in range(1, 31):  # 30 columns max
+                for col in range(1, 33):  # 32 columns max
                     cell_value = ws.cell(row=1, column=col).value
                     if cell_value:
                         self.template_columns.append(str(cell_value))
@@ -71,8 +103,8 @@ class ExcelExportService:
             else:
                 logger.warning(f"Template not found at {self.template_path}, using default columns")
                 self._set_default_columns()
-        except Exception as e:
-            logger.error(f"Failed to load template: {e}, using default columns")
+        except Exception:
+            logger.exception("Failed to load template; using default columns")
             self._set_default_columns()
 
     def _set_default_columns(self):
@@ -85,7 +117,7 @@ class ExcelExportService:
             "職別(稱)",  # 5. 固定值"學生"
             "戶籍地址",  # 6. 選填
             "身份別代碼",  # 7. 學生固定為1
-            "單位(ex:時,月,次...)",  # 8. 固定值"次"
+            "單位(ex:時,月,次...)",  # 8. 固定值"元"
             "數量",  # 9. 固定值"1"
             "單價",  # 10. 獎學金金額
             "機關負擔勞保費",  # 11. 學生不適用，留空
@@ -106,6 +138,8 @@ class ExcelExportService:
             "E-MAIL",  # 26. 選填
             "個人身分別(1:本國人,2:外國人,3:大陸人)",  # 27. 本國人=1
             "居留天數是否滿183天(是/否)",  # 28. 本國人預設"是"
+            "申請身分",  # 29. 申請身分別 (e.g. 114新申請, 114續領)
+            "分發獎學金",  # 30. 分發到的獎學金 (e.g. 114年 國科會)
         ]
 
         # Field mapping for easy access
@@ -141,8 +175,21 @@ class ExcelExportService:
         }
 
     def ensure_export_directory(self):
-        """確保匯出目錄存在"""
-        Path(self.export_base_path).mkdir(parents=True, exist_ok=True)
+        """確保匯出目錄存在；若無權限則退回系統暫存目錄（容器中 cwd 可能不可寫）"""
+        try:
+            Path(self.export_base_path).mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            import tempfile
+
+            fallback = os.path.join(tempfile.gettempdir(), "scholarship-exports")
+            logger.warning(
+                "Cannot create export dir %s; falling back to %s",
+                self.export_base_path,
+                fallback,
+                exc_info=True,
+            )
+            Path(fallback).mkdir(parents=True, exist_ok=True)
+            self.export_base_path = fallback
 
     def export_roster_to_excel(
         self,
@@ -153,6 +200,7 @@ class ExcelExportService:
         include_header: bool = True,
         include_statistics: bool = True,
         async_mode: bool = False,
+        skip_minio_upload: bool = False,
     ) -> Dict[str, Any]:
         """
         匯出造冊至Excel檔案
@@ -164,6 +212,7 @@ class ExcelExportService:
             include_header: 是否在檔案中包含表頭
             include_statistics: 是否加入統計資訊工作表
             async_mode: 是否以非同步模式回傳背景任務資訊
+            skip_minio_upload: 是否跳過 MinIO 上傳並保留本地檔案 (用於 use_minio=False 的下載路徑)
 
         Returns:
             Dict[str, Any]: 匯出結果
@@ -195,7 +244,7 @@ class ExcelExportService:
 
         if async_mode:
             task_id = f"roster-export-{uuid4().hex}"
-            estimated_completion = (datetime.utcnow() + timedelta(minutes=5)).isoformat()
+            estimated_completion = (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat()
             return {
                 "task_id": task_id,
                 "status": "queued",
@@ -205,6 +254,7 @@ class ExcelExportService:
                 "estimated_completion": estimated_completion,
             }
 
+        file_name: Optional[str] = None
         try:
             # 取得造冊明細
             roster_items = self._get_roster_items(roster, include_excluded)
@@ -213,8 +263,12 @@ class ExcelExportService:
             file_name = roster.generate_excel_filename()
             file_path = os.path.join(self.export_base_path, file_name)
 
-            # 準備Excel資料
-            excel_data = self._prepare_excel_data(roster, roster_items)
+            # 計算動態欄位（base 30 欄 + 驗證欄 + 逐條規則欄）
+            rule_columns = self._collect_rule_columns(roster_items)
+            export_columns = self._build_export_columns(rule_columns)
+
+            # 準備Excel資料 + 上色 metadata
+            excel_data, cell_fills = self._prepare_excel_data(roster, roster_items, rule_columns)
 
             # 驗證資料品質
             validation_result = self._validate_export_data(excel_data)
@@ -230,9 +284,11 @@ class ExcelExportService:
             # 建立Excel檔案
             self._create_excel_file(
                 excel_data,
+                cell_fills,
                 file_path,
                 roster,
                 template_path=resolved_template_path,
+                columns=export_columns,
                 include_header=include_header,
                 include_statistics=include_statistics,
             )
@@ -247,8 +303,13 @@ class ExcelExportService:
             roster.excel_file_size = file_size
             roster.excel_file_hash = file_hash
 
-            # Upload to MinIO automatically (if roster has valid ID)
-            if roster.id is None:
+            # Upload to MinIO automatically (if roster has valid ID and not explicitly skipped)
+            if skip_minio_upload:
+                logger.info(
+                    f"Skipping MinIO upload for roster {roster.id} (skip_minio_upload=True); "
+                    f"local file retained at: {file_path}"
+                )
+            elif roster.id is None:
                 logger.warning(
                     "Roster ID is None, cannot upload to MinIO. " "Roster must be persisted to database before export."
                 )
@@ -296,7 +357,7 @@ class ExcelExportService:
                     logger.error(f"Failed to upload Excel file to MinIO: {minio_error}", exc_info=True)
                     logger.warning(f"Excel file remains available locally at: {file_path}")
 
-            qualified_count = sum(1 for item in roster_items if item.is_qualified and item.is_included)
+            qualified_count = sum(1 for item in roster_items if item.is_included)
             disqualified_count = len(roster_items) - qualified_count
 
             logger.info(f"Excel export completed: {file_name} ({file_size} bytes)")
@@ -311,24 +372,88 @@ class ExcelExportService:
                 "qualified_count": qualified_count,
                 "disqualified_count": disqualified_count,
                 "validation_result": validation_result,
-                "template_columns": self.template_columns,
+                "template_columns": export_columns,
                 "template_name": resolved_template_name,
                 "include_header": include_header,
                 "include_statistics": include_statistics,
             }
 
         except Exception as e:
-            logger.error(f"Excel export failed: {e}")
-            raise FileStorageError(f"Failed to export Excel file: {e}", file_name=file_name)
+            logger.exception("Excel export failed")
+            raise FileStorageError(f"Failed to export Excel file: {e}", file_name=file_name) from e
+
+    @staticmethod
+    def _is_manual_removal(item) -> bool:
+        """True 表示此 item 是「鎖定後手動移除」或「比對分發移除」，
+        應排除於資格驗證視圖之外（自動因資格不符排除者則保留並標紅）。
+        前綴常數與 roster_service 產生端共用（MANUAL_REMOVAL_PREFIXES）。"""
+        reason = getattr(item, "exclusion_reason", None)
+        return bool(reason and reason.startswith(MANUAL_REMOVAL_PREFIXES))
+
+    @staticmethod
+    def _rule_details(item) -> Dict[str, Any]:
+        """取出凍結快照的逐條規則 details；缺漏／格式不符時回傳空 dict。"""
+        rvr = getattr(item, "rule_validation_result", None)
+        details = rvr.get("details") if isinstance(rvr, dict) else None
+        return details if isinstance(details, dict) else {}
 
     def _get_roster_items(self, roster: PaymentRoster, include_excluded: bool) -> List[PaymentRosterItem]:
-        """取得造冊明細"""
-        items = roster.items
+        """取得造冊明細。
+
+        預設（include_excluded=False）：保留「納入」與「因資格不符自動排除」者，
+        隱藏「手動移除」者。include_excluded=True 時回傳全部（含手動移除）。
+        """
+        items = list(roster.items)
 
         if not include_excluded:
-            items = [item for item in items if item.is_included]
+            items = [item for item in items if item.is_included or not self._is_manual_removal(item)]
 
         return sorted(items, key=lambda x: x.student_name)
+
+    def _collect_rule_columns(self, roster_items: List[PaymentRosterItem]) -> List[Tuple[int, str]]:
+        """從所有 item 的凍結快照 rule_validation_result["details"] 收集規則欄。
+
+        回傳依 rule_id 升冪排序的 (rule_id, header)；header 以 rule_name 為主，
+        若與 base/驗證欄名或其他規則 header 衝突，加上「（#id）」後綴確保唯一。
+        非規則鍵（no_rules_found / error）忽略。Excel 層只讀不重跑規則。
+        """
+        seen: Dict[int, str] = {}
+        for item in roster_items:
+            for key, res in self._rule_details(item).items():
+                if not isinstance(key, str) or not key.startswith("rule_"):
+                    continue
+                suffix = key[len("rule_") :]
+                if not suffix.isdigit():
+                    continue
+                rid = int(suffix)
+                if rid in seen:
+                    continue
+                name = (res.get("rule_name") if isinstance(res, dict) else None) or f"規則{rid}"
+                seen[rid] = name
+
+        columns: List[Tuple[int, str]] = []
+        used = set(self.template_columns) | {
+            self.COL_VERIFICATION,
+            self.COL_RULE_SUMMARY,
+            self.COL_INCLUDED,
+            self.COL_EXCLUSION,
+        }
+        for rid in sorted(seen):
+            header = seen[rid]
+            if header in used:
+                header = f"{header}（#{rid}）"
+            used.add(header)
+            columns.append((rid, header))
+        return columns
+
+    def _build_export_columns(self, rule_columns: List[Tuple[int, str]]) -> List[str]:
+        """組出本次匯出的完整欄位順序：base 30 欄 + 驗證欄 + 逐條規則欄 + 納入/排除。"""
+        return (
+            list(self.template_columns)
+            + [self.COL_VERIFICATION, self.COL_RULE_SUMMARY]
+            + [header for _, header in rule_columns]
+            + [self.COL_INCLUDED, self.COL_EXCLUSION]
+        )
 
     def _resolve_template_path(self, template_name: Optional[str]) -> str:
         """
@@ -356,13 +481,37 @@ class ExcelExportService:
         logger.warning("Template %s not found. Falling back to default template.", candidate)
         return self.template_path
 
+    @staticmethod
+    def _format_allocation_display(item: PaymentRosterItem) -> str:
+        """Format allocated sub-type + year for Excel display"""
+        if not item.allocated_sub_type:
+            return ""
+        display = SUB_TYPE_SHORT_LABELS.get(item.allocated_sub_type, item.allocated_sub_type)
+        if item.allocation_year:
+            return f"{item.allocation_year}年 {display}"
+        return display
+
     def _get_filtered_roster_items(self, roster: PaymentRoster, include_excluded: bool) -> List[PaymentRosterItem]:
         """Compatibility helper for legacy calls that expect filtered roster items"""
         return self._get_roster_items(roster, include_excluded)
 
-    def _prepare_excel_data(self, roster: PaymentRoster, roster_items: List[PaymentRosterItem]) -> List[Dict]:
-        """準備Excel資料 - STD_UP_MIXLISTA 30欄位格式"""
-        excel_data = []
+    def _prepare_excel_data(
+        self,
+        roster: PaymentRoster,
+        roster_items: List[PaymentRosterItem],
+        rule_columns: Optional[List[Tuple[int, str]]] = None,
+    ) -> Tuple[List[Dict], List[Dict[str, str]]]:
+        """準備 Excel 資料 — base 30 欄 + 資格驗證欄。
+
+        回傳 (excel_data, cell_fills)：cell_fills 與 excel_data 等長平行，
+        每筆為 {欄名: "red"|"amber"}，供 _create_excel_file 套色。
+        item.excel_row_data 仍寫回乾淨 row dict（不含 fills）。
+        """
+        rule_columns = rule_columns or []
+        # 預先算好每欄的快照鍵，避免逐列重建 f"rule_{rid}"
+        rule_lookup = [(header, f"rule_{rid}") for rid, header in rule_columns]
+        excel_data: List[Dict] = []
+        cell_fills: List[Dict[str, str]] = []
 
         for idx, item in enumerate(roster_items, start=1):
             # 取得學生相關資訊
@@ -375,11 +524,16 @@ class ExcelExportService:
                 )
                 continue
 
-            # 生成備註 (第25欄) - 包含期間標籤、獎學金名稱和狀態
+            # 生成備註 (第25欄) - 包含期間標籤、獎學金名稱、分發資訊和狀態
             remarks_parts = []
             if hasattr(roster, "period_label") and roster.period_label:
                 remarks_parts.append(f"期間:{roster.period_label}")
             remarks_parts.append(f"獎學金:{item.scholarship_name}")
+            # 分發資訊（從快照欄位取得）
+            if item.application_identity:
+                remarks_parts.append(f"身分:{item.application_identity}")
+            if item.allocated_sub_type:
+                remarks_parts.append(f"分發:{self._format_allocation_display(item)}")
             if not item.is_included:
                 remarks_parts.append("狀態:不合格")
             if not item.bank_account:
@@ -402,8 +556,8 @@ class ExcelExportService:
                 "戶籍地址": item.permanent_address or "",
                 # 7. 身份別代碼 (學生固定為1)
                 "身份別代碼": "1",
-                # 8. 單位(ex:時,月,次...) (固定值"次")
-                "單位(ex:時,月,次...)": "次",
+                # 8. 單位(ex:時,月,次...) (固定值"元")
+                "單位(ex:時,月,次...)": "元",
                 # 9. 數量 (固定值"1")
                 "數量": "1",
                 # 10. 單價 (獎學金金額)
@@ -434,16 +588,61 @@ class ExcelExportService:
                 "個人身分別(1:本國人,2:外國人,3:大陸人)": "1",
                 # 28. 居留天數是否滿183天(是/否) (本國人預設"是")
                 "居留天數是否滿183天(是/否)": "是",
+                # 29. 申請身分 (快照欄位)
+                "申請身分": item.application_identity or "",
+                # 30. 分發獎學金 (快照欄位)
+                "分發獎學金": self._format_allocation_display(item),
             }
 
-            # 儲存Excel行資料到資料庫
+            fills: Dict[str, str] = {}
+
+            # 銀行帳號缺漏 → 帳號欄紅
+            if not item.bank_account:
+                fills[self.COL_BANK_ACCOUNT] = "red"
+
+            # 學籍驗證
+            status = item.verification_status
+            row_data[self.COL_VERIFICATION] = self._get_verification_status_label(status)
+            status_value = status.value if hasattr(status, "value") else str(status)
+            if status_value != StudentVerificationStatus.VERIFIED.value:
+                fills[self.COL_VERIFICATION] = "red"
+
+            # 整體規則資格（重用 is_eligible property；stub 以屬性提供）
+            elig = getattr(item, "is_eligible", None)
+            row_data[self.COL_RULE_SUMMARY] = "符合" if elig is True else ("不符合" if elig is False else "—")
+            if elig is False:
+                fills[self.COL_RULE_SUMMARY] = "red"
+
+            # 逐條規則欄（讀凍結快照，不重跑）
+            details = self._rule_details(item)
+            for header, rule_key in rule_lookup:
+                res = details.get(rule_key)
+                if isinstance(res, dict) and "passed" in res:
+                    if res.get("passed"):
+                        row_data[header] = "通過"
+                    else:
+                        row_data[header] = "未通過"
+                        # warning 規則 → 琥珀；硬性或無嚴重度標記（含評估錯誤）→ 紅
+                        fills[header] = "amber" if (res.get("is_warning") and not res.get("is_hard_rule")) else "red"
+                else:
+                    row_data[header] = "—"
+
+            # 納入造冊 / 排除原因
+            row_data[self.COL_INCLUDED] = "是" if item.is_included else "否"
+            row_data[self.COL_EXCLUSION] = item.exclusion_reason or ""
+            if not item.is_included:
+                fills[self.COL_INCLUDED] = "red"
+                fills[self.COL_EXCLUSION] = "red"
+
+            # 儲存Excel行資料到資料庫（乾淨 row dict，不含 fills metadata）
             item.excel_row_data = row_data
             item.excel_remarks = remarks
 
             excel_data.append(row_data)
+            cell_fills.append(fills)
 
-        logger.info(f"Prepared {len(excel_data)} rows for 28-column format export")
-        return excel_data
+        logger.info(f"Prepared {len(excel_data)} rows for export ({len(rule_columns)} rule columns)")
+        return excel_data, cell_fills
 
     def _validate_export_data(self, excel_data: List[Dict]) -> Dict[str, Any]:
         """驗證STD_UP_MIXLISTA格式匯出資料品質"""
@@ -455,8 +654,7 @@ class ExcelExportService:
         }
 
         if not excel_data:
-            validation_result["errors"].append("No data to export")
-            validation_result["is_valid"] = False
+            validation_result["warnings"].append("No roster items to export — generating header-only file")
             return validation_result
 
         # 統計資料
@@ -469,7 +667,7 @@ class ExcelExportService:
         # STD_UP_MIXLISTA必填欄位檢查
         required_fields = ["身分證字號", "姓名"]  # 第1、2欄必填
 
-        for idx, row in enumerate(excel_data, start=1):
+        for _idx, row in enumerate(excel_data, start=1):
             # 檢查必填欄位
             missing_required = False
             for field in required_fields:
@@ -544,14 +742,16 @@ class ExcelExportService:
     def _create_excel_file(
         self,
         excel_data: List[Dict],
+        cell_fills: List[Dict[str, str]],
         file_path: str,
         roster: PaymentRoster,
         *,
         template_path: str,
+        columns: List[str],
         include_header: bool,
         include_statistics: bool,
     ):
-        """建立Excel檔案 - 優先使用模板檔案"""
+        """建立 Excel 檔案 — 依 columns 寫表頭/資料並套用紅/琥珀底。"""
         try:
             use_template = include_header and os.path.exists(template_path)
 
@@ -563,40 +763,44 @@ class ExcelExportService:
                 wb = Workbook()
                 ws = wb.active
                 ws.title = "印領清冊"
+                logger.info("Created new Excel file using default structure (include_header=%s)", include_header)
 
-                if include_header:
-                    for col_idx, column_name in enumerate(self.template_columns, start=1):
-                        cell = ws.cell(row=1, column=col_idx, value=column_name)
-                        cell.font = Font(bold=True)
-                        cell.alignment = Alignment(horizontal="center", vertical="center")
-                        cell.fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
-
-                logger.info(
-                    "Created new Excel file using default structure (include_header=%s)",
-                    include_header,
-                )
-
-            start_row = 2 if include_header else 1
-
-            if include_header and ws.max_row >= start_row:
-                ws.delete_rows(start_row, ws.max_row - start_row + 1)
-            elif not include_header and ws.max_row >= 1:
+            # 清掉既有列，統一依 columns 重寫表頭與資料
+            if ws.max_row >= 1:
                 ws.delete_rows(1, ws.max_row)
 
-            for row_idx, row_data in enumerate(excel_data, start=start_row):
-                for col_idx, column_name in enumerate(self.template_columns, start=1):
-                    value = row_data.get(column_name, "")
-                    cell = ws.cell(row=row_idx, column=col_idx, value=value)
+            if include_header:
+                for col_idx, column_name in enumerate(columns, start=1):
+                    cell = ws.cell(row=1, column=col_idx, value=column_name)
+                    cell.font = Font(bold=True)
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+                    cell.fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
+                start_row = 2
+            else:
+                start_row = 1
 
-                    if column_name in ["金額", "扣繳稅額"] and isinstance(value, (int, float)):
+            # strict=True：excel_data 與 cell_fills 由 _prepare_excel_data 同步建構，
+            # 若長度不一致代表上游 bug — 寧可大聲 raise，也不要靜默截斷成局部匯出。
+            for row_idx, (row_data, fills) in enumerate(zip(excel_data, cell_fills, strict=True), start=start_row):
+                for col_idx, column_name in enumerate(columns, start=1):
+                    value = row_data.get(column_name, "")
+                    # SECURITY (#1081 G): neutralize spreadsheet formula injection
+                    # from student-derived free-text (name, bank, address, dynamic
+                    # fields) before writing. Numeric formatting below still keys
+                    # off the original numeric `value`.
+                    cell = ws.cell(row=row_idx, column=col_idx, value=sanitize_excel_cell(value))
+
+                    if column_name in self.NUMERIC_FORMAT_COLUMNS and isinstance(value, (int, float)):
                         cell.number_format = "#,##0"
-                    elif column_name in ["序號", "流水號"]:
-                        cell.alignment = Alignment(horizontal="center")
-                    elif column_name in ["申請日期", "核准日期", "造冊日期"] and isinstance(value, str) and value:
-                        cell.alignment = Alignment(horizontal="center")
+
+                    kind = fills.get(column_name)
+                    if kind == "red":
+                        cell.fill = self.RED_FILL
+                    elif kind == "amber":
+                        cell.fill = self.AMBER_FILL
 
             total_rows = max(len(excel_data) + (1 if include_header else 0), 1)
-            self._apply_excel_styling(ws, total_rows, include_header)
+            self._apply_excel_styling(ws, total_rows, include_header, columns)
 
             if include_statistics:
                 self._add_worksheet_info(wb, roster)
@@ -605,19 +809,19 @@ class ExcelExportService:
             logger.info("Excel file created successfully: %s", file_path)
 
         except Exception as e:
-            logger.error(f"Failed to create Excel file: {e}")
+            logger.exception("Failed to create Excel file")
             raise FileStorageError(
                 f"Failed to create Excel file: {e}",
                 file_name=os.path.basename(file_path),
-            )
+            ) from e
 
-    def _apply_excel_styling(self, ws, max_row: int, include_header: bool):
+    def _apply_excel_styling(self, ws, max_row: int, include_header: bool, columns: List[str]):
         """應用Excel樣式"""
-        self._set_column_widths(ws)
-        self._set_borders(ws, max_row)
+        self._set_column_widths(ws, columns)
+        self._set_borders(ws, max_row, columns)
         ws.freeze_panes = "A2" if include_header else None
 
-    def _set_column_widths(self, ws):
+    def _set_column_widths(self, ws, columns: List[str]):
         """設定欄寬 - 智慧調整基於欄位內容"""
         # 預設欄寬設定
         default_widths = {
@@ -656,14 +860,20 @@ class ExcelExportService:
             "審核狀態": 8,
             "備註": 20,
             "驗證狀態": 10,
+            "申請身分": 14,
+            "分發獎學金": 18,
+            "學籍驗證": 12,
+            "規則資格": 10,
+            "納入造冊": 10,
+            "排除原因": 30,
         }
 
-        for col_idx, column_name in enumerate(self.template_columns, start=1):
+        for col_idx, column_name in enumerate(columns, start=1):
             width = default_widths.get(column_name, 12)
             column_letter = get_column_letter(col_idx)
             ws.column_dimensions[column_letter].width = width
 
-    def _set_borders(self, ws, max_row: int):
+    def _set_borders(self, ws, max_row: int, columns: List[str]):
         """設定邊框"""
         thin_border = Border(
             left=Side(style="thin"),
@@ -673,7 +883,7 @@ class ExcelExportService:
         )
 
         for row in range(1, max_row + 1):
-            for col in range(1, len(self.template_columns) + 1):
+            for col in range(1, len(columns) + 1):
                 ws.cell(row=row, column=col).border = thin_border
 
     def _add_worksheet_info(self, wb: Workbook, roster: PaymentRoster):
@@ -695,8 +905,8 @@ class ExcelExportService:
                 roster.completed_at.strftime("%Y-%m-%d %H:%M:%S") if roster.completed_at else "",
             ],
             ["總申請數", roster.total_applications or 0],
-            ["合格人數", roster.qualified_count or 0],
-            ["不合格人數", roster.disqualified_count or 0],
+            ["納入造冊人數", roster.qualified_count or 0],
+            ["排除人數", roster.disqualified_count or 0],
             ["總金額", float(roster.total_amount) if roster.total_amount else 0],
             ["學籍驗證啟用", "是" if roster.student_verification_enabled else "否"],
             ["API失敗次數", roster.verification_api_failures or 0],
@@ -704,7 +914,7 @@ class ExcelExportService:
 
         for row_idx, (label, value) in enumerate(info_data, start=1):
             info_ws.cell(row=row_idx, column=1, value=label).font = Font(bold=True)
-            info_ws.cell(row=row_idx, column=2, value=value)
+            info_ws.cell(row=row_idx, column=2, value=sanitize_excel_cell(value))  # SECURITY (#1081 G)
 
         info_ws.column_dimensions["A"].width = 15
         info_ws.column_dimensions["B"].width = 20
@@ -752,7 +962,7 @@ class ExcelExportService:
                 db.close()
 
         except Exception as e:
-            logger.warning(f"Failed to get advisor name for student {student.id}: {e}")
+            logger.warning(f"Failed to get advisor name for student {student.id}", exc_info=True)
 
         return ""
 
@@ -784,16 +994,13 @@ class ExcelExportService:
         return "; ".join(remarks)
 
     def _get_verification_status_label(self, status) -> str:
-        """取得驗證狀態標籤"""
-        labels = {
-            "verified": "已驗證",
-            "graduated": "已畢業",
-            "suspended": "休學中",
-            "withdrawn": "已退學",
-            "api_error": "驗證錯誤",
-            "not_found": "查無此人",
-        }
-        return labels.get(status.value if hasattr(status, "value") else str(status), str(status))
+        """取得驗證狀態標籤。文案取自 STUDENT_VERIFICATION_STATUS_LABELS
+        （單一真相來源），此處僅負責 enum/字串兩種輸入的正規化。"""
+        raw = status.value if hasattr(status, "value") else str(status)
+        for member, label in STUDENT_VERIFICATION_STATUS_LABELS.items():
+            if member.value == raw:
+                return label
+        return str(status)
 
     def _calculate_file_hash(self, file_path: str) -> str:
         """計算檔案SHA256雜湊值"""
@@ -834,8 +1041,8 @@ class ExcelExportService:
             logger.info(f"Deleted Excel file: {roster.excel_file_path}")
             return True
 
-        except Exception as e:
-            logger.error(f"Failed to delete Excel file: {e}")
+        except Exception:
+            logger.exception("Failed to delete Excel file")
             return False
 
     def preview_roster_export(
@@ -855,8 +1062,10 @@ class ExcelExportService:
             # 取得造冊項目
             roster_items = self._get_filtered_roster_items(roster, include_excluded=include_excluded)
 
-            # 準備Excel資料
-            excel_data = self._prepare_excel_data(roster, roster_items)
+            # 計算動態欄位 + 準備Excel資料（預覽不需 fills）
+            rule_columns = self._collect_rule_columns(roster_items)
+            export_columns = self._build_export_columns(rule_columns)
+            excel_data, _ = self._prepare_excel_data(roster, roster_items, rule_columns)
 
             # 驗證資料
             validation_result = self._validate_export_data(excel_data)
@@ -871,21 +1080,21 @@ class ExcelExportService:
                 "preview_rows": len(preview_data),
                 "roster_code": roster.roster_code,
                 "period_label": getattr(roster, "period_label", ""),
-                "generated_at": datetime.now().isoformat(),
+                "generated_at": datetime.now(timezone.utc).isoformat(),
                 "std_up_mixlista_format": True,
             }
 
             return {
                 "preview_data": preview_data,
                 "total_rows": len(excel_data),
-                "column_headers": self.template_columns,
+                "column_headers": export_columns,
                 "validation_result": validation_result,
                 "metadata": metadata,
             }
 
         except Exception as e:
-            logger.error(f"Failed to preview roster export: {e}")
-            raise FileStorageError(f"預覽產生失敗: {str(e)}")
+            logger.exception("Failed to preview roster export")
+            raise FileStorageError(f"預覽產生失敗: {str(e)}") from e
 
     def process_async_export(
         self,
@@ -954,6 +1163,6 @@ class ExcelExportService:
             finally:
                 db.close()
 
-        except Exception as e:
-            logger.error(f"Async export failed: roster_id={roster_id}, task_id={task_id}, error={e}")
+        except Exception:
+            logger.exception(f"Async export failed: roster_id={roster_id}, task_id={task_id}")
             # 這裡可以實作錯誤通知機制

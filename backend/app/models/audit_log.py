@@ -4,11 +4,15 @@ Audit log model for tracking system activities
 
 import enum
 
-from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, Index, Integer, String, Text, event
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.base_class import Base
+
+
+class AuditLogImmutableError(RuntimeError):
+    """Raised when application code tries to mutate or delete an audit row."""
 
 
 class AuditAction(enum.Enum):
@@ -44,6 +48,18 @@ class AuditAction(enum.Enum):
     verify_bank_account = "verify_bank_account"  # Verify single bank account
     batch_verify_bank_accounts = "batch_verify_bank_accounts"  # Batch verify bank accounts
 
+    # PII access (issue #73): logged when full-plaintext std_pid is exposed
+    # to a user (e.g. Excel ranking export).
+    pii_access = "pii_access"
+
+    # Allocation lifecycle (issue #980 / audit gap G18): 撤銷/停發/回復.
+    # Previously written as ad-hoc `application.<verb>` strings bypassing
+    # this enum — normalized so the audit vocabulary stays typed and the
+    # contract suite covers them.
+    revoke = "revoke"
+    suspend = "suspend"
+    restore = "restore"
+
 
 class AuditLog(Base):
     """Audit log model for tracking user activities"""
@@ -51,7 +67,13 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    # RESTRICT (issue #983 / G21): audit rows carry NO independent actor
+    # snapshot, so user_id must never be nulled or cascaded away — deleting a
+    # users row that audit history points at would either anonymize or
+    # destroy the trail. Accounts with audit history are deactivated, not
+    # deleted. (Explicit RESTRICT pins what was previously an implicit
+    # NO ACTION default.)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
 
     # 活動資訊
     action = Column(String(50), nullable=False)
@@ -89,6 +111,17 @@ class AuditLog(Base):
     # 關聯
     user = relationship("User", back_populates="audit_logs")
 
+    __table_args__ = (
+        # Per-entity audit-trail lookups filter resource_type + resource_id and
+        # order by created_at desc; without this they full-scan an ever-growing table.
+        Index(
+            "ix_audit_logs_resource_lookup",
+            "resource_type",
+            "resource_id",
+            "created_at",
+        ),
+    )
+
     def __repr__(self):
         return f"<AuditLog(id={self.id}, user_id={self.user_id}, action={self.action})>"
 
@@ -111,3 +144,26 @@ class AuditLog(Base):
             description=description,
             **kwargs,
         )
+
+
+# ── Append-only guard (issue #966 / gap G4) ──────────────────────────────
+# ISO 27001 A.8.15: event logs must not be modifiable or deletable by any
+# privilege level. The PostgreSQL trigger (migration
+# audit_logs_immutability_001) enforces this at the database; these ORM
+# listeners enforce the same property on every backend (incl. the sqlite
+# test DB) and fail fast when application code regresses. A sanctioned
+# destruction workflow must bypass the ORM on purpose (raw SQL +
+# `SET LOCAL app.audit_purge = 'allowed'`), never silently.
+
+
+@event.listens_for(AuditLog, "before_update")
+def _audit_log_block_update(mapper, connection, target):  # noqa: ARG001
+    raise AuditLogImmutableError(f"audit_logs is append-only: refusing UPDATE of AuditLog id={target.id}")
+
+
+@event.listens_for(AuditLog, "before_delete")
+def _audit_log_block_delete(mapper, connection, target):  # noqa: ARG001
+    raise AuditLogImmutableError(
+        f"audit_logs is append-only: refusing DELETE of AuditLog id={target.id} "
+        "(sanctioned destruction must use the raw-SQL purge workflow)"
+    )

@@ -61,6 +61,10 @@ class ApplicationField(Base):
     validation_rules = Column(JSON)  # 額外驗證規則
     conditional_rules = Column(JSON)  # 條件顯示規則
 
+    # College export settings
+    include_in_college_export = Column(Boolean, default=False, nullable=False, server_default="false")
+    export_column_label = Column(String(200), nullable=True)
+
     # Meta data
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -93,6 +97,9 @@ class ApplicationDocument(Base):
 
     # Requirements
     is_required = Column(Boolean, default=True)
+    # Admin-configurable visibility/upload behavior
+    display_in_list = Column(Boolean, default=True, nullable=False, server_default="true")  # 顯示於獎學金列表框框
+    requires_upload = Column(Boolean, default=True, nullable=False, server_default="true")  # 步驟3需要學生上傳
     accepted_file_types = Column(JSON)  # 接受的檔案類型 ["PDF", "JPG", "JPEG", "PNG"]
     max_file_size = Column(String(20), default="5MB")  # 檔案大小限制
     max_file_count = Column(Integer, default=1)  # 檔案數量限制

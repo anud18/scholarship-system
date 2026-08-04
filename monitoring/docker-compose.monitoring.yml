@@ -9,7 +9,7 @@ services:
   # GRAFANA - Visualization Platform (Enterprise Edition)
   # =========================================================================
   grafana:
-    image: grafana/grafana-enterprise:latest
+    image: grafana/grafana-enterprise:12.2.1
     container_name: monitoring_grafana
     expose:
       - "3000"
@@ -41,9 +41,11 @@ services:
       - grafana_data:/var/lib/grafana
       - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./config/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+      - /opt/scholarship/secrets/gh_pat:/etc/grafana/secrets/gh_pat:ro
     networks:
       - monitoring_network
-      - scholarship_staging_network
+      - app_network
+      - prod_app_network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
@@ -61,7 +63,7 @@ services:
   # LOKI - Log Aggregation with Multi-Tenancy
   # =========================================================================
   loki:
-    image: grafana/loki:latest
+    image: grafana/loki:3.5.5
     container_name: monitoring_loki
     ports:
       - "3100:3100"
@@ -72,7 +74,8 @@ services:
     command: -config.file=/etc/loki/local-config.yaml
     networks:
       - monitoring_network
-      - scholarship_staging_network
+      - app_network
+      - prod_app_network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3100/ready"]
@@ -98,7 +101,7 @@ services:
   # PROMETHEUS - Metrics Collection & Storage
   # =========================================================================
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v3.6.0
     container_name: monitoring_prometheus
     ports:
       - "9090:9090"
@@ -115,7 +118,8 @@ services:
       - '--web.enable-remote-write-receiver'  # Enable remote write
     networks:
       - monitoring_network
-      - scholarship_staging_network
+      - app_network
+      - prod_app_network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
@@ -142,6 +146,42 @@ services:
   # =========================================================================
   # If you need alerting, uncomment and configure AlertManager service here
 
+  # =========================================================================
+  # WEBHOOK BRIDGE - Grafana → GitHub /dispatches
+  # =========================================================================
+  # Grafana's webhook contact-point only customises the message *inside*
+  # an Alertmanager-style envelope; GitHub /dispatches strictly requires
+  # `{event_type, client_payload}` and rejects everything else with 422.
+  # This sidecar receives Grafana's envelope on POST /grafana, reformats
+  # it, and forwards to GitHub. The GH_PAT file is shared via a read-only
+  # bind mount.
+  webhook-bridge:
+    build: ./webhook-bridge
+    image: scholarship/webhook-bridge:latest
+    container_name: monitoring_webhook_bridge
+    expose:
+      - "8080"
+    environment:
+      GH_REPO: ${GH_REPO:-anud18/scholarship-system}
+      GH_EVENT_TYPE: ${GH_EVENT_TYPE:-monitoring-alert}
+      GH_PAT_FILE: /etc/webhook-bridge/gh_pat
+    volumes:
+      - /opt/scholarship/secrets/gh_pat:/etc/webhook-bridge/gh_pat:ro
+    networks:
+      - monitoring_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8080/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+
 volumes:
   grafana_data:
     driver: local
@@ -157,6 +197,14 @@ networks:
       driver: default
       config:
         - subnet: 172.30.0.0/16
-  scholarship_staging_network:
+  app_network:
     external: true
-    name: scholarship_staging_network
+    name: ${APP_NETWORK_NAME}
+  # The stack serves BOTH environments, but only ever joined one app network,
+  # hardcoded to staging in deploy-monitoring-stack.yml. Production's alloy sat
+  # on a network Loki and Prometheus were not attached to, so its DNS lookups
+  # failed and every batch was dropped ("no retries left, dropping data"), and
+  # prod nginx could not reach Grafana for the /monitoring proxy either.
+  prod_app_network:
+    external: true
+    name: ${PROD_APP_NETWORK_NAME:-scholarship_prod_network}

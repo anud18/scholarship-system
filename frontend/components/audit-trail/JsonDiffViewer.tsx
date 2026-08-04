@@ -2,10 +2,13 @@
 
 import { useMemo } from "react";
 import ReactDiffViewer, { DiffMethod } from "react-diff-viewer-continued";
+import { useCspNonce } from "@/components/providers/csp-nonce";
 
 interface JsonDiffViewerProps {
-  oldValue: any;
-  newValue: any;
+  // Audit-log diffs ship arbitrary JSON payloads (rows from many tables),
+  // so the values are typed as `unknown` and stringified at use-site.
+  oldValue: unknown;
+  newValue: unknown;
   locale?: "zh" | "en";
 }
 
@@ -14,6 +17,14 @@ export function JsonDiffViewer({
   newValue,
   locale = "zh",
 }: JsonDiffViewerProps) {
+  // react-diff-viewer-continued styles itself with its OWN @emotion/css instance
+  // (create-instance, not the global cache), so the nonce-gated production
+  // style-src would drop the entire diff stylesheet — the audit-trail diff would
+  // render as unstyled text (#1273). The library threads a `nonce` prop straight
+  // into that instance (lib/src/index.js: computeStyles(styles, dark, nonce)),
+  // so passing it is the whole fix; no emotion cache surgery is needed.
+  const nonce = useCspNonce();
+
   const oldString = useMemo(() => {
     if (!oldValue) return "";
     return typeof oldValue === "string"
@@ -88,6 +99,7 @@ export function JsonDiffViewer({
         newValue={newString}
         splitView={false}
         compareMethod={DiffMethod.WORDS}
+        nonce={nonce}
         useDarkTheme={false}
         hideLineNumbers={false}
         showDiffOnly={true}

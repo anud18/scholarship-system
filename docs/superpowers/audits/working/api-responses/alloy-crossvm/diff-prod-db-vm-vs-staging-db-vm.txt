@@ -1,0 +1,49 @@
+--- monitoring/config/alloy/prod-db-vm.alloy	2026-04-28 00:44:05
++++ monitoring/config/alloy/staging-db-vm.alloy	2026-04-28 00:44:05
+@@ -1,5 +1,5 @@
+-// Grafana Alloy Configuration for Production Database VM
+-// Environment: production
++// Grafana Alloy Configuration for Staging Database VM
++// Environment: staging
+ // Host: db-vm
+ // Components: PostgreSQL, MinIO, Redis
+ 
+@@ -18,6 +18,8 @@
+ 
+   rule {
+     source_labels = ["__meta_docker_container_name"]
++    regex         = "^/(.*)"
++    replacement   = "$1"
+     target_label  = "container"
+   }
+ 
+@@ -42,7 +44,7 @@
+   // Add static labels
+   stage.static_labels {
+     values = {
+-      environment = "prod",
++      environment = "staging",
+       vm          = "db-vm",
+     }
+   }
+@@ -68,9 +70,9 @@
+   endpoint {
+     url = env("MONITORING_SERVER_URL") + ":3100/loki/api/v1/push"
+ 
+-    // Multi-tenant identification for production
++    // Multi-tenant identification
+     headers = {
+-      "X-Scope-OrgID" = "prod",
++      "X-Scope-OrgID" = "staging",
+     }
+   }
+ }
+@@ -85,8 +87,6 @@
+ //
+ // Prometheus on AP-VM will add environment/vm labels during scrape using
+ // relabel_configs in its prometheus.yml configuration.
+-//
+-// Note: Redis is on AP-VM, not DB-VM
+ 
+ // =============================================================================
+ // SELF-MONITORING

@@ -307,6 +307,18 @@ class NotificationService:
                 processed += 1
 
             except Exception as e:
+                # Surface the failure in logs (with full traceback) before mutating
+                # the row — operators should not have to query notification_queue
+                # to discover that background processing is failing.
+                logger.exception(
+                    "Notification queue item failed",
+                    extra={
+                        "queue_item_id": item.id,
+                        "attempts": item.attempts,
+                        "max_attempts": item.max_attempts,
+                        "notification_type": item.notification_type,
+                    },
+                )
                 item.status = "failed"
                 item.error_message = str(e)
                 failed += 1
@@ -413,8 +425,8 @@ class NotificationService:
 
             logger.info(f"Email notification sent to {notification.user.email} for notification {notification.id}")
 
-        except Exception as e:
-            logger.error(f"Failed to send email notification {notification.id}: {str(e)}")
+        except Exception:
+            logger.exception(f"Failed to send email notification {notification.id}")
             # Don't raise exception to avoid breaking the notification flow
 
     async def _send_sms_notification(self, notification: Notification):
@@ -721,7 +733,7 @@ class NotificationService:
         Returns:
             Notification: 創建的通知對象
         """
-        days_left = (deadline - datetime.now()).days if deadline else 0
+        days_left = (deadline - datetime.now(timezone.utc)).days if deadline else 0
 
         if days_left > 1:
             message = f"{title}的截止日期將在 {days_left} 天後到期"
@@ -844,7 +856,7 @@ class NotificationService:
         base_query = base_query.where(
             or_(
                 Notification.expires_at.is_(None),
-                Notification.expires_at > datetime.now(),
+                Notification.expires_at > datetime.now(timezone.utc),
             )
         )
 
@@ -950,7 +962,7 @@ class NotificationService:
                 Notification.is_read.is_(False),
                 or_(
                     Notification.expires_at.is_(None),
-                    Notification.expires_at > datetime.now(),
+                    Notification.expires_at > datetime.now(timezone.utc),
                 ),
             )
         )
@@ -964,7 +976,7 @@ class NotificationService:
                 ~Notification.id.in_(read_subquery),
                 or_(
                     Notification.expires_at.is_(None),
-                    Notification.expires_at > datetime.now(),
+                    Notification.expires_at > datetime.now(timezone.utc),
                 ),
             )
         )
@@ -1035,7 +1047,7 @@ class NotificationService:
         personal_update = (
             update(Notification)
             .where(and_(Notification.user_id == user_id, Notification.is_read.is_(False)))
-            .values(is_read=True, read_at=datetime.now())
+            .values(is_read=True, read_at=datetime.now(timezone.utc))
         )
 
         personal_result = await self.db.execute(personal_update)
@@ -1050,7 +1062,7 @@ class NotificationService:
                 ~Notification.id.in_(read_subquery),
                 or_(
                     Notification.expires_at.is_(None),
-                    Notification.expires_at > datetime.now(),
+                    Notification.expires_at > datetime.now(timezone.utc),
                 ),
             )
         )

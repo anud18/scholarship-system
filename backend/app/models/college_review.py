@@ -67,6 +67,10 @@ class CollegeRanking(Base):
     sub_type_code = Column(String(50), nullable=False)
     academic_year = Column(Integer, nullable=False)
     semester = Column(String(20))  # Can be null for yearly scholarships
+    # College that owns this ranking. A ranking is scoped per (type, sub_type, year,
+    # semester, college): each college's reviewers share one ranking of their own
+    # college's applications. NULL only for admin/super_admin global rankings.
+    college_code = Column(String(10), nullable=True, index=True)
 
     # Ranking metadata
     ranking_name = Column(String(200))  # Descriptive name for this ranking
@@ -82,6 +86,8 @@ class CollegeRanking(Base):
     distribution_executed = Column(Boolean, default=False)
     distribution_date = Column(DateTime(timezone=True))
     github_issue_url = Column(String(500))  # Link to generated GitHub issue
+    # NOTE: supplementary-import flag lives on ScholarshipConfiguration.allow_supplementary_import
+    # (one flag per scholarship/year/semester, applies to every college under it)
 
     # Time tracking
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -144,12 +150,29 @@ class CollegeRankingItem(Base):
     # Status tracking
     status = Column(String(20), default="ranked")  # 'ranked', 'allocated', 'rejected', 'waitlisted'
 
+    # College-level rejection flag (independent of `status`).
+    # Set when college imports rank "N" for a student. Student remains in normal
+    # allocation flow (status stays 'ranked'); admin can still allocate if desired.
+    # Distinct from status='rejected' which excludes from alternate-promotion.
+    college_rejected = Column(Boolean, default=False, nullable=False, server_default="false")
+    # LEGACY: no code path writes this any more. 補充匯入 now creates ordinary
+    # applications with no ranking entry, so only rows imported before that
+    # change carry True. finalize() still honours it for those rows.
+    is_supplementary = Column(Boolean, default=False, nullable=False, server_default="false")
+
     # Matrix distribution fields
     allocated_sub_type = Column(String(50), nullable=True)  # Sub-type code allocated to (e.g., 'nstc', 'moe_1w')
+    allocation_config_id = Column(
+        Integer, ForeignKey("scholarship_configurations.id"), nullable=True
+    )  # Which config's quota this slot consumed (NULL only on whole-period sentinel rows)
     backup_position = Column(Integer, nullable=True)  # Backup position (NULL for admitted, 1, 2, 3... for backup)
     backup_allocations = Column(
-        JSONB, nullable=True
+        get_json_type(), nullable=True
     )  # Array of backup allocations: [{sub_type, backup_position, college, allocation_reason}, ...]
+
+    # NOTE: received_months / received_months_source used to live here. Admin
+    # overrides now live in student_received_month_records, keyed by 學號 so a
+    # student need not already be in a 排名. See app/models/received_months.py.
 
     # Time tracking
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -158,6 +181,7 @@ class CollegeRankingItem(Base):
     # Relationships using string references to avoid circular imports
     ranking = relationship("CollegeRanking", back_populates="items")
     application = relationship("Application", lazy="select", foreign_keys=[application_id])
+    allocation_config = relationship("ScholarshipConfiguration", lazy="select", foreign_keys=[allocation_config_id])
 
     def __repr__(self):
         return f"<CollegeRankingItem(id={self.id}, rank={self.rank_position}, allocated={self.is_allocated})>"
@@ -225,6 +249,43 @@ class QuotaDistribution(Base):
         if not self.distribution_summary:
             return None
         return self.distribution_summary.get(sub_type)
+
+
+class ManualDistributionHistory(Base):
+    """
+    Historical record of manual distribution allocations
+
+    Tracks all changes to manual allocations, enabling undo/redo functionality
+    and maintaining an audit trail of distribution changes.
+    """
+
+    __tablename__ = "manual_distribution_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    scholarship_type_id = Column(Integer, ForeignKey("scholarship_types.id"), nullable=False)
+    academic_year = Column(Integer, nullable=False)
+    semester = Column(String(20), nullable=False)
+
+    # Snapshot of allocations at this point in time
+    # Format: {ranking_item_id: {sub_type: "nstc", allocation_year: 114, ...}, ...}
+    allocations_snapshot = Column(get_json_type(), nullable=False)
+
+    # Metadata
+    operation_type = Column(String(50), nullable=False)  # 'save', 'finalize', 'revert'
+    change_summary = Column(Text)  # Human-readable summary of changes
+    total_allocated = Column(Integer)  # Count of allocated students
+
+    # Time and user tracking
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_by = Column(Integer, ForeignKey("users.id"))
+
+    # Relationships
+    user = relationship("User", lazy="select", foreign_keys=[created_by])
+
+    def __repr__(self):
+        return (
+            f"<ManualDistributionHistory(id={self.id}, type_id={self.scholarship_type_id}, year={self.academic_year})>"
+        )
 
 
 # PostgreSQL-optimized indexes for college ranking tables

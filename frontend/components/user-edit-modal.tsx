@@ -6,7 +6,13 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Modal } from "./ui/modal";
-import { UserListResponse, UserCreate, apiClient } from "@/lib/api";
+import {
+  UserListResponse,
+  UserCreate,
+  ScholarshipPermission,
+  apiClient,
+} from "@/lib/api";
+import { logger } from "@/lib/utils/logger";
 import { Badge } from "./ui/badge";
 
 interface Academy {
@@ -20,18 +26,21 @@ interface UserEditModalProps {
   onClose: () => void;
   editingUser: UserListResponse | null;
   userForm: UserCreate;
-  onUserFormChange: (field: keyof UserCreate, value: any) => void;
+  onUserFormChange: <K extends keyof UserCreate>(
+    field: K,
+    value: UserCreate[K]
+  ) => void;
   onSubmit: () => void;
   isLoading?: boolean;
   // 獎學金權限相關
-  scholarshipPermissions?: any[];
+  scholarshipPermissions?: ScholarshipPermission[];
   availableScholarships?: Array<{
     id: number;
     name: string;
     name_en?: string;
     code: string;
   }>;
-  onPermissionChange?: (permissions: any[]) => void;
+  onPermissionChange?: (permissions: ScholarshipPermission[]) => void;
 }
 
 export function UserEditModal({
@@ -77,7 +86,7 @@ export function UserEditModal({
           setAcademies(response.data);
         }
       } catch (error) {
-        console.error("Failed to fetch academies:", error);
+        logger.error("Failed to fetch academies", { error });
       } finally {
         setLoadingAcademies(false);
       }
@@ -97,7 +106,7 @@ export function UserEditModal({
           setDepartments(response.data);
         }
       } catch (error) {
-        console.error("Failed to fetch departments:", error);
+        logger.error("Failed to fetch departments", { error });
       }
     };
 
@@ -107,17 +116,34 @@ export function UserEditModal({
   }, [isOpen]);
 
   // 初始化已選擇的獎學金 ID
+  //
+  // INFINITE-LOOP FIX (PR #510): same root cause as the FileUpload fix in
+  // PR #509. The default `scholarshipPermissions = []` parameter creates
+  // a fresh array reference on every render, so the useEffect dependency
+  // `[scholarshipPermissions, ...]` always sees a "changed" prop and
+  // re-runs the effect. Without a content-aware bailout, `setSelectedScholarshipIds`
+  // schedules a new array each render and the cycle never stops. Compare
+  // contents before scheduling state updates; rely on React's bailout when
+  // the previous reference is returned.
   React.useEffect(() => {
-    if (scholarshipPermissions.length > 0 && editingUser?.id) {
-      // 只顯示當前編輯用戶的權限
-      const userPermissions = scholarshipPermissions.filter(
-        p => p.user_id === Number(editingUser.id)
-      );
-      const selectedIds = userPermissions.map(p => p.scholarship_id);
-      setSelectedScholarshipIds(selectedIds);
-    } else {
-      setSelectedScholarshipIds([]);
-    }
+    setSelectedScholarshipIds((prev) => {
+      let nextIds: number[];
+      if (scholarshipPermissions.length > 0 && editingUser?.id) {
+        const userPermissions = scholarshipPermissions.filter(
+          p => p.user_id === Number(editingUser.id)
+        );
+        nextIds = userPermissions.map(p => p.scholarship_id);
+      } else {
+        nextIds = [];
+      }
+      if (
+        prev.length === nextIds.length &&
+        prev.every((id, i) => id === nextIds[i])
+      ) {
+        return prev;
+      }
+      return nextIds;
+    });
   }, [scholarshipPermissions, editingUser?.id]);
 
   // 當角色改變時，清除獎學金權限
@@ -208,7 +234,7 @@ export function UserEditModal({
               <select
                 value={userForm.role}
                 onChange={(e) => {
-                  const newRole = e.target.value;
+                  const newRole = e.target.value as UserCreate["role"];
                   const oldRole = userForm.role;
 
                   onUserFormChange("role", newRole);

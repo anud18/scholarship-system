@@ -1,0 +1,120 @@
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: container_health
+    folder: Alerts
+    interval: 30s
+    rules:
+      # ContainerDown was flapping (8 fire/resolve cycles per hour on
+      # 2026-05-15) because cAdvisor's container_last_seen metric goes
+      # stale under scrape jitter — the original `> 60s staleness, for: 2m`
+      # tripped on every short gap. Raise to `> 300s` (5 min) with
+      # `for: 5m` so the alert only fires after a sustained, real outage.
+      # Genuine container crashes still produce 5+ minutes of staleness
+      # and trip the new threshold.
+      - uid: alert-container-down
+        title: ContainerDown
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-uid
+            model:
+              expr: time() - container_last_seen{name!=""} > 300
+              refId: A
+              instant: true
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        labels:
+          severity: critical
+          category: container
+        annotations:
+          summary: "Container {{ $labels.name }} is down"
+          description: "Container {{ $labels.name }} on {{ $labels.instance }} ({{ $labels.environment }}) has been unreachable to cAdvisor for more than 5 minutes (post-tune threshold; was 2m which flapped under scrape jitter)."
+        isPaused: false
+
+      - uid: alert-container-high-cpu
+        title: ContainerHighCPU
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus-uid
+            model:
+              expr: sum(rate(container_cpu_usage_seconds_total{name!=""}[5m])) by (name, instance, environment) * 100 > 80
+              refId: A
+              instant: true
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        labels:
+          severity: warning
+          category: container
+        annotations:
+          summary: "High CPU usage in container {{ $labels.name }}"
+          description: "Container {{ $labels.name }} on {{ $labels.instance }} ({{ $labels.environment }}) is using more than 80% CPU. Current value: {{ if eq $value 0.0 }}0{{ else }}{{ $value | humanize }}{{ end }}%"
+        isPaused: false
+
+      - uid: alert-container-high-memory
+        title: ContainerHighMemory
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus-uid
+            model:
+              # Guard against containers without a memory limit set:
+              # container_spec_memory_limit_bytes == 0 → division → +Inf →
+              # always > 85. The `and ... > 0` clause filters those out so
+              # we only alert on containers that actually have a limit.
+              expr: (container_memory_usage_bytes{name!=""} / container_spec_memory_limit_bytes{name!=""}) * 100 > 85 and container_spec_memory_limit_bytes{name!=""} > 0
+              refId: A
+              instant: true
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        labels:
+          severity: warning
+          category: container
+        annotations:
+          summary: "High memory usage in container {{ $labels.name }}"
+          description: "Container {{ $labels.name }} on {{ $labels.instance }} ({{ $labels.environment }}) is using more than 85% of its memory limit. Current value: {{ if eq $value 0.0 }}0{{ else }}{{ $value | humanize }}{{ end }}%"
+        isPaused: false
+
+      - uid: alert-container-restarting-frequently
+        title: ContainerRestartingFrequently
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus-uid
+            model:
+              # container_last_seen is a monotonically-increasing timestamp
+              # gauge: each cadvisor scrape advances it by the scrape
+              # interval. For any stably-running container, rate() ≈ 1.0
+              # always — so the original `> 0.1` query fired for every
+              # healthy container, not actual restarts. Use changes() over
+              # container_start_time_seconds, which only ticks when the
+              # container is recreated.
+              expr: changes(container_start_time_seconds{name!=""}[15m]) > 1
+              refId: A
+              instant: true
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        labels:
+          severity: warning
+          category: container
+        annotations:
+          summary: "Container {{ $labels.name }} is restarting frequently"
+          description: "Container {{ $labels.name }} on {{ $labels.instance }} ({{ $labels.environment }}) has restarted multiple times in the last 15 minutes"
+        isPaused: false

@@ -1,5 +1,6 @@
 'use client';
 
+import { logger } from "@/lib/utils/logger";
 /**
  * Example component demonstrating useScholarshipData hook usage
  *
@@ -310,7 +311,7 @@ export function ScholarshipDataExamples() {
       <section>
         <h2 className="text-2xl font-bold mb-4">Example 5: Selector</h2>
         <div className="max-w-sm">
-          <ScholarshipSelectorExample onChange={id => console.log('Selected:', id)} />
+          <ScholarshipSelectorExample onChange={id => logger.debug('Selected:', id)} />
         </div>
       </section>
 

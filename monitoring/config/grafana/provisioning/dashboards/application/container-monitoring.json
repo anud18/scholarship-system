@@ -15,7 +15,7 @@
       }
     ]
   },
-  "editable": true,
+  "editable": false,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": null,
@@ -791,7 +791,8 @@
           "uid": "prometheus-uid"
         },
         "definition": "label_values(up, environment)",
-        "refresh": 1
+        "refresh": 1,
+        "regex": "/^(?!monitoring).*$/"
       },
       {
         "current": {
@@ -857,6 +858,6 @@
   "timezone": "browser",
   "title": "Container Monitoring (cAdvisor)",
   "uid": "container-monitoring",
-  "version": 1,
+  "version": 6,
   "weekStart": ""
 }

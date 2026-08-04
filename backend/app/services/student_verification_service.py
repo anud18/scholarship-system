@@ -5,7 +5,7 @@ Student verification service for checking student enrollment status
 
 import logging
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -13,7 +13,7 @@ from requests.packages.urllib3.util.retry import Retry
 
 from app.core.config import settings
 from app.core.exceptions import StudentVerificationError
-from app.models.payment_roster import StudentVerificationStatus
+from app.models.payment_roster import STUDENT_VERIFICATION_STATUS_LABELS, StudentVerificationStatus
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +74,7 @@ class StudentVerificationService:
                 return self._api_verification(student_id_number, student_name)
 
         except Exception as e:
-            logger.error(f"Student verification failed for {student_id_number}: {e}")
+            logger.exception(f"Student verification failed for {student_id_number}")
             return {
                 "status": StudentVerificationStatus.API_ERROR,
                 "message": f"驗證過程發生錯誤: {str(e)}",
@@ -83,9 +83,121 @@ class StudentVerificationService:
                 "api_response": {"error": str(e)},
             }
 
+    # SIS mock std_studingstatus → 驗證狀態對照（#1141）
+    # 1 在學 / 2 應畢 / 3 延畢 → 通過；4 休學；5-6 退學；11 畢業
+    _SIS_STATUS_MAP = {
+        1: StudentVerificationStatus.VERIFIED,
+        2: StudentVerificationStatus.VERIFIED,
+        3: StudentVerificationStatus.VERIFIED,
+        4: StudentVerificationStatus.SUSPENDED,
+        5: StudentVerificationStatus.WITHDRAWN,
+        6: StudentVerificationStatus.WITHDRAWN,
+        11: StudentVerificationStatus.GRADUATED,
+    }
+
+    _STATUS_MESSAGES = {
+        StudentVerificationStatus.VERIFIED: "學籍驗證通過",
+        StudentVerificationStatus.GRADUATED: "學生已畢業",
+        StudentVerificationStatus.SUSPENDED: "學生目前休學中",
+        StudentVerificationStatus.WITHDRAWN: "學生已退學",
+        StudentVerificationStatus.NOT_FOUND: "查無此學生資料",
+    }
+
     def _mock_verification(self, student_id_number: str, student_name: str) -> Dict[str, Any]:
         """
         模擬驗證 (開發測試用)
+
+        先查詢 mock student API（SIS mock）的真實學籍狀態，讓 dev 環境的
+        造冊驗證與 SIS mock 一致（#1141）；SIS mock 不可用時才退回舊的
+        「末位數字」啟發式。
+        """
+        sis_result = self._mock_sis_verification(student_id_number, student_name)
+        if sis_result is not None:
+            return sis_result
+        return self._last_digit_mock_verification(student_id_number, student_name)
+
+    def _mock_sis_verification(self, student_id_number: str, student_name: str) -> Optional[Dict[str, Any]]:
+        """以 mock student API 的 std_studingstatus / mgd_title 判定學籍。
+
+        回傳 None 表示 SIS mock 不可用（呼叫端退回末位數字啟發式）；
+        查無學生是「確定的」結果，回 NOT_FOUND 而非 None。
+        """
+        base_url = getattr(settings, "student_api_base_url", None)
+        if not base_url:
+            return None
+
+        try:
+            response = self.session.post(
+                f"{base_url}/ScholarshipStudent",
+                json={"action": "qrySoaaScholarshipStudent", "stdcode": student_id_number},
+                timeout=5,
+            )
+            payload = response.json()
+        except (requests.RequestException, ValueError):
+            logger.warning(
+                "Mock SIS unreachable for verification of %s; falling back to last-digit heuristic",
+                student_id_number,
+            )
+            return None
+
+        code = payload.get("code")
+        data = payload.get("data") or []
+        if code not in (200, "200") or not data:
+            return {
+                "status": StudentVerificationStatus.NOT_FOUND,
+                "message": self._STATUS_MESSAGES[StudentVerificationStatus.NOT_FOUND],
+                "student_info": {},
+                "verified_at": datetime.now(),
+                "api_response": {"mock": True, "source": "mock-student-api", "code": code},
+            }
+
+        record = data[0]
+        raw_status = record.get("std_studingstatus")
+        title = str(record.get("mgd_title") or "")
+
+        try:
+            status = self._SIS_STATUS_MAP.get(int(raw_status))
+        except (TypeError, ValueError):
+            status = None
+        if status is None:
+            # 數字狀態不在對照表時以中文狀態名稱推斷
+            if "休" in title:
+                status = StudentVerificationStatus.SUSPENDED
+            elif "退" in title:
+                status = StudentVerificationStatus.WITHDRAWN
+            elif "畢" in title:
+                status = StudentVerificationStatus.GRADUATED
+            else:
+                status = StudentVerificationStatus.VERIFIED
+
+        # 保留原始 std_* 欄位供規則評估（roster 的 fresh_api_data 只讀 std_/trm_ 鍵）
+        student_info = {
+            **record,
+            "student_id": student_id_number,
+            "name": record.get("std_cname") or student_name,
+            "school_name": "國立陽明交通大學",
+            "enrollment_status": title or str(raw_status),
+            "email": record.get("com_email", ""),
+            "phone": record.get("com_cellphone", ""),
+            "address": record.get("com_commadd", ""),
+        }
+
+        return {
+            "status": status,
+            "message": f"{self._STATUS_MESSAGES[status]}（SIS mock：{title or raw_status}）",
+            "student_info": student_info,
+            "verified_at": datetime.now(),
+            "api_response": {
+                "mock": True,
+                "source": "mock-student-api",
+                "std_studingstatus": raw_status,
+                "mgd_title": title,
+            },
+        }
+
+    def _last_digit_mock_verification(self, student_id_number: str, student_name: str) -> Dict[str, Any]:
+        """
+        末位數字啟發式（僅當 SIS mock 不可用時的離線退路）
         根據身分證字號末位數字決定驗證結果
         """
         logger.info(f"Mock verification for {student_id_number} ({student_name})")
@@ -202,21 +314,21 @@ class StudentVerificationService:
                     student_id=student_id_number,
                 )
 
-        except requests.exceptions.Timeout:
+        except requests.exceptions.Timeout as exc:
             raise StudentVerificationError(
                 "Student verification API timeout",
                 student_id=student_id_number,
-            )
-        except requests.exceptions.ConnectionError:
+            ) from exc
+        except requests.exceptions.ConnectionError as exc:
             raise StudentVerificationError(
                 "Cannot connect to student verification API",
                 student_id=student_id_number,
-            )
+            ) from exc
         except requests.exceptions.RequestException as e:
             raise StudentVerificationError(
                 f"API request failed: {str(e)}",
                 student_id=student_id_number,
-            )
+            ) from e
 
     def _parse_api_response(self, data: Dict[str, Any], student_id_number: str) -> Dict[str, Any]:
         """
@@ -251,7 +363,7 @@ class StudentVerificationService:
             }
 
         except Exception as e:
-            logger.error(f"Failed to parse API response for {student_id_number}: {e}")
+            logger.exception(f"Failed to parse API response for {student_id_number}")
             return {
                 "status": StudentVerificationStatus.API_ERROR,
                 "message": f"API回應解析錯誤: {str(e)}",
@@ -284,7 +396,7 @@ class StudentVerificationService:
                 result = self.verify_student(student_id, student_name)
                 results[student_id] = result
             except Exception as e:
-                logger.error(f"Batch verification failed for {student_id}: {e}")
+                logger.exception(f"Batch verification failed for {student_id}")
                 results[student_id] = {
                     "status": StudentVerificationStatus.API_ERROR,
                     "message": f"批次驗證錯誤: {str(e)}",
@@ -319,14 +431,8 @@ class StudentVerificationService:
         取得驗證狀態的顯示標籤
         """
         labels = {
-            "zh": {
-                StudentVerificationStatus.VERIFIED: "已驗證",
-                StudentVerificationStatus.GRADUATED: "已畢業",
-                StudentVerificationStatus.SUSPENDED: "休學中",
-                StudentVerificationStatus.WITHDRAWN: "已退學",
-                StudentVerificationStatus.API_ERROR: "驗證錯誤",
-                StudentVerificationStatus.NOT_FOUND: "查無此人",
-            },
+            # zh 文案取自 STUDENT_VERIFICATION_STATUS_LABELS（單一真相來源）
+            "zh": STUDENT_VERIFICATION_STATUS_LABELS,
             "en": {
                 StudentVerificationStatus.VERIFIED: "Verified",
                 StudentVerificationStatus.GRADUATED: "Graduated",

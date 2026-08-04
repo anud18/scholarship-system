@@ -8,7 +8,7 @@ import logging
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
@@ -21,6 +21,8 @@ from app.api.v1.api import api_router
 from app.core.config import settings
 from app.core.database_health import check_database_health
 from app.core.exceptions import ScholarshipException, scholarship_exception_handler
+from app.core.security import require_admin
+from app.models.user import User
 
 # Import Prometheus metrics
 from app.core.metrics import CONTENT_TYPE_LATEST, generate_latest, set_app_info, update_db_pool_metrics
@@ -43,6 +45,13 @@ logging.getLogger("sqlalchemy.dialects").setLevel(logging.WARNING)
 
 
 # Create JSON formatter for structured logging
+# Attributes the logging module puts on EVERY LogRecord. Anything outside this set
+# was supplied by a caller's `extra={...}`.
+_RESERVED_LOGRECORD_KEYS = frozenset(
+    logging.LogRecord(name="", level=0, pathname="", lineno=0, msg="", args=(), exc_info=None).__dict__
+) | {"message", "asctime", "taskName"}
+
+
 class JsonFormatter(logging.Formatter):
     def format(self, record):
         log_record = {
@@ -51,9 +60,21 @@ class JsonFormatter(logging.Formatter):
             "name": record.name,
             "message": record.getMessage(),
         }
+        # Surface `extra={...}` fields. Without this the formatter silently dropped
+        # them, so ~105 structured-log call sites emitted a bare message — including
+        # the SECURITY audit warnings for cross-college access (#1223 A) and the
+        # file-proxy one from #1222, which lost the user_id / college / application_id
+        # that make them actionable.
+        # Nested under "extra" rather than merged flat so a caller key can never
+        # overwrite timestamp/level/name/message.
+        extras = {key: value for key, value in record.__dict__.items() if key not in _RESERVED_LOGRECORD_KEYS}
+        if extras:
+            log_record["extra"] = extras
         if record.exc_info:
             log_record["exception"] = self.formatException(record.exc_info)
-        return json.dumps(log_record)
+        # default=str so a non-serialisable value degrades to its repr instead of
+        # raising inside the logging path and losing the record entirely.
+        return json.dumps(log_record, default=str)
 
 
 # Configure root logger
@@ -107,13 +128,22 @@ async def lifespan(_app: FastAPI):
                 LOGGER.exception("Error during scheduler shutdown: %s", exc)
 
 
+# Interactive API docs and the OpenAPI schema enumerate every route, parameter
+# and model for an anonymous caller — nginx forwards all of /api/ to this app, so
+# in production they are internet-reachable and reliably flagged by vulnerability
+# scanners as information disclosure. Keep them on everywhere EXCEPT a real
+# production deployment; `settings.testing` keeps CI's `bun run api:generate`
+# working (that job sets CI/TESTING but leaves ENVIRONMENT at its "production"
+# default).
+_expose_api_docs = settings.environment != "production" or settings.testing
+
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     description="A comprehensive scholarship application and approval management system",
-    openapi_url="/api/v1/openapi.json",
-    docs_url="/api/v1/docs",
-    redoc_url="/api/v1/redoc",
+    openapi_url="/api/v1/openapi.json" if _expose_api_docs else None,
+    docs_url="/api/v1/docs" if _expose_api_docs else None,
+    redoc_url="/api/v1/redoc" if _expose_api_docs else None,
     lifespan=lifespan,
     redirect_slashes=False,  # Disable automatic slash redirects to prevent 307 in both dev and staging
 )
@@ -295,7 +325,7 @@ async def health_check():
         # Get logger instance for this function
         health_logger = logging.getLogger(__name__)
         try:
-            health_logger.error("Health check failed: %s", exc)
+            health_logger.exception("Health check failed")
         except Exception:
             # Fallback logging if logger fails
             print(
@@ -313,7 +343,7 @@ async def health_check():
 
 # Database pool status endpoint (admin only)
 @app.get("/debug/pool-status")
-async def get_pool_status():
+async def get_pool_status(current_user: User = Depends(require_admin)):
     """Get current database connection pool status (for debugging)"""
     async_pool = async_engine.pool
     sync_pool = sync_engine.pool
@@ -341,12 +371,15 @@ async def get_pool_status():
 @app.get("/")
 async def root():
     """Root endpoint with API information"""
+    # Read the URLs back off the app rather than repeating the literals: they are
+    # None whenever the docs are disabled (production — see _expose_api_docs), and
+    # advertising a link that 404s is worse than not advertising it at all.
     return {
         "success": True,
         "message": f"Welcome to {settings.app_name}",
         "version": settings.app_version,
-        "docs_url": "/api/v1/docs",
-        "redoc_url": "/api/v1/redoc",
+        **({"docs_url": app.docs_url} if app.docs_url else {}),
+        **({"redoc_url": app.redoc_url} if app.redoc_url else {}),
     }
 
 

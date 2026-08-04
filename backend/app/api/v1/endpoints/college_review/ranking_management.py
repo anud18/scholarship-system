@@ -10,21 +10,30 @@ Handles:
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple
+from urllib.parse import quote as _url_quote
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.security import require_college
+from app.core.college_mappings import get_college_name
+from app.core.exceptions import AuthorizationError, NotFoundError
+from app.core.security import require_college, require_scholarship_manager
 from app.db.deps import get_db
+from app.models.audit_log import AuditAction, AuditLog
 from app.models.college_review import CollegeRanking, CollegeRankingItem
-from app.models.scholarship import ScholarshipConfiguration
-from app.models.student import Department
+from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
+from app.models.student import Academy, Department
 from app.models.user import User, UserRole
 from app.schemas.college_review import RankingImportItem, RankingOrderUpdate, RankingUpdate
 from app.schemas.response import ApiResponse
+from app.services.college_ranking_export_service import (
+    CollegeRankingExportService,
+    ExportRow,
+)
 from app.services.college_review_service import (
     CollegeReviewError,
     CollegeReviewService,
@@ -32,11 +41,23 @@ from app.services.college_review_service import (
     RankingModificationError,
     RankingNotFoundError,
 )
+from app.services.email_automation_service import email_automation_service
 from app.services.review_service import ReviewService
 
-from ._helpers import normalize_semester_value
+from app.utils.export_download import XLSX_MEDIA_TYPE
+from ._helpers import (
+    _check_academic_year_permission,
+    _check_scholarship_permission,
+    assert_can_manage_ranking,
+    load_export_aux_data,
+    normalize_semester_value,
+)
 
 logger = logging.getLogger(__name__)
+
+# Appended to rank-sequence errors so the message states the rule that was
+# broken, not just the symptom. Mirrors the frontend (parse-ranking-sheet.ts).
+RANK_SEQUENCE_RULE = "，排名數字不可重複、不可跳號"
 
 router = APIRouter()
 
@@ -56,8 +77,11 @@ async def get_rankings(
 
         # Apply filters
         if current_user.role not in [UserRole.admin, UserRole.super_admin]:
-            # Regular college users can only see their own rankings
-            stmt = stmt.where(CollegeRanking.created_by == current_user.id)
+            # College reviewers see their college's ranking. Scope by college_code (not
+            # created_by) so every reviewer of the same college shares one ranking and
+            # different colleges stay isolated — matches create_ranking's reuse scoping
+            # (issue #1034).
+            stmt = stmt.where(CollegeRanking.college_code == current_user.college_code)
 
         if academic_year:
             stmt = stmt.where(CollegeRanking.academic_year == academic_year)
@@ -107,9 +131,12 @@ async def get_rankings(
         rankings_data = []
         for ranking in rankings:
             college_quota: Optional[int] = None
+            # Always load the config so we can surface college_review_end on
+            # each ranking item — this lets the frontend display the deadline
+            # banner before any specific ranking has been selected.
+            config = await get_config_for_ranking(ranking)
 
             if user_college_code:
-                config = await get_config_for_ranking(ranking)
                 if config and config.has_college_quota and config.quotas:
                     if ranking.sub_type_code == "default":
                         # Sum all quotas for this college across sub-types
@@ -157,10 +184,14 @@ async def get_rankings(
                     "college_quota": college_quota,
                     "allocated_count": ranking.allocated_count,
                     "is_finalized": ranking.is_finalized,
+                    "allow_college_view_distribution": bool(config and config.allow_college_view_distribution),
                     "ranking_status": ranking.ranking_status,
                     "distribution_executed": ranking.distribution_executed,
                     "created_at": ranking.created_at.isoformat(),
                     "finalized_at": ranking.finalized_at.isoformat() if ranking.finalized_at else None,
+                    "college_review_end": (
+                        config.college_review_end.isoformat() if config and config.college_review_end else None
+                    ),
                 }
             )
 
@@ -169,14 +200,16 @@ async def get_rankings(
         )
 
     except ValueError as e:
-        logger.warning(f"Invalid query parameters for rankings: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid query parameters: {str(e)}")
+        logger.warning("Invalid query parameters for rankings", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid query parameters") from e
     except CollegeReviewError as e:
-        logger.error(f"College review error retrieving rankings: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        logger.exception("College review error retrieving rankings")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving rankings: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve rankings")
+        logger.exception("Unexpected error retrieving rankings")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve rankings"
+        ) from e
 
 
 @router.post("/rankings")
@@ -194,6 +227,9 @@ async def create_ranking(
 
     try:
         service = CollegeReviewService(db)
+        # #63: block ranking writes once college-review deadline has passed
+        # (admins / super_admins bypass).
+        await service.assert_ranking_within_deadline(scholarship_type_id, academic_year, semester, current_user)
         ranking = await service.create_ranking(
             scholarship_type_id=scholarship_type_id,
             sub_type_code=sub_type_code,
@@ -203,6 +239,12 @@ async def create_ranking(
             ranking_name=ranking_name,
             force_new=force_new,
         )
+        # Commit before building the response so the row is visible to any
+        # read-after-write query the caller makes immediately after receiving
+        # the HTTP 200 (e.g. direct pool.query in the E2E test suite — see
+        # issue #199). get_db will commit again on context exit but that is a
+        # no-op on an already-clean session. Mirrors the fix in PR #200.
+        await db.commit()
 
         return ApiResponse(
             success=True,
@@ -220,15 +262,19 @@ async def create_ranking(
             },
         )
 
+    except AuthorizationError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except NotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except ValueError as e:
-        logger.warning(f"Invalid ranking creation data: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid ranking data: {str(e)}")
+        logger.warning("Invalid ranking creation data", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid ranking data") from e
     except CollegeReviewError as e:
-        logger.error(f"College review error creating ranking: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        logger.exception("College review error creating ranking")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     except Exception as e:
-        logger.error(f"Unexpected error creating ranking: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create ranking")
+        logger.exception("Unexpected error creating ranking")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create ranking") from e
 
 
 @router.get("/rankings/{ranking_id}")
@@ -243,6 +289,11 @@ async def get_ranking(
 
         if not ranking:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
+
+        # College-scope the detail read: a reviewer may only see their own college's
+        # ranking (admins may see any). Prevents cross-college access to student PII /
+        # rejection reasons via ranking-id enumeration.
+        assert_can_manage_ranking(ranking, current_user)
 
         # Build sub-type metadata for UI display
         sub_type_metadata_map: Dict[str, Dict[str, str]] = {}
@@ -285,22 +336,22 @@ async def get_ranking(
 
         normalized_ranking_semester = normalize_semester_value(ranking.semester)
 
-        if user_college_code:
-            config_stmt = select(ScholarshipConfiguration).where(
-                and_(
-                    ScholarshipConfiguration.scholarship_type_id == ranking.scholarship_type_id,
-                    ScholarshipConfiguration.academic_year == ranking.academic_year,
-                    ScholarshipConfiguration.is_active.is_(True),
-                )
+        # Fetch scholarship config once — used for quota calculation AND deadline banner (#91)
+        _cfg_stmt = select(ScholarshipConfiguration).where(
+            and_(
+                ScholarshipConfiguration.scholarship_type_id == ranking.scholarship_type_id,
+                ScholarshipConfiguration.academic_year == ranking.academic_year,
+                ScholarshipConfiguration.is_active.is_(True),
             )
-            if normalized_ranking_semester:
-                config_stmt = config_stmt.where(ScholarshipConfiguration.semester == normalized_ranking_semester)
-            else:
-                config_stmt = config_stmt.where(ScholarshipConfiguration.semester.is_(None))
+        )
+        if normalized_ranking_semester:
+            _cfg_stmt = _cfg_stmt.where(ScholarshipConfiguration.semester == normalized_ranking_semester)
+        else:
+            _cfg_stmt = _cfg_stmt.where(ScholarshipConfiguration.semester.is_(None))
+        _cfg_result = await db.execute(_cfg_stmt)
+        config = _cfg_result.scalar_one_or_none()
 
-            config_result = await db.execute(config_stmt)
-            config = config_result.scalar_one_or_none()
-
+        if user_college_code:
             if config and config.has_college_quota and isinstance(config.quotas, dict):
 
                 def _record_quota(sub_type_code: str, quota_value: Any) -> None:
@@ -442,6 +493,7 @@ async def get_ranking(
                     "display_rank": len(items) + 1,  # Dynamic display rank (skips deleted applications)
                     "is_allocated": item.is_allocated,
                     "status": item.status,
+                    "college_rejected": item.college_rejected,
                     "student_name": student_name,
                     "student_id": student_id,
                     # Lightweight DTO with minimal student exposure
@@ -451,6 +503,8 @@ async def get_ranking(
                         "status": item.application.status,
                         "scholarship_type_id": item.application.scholarship_type_id,
                         "sub_type": item.application.sub_scholarship_type,
+                        "is_renewal": item.application.is_renewal,
+                        "renewal_year": item.application.renewal_year,
                         # Eligible sub-types that student applied for, with review status
                         "eligible_subtypes": (
                             [
@@ -470,6 +524,16 @@ async def get_ranking(
                                 for subtype in (item.application.scholarship_subtype_list or [])
                             ]
                         ),
+                        # #68: 國籍/身分 — expose only the two snapshot keys the
+                        # ranking table reads, not the full SIS snapshot.
+                        "student_data": {
+                            "std_nation": student_data.get("std_nation") or student_data.get("nationality"),
+                            "std_identity": (
+                                student_data.get("std_identity")
+                                if student_data.get("std_identity") is not None
+                                else student_data.get("identity")
+                            ),
+                        },
                         # Minimal student info - only what's needed for ranking display
                         "student_info": {
                             "display_name": student_name,
@@ -509,25 +573,31 @@ async def get_ranking(
                 "college_quota_breakdown": college_quota_breakdown,
                 "allocated_count": ranking.allocated_count,
                 "is_finalized": ranking.is_finalized,
+                "allow_college_view_distribution": bool(config and config.allow_college_view_distribution),
                 "ranking_status": ranking.ranking_status,
                 "distribution_executed": ranking.distribution_executed,
                 "sub_type_metadata": list(sub_type_metadata_map.values()),
                 "items": items,
                 "created_at": ranking.created_at.isoformat(),
+                "college_review_end": (
+                    config.college_review_end.isoformat() if config and config.college_review_end else None
+                ),
             },
         )
 
     except HTTPException:
         raise
     except RankingNotFoundError as e:
-        logger.warning(f"Ranking not found: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        logger.warning("Ranking not found", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except CollegeReviewError as e:
-        logger.error(f"College review error retrieving ranking: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        logger.exception("College review error retrieving ranking")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving ranking: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve ranking")
+        logger.exception("Unexpected error retrieving ranking")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve ranking"
+        ) from e
 
 
 @router.put("/rankings/{ranking_id}")
@@ -548,12 +618,8 @@ async def update_ranking(
         if not ranking:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
 
-        # Check permissions - only creator or admin can update
-        if ranking.created_by != current_user.id and current_user.role not in [UserRole.admin, UserRole.super_admin]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only the ranking creator or admin can update this ranking",
-            )
+        # Check permissions - the owning college's reviewers or an admin can update
+        assert_can_manage_ranking(ranking, current_user)
 
         # Check if ranking is finalized - cannot update finalized rankings
         if ranking.is_finalized:
@@ -577,8 +643,8 @@ async def update_ranking(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Unexpected error updating ranking: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update ranking")
+        logger.exception("Unexpected error updating ranking")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update ranking") from e
 
 
 @router.put("/rankings/{ranking_id}/order")
@@ -593,9 +659,57 @@ async def update_ranking_order(
 
     try:
         service = CollegeReviewService(db)
-        ranking = await service.update_ranking_order(
-            ranking_id=ranking_id, new_order=[item.dict() for item in new_order]
+        # #63: block once college-review deadline has passed (admins bypass).
+        await service.assert_ranking_within_deadline_by_ranking(ranking_id, current_user)
+
+        # Authorize: only the owning college's reviewers or an admin may reorder. This
+        # write path previously had no ownership check, so any college reviewer could
+        # reorder another college's ranking (and overwrite Application.final_ranking_position).
+        ranking_row = (
+            await db.execute(select(CollegeRanking).where(CollegeRanking.id == ranking_id))
+        ).scalar_one_or_none()
+        if not ranking_row:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
+        assert_can_manage_ranking(ranking_row, current_user)
+
+        # G8 (#970): capture the prior order — rank overwrites previously left
+        # no trace, so 「核配當時的名次」 could not be reconstructed.
+        prior_rows = await db.execute(
+            select(
+                CollegeRankingItem.id,
+                CollegeRankingItem.application_id,
+                CollegeRankingItem.rank_position,
+            ).where(CollegeRankingItem.ranking_id == ranking_id)
         )
+        prior = prior_rows.all()
+        old_order = {str(app_id): pos for _item_id, app_id, pos in prior}
+        item_to_app = {item_id: app_id for item_id, app_id, _pos in prior}
+
+        ranking = await service.update_ranking_order(
+            ranking_id=ranking_id, new_order=[item.model_dump() for item in new_order]
+        )
+
+        db.add(
+            AuditLog.create_log(
+                user_id=current_user.id,
+                action=AuditAction.update.value,
+                resource_type="college_ranking",
+                resource_id=str(ranking_id),
+                description=f"ranking order updated ({len(new_order)} item(s))",
+                old_values={"rank_positions": old_order},
+                # RankingOrderUpdate carries item_id/position (NOT application_id/
+                # rank_position) — reading the wrong keys here 500'd EVERY valid
+                # reorder request since the G8 audit block landed. Key new_values by
+                # application_id (via the prior-rows mapping) so old/new stay comparable.
+                new_values={
+                    "rank_positions": {
+                        str(item_to_app.get(i["item_id"], f"item:{i['item_id']}")): i.get("position")
+                        for i in (item.model_dump() for item in new_order)
+                    }
+                },
+            )
+        )
+        await db.commit()
 
         return ApiResponse(
             success=True,
@@ -603,21 +717,72 @@ async def update_ranking_order(
             data={"id": ranking.id, "updated_at": ranking.updated_at.isoformat()},
         )
 
+    except AuthorizationError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except NotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except RankingNotFoundError as e:
-        logger.warning(f"Ranking not found for order update: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        logger.warning("Ranking not found for order update", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except RankingModificationError as e:
-        logger.warning(f"Cannot modify ranking: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+        logger.warning("Cannot modify ranking", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except InvalidRankingDataError as e:
-        logger.warning(f"Invalid ranking data: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        logger.warning("Invalid ranking data", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except CollegeReviewError as e:
-        logger.error(f"College review error during ranking update: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        logger.exception("College review error during ranking update")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Unexpected error updating ranking order: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update ranking order")
+        logger.exception("Unexpected error updating ranking order")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update ranking order"
+        ) from e
+
+
+async def _resolve_college_name(db: AsyncSession, college_code: Optional[str]) -> str:
+    """Resolve a college code to its display name, academies table first.
+
+    The static COLLEGE_MAPPINGS table lagged the real academy names for a long
+    time, so the DB is the authority and the static map is only a fallback.
+    """
+    if not college_code:
+        return ""
+
+    result = await db.execute(select(Academy.name).where(Academy.code == college_code))
+    name = result.scalar_one_or_none()
+    if name:
+        return name
+
+    return get_college_name(college_code) or college_code
+
+
+async def _notify_college_ranking_submitted(db: AsyncSession, ranking: CollegeRanking, finalizer: User) -> None:
+    """Emit the college_review_submitted trigger for a just-finalized ranking."""
+    scholarship_name = ""
+    if ranking.scholarship_type_id:
+        result = await db.execute(select(ScholarshipType.name).where(ScholarshipType.id == ranking.scholarship_type_id))
+        scholarship_name = result.scalar_one_or_none() or ""
+
+    await email_automation_service.trigger_college_ranking_submitted(
+        db=db,
+        ranking_data={
+            "ranking_id": ranking.id,
+            "college_code": ranking.college_code,
+            "college_name": await _resolve_college_name(db, ranking.college_code),
+            "ranking_name": ranking.ranking_name or f"排名 #{ranking.id}",
+            "scholarship_type": scholarship_name,
+            "scholarship_type_id": ranking.scholarship_type_id,
+            "sub_type_code": ranking.sub_type_code or "",
+            "academic_year": str(ranking.academic_year or ""),
+            "semester": normalize_semester_value(ranking.semester) or "全學年",
+            "total_applications": str(ranking.total_applications or 0),
+            "finalized_by": finalizer.name or finalizer.email or "",
+            "finalized_at": (ranking.finalized_at.strftime("%Y-%m-%d %H:%M") if ranking.finalized_at else ""),
+        },
+    )
 
 
 @router.post("/rankings/{ranking_id}/finalize")
@@ -640,15 +805,8 @@ async def finalize_ranking(
         if not ranking_check:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
 
-        # Check permissions - only creator or admin can finalize
-        if ranking_check.created_by != current_user.id and current_user.role not in [
-            UserRole.admin,
-            UserRole.super_admin,
-        ]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only the ranking creator or admin can finalize this ranking",
-            )
+        # Check permissions - the owning college's reviewers or an admin can finalize
+        assert_can_manage_ranking(ranking_check, current_user)
 
         # Capture old state for audit log
         old_values = {
@@ -657,6 +815,8 @@ async def finalize_ranking(
         }
 
         service = CollegeReviewService(db)
+        # #63: block once college-review deadline has passed (admins bypass).
+        await service.assert_ranking_within_deadline_by_ranking(ranking_id, current_user)
         ranking = await service.finalize_ranking(ranking_id=ranking_id, finalizer_id=current_user.id)
 
         # Log the finalize ranking operation
@@ -685,6 +845,13 @@ async def finalize_ranking(
         db.add(audit_log)
         await db.commit()
 
+        # Notify the owning college that its ranking has been sent. Wrapped so a
+        # mail failure can never turn a successful finalize into a 500.
+        try:
+            await _notify_college_ranking_submitted(db, ranking, current_user)
+        except Exception:
+            logger.exception("Failed to trigger college ranking submitted email for ranking %s", ranking.id)
+
         return ApiResponse(
             success=True,
             message="Ranking finalized successfully",
@@ -696,18 +863,26 @@ async def finalize_ranking(
             },
         )
 
+    except AuthorizationError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except NotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except RankingNotFoundError as e:
-        logger.warning(f"Ranking not found for finalization: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        logger.warning("Ranking not found for finalization", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except RankingModificationError as e:
-        logger.warning(f"Cannot finalize ranking: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+        logger.warning("Cannot finalize ranking", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except CollegeReviewError as e:
-        logger.error(f"College review error during finalization: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        logger.exception("College review error during finalization")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Unexpected error finalizing ranking: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to finalize ranking")
+        logger.exception("Unexpected error finalizing ranking")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to finalize ranking"
+        ) from e
 
 
 @router.post("/rankings/{ranking_id}/unfinalize")
@@ -730,15 +905,8 @@ async def unfinalize_ranking(
         if not ranking_check:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
 
-        # Check permissions - only creator or admin can unfinalize
-        if ranking_check.created_by != current_user.id and current_user.role not in [
-            UserRole.admin,
-            UserRole.super_admin,
-        ]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only the ranking creator or admin can unfinalize this ranking",
-            )
+        # Check permissions - the owning college's reviewers or an admin can unfinalize
+        assert_can_manage_ranking(ranking_check, current_user)
 
         # Capture old state for audit log
         old_values = {
@@ -747,6 +915,8 @@ async def unfinalize_ranking(
         }
 
         service = CollegeReviewService(db)
+        # #63: block once college-review deadline has passed (admins bypass).
+        await service.assert_ranking_within_deadline_by_ranking(ranking_id, current_user)
         ranking = await service.unfinalize_ranking(ranking_id=ranking_id)
 
         # Log the unfinalize ranking operation
@@ -784,18 +954,26 @@ async def unfinalize_ranking(
             },
         )
 
+    except AuthorizationError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except NotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except RankingNotFoundError as e:
-        logger.warning(f"Ranking not found for unfinalization: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        logger.warning("Ranking not found for unfinalization", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except RankingModificationError as e:
-        logger.warning(f"Cannot unfinalize ranking: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+        logger.warning("Cannot unfinalize ranking", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except CollegeReviewError as e:
-        logger.error(f"College review error during unfinalization: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        logger.exception("College review error during unfinalization")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Unexpected error unfinalizing ranking: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to unfinalize ranking")
+        logger.exception("Unexpected error unfinalizing ranking")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to unfinalize ranking"
+        ) from e
 
 
 @router.delete("/rankings/{ranking_id}")
@@ -823,12 +1001,8 @@ async def delete_ranking(
         if not ranking:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
 
-        # Check permissions - only creator or admin can delete
-        if ranking.created_by != current_user.id and current_user.role not in [UserRole.admin, UserRole.super_admin]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only the ranking creator or admin can delete this ranking",
-            )
+        # Check permissions - the owning college's reviewers or an admin can delete
+        assert_can_manage_ranking(ranking, current_user)
 
         # Check if ranking is finalized - cannot delete finalized rankings
         if ranking.is_finalized:
@@ -887,10 +1061,8 @@ async def delete_ranking(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error deleting ranking {ranking_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete ranking: {str(e)}"
-        )
+        logger.exception(f"Error deleting ranking {ranking_id}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete ranking") from e
 
 
 @router.post("/rankings/{ranking_id}/import-excel")
@@ -901,16 +1073,17 @@ async def import_ranking_from_excel(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Import ranking data from Excel
+    Import ranking data parsed from the 學生資料彙整表 Excel.
 
-    Expected Excel columns: 學號, 姓名, 排名
-    This endpoint updates the rank_position of existing ranking items based on student IDs
+    Takes a JSON body (List[RankingImportItem]); the frontend parses the workbook
+    (學號 → student_id, 學生中文姓名 → student_name, 學院初審會議之學院排序 → rank_position).
+    rank_position accepts positive integers (1-based, consecutive, no duplicates) or "N" (rejected).
+    Student IDs must exactly match the ranking's application set.
     """
-
     try:
         logger.info(f"User {current_user.id} importing {len(import_data)} rankings for ranking_id={ranking_id}")
 
-        # Get ranking
+        # Load ranking with items
         stmt = (
             select(CollegeRanking)
             .options(selectinload(CollegeRanking.items).selectinload(CollegeRankingItem.application))
@@ -922,53 +1095,314 @@ async def import_ranking_from_excel(
         if not ranking:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
 
-        # Check if ranking can be modified
+        # Check permissions - the owning college's reviewers or an admin can import
+        assert_can_manage_ranking(ranking, current_user)
+
+        # #63 / #1081 finding H: block once the college-review deadline has passed
+        # (admins bypass). import-excel was the one ranking-mutation path missing
+        # this guard that update_ranking_order / bulk-reject / reject all apply,
+        # so a college user could reorder ranks or flip college_rejected on a
+        # non-finalized ranking after the deadline.
+        service = CollegeReviewService(db)
+        await service.assert_ranking_within_deadline_by_ranking(ranking_id, current_user)
+
         if ranking.is_finalized:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot modify finalized ranking")
 
-        # Build a map of student_id -> import_item
-        import_map = {item.student_id: item for item in import_data}
+        # --- Validation ---
+        errors = []
 
-        # Update ranking items
-        updated_count = 0
-        not_found = []
+        # 1. Check for duplicate student IDs in import data
+        seen_student_ids: set = set()
+        duplicate_student_ids: list = []
+        for item in import_data:
+            if item.student_id in seen_student_ids:
+                duplicate_student_ids.append(item.student_id)
+            seen_student_ids.add(item.student_id)
+        if duplicate_student_ids:
+            errors.append(f"匯入資料中學號重複：{', '.join(sorted(set(duplicate_student_ids)))}")
 
+        # 2. Collect ranking system student IDs
+        system_student_ids = set()
+        student_id_to_item = {}
         for rank_item in ranking.items:
             app = rank_item.application
             if not app or not app.student_data:
                 continue
+            sid = app.student_data.get("std_stdcode") or app.student_data.get("student_id")
+            if sid:
+                system_student_ids.add(sid)
+                student_id_to_item[sid] = rank_item
 
-            student_id = app.student_data.get("std_stdcode") or app.student_data.get("student_id")
-            if not student_id:
+        # 3. Strict student matching
+        import_student_ids = seen_student_ids
+        extra_ids = import_student_ids - system_student_ids
+        missing_ids = system_student_ids - import_student_ids
+        if extra_ids:
+            errors.append(f"以下學號不在申請清單中：{', '.join(sorted(extra_ids))}")
+        if missing_ids:
+            errors.append(f"以下學號未包含在匯入檔案中：{', '.join(sorted(missing_ids))}")
+
+        # 4. Validate rank sequence
+        integer_ranks = []
+        for item in import_data:
+            if isinstance(item.rank_position, int):
+                integer_ranks.append(item.rank_position)
+
+        # Check duplicates
+        rank_counts: Dict[int, int] = {}
+        for r in integer_ranks:
+            rank_counts[r] = rank_counts.get(r, 0) + 1
+        duplicates = [str(r) for r, count in sorted(rank_counts.items()) if count > 1]
+        if duplicates:
+            errors.append(f"排名重複：{', '.join(duplicates)}{RANK_SEQUENCE_RULE}")
+
+        # Check consecutive from 1
+        if integer_ranks and not duplicates:
+            expected = set(range(1, len(integer_ranks) + 1))
+            actual = set(integer_ranks)
+            missing_ranks = expected - actual
+            if missing_ranks:
+                errors.append(
+                    f"排名不連續：缺少第 {', '.join(str(r) for r in sorted(missing_ranks))} 名{RANK_SEQUENCE_RULE}"
+                )
+
+        if errors:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="\n".join(errors),
+            )
+
+        # --- Apply updates ---
+        updated_count = 0
+        rejected_count = 0
+        num_ranked = len(integer_ranks)
+
+        import_map = {item.student_id: item for item in import_data}
+
+        # Track rejected index for assigning positions after ranked students.
+        # college_rejected=True is the college-level "N" marker. status stays
+        # 'ranked' so admin retains ability to allocate.
+        rejected_index = 0
+        # G8 (#970): snapshot prior state — the import overwrites ranks and
+        # college_rejected flags in place.
+        prior_ranks = {
+            sid: {"rank_position": ri.rank_position, "college_rejected": ri.college_rejected}
+            for sid, ri in student_id_to_item.items()
+        }
+        for sid, rank_item in student_id_to_item.items():
+            if sid not in import_map:
                 continue
-
-            if student_id in import_map:
-                import_item = import_map[student_id]
-                rank_item.rank_position = import_item.rank_position
-                updated_count += 1
+            import_item = import_map[sid]
+            if import_item.rank_position == "N":
+                rejected_index += 1
+                rank_item.rank_position = num_ranked + rejected_index
+                rank_item.status = "ranked"
+                rank_item.college_rejected = True
+                rejected_count += 1
             else:
-                not_found.append(student_id)
+                rank_item.rank_position = import_item.rank_position
+                rank_item.status = "ranked"
+                rank_item.college_rejected = False
+            updated_count += 1
 
-        # Update ranking metadata
         ranking.total_applications = len(ranking.items)
 
-        await db.flush()
+        db.add(
+            AuditLog.create_log(
+                user_id=current_user.id,
+                action=AuditAction.import_.value,
+                resource_type="college_ranking",
+                resource_id=str(ranking_id),
+                description=(f"ranking import-excel: {updated_count} updated, {rejected_count} rejected (N)"),
+                old_values={"rank_positions": prior_ranks},
+                new_values={
+                    "rank_positions": {
+                        sid: {
+                            "rank_position": ri.rank_position,
+                            "college_rejected": ri.college_rejected,
+                        }
+                        for sid, ri in student_id_to_item.items()
+                    }
+                },
+            )
+        )
+        await db.commit()
 
         return ApiResponse(
             success=True,
-            message=f"Ranking import successful. Updated {updated_count} students.",
+            message=f"排名匯入成功。更新 {updated_count} 筆（其中 {rejected_count} 筆拒絕）。",
             data={
                 "ranking_id": ranking_id,
                 "updated_count": updated_count,
+                "rejected_count": rejected_count,
                 "total_imported": len(import_data),
-                "not_found_in_ranking": not_found if len(not_found) < 20 else f"{len(not_found)} students not found",
             },
         )
 
     except HTTPException:
         raise
+    except AuthorizationError as e:
+        # e.g. the #1081-H college-review deadline guard — must surface as 403,
+        # not get swallowed into the generic 500 below.
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except Exception as e:
-        logger.error(f"Error importing ranking data: {str(e)}")
+        logger.exception("Error importing ranking data")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to import ranking data: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to import ranking data",
+        ) from e
+
+
+@router.get("/rankings/{ranking_id}/export-excel")
+async def export_ranking_excel(
+    ranking_id: int,
+    request: Request,
+    template: bool = Query(False, description="Render the rank column blank, as a fill-in import template"),
+    format: Literal["xlsx", "pdf"] = Query("xlsx", description="Output format: xlsx (default) or pdf"),
+    current_user: User = Depends(require_scholarship_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate the 學生資料彙整表 for a ranking, as Excel (default) or PDF.
+
+    Auth: admin/super_admin OR a college user whose `college_code` matches the
+    ranking's own `college_code` (authoritative per-college ownership).
+    """
+
+    # A PDF template makes no sense — a template is meant to be filled in and
+    # re-imported, which only the xlsx path supports.
+    if template and format == "pdf":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="範本僅支援 Excel 格式")
+
+    # 1. Load ranking + items with applications
+    stmt = (
+        select(CollegeRanking)
+        .where(CollegeRanking.id == ranking_id)
+        .options(
+            selectinload(CollegeRanking.items).selectinload(CollegeRankingItem.application),
+            selectinload(CollegeRanking.scholarship_type).selectinload(ScholarshipType.sub_type_configs),
+            selectinload(CollegeRanking.creator),
         )
+    )
+    ranking = (await db.execute(stmt)).scalar_one_or_none()
+    if ranking is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到該學院排序資料")
+
+    # 2. Authorization — admin OK; college users must own this ranking's college.
+    # Use the authoritative ranking.college_code (immutable snapshot), not the live
+    # creator.college_code, so authz stays correct if the creator is later reassigned.
+    assert_can_manage_ranking(ranking, current_user)
+
+    # 2b. Scholarship + academic-year permission checks (mirrors export_package.py pattern)
+    if not await _check_scholarship_permission(current_user, ranking.scholarship_type_id, db):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權限存取此獎學金類型")
+    if not await _check_academic_year_permission(current_user, ranking.academic_year, db):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權限存取此學年度")
+
+    # 3-5. Bulk-load aux data (dynamic fields, sub-type labels, accounts, advisors)
+    items_sorted = sorted(ranking.items or [], key=lambda x: x.rank_position)
+    apps_in_ranking = [item.application for item in items_sorted if item.application is not None]
+
+    dynamic_fields, sub_type_labels, account_number_by_user, advisor_string_by_user = await load_export_aux_data(
+        db,
+        scholarship_type=ranking.scholarship_type,
+        applications=apps_in_ranking,
+    )
+
+    export_rows = [
+        ExportRow(
+            rank_position=None if template else item.rank_position,
+            application=item.application,
+            bank_account=account_number_by_user.get(item.application.user_id),
+            advisor_names=advisor_string_by_user.get(item.application.user_id),
+        )
+        for item in items_sorted
+        if item.application is not None
+    ]
+
+    # 6. Title + sheet name + filename
+    scholarship_name = (
+        ranking.scholarship_type.name if ranking.scholarship_type and ranking.scholarship_type.name else "獎學金"
+    )
+    title = f"{ranking.academic_year}學年度{scholarship_name}學生資料彙整表"
+    sheet_name = f"{ranking.academic_year}學年"
+
+    # College name in filename — use the current college user's college_code for
+    # college users; admins fall back to "全校" if the creator has no code.
+    college_label = (
+        current_user.college_code
+        if current_user.role not in (UserRole.admin, UserRole.super_admin)
+        else (getattr(ranking.creator, "college_code", None) or "全校")
+    )
+    template_suffix = "_範本" if template else ""
+    extension = format  # Literal["xlsx", "pdf"] — extension IS the format
+    base_filename = (
+        f"{ranking.academic_year}學年度{scholarship_name}學生資料彙整表"
+        f"_{college_label}{template_suffix}.{extension}"
+    )
+    encoded = _url_quote(base_filename, safe="")
+
+    # 7. Render the workbook (xlsx) or PDF — both share the same columns/rows.
+    service = CollegeRankingExportService()
+    if format == "pdf":
+        payload = service.build_pdf(
+            rows=export_rows,
+            dynamic_fields=dynamic_fields,
+            sub_type_labels=sub_type_labels,
+            title=title,
+        )
+        media_type = "application/pdf"
+    else:
+        payload = service.build_workbook(
+            rows=export_rows,
+            dynamic_fields=dynamic_fields,
+            sub_type_labels=sub_type_labels,
+            title=title,
+            sheet_name=sheet_name,
+        )
+        media_type = XLSX_MEDIA_TYPE
+
+    # 8. Audit the PII access (issue #73): business confirmed Excel must show
+    # the full std_pid, so every export that includes plaintext IDs is logged.
+    exported_app_ids = [r.application.id for r in export_rows if r.application is not None]
+    try:
+        audit_log = AuditLog(
+            user_id=current_user.id,
+            action=AuditAction.pii_access.value,
+            resource_type="college_ranking",
+            resource_id=str(ranking_id),
+            resource_name=base_filename,
+            description=(
+                f"匯出學生資料彙整表（{'範本，' if template else ''}含身分證字號明文）: "
+                f"ranking_id={ranking_id}, records={len(exported_app_ids)}"
+            ),
+            ip_address=(request.client.host if request.client else None),
+            user_agent=request.headers.get("user-agent"),
+            request_method=request.method,
+            request_url=str(request.url.path),
+            status="success",
+            meta_data={
+                "ranking_id": ranking_id,
+                "scholarship_type_id": (ranking.scholarship_type.id if ranking.scholarship_type else None),
+                "academic_year": ranking.academic_year,
+                "record_count": len(exported_app_ids),
+                "application_ids": exported_app_ids,
+                "pii_fields": ["std_pid"],
+                "export_format": extension,
+                "is_template": template,
+            },
+        )
+        db.add(audit_log)
+        await db.commit()
+    except Exception:  # noqa: BLE001 — audit failure must not block download
+        logger.exception("Failed to record pii_access audit log for ranking %s", ranking_id)
+        await db.rollback()
+
+    return StreamingResponse(
+        iter([payload]),
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded}",
+            "Content-Length": str(len(payload)),
+        },
+    )

@@ -58,6 +58,12 @@ class DocumentRequest(Base):
         index=True,
     )
     fulfilled_at = Column(DateTime(timezone=True), nullable=True)
+    deadline = Column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+        comment="When the student must fulfill this request by; null = no hard deadline.",
+    )
     cancelled_at = Column(DateTime(timezone=True), nullable=True)
     cancelled_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     cancellation_reason = Column(Text, nullable=True)

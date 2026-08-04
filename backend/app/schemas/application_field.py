@@ -5,7 +5,7 @@ Application field configuration schemas
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models.application_field import FieldType
 
@@ -32,6 +32,23 @@ class ApplicationFieldBase(BaseModel):
     help_text_en: Optional[str] = Field(None, description="Help text (English)")
     validation_rules: Optional[Dict[str, Any]] = Field(None, description="Validation rules")
     conditional_rules: Optional[Dict[str, Any]] = Field(None, description="Conditional rules")
+
+    # College export settings
+    include_in_college_export: bool = Field(
+        default=False,
+        description="Whether this field appears in the college Excel export",
+    )
+    export_column_label: Optional[str] = Field(
+        default=None,
+        max_length=200,
+        description="Override label for the college export column header",
+    )
+
+    @model_validator(mode="after")
+    def _validate_export_flag(self) -> "ApplicationFieldBase":
+        if self.include_in_college_export and self.field_type != FieldType.TEXT.value:
+            raise ValueError("include_in_college_export 僅支援 field_type='text'")
+        return self
 
 
 class ApplicationFieldCreate(ApplicationFieldBase):
@@ -60,6 +77,18 @@ class ApplicationFieldUpdate(BaseModel):
     help_text_en: Optional[str] = None
     validation_rules: Optional[Dict[str, Any]] = None
     conditional_rules: Optional[Dict[str, Any]] = None
+    include_in_college_export: Optional[bool] = None
+    export_column_label: Optional[str] = Field(default=None, max_length=200)
+
+    @model_validator(mode="after")
+    def _validate_export_flag(self) -> "ApplicationFieldUpdate":
+        if (
+            self.include_in_college_export is True
+            and self.field_type is not None
+            and self.field_type != FieldType.TEXT.value
+        ):
+            raise ValueError("include_in_college_export 僅支援 field_type='text'")
+        return self
 
 
 class ApplicationFieldResponse(ApplicationFieldBase):
@@ -86,6 +115,8 @@ class ApplicationDocumentBase(BaseModel):
     description: Optional[str] = Field(None, description="Document description")
     description_en: Optional[str] = Field(None, description="Document description (English)")
     is_required: bool = Field(default=True, description="Is document required")
+    display_in_list: bool = Field(default=True, description="Show in scholarship-list document boxes")
+    requires_upload: bool = Field(default=True, description="Student must upload this document in step 3")
     accepted_file_types: List[str] = Field(default=["PDF"], description="Accepted file types")
     max_file_size: str = Field(default="5MB", description="Maximum file size")
     max_file_count: int = Field(default=1, description="Maximum file count")
@@ -111,6 +142,8 @@ class ApplicationDocumentUpdate(BaseModel):
     description: Optional[str] = None
     description_en: Optional[str] = None
     is_required: Optional[bool] = None
+    display_in_list: Optional[bool] = None
+    requires_upload: Optional[bool] = None
     accepted_file_types: Optional[List[str]] = None
     max_file_size: Optional[str] = None
     max_file_count: Optional[int] = None
@@ -148,5 +181,7 @@ class ScholarshipFormConfigResponse(BaseModel):
     color: Optional[str] = None
     hasWhitelist: Optional[bool] = None
     terms_document_url: Optional[str] = None
+    application_document_note: Optional[str] = None
+    application_document_note_en: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)

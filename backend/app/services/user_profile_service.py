@@ -14,7 +14,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.user_profile import UserProfile, UserProfileHistory
 from app.schemas.user_profile import (
     BankDocumentPhotoUpload,
@@ -104,11 +104,20 @@ class UserProfileService:
         if existing_profile:
             raise ValueError("User profile already exists")
 
-        # Create profile
+        # Create profile. The check above is racy under concurrent requests
+        # for the same user_id — convert IntegrityError on the unique
+        # constraint to a 1-line ValueError matching the upfront-check
+        # contract, so callers always see a clean error rather than a 500.
+        from sqlalchemy.exc import IntegrityError
+
         profile = UserProfile(user_id=user_id, **profile_data.model_dump(exclude_unset=True))
 
         self.db.add(profile)
-        await self.db.commit()
+        try:
+            await self.db.commit()
+        except IntegrityError as e:
+            await self.db.rollback()
+            raise ValueError("User profile already exists") from e
         await self.db.refresh(profile)
 
         # Log profile creation
@@ -194,7 +203,7 @@ class UserProfileService:
             try:
                 image_data = base64.b64decode(document_upload.photo_data)
             except Exception as e:
-                raise ValueError(f"Invalid base64 data: {str(e)}")
+                raise ValueError("Invalid base64 data") from e
 
             # Verify actual size after decoding
             if len(image_data) > self.MAX_FILE_SIZE:
@@ -252,7 +261,7 @@ class UserProfileService:
                 preview_url = f"/api/v1/user-profiles/files/bank_documents/{object_name.split('/')[-1]}"
 
             except Exception as e:
-                raise ValueError(f"Failed to upload to MinIO: {str(e)}")
+                raise ValueError("Failed to upload to MinIO") from e
 
             # Update profile with new document URL
             profile = await self.get_user_profile(user_id)
@@ -280,7 +289,7 @@ class UserProfileService:
             return profile.bank_document_photo_url
 
         except Exception as e:
-            raise ValueError(f"Failed to upload bank document: {str(e)}")
+            raise ValueError("Failed to upload bank document") from e
 
     async def upload_bank_document(
         self,
@@ -313,7 +322,7 @@ class UserProfileService:
             try:
                 image_data = base64.b64decode(document_upload.photo_data)
             except Exception as e:
-                raise ValueError(f"Invalid base64 data: {str(e)}")
+                raise ValueError("Invalid base64 data") from e
 
             # Verify actual size after decoding (final check)
             if len(image_data) > self.MAX_FILE_SIZE:
@@ -411,7 +420,7 @@ class UserProfileService:
             return profile.bank_document_photo_url
 
         except Exception as e:
-            raise ValueError(f"Failed to upload bank document: {str(e)}")
+            raise ValueError("Failed to upload bank document") from e
 
     async def delete_bank_document(self, user_id: int) -> bool:
         """Delete bank document"""
@@ -419,16 +428,19 @@ class UserProfileService:
         if not profile or not profile.bank_document_photo_url:
             return False
 
-        # Delete file if it exists
-        if profile.bank_document_photo_url.startswith("/api/v1/user-profiles/files/bank_documents/"):
-            filename = profile.bank_document_photo_url.split("/")[-1]
-            file_path = os.path.join(self.upload_path, filename)
-            if os.path.exists(file_path):
-                os.remove(file_path)
+        # Remove from MinIO using stored object_name (symmetric with upload path).
+        # delete_file() swallows + logs its own exceptions and returns bool, so
+        # DB cleanup proceeds regardless — DB consistency takes precedence over
+        # leaving a MinIO orphan.
+        if profile.bank_document_object_name:
+            minio_service.delete_file(profile.bank_document_object_name)
 
-        # Update profile
+        # Clear BOTH columns. The original code only nulled bank_document_photo_url,
+        # leaving bank_document_object_name as a dangling pointer to a now-deleted
+        # MinIO object (or a still-present one if MinIO removal failed) — see #55.
         old_document_url = profile.bank_document_photo_url
         profile.bank_document_photo_url = None
+        profile.bank_document_object_name = None
         profile.updated_at = datetime.now(timezone.utc)
 
         await self.db.commit()
@@ -507,7 +519,7 @@ class UserProfileService:
             import logging
 
             logger = logging.getLogger(__name__)
-            logger.error(f"Virus scanning failed: {str(e)}")
+            logger.exception("Virus scanning failed")
             return {"is_safe": True, "warning": f"Scanner exception: {str(e)}"}
 
     async def get_profile_history(self, user_id: int, limit: int = 50) -> List[UserProfileHistory]:
@@ -562,7 +574,11 @@ class UserProfileService:
 
     async def get_users_with_incomplete_profiles(self) -> List[Dict[str, Any]]:
         """Get users with incomplete profiles for admin dashboard"""
-        stmt = select(User, UserProfile).outerjoin(UserProfile).where(User.role == "STUDENT")
+        # Enum members are lowercase to match the PostgreSQL `userrole` enum
+        # (see CLAUDE.md enum consistency rules). The literal "STUDENT" made
+        # asyncpg raise InvalidTextRepresentationError, so this endpoint returned
+        # 500 unconditionally.
+        stmt = select(User, UserProfile).outerjoin(UserProfile).where(User.role == UserRole.student)
 
         result = await self.db.execute(stmt)
         users_profiles = result.all()
@@ -576,14 +592,14 @@ class UserProfileService:
                 completion_percentage = profile.profile_completion_percentage
                 missing_info = []
 
+                # Keep this list in step with UserProfile.profile_completion_percentage,
+                # which scores exactly two sections. The previous code also tested
+                # `preferred_email` and `phone_number`; neither attribute exists on
+                # UserProfile, so this raised AttributeError on every profile row.
                 if not profile.has_complete_bank_info:
                     missing_info.append("銀行帳戶資訊")
                 if not profile.has_advisor_info:
                     missing_info.append("指導教授資訊")
-                if not profile.preferred_email:
-                    missing_info.append("聯絡Email")
-                if not profile.phone_number:
-                    missing_info.append("聯絡電話")
 
             if completion_percentage < 80:  # Consider <80% as incomplete
                 incomplete_users.append(

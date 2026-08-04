@@ -4,6 +4,7 @@ import React, { Component, ErrorInfo, ReactNode } from "react";
 import { AlertCircle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { logger } from "@/lib/utils/logger";
 
 interface Props {
   children: ReactNode;
@@ -26,7 +27,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error("ErrorBoundary caught an error:", error, errorInfo);
+    logger.error("ErrorBoundary caught an error", { error, errorInfo });
 
     // Call optional error handler
     this.props.onError?.(error, errorInfo);
@@ -104,10 +105,6 @@ export function withErrorBoundary<P extends object>(
 // Hook for error handling in functional components
 export function useErrorHandler() {
   return (error: Error, errorInfo?: string) => {
-    console.error("Error caught by useErrorHandler:", error, errorInfo);
-    // In production, you might want to send this to an error reporting service
-    if (process.env.NODE_ENV === "production") {
-      // Example: sendToErrorReporting(error, errorInfo)
-    }
+    logger.error("Error caught by useErrorHandler", { error, errorInfo });
   };
 }

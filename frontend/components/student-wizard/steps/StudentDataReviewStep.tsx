@@ -43,7 +43,8 @@ export function StudentDataReviewStep({
   const [confirmed, setConfirmed] = useState(false);
 
   // Use SWR hook for student profile data
-  const { userInfo, studentInfo, isLoading, error, refresh } = useStudentProfile();
+  const { userInfo, studentInfo, isLoading, error, refresh } =
+    useStudentProfile();
 
   const t = {
     zh: {
@@ -61,11 +62,13 @@ export function StudentDataReviewStep({
       role: "系統角色",
       degree: "學位",
       enrollmentStatus: "在學狀態",
-      enrollmentYear: "入學年度",
+      enrollmentYear: "入學年度學期",
       semesterCount: "學期數",
+      nationality: "國籍",
+      identity: "身分",
       dataNotice: "資料說明",
       dataNoticeContent:
-        "以上資料來自學校資料庫，若發現資料有誤，請聯繫教務處或資訊中心更新。",
+        "以上資料來自學校資料庫，若發現資料有誤，請聯繫教務處註冊組更新。",
       confirmButton: "確認資料無誤，繼續",
       backButton: "返回上一步",
       loading: "正在載入學籍資料...",
@@ -73,6 +76,44 @@ export function StudentDataReviewStep({
       retry: "重新載入",
       student: "學生",
       employee: "職員",
+      reference_data: {
+        degrees: {
+          博士: "博士",
+          碩士: "碩士",
+          學士: "學士",
+        } as Record<string, string>,
+        studying_status: {
+          在學: "在學",
+          應畢: "應畢",
+          延畢: "延畢",
+          休學: "休學",
+          期中退學: "期中退學",
+          期末退學: "期末退學",
+          開除學籍: "開除學籍",
+          死亡: "死亡",
+          保留學籍: "保留學籍",
+          放棄入學: "放棄入學",
+          畢業: "畢業",
+        } as Record<string, string>,
+        identity: {
+          一般生: "一般生",
+          原住民: "原住民",
+          "僑生(目前有中華民國國籍生)": "僑生(目前有中華民國國籍生)",
+          "外籍生(目前有中華民國國籍生)": "外籍生(目前有中華民國國籍生)",
+          外交子女: "外交子女",
+          身心障礙生: "身心障礙生",
+          運動成績優良甄試學生: "運動成績優良甄試學生",
+          離島: "離島",
+          退伍軍人: "退伍軍人",
+          一般公費生: "一般公費生",
+          原住民公費生: "原住民公費生",
+          離島公費生: "離島公費生",
+          退伍軍人公費生: "退伍軍人公費生",
+          願景計畫生: "願景計畫生",
+          陸生: "陸生",
+          其他: "其他",
+        } as Record<string, string>,
+      },
     },
     en: {
       title: "Verify Student Data",
@@ -90,11 +131,13 @@ export function StudentDataReviewStep({
       role: "System Role",
       degree: "Degree",
       enrollmentStatus: "Enrollment Status",
-      enrollmentYear: "Enrollment Year",
+      enrollmentYear: "Enrollment Year & Semester",
       semesterCount: "Semester Count",
+      nationality: "Nationality",
+      identity: "Identity",
       dataNotice: "Data Notice",
       dataNoticeContent:
-        "The above information is from the university database. If you find any errors, please contact the Academic Affairs Office or Information Center.",
+        "The above information is from the university database. If you find any errors, please contact the Office of the Registrar.",
       confirmButton: "Confirm and Continue",
       backButton: "Back",
       loading: "Loading student data...",
@@ -102,10 +145,109 @@ export function StudentDataReviewStep({
       retry: "Retry",
       student: "Student",
       employee: "Employee",
+      reference_data: {
+        degrees: {
+          博士: "Doctoral",
+          碩士: "Master's",
+          學士: "Bachelor's",
+        } as Record<string, string>,
+        studying_status: {
+          在學: "Enrolled",
+          應畢: "Pending Graduation",
+          延畢: "Extended Study",
+          休學: "On Leave",
+          期中退學: "Withdrawn (Mid-term)",
+          期末退學: "Withdrawn (End of Term)",
+          開除學籍: "Expelled",
+          死亡: "Deceased",
+          保留學籍: "Enrollment Reserved",
+          放棄入學: "Enrollment Forfeited",
+          畢業: "Graduated",
+        } as Record<string, string>,
+        identity: {
+          一般生: "Regular Student",
+          原住民: "Indigenous Student",
+          "僑生(目前有中華民國國籍生)":
+            "Overseas Chinese Student (Currently holds R.O.C. nationality)",
+          "外籍生(目前有中華民國國籍生)":
+            "Foreign Student (Currently holds R.O.C. nationality)",
+          外交子女: "Diplomat's Child",
+          身心障礙生: "Student with Disability",
+          運動成績優良甄試學生:
+            "Outstanding Athletic Performance Admission Student",
+          離島: "Outlying Islands Student",
+          退伍軍人: "Veteran",
+          一般公費生: "Regular Government-Funded Student",
+          原住民公費生: "Indigenous Government-Funded Student",
+          離島公費生: "Outlying Islands Government-Funded Student",
+          退伍軍人公費生: "Veteran Government-Funded Student",
+          願景計畫生: "Vision Project Student",
+          陸生: "Mainland Chinese Student",
+          其他: "Other",
+        } as Record<string, string>,
+      },
     },
   };
 
   const text = t[locale];
+
+  // Numeric code -> canonical zh key (lookup happens via t[locale].reference_data)
+  const degreeCodeToKey: Record<string, string> = {
+    "1": "博士",
+    "2": "碩士",
+    "3": "學士",
+  };
+
+  const studyingStatusCodeToKey: Record<string, string> = {
+    "1": "在學",
+    "2": "應畢",
+    "3": "延畢",
+    "4": "休學",
+    "5": "期中退學",
+    "6": "期末退學",
+    "7": "開除學籍",
+    "8": "死亡",
+    "9": "保留學籍",
+    "10": "放棄入學",
+    "11": "畢業",
+  };
+
+  const identityCodeToKey: Record<string, string> = {
+    "1": "一般生",
+    "2": "原住民",
+    "3": "僑生(目前有中華民國國籍生)",
+    "4": "外籍生(目前有中華民國國籍生)",
+    "5": "外交子女",
+    "6": "身心障礙生",
+    "7": "運動成績優良甄試學生",
+    "8": "離島",
+    "9": "退伍軍人",
+    "10": "一般公費生",
+    "11": "原住民公費生",
+    "12": "離島公費生",
+    "13": "退伍軍人公費生",
+    "14": "願景計畫生",
+    "17": "陸生",
+    "30": "其他",
+  };
+
+  const lookupDegree = (code: string | number): string => {
+    const key = degreeCodeToKey[String(code)];
+    if (key) return text.reference_data.degrees[key] || key;
+    return String(code);
+  };
+
+  const lookupStudyingStatus = (code: string | number): string => {
+    const key = studyingStatusCodeToKey[String(code)];
+    if (key) return text.reference_data.studying_status[key] || key;
+    return String(code);
+  };
+
+  const lookupIdentity = (code: string | number): string => {
+    const key = identityCodeToKey[String(code)];
+    if (key) return text.reference_data.identity[key] || key;
+    return String(code);
+  };
 
   const handleConfirm = () => {
     setConfirmed(true);
@@ -248,9 +390,7 @@ export function StudentDataReviewStep({
                       {text.status}
                     </label>
                     <p>
-                      <Badge variant="outline">
-                        {userInfo.status || "-"}
-                      </Badge>
+                      <Badge variant="outline">{userInfo.status || "-"}</Badge>
                     </p>
                   </div>
                 </div>
@@ -280,7 +420,9 @@ export function StudentDataReviewStep({
                         <div className="flex items-center gap-2">
                           <BookOpen className="h-4 w-4 text-gray-500" />
                           <div className="text-base text-gray-700">
-                            {studentInfo.std_degree || "-"}
+                            {studentInfo.std_degree
+                              ? lookupDegree(studentInfo.std_degree)
+                              : "-"}
                           </div>
                         </div>
                       </div>
@@ -291,7 +433,11 @@ export function StudentDataReviewStep({
                           {text.enrollmentStatus}
                         </label>
                         <div className="text-base font-semibold text-green-700">
-                          {studentInfo.std_studingstatus || "-"}
+                          {studentInfo.std_studingstatus
+                            ? lookupStudyingStatus(
+                                studentInfo.std_studingstatus
+                              )
+                            : "-"}
                         </div>
                       </div>
 
@@ -303,7 +449,11 @@ export function StudentDataReviewStep({
                         <div className="flex items-center gap-2">
                           <Calendar className="h-4 w-4 text-gray-500" />
                           <div className="text-base text-gray-700">
-                            {studentInfo.std_enrollyear || "-"}
+                            {studentInfo.std_enrollyear
+                              ? locale === "zh"
+                                ? `${studentInfo.std_enrollyear} 學年度第 ${studentInfo.std_enrollterm || "?"} 學期`
+                                : `Year ${studentInfo.std_enrollyear}, Semester ${studentInfo.std_enrollterm || "?"}`
+                              : "-"}
                           </div>
                         </div>
                       </div>
@@ -315,6 +465,28 @@ export function StudentDataReviewStep({
                         </label>
                         <div className="text-base text-gray-700">
                           {studentInfo.std_termcount || "-"}
+                        </div>
+                      </div>
+
+                      {/* Nationality */}
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-600">
+                          {text.nationality}
+                        </label>
+                        <div className="text-base text-gray-700">
+                          {studentInfo.std_nation || "-"}
+                        </div>
+                      </div>
+
+                      {/* Identity */}
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-600">
+                          {text.identity}
+                        </label>
+                        <div className="text-base text-gray-700">
+                          {studentInfo.std_identity
+                            ? lookupIdentity(studentInfo.std_identity)
+                            : "-"}
                         </div>
                       </div>
                     </div>

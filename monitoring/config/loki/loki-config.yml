@@ -72,8 +72,13 @@ compactor:
 
 # Limits configuration
 limits_config:
+  # Loki used to log a flood of "entry has timestamp too old" errors on
+  # first deploy because Alloy on DB-VM replays whatever Docker has
+  # cached for each container — easily weeks old after a long-running
+  # staging stack. Bumping this to 720h (30d) suppresses that noise
+  # without weakening retention (separate setting in retention_period).
   reject_old_samples: true
-  reject_old_samples_max_age: 168h
+  reject_old_samples_max_age: 720h
   ingestion_rate_mb: 4
   ingestion_burst_size_mb: 6
   max_label_name_length: 1024

@@ -15,6 +15,86 @@ import { typedClient } from '../typed-client';
 import { toApiResponse } from '../compat';
 import { createFileUploadFormData, type MultipartFormData } from '../form-data-helpers';
 import type { ApiResponse } from '../types';
+import { getAuthToken } from '../../utils/url-validation';
+
+/**
+ * Resolve the auth token for direct `fetch()` downloads.
+ *
+ * The typed client keeps an in-memory copy, but that can be empty on a fresh
+ * page load / session restore where the token only lives in localStorage. The
+ * rest of the app reads the token straight from storage at call time, so fall
+ * back to the same keys here — otherwise these downloads go out without an
+ * Authorization header and the backend rejects them with 401
+ * ("Authorization header missing").
+ */
+function resolveAuthToken(): string | null {
+  const inMemory = typedClient.getToken();
+  if (inMemory) return inMemory;
+  if (typeof window === 'undefined') return null;
+  // Delegate to the app-wide fallback chain (localStorage/sessionStorage,
+  // auth_token + legacy token keys) instead of re-implementing a subset.
+  return getAuthToken() || null;
+}
+
+/**
+ * Fetch an authenticated file endpoint and trigger a browser download.
+ * Shared by template/file downloads: error-body extraction and RFC 5987
+ * filename handling live in one place.
+ */
+async function downloadAuthedFile(path: string, label: string, fallbackFilename: string): Promise<void> {
+  const token = resolveAuthToken();
+  const baseURL = typeof window !== "undefined" ? "" : process.env.INTERNAL_API_URL || "http://localhost:8000";
+
+  const response = await fetch(`${baseURL}${path}`, {
+    method: "GET",
+    headers: {
+      ...(token && { Authorization: `Bearer ${token}` }),
+    },
+  });
+
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const body = await response.clone().json();
+      detail = body?.message || body?.detail || "";
+    } catch {
+      // Non-JSON error body — surface the status alone.
+    }
+    throw new Error(`Failed to download ${label} (${response.status}${detail ? `: ${detail}` : ""})`);
+  }
+
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+
+  // Extract filename from Content-Disposition header
+  const contentDisposition = response.headers.get("content-disposition");
+  let filename = fallbackFilename;
+  if (contentDisposition) {
+    // Match filename*=UTF-8''encoded_name (RFC 5987)
+    const filenameMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/);
+    if (filenameMatch) {
+      filename = decodeURIComponent(filenameMatch[1].trim());
+    }
+  }
+
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(url);
+}
+
+/** Upload/details warnings come back as structured objects from the backend
+ *  (`{row, field, message}`); plain strings are tolerated for older records. */
+type BatchValidationWarning =
+  | string
+  | {
+      row?: number | null;
+      field?: string | null;
+      message?: string | null;
+    };
 
 type BatchUploadResult = {
   batch_id: number;
@@ -24,7 +104,7 @@ type BatchUploadResult = {
   validation_summary: {
     valid_count: number;
     invalid_count: number;
-    warnings: string[];
+    warnings: BatchValidationWarning[];
     errors: Array<{
       row: number;
       field?: string;
@@ -113,7 +193,7 @@ type BatchDetails = BatchHistoryItem & {
   validation_summary: {
     valid_count: number;
     invalid_count: number;
-    warnings: string[];
+    warnings: BatchValidationWarning[];
     errors: Array<{
       row: number;
       field?: string;
@@ -138,7 +218,7 @@ export function createBatchImportApi() {
       file: File,
       scholarshipType: string,
       academicYear: number,
-      semester: string
+      semester?: string
     ): Promise<ApiResponse<BatchUploadResult>> => {
       const formData = createFileUploadFormData({ file });
 
@@ -147,7 +227,9 @@ export function createBatchImportApi() {
           query: {
             scholarship_type: scholarshipType,
             academic_year: academicYear,
-            semester: semester,
+            // Yearly scholarships have no semester — omit the param entirely
+            // (an empty string would fail the endpoint's pattern check).
+            ...(semester ? { semester } : {}),
           },
         },
         body: formData as MultipartFormData<{ file: string }>,
@@ -181,7 +263,7 @@ export function createBatchImportApi() {
     ): Promise<ApiResponse<BatchUpdateRecordResult>> => {
       const response = await typedClient.raw.PATCH('/api/v1/college-review/batch-import/{batch_id}/records', {
         params: { path: { batch_id: batchId } },
-        body: { record_index: recordIndex, updates } as any,
+        body: { record_index: recordIndex, updates } as never,
       });
       return toApiResponse<BatchUpdateRecordResult>(response);
     },
@@ -269,44 +351,11 @@ export function createBatchImportApi() {
      * Type-safe: Returns blob for file download
      */
     downloadTemplate: async (scholarshipType: string): Promise<void> => {
-      const token = typedClient.getToken();
-      const baseURL = typeof window !== "undefined" ? "" : process.env.INTERNAL_API_URL || "http://localhost:8000";
-
-      const response = await fetch(
-        `${baseURL}/api/v1/college-review/batch-import/template?scholarship_type=${encodeURIComponent(scholarshipType)}`,
-        {
-          method: "GET",
-          headers: {
-            ...(token && { Authorization: `Bearer ${token}` }),
-          },
-        }
+      await downloadAuthedFile(
+        `/api/v1/college-review/batch-import/template?scholarship_type=${encodeURIComponent(scholarshipType)}`,
+        "template",
+        `batch_import_template_${scholarshipType}.xlsx`
       );
-
-      if (!response.ok) {
-        throw new Error("Failed to download template");
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-
-      // Extract filename from Content-Disposition header
-      const contentDisposition = response.headers.get("content-disposition");
-      let filename = `batch_import_template_${scholarshipType}.xlsx`;
-      if (contentDisposition) {
-        // Match filename*=UTF-8''encoded_name (RFC 5987)
-        const filenameMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/);
-        if (filenameMatch) {
-          filename = decodeURIComponent(filenameMatch[1].trim());
-        }
-      }
-
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
     },
 
     /**
@@ -325,49 +374,11 @@ export function createBatchImportApi() {
      * Type-safe: Returns blob for file download
      */
     downloadFile: async (batchId: number): Promise<void> => {
-      const token = typedClient.getToken();
-      const baseURL =
-        typeof window !== "undefined"
-          ? ""
-          : process.env.INTERNAL_API_URL || "http://localhost:8000";
-
-      const response = await fetch(
-        `${baseURL}/api/v1/college-review/batch-import/${batchId}/download`,
-        {
-          method: "GET",
-          headers: {
-            ...(token && { Authorization: `Bearer ${token}` }),
-          },
-        }
+      await downloadAuthedFile(
+        `/api/v1/college-review/batch-import/${batchId}/download`,
+        "file",
+        `batch_import_${batchId}.xlsx`
       );
-
-      if (!response.ok) {
-        throw new Error("Failed to download file");
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-
-      // Extract filename from Content-Disposition header
-      const contentDisposition = response.headers.get("content-disposition");
-      let filename = `batch_import_${batchId}.xlsx`;
-      if (contentDisposition) {
-        // Match filename*=UTF-8''encoded_name (RFC 5987)
-        const filenameMatch = contentDisposition.match(
-          /filename\*=UTF-8''([^;]+)/
-        );
-        if (filenameMatch) {
-          filename = decodeURIComponent(filenameMatch[1].trim());
-        }
-      }
-
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
     },
   };
 }

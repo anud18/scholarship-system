@@ -1,6 +1,7 @@
 "use client";
 
 import { AdminRuleManagement } from "@/components/admin-rule-management";
+import { logger } from "@/lib/utils/logger";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -26,7 +27,7 @@ export function RulesPanel() {
         setScholarshipTypes(response.data);
       }
     } catch (error) {
-      console.error("Failed to load scholarship types:", error);
+      logger.error("Failed to load scholarship types", { error: error });
     } finally {
       setLoadingScholarshipTypes(false);
     }

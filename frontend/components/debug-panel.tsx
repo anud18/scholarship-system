@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { logger } from "@/lib/utils/logger";
 import type { JSX } from "react";
 import {
   X,
@@ -22,11 +23,18 @@ interface DebugPanelProps {
   isTestMode?: boolean;
 }
 
+// JSON blobs fetched at runtime from JWT decoding and SIS API responses.
+// Shapes are intentionally loose because the panel renders whatever the
+// backend returned (including unknown / debug-only fields). Render code below
+// narrows specific fields on access.
+type JsonObject = Record<string, unknown>;
+type JsonValue = unknown;
+
 export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [portalData, setPortalData] = useState<any>(null);
-  const [studentData, setStudentData] = useState<any>(null);
-  const [jwtData, setJwtData] = useState<any>(null);
+  const [portalData, setPortalData] = useState<JsonObject | null>(null);
+  const [studentData, setStudentData] = useState<JsonObject | null>(null);
+  const [jwtData, setJwtData] = useState<JsonObject | null>(null);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(["jwt", "portal", "student"])
   );
@@ -88,8 +96,8 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
   };
 
   const detectPortalSource = (
-    jwtPayload: any,
-    portalData: any
+    jwtPayload: JsonObject | null,
+    portalData: JsonObject | null
   ): "mock" | "real" | "unknown" => {
     // If JWT has debug_mode flag, check portal data source
     if (jwtPayload?.debug_mode && portalData) {
@@ -120,8 +128,8 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
   };
 
   const detectStudentApiSource = (
-    jwtPayload: any,
-    studentData: any
+    jwtPayload: JsonObject | null,
+    studentData: JsonObject | null
   ): "mock" | "real" | "unknown" => {
     // If JWT has debug_mode flag, check student data source
     if (jwtPayload?.debug_mode && studentData) {
@@ -131,7 +139,7 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
       }
       // Check if API URL points to mock service
       if (
-        studentData.api_url &&
+        typeof studentData.api_url === "string" &&
         studentData.api_url.includes("mock-student-api")
       ) {
         return "mock";
@@ -170,11 +178,11 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
 
     setIsRefreshing(prev => new Set(prev).add("student"));
     try {
-      console.log("🔍 Fetching live student data from API...");
+      logger.debug("🔍 Fetching live student data from API...");
       const response = await apiClient.users.getStudentInfo();
       if (response.success && response.data) {
-        console.log("🔍 Live student data fetched:", response.data);
-        console.log("🔍 Semesters data:", response.data.semesters);
+        logger.debug("🔍 Live student data fetched:", response.data);
+        logger.debug("🔍 Semesters data:", response.data.semesters);
         setStudentData({
           source: "api_live",
           api_endpoint: "/users/student-info",
@@ -182,7 +190,7 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
           ...response.data,
         });
       } else {
-        console.log("🔍 Student API returned no data:", response.message);
+        logger.debug("🔍 Student API returned no data:", response.message);
         setStudentData({
           source: "api_live",
           api_endpoint: "/users/student-info",
@@ -191,7 +199,7 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
         });
       }
     } catch (error) {
-      console.error("🔍 Failed to fetch student data:", error);
+      logger.error("🔍 Failed to fetch student data:", error);
       setStudentData({
         source: "api_live",
         api_endpoint: "/users/student-info",
@@ -213,12 +221,12 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
 
     setIsRefreshing(prev => new Set(prev).add("portal"));
     try {
-      console.log("🔍 Assembling portal data from current user and JWT...");
+      logger.debug("🔍 Assembling portal data from current user and JWT...");
 
       // Get current user profile which contains portal-sourced data
       const response = await apiClient.users.getProfile();
       if (response.success && response.data) {
-        console.log("🔍 Portal-sourced user data:", response.data);
+        logger.debug("🔍 Portal-sourced user data:", response.data);
         setPortalData({
           source: "api_live",
           api_endpoint: "/users/me",
@@ -235,7 +243,7 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
             : null,
         });
       } else {
-        console.log("🔍 Portal API returned no data:", response.message);
+        logger.debug("🔍 Portal API returned no data:", response.message);
         setPortalData({
           source: "api_live",
           api_endpoint: "/users/me",
@@ -244,7 +252,7 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
         });
       }
     } catch (error) {
-      console.error("🔍 Failed to fetch portal data:", error);
+      logger.error("🔍 Failed to fetch portal data:", error);
       setPortalData({
         source: "api_live",
         api_endpoint: "/users/me",
@@ -262,11 +270,11 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
 
   useEffect(() => {
     if (!token) {
-      console.log("🔍 Debug Panel: No token available");
+      logger.debug("🔍 Debug Panel: No token available");
       return;
     }
 
-    console.log(
+    logger.debug(
       "🔍 Debug Panel: Processing token:",
       token.substring(0, 50) + "..."
     );
@@ -274,7 +282,7 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
     // Decode JWT to get portal data
     try {
       const parts = token.split(".");
-      console.log("🔍 JWT Parts count:", parts.length);
+      logger.debug("🔍 JWT Parts count:", parts.length);
 
       if (parts.length === 3) {
         // Add padding if needed for base64 decoding
@@ -283,35 +291,35 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
           payload += "=";
         }
 
-        console.log(
+        logger.debug(
           "🔍 Decoding JWT payload:",
           payload.substring(0, 50) + "..."
         );
         const decodedPayload = JSON.parse(atob(payload));
-        console.log("🔍 Decoded JWT payload:", decodedPayload);
+        logger.debug("🔍 Decoded JWT payload:", decodedPayload);
 
         setJwtData(decodedPayload);
 
         // Extract portal data from JWT
         if (decodedPayload.portal_data) {
-          console.log(
+          logger.debug(
             "🔍 Found portal_data in JWT:",
             decodedPayload.portal_data
           );
           setPortalData(decodedPayload.portal_data);
         } else {
-          console.log("🔍 No portal_data found in JWT");
+          logger.debug("🔍 No portal_data found in JWT");
         }
 
         // Extract student data from JWT
         if (decodedPayload.student_data) {
-          console.log(
+          logger.debug(
             "🔍 Found student_data in JWT:",
             decodedPayload.student_data
           );
           setStudentData(decodedPayload.student_data);
         } else {
-          console.log("🔍 No student_data found in JWT");
+          logger.debug("🔍 No student_data found in JWT");
         }
 
         // Detect data sources based on JWT payload and environment
@@ -320,22 +328,22 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
           studentApiSource: detectStudentApiSource(decodedPayload, studentData),
           environment: detectEnvironment(),
         };
-        console.log("🔍 Detected data sources:", newDataSourceInfo);
+        logger.debug("🔍 Detected data sources:", newDataSourceInfo);
         setDataSourceInfo(newDataSourceInfo);
 
         // Auto-fetch live API data when panel loads
-        console.log("🔍 Auto-fetching live API data...");
+        logger.debug("🔍 Auto-fetching live API data...");
         fetchStudentData();
         fetchPortalData();
       } else {
-        console.error(
+        logger.error(
           "🔍 Invalid JWT format - expected 3 parts, got:",
           parts.length
         );
       }
     } catch (error) {
-      console.error("🔍 Failed to decode JWT:", error);
-      console.error(
+      logger.error("🔍 Failed to decode JWT:", error);
+      logger.error(
         "🔍 Token parts:",
         token
           .split(".")
@@ -362,11 +370,15 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
       setCopiedField(field);
       setTimeout(() => setCopiedField(null), 2000);
     } catch (error) {
-      console.error("Failed to copy:", error);
+      logger.error("Failed to copy:", error);
     }
   };
 
-  const renderValue = (value: any, path: string = ""): JSX.Element => {
+  // Recursive JSON renderer. The input is intentionally `JsonValue` (= unknown)
+  // because the panel shows whatever shape the backend / JWT returned, including
+  // novel fields added by future endpoints. All property accesses inside narrow
+  // via typeof / Array.isArray checks first.
+  const renderValue = (value: JsonValue, path: string = ""): JSX.Element => {
     if (value === null || value === undefined) {
       return <span className="text-gray-400">null</span>;
     }
@@ -738,34 +750,40 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
                         <div>
                           <div className="font-semibold text-sm mb-2">基本資料</div>
                           <div className="font-mono text-xs overflow-x-auto bg-white p-2 rounded">
-                            {renderValue(studentData.student || studentData)}
+                            {renderValue((studentData.student as JsonValue) ?? (studentData as JsonValue))}
                           </div>
                         </div>
 
                         {/* Debug: Show what's in studentData */}
                         <div className="text-xs text-gray-500 bg-yellow-50 p-2 rounded">
                           Debug: semesters exists: {String(!!studentData.semesters)} |
-                          length: {studentData.semesters?.length || 0} |
+                          length: {Array.isArray(studentData.semesters) ? studentData.semesters.length : 0} |
                           keys: {Object.keys(studentData).join(', ')}
                         </div>
 
                         {/* Semester Data */}
-                        {studentData.semesters && studentData.semesters.length > 0 && (
+                        {Array.isArray(studentData.semesters) && studentData.semesters.length > 0 && (
                           <div>
                             <div className="font-semibold text-sm mb-2">
                               學期資料 ({studentData.semesters.length} 筆)
                             </div>
                             <div className="space-y-2">
-                              {studentData.semesters.map((semester: any, index: number) => (
-                                <div key={index} className="bg-white p-3 rounded border border-gray-200">
-                                  <div className="font-semibold text-xs mb-2 text-blue-600">
-                                    {semester.academic_year || semester.trm_year} 學年 第 {semester.term || semester.trm_term} 學期
+                              {(studentData.semesters as JsonObject[]).map(
+                                (semester: JsonObject, index: number) => (
+                                  <div
+                                    key={index}
+                                    className="bg-white p-3 rounded border border-gray-200"
+                                  >
+                                    <div className="font-semibold text-xs mb-2 text-blue-600">
+                                      {String(semester.academic_year ?? semester.trm_year ?? "")} 學年 第{" "}
+                                      {String(semester.term ?? semester.trm_term ?? "")} 學期
+                                    </div>
+                                    <div className="font-mono text-xs overflow-x-auto">
+                                      {renderValue(semester)}
+                                    </div>
                                   </div>
-                                  <div className="font-mono text-xs overflow-x-auto">
-                                    {renderValue(semester)}
-                                  </div>
-                                </div>
-                              ))}
+                                )
+                              )}
                             </div>
                           </div>
                         )}

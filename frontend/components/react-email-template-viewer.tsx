@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { logger } from "@/lib/utils/logger";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -10,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Eye, Mail, Code, FileText, AlertCircle, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
-import { renderEmailTemplate } from "@/lib/email-renderer";
+import { useCspNonce } from "@/components/providers/csp-nonce";
 
 interface TemplateVariable {
   name: string;
@@ -37,7 +38,7 @@ interface PreviewDialogProps {
 
 function PreviewDialog({ template, open, onClose }: PreviewDialogProps) {
   const [testData, setTestData] = useState<Record<string, string>>({});
-  const [previewHtml, setPreviewHtml] = useState<string>("");
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const [isSendingTest, setIsSendingTest] = useState(false);
   const [testEmail, setTestEmail] = useState("");
@@ -62,10 +63,19 @@ function PreviewDialog({ template, open, onClose }: PreviewDialogProps) {
     setError(null);
 
     try {
-      const html = await renderEmailTemplate(template.name as any, testData);
-      setPreviewHtml(html);
+      const res = await fetch("/api/email/render", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ template_name: template.name, context: testData }),
+      });
+      const result = await res.json();
+      if (result.success && result.html) {
+        setPreviewHtml(result.html);
+      } else {
+        setError(result.error || "渲染模板失敗");
+      }
     } catch (err) {
-      console.error("Failed to render template:", err);
+      logger.error("Failed to render template", { err: err });
       setError(err instanceof Error ? err.message : "渲染模板失敗");
     } finally {
       setIsLoadingPreview(false);
@@ -83,20 +93,28 @@ function PreviewDialog({ template, open, onClose }: PreviewDialogProps) {
     setSuccess(null);
 
     try {
-      // First render the email
-      const html = await renderEmailTemplate(template.name as any, testData);
+      // Render via server-side API route (same path as real email system)
+      const res = await fetch("/api/email/render", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ template_name: template.name, context: testData }),
+      });
+      const result = await res.json();
+      if (!result.success || !result.html) {
+        throw new Error(result.error || "渲染模板失敗");
+      }
 
       // Then send it via the email API
       await api.emailManagement.sendSimpleTestEmail({
         recipient_email: testEmail,
         subject: `[測試] ${template.display_name}`,
-        body: html,
+        body: result.html,
       });
 
       setSuccess(`測試郵件已發送至 ${testEmail}`);
       setTimeout(() => setSuccess(null), 5000);
     } catch (err) {
-      console.error("Failed to send test email:", err);
+      logger.error("Failed to send test email", { err: err });
       setError(err instanceof Error ? err.message : "發送測試郵件失敗");
     } finally {
       setIsSendingTest(false);
@@ -173,9 +191,8 @@ function PreviewDialog({ template, open, onClose }: PreviewDialogProps) {
               <div className="border rounded-lg overflow-hidden">
                 <iframe
                   srcDoc={previewHtml}
-                  className="w-full h-[400px]"
+                  className="w-full h-[600px]"
                   title="Email Preview"
-                  sandbox="allow-same-origin"
                 />
               </div>
             </div>
@@ -236,6 +253,9 @@ function PreviewDialog({ template, open, onClose }: PreviewDialogProps) {
 }
 
 export function ReactEmailTemplateViewer() {
+  // The 查看源碼 popup is an about:blank window, which INHERITS this document's
+  // CSP — so the <style> it writes needs the nonce like any other (#1273).
+  const nonce = useCspNonce();
   const [templates, setTemplates] = useState<ReactEmailTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -252,22 +272,22 @@ export function ReactEmailTemplateViewer() {
 
     try {
       const response = await api.emailManagement.getReactEmailTemplates();
-      console.log("📧 React Email Templates API response:", response);
+      logger.debug("📧 React Email Templates API response:", response);
 
       // Check if data is an array
       if (Array.isArray(response.data)) {
-        console.log(`✅ Found ${response.data.length} React Email templates`);
+        logger.debug(`✅ Found ${response.data.length} React Email templates`);
         setTemplates(response.data);
       } else if (response.success && response.data) {
-        console.warn("⚠️ Unexpected response data format:", response.data);
+        logger.warn("⚠️ Unexpected response data format:", response.data);
         setTemplates([]);
         setError("回應格式錯誤：無法解析模板列表");
       } else {
-        console.warn("⚠️ No templates data in response:", response);
+        logger.warn("⚠️ No templates data in response:", response);
         setTemplates([]);
       }
     } catch (err) {
-      console.error("❌ Failed to fetch React Email templates:", err);
+      logger.error("❌ Failed to fetch React Email templates", { err: err });
       setError(err instanceof Error ? err.message : "載入模板失敗");
     } finally {
       setIsLoading(false);
@@ -290,7 +310,7 @@ export function ReactEmailTemplateViewer() {
           <html>
             <head>
               <title>${template.display_name} - 源碼</title>
-              <style>
+              <style${nonce ? ` nonce="${nonce}"` : ""}>
                 body { margin: 0; font-family: monospace; }
                 pre { margin: 0; padding: 20px; background: #1e1e1e; color: #d4d4d4; overflow: auto; }
               </style>
@@ -303,7 +323,7 @@ export function ReactEmailTemplateViewer() {
         sourceWindow.document.close();
       }
     } catch (err) {
-      console.error("Failed to fetch source:", err);
+      logger.error("Failed to fetch source", { err: err });
       setError(err instanceof Error ? err.message : "載入源碼失敗");
     }
   };

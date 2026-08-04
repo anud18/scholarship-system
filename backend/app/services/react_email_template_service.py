@@ -123,8 +123,8 @@ class ReactEmailTemplateService:
                 metadata = cls._parse_template_file(file_path)
                 if metadata:
                     templates.append(metadata)
-            except Exception as e:
-                logger.error(f"Failed to parse template {file_path.name}: {e}")
+            except Exception:
+                logger.exception(f"Failed to parse template {file_path.name}")
                 continue
 
         # Sort by display name
@@ -157,8 +157,8 @@ class ReactEmailTemplateService:
 
         try:
             return cls._parse_template_file(file_path)
-        except Exception as e:
-            logger.error(f"Failed to parse template {template_name}: {e}")
+        except Exception:
+            logger.exception(f"Failed to parse template {template_name}")
             return None
 
     @classmethod
@@ -287,6 +287,6 @@ class ReactEmailTemplateService:
 
         try:
             return file_path.read_text(encoding="utf-8")
-        except Exception as e:
-            logger.error(f"Failed to read template source {template_name}: {e}")
+        except Exception:
+            logger.exception(f"Failed to read template source {template_name}")
             return None

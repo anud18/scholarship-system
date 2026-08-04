@@ -41,11 +41,13 @@ type ReferenceDataAll = {
  * Fetcher function for SWR
  */
 const fetchAllReferenceData = async (): Promise<ReferenceDataAll> => {
-  const response = await api.referenceData.getAll() as any;
+  const response = (await api.referenceData.getAll()) as
+    | { data?: ReferenceDataAll }
+    | ReferenceDataAll;
 
   // Handle ApiResponse format
-  if (response?.data) {
-    return response.data as ReferenceDataAll;
+  if (response && typeof response === "object" && "data" in response && response.data) {
+    return response.data;
   }
 
   // Fallback if response is already the data

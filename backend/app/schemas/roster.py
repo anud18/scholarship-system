@@ -45,15 +45,33 @@ class RosterItemResponse(BaseModel):
     id: int
     roster_id: int
     application_id: int
-    student_id_number: str
+    student_id_number: str  # 身分證字號 (national ID / std_pid)
+    student_id: Optional[str] = None  # 學號 (std_stdcode), enriched from student_data
     student_name: str
+    student_email: Optional[str] = None
+    scholarship_name: Optional[str] = None
     scholarship_amount: Decimal
+    scholarship_subtype: Optional[str] = None
+    allocation_year: Optional[int] = None
+    bank_account: Optional[str] = None
     verification_status: StudentVerificationStatus
-    verification_snapshot: Optional[Dict[str, Any]] = None  # 對應 model 欄位名稱
-    is_included: bool  # 對應 model 欄位名稱
-    exclusion_reason: Optional[str] = None  # 對應 model 欄位名稱
+    verification_message: Optional[str] = None
+    verification_snapshot: Optional[Dict[str, Any]] = None
+    is_included: bool
+    exclusion_reason: Optional[str] = None
+    # 資格驗證快照（造冊產生當下；failed_rules/warning_rules/details 都在快照內）
+    rule_validation_result: Optional[Dict[str, Any]] = None
+    # PaymentRosterItem.is_eligible model property; None = 無快照（較舊造冊）
+    is_eligible: Optional[bool] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
+    # 學生學院/系所資訊（從 application.student_data 取得，非 ORM 欄位）
+    college_code: Optional[str] = None
+    college_name: Optional[str] = None
+    department_name: Optional[str] = None
+    # 分發資訊（造冊產生時快照，儲存於 DB）
+    application_identity: Optional[str] = None  # e.g. "114新申請", "114續領"
+    allocated_sub_type: Optional[str] = None  # 分發到的子類型 e.g. "nstc"
 
 
 class RosterAuditLogResponse(BaseModel):
@@ -68,7 +86,9 @@ class RosterAuditLogResponse(BaseModel):
     title: str
     description: Optional[str] = None
     audit_metadata: Optional[Dict[str, Any]] = None
-    created_by_user_id: Optional[int] = None
+    user_id: Optional[int] = None
+    user_name: Optional[str] = None
+    user_role: Optional[str] = None
     created_at: datetime
 
 
@@ -80,10 +100,20 @@ class RosterResponse(BaseModel):
     id: int
     roster_code: str
     scholarship_configuration_id: int
+    # Structured links to the owning scholarship config, derived from the
+    # related ScholarshipConfiguration so reports/audits can filter without
+    # parsing roster_code (issue #1033). config_id duplicates
+    # scholarship_configuration_id under the name the frontend expects.
+    config_id: Optional[int] = None
+    scholarship_type_id: Optional[int] = None
+    semester: Optional[str] = None
     ranking_id: Optional[int] = None  # 關聯的排名ID（可選）
     period_label: str
     roster_cycle: RosterCycle
     academic_year: int
+    sub_type: Optional[str] = None  # 獎學金子類型 (e.g. nstc, moe_1w)
+    allocation_year: Optional[int] = None  # 消耗配額的學年度
+    project_number: Optional[str] = None  # 計畫編號
     status: RosterStatus
     trigger_type: RosterTriggerType
     qualified_count: int
@@ -215,7 +245,7 @@ class RosterItemSummaryResponse(BaseModel):
     student_id_number: str
     scholarship_amount: Decimal
     verification_status: StudentVerificationStatus
-    is_qualified: bool
+    is_included: bool
 
 
 # 統計和報表相關模型

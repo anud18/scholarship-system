@@ -2,7 +2,7 @@
 Security utilities for authentication and authorization
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import jwt
@@ -28,9 +28,9 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta]
     """Create JWT access token"""
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.access_token_expire_minutes)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
 
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
@@ -40,7 +40,7 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta]
 def create_refresh_token(data: Dict[str, Any]) -> str:
     """Create JWT refresh token"""
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(days=settings.refresh_token_expire_days)
+    expire = datetime.now(timezone.utc) + timedelta(days=settings.refresh_token_expire_days)
     to_encode.update({"exp": expire, "type": "refresh"})
 
     encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
@@ -52,10 +52,10 @@ def verify_token(token: str) -> Dict[str, Any]:
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
         return payload
-    except jwt.ExpiredSignatureError:
-        raise AuthenticationError("Token has expired")
-    except jwt.PyJWTError:
-        raise AuthenticationError("Invalid token")
+    except jwt.ExpiredSignatureError as exc:
+        raise AuthenticationError("Token has expired") from exc
+    except jwt.PyJWTError as exc:
+        raise AuthenticationError("Invalid token") from exc
 
 
 async def get_current_user(
@@ -74,8 +74,8 @@ async def get_current_user(
         user_id = int(user_id_str)  # Convert string back to int
     except AuthenticationError:
         raise  # Re-raise authentication errors as-is
-    except Exception:
-        raise AuthenticationError("Could not validate credentials")
+    except Exception as exc:
+        raise AuthenticationError("Could not validate credentials") from exc
 
     # Get user from database with relationships that will be used in-request
     stmt = select(User).options(selectinload(User.admin_scholarships)).where(User.id == user_id)
@@ -213,7 +213,7 @@ async def check_college_academic_year_permission(user: User, academic_year: int,
         return True
 
     # College users can only access current and previous academic year
-    current_year = datetime.now().year - 1911  # ROC year
+    current_year = datetime.now(timezone.utc).year - 1911  # ROC year
     allowed_years = [current_year - 1, current_year, current_year + 1]
     return academic_year in allowed_years
 

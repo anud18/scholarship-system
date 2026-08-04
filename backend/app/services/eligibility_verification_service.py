@@ -198,7 +198,7 @@ class EligibilityVerificationService:
             return is_eligible, failure_reasons, verification_results
 
         except Exception as e:
-            logger.error(f"Error in eligibility verification: {str(e)}")
+            logger.exception("Error in eligibility verification")
             return False, [f"Verification error: {str(e)}"], {}
 
     def _check_academic_eligibility(
@@ -323,8 +323,8 @@ class EligibilityVerificationService:
                     error_msg = rule.error_message or f"Rule failed: {rule.rule_name}"
                     details["failures"].append(error_msg)
 
-            except Exception as e:
-                logger.error(f"Error validating rule {rule.id}: {str(e)}")
+            except Exception:
+                logger.exception(f"Error validating rule {rule.id}")
                 if rule.is_required:
                     details["failures"].append(f"Rule validation error: {rule.rule_name}")
 
@@ -474,7 +474,7 @@ class EligibilityVerificationService:
                         results["ineligible_students"].append(student_result)
 
                 except Exception as e:
-                    logger.error(f"Error verifying eligibility for student {student_id}: {str(e)}")
+                    logger.exception(f"Error verifying eligibility for student {student_id}")
                     results["verification_errors"].append({"student_id": student_id, "error": str(e)})
 
             results["eligible_count"] = len(results["eligible_students"])
@@ -488,7 +488,7 @@ class EligibilityVerificationService:
             return results
 
         except Exception as e:
-            logger.error(f"Error in batch eligibility verification: {str(e)}")
+            logger.exception("Error in batch eligibility verification")
             return {
                 "error": str(e),
                 "total_students": 0,

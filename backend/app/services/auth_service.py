@@ -2,10 +2,11 @@
 Authentication service for user login and registration
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AuthenticationError, ConflictError
@@ -51,7 +52,20 @@ class AuthService:
         )
 
         self.db.add(user)
-        await self.db.commit()
+        try:
+            await self.db.commit()
+        except IntegrityError as e:
+            # Concurrent registration race: another request inserted a row
+            # with the same nycu_id (or email) between our check above and
+            # this commit. The DB-level unique constraint catches it; convert
+            # to ConflictError so the caller gets a 409 instead of a 500.
+            await self.db.rollback()
+            msg = str(e.orig) if getattr(e, "orig", None) else str(e)
+            if "nycu_id" in msg:
+                raise ConflictError("NYCU ID already exists") from e
+            if "email" in msg:
+                raise ConflictError("Email already registered") from e
+            raise ConflictError("Conflict during registration") from e
         await self.db.refresh(user)
 
         return UserResponse.model_validate(user)
@@ -67,7 +81,7 @@ class AuthService:
             raise AuthenticationError("Invalid nycu_id or email")
 
         # Update last login time
-        user.last_login_at = datetime.utcnow()
+        user.last_login_at = datetime.now(timezone.utc)
         await self.db.commit()
 
         return user
@@ -83,13 +97,11 @@ class AuthService:
         # Add debug data in test/development mode or when explicitly requested
         from app.core.config import settings
 
-        is_debug_mode = (
-            settings.environment in ["development", "testing"]
-            or settings.portal_test_mode
-            or settings.debug
-            # Also include for test deployments (when host contains test indicators)
-            or any(indicator in settings.base_url.lower() for indicator in ["test", "140.113.7.148", "localhost"])
-        )
+        # SECURITY: only embed raw portal/student data in the JWT for explicit
+        # local development/testing. The previous URL-substring heuristic (matching
+        # "test"/host IPs in base_url) leaked PII into signed-but-unencrypted tokens
+        # on any staging host whose URL happened to contain those substrings.
+        is_debug_mode = settings.environment in ["development", "testing"] or settings.portal_test_mode
 
         if is_debug_mode:
             if portal_data:

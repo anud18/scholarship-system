@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { logger } from "@/lib/utils/logger";
 
 const INTERNAL_API_URL = process.env.INTERNAL_API_URL || "http://backend:8000";
 
@@ -48,7 +49,7 @@ export async function POST(
     // Construct backend URL using INTERNAL_API_URL (Docker internal network)
     const backendUrl = `${INTERNAL_API_URL}/api/v1/scholarships/${encodeURIComponent(type)}/upload-terms`;
 
-    console.log(`[Upload Terms Proxy] Forwarding file "${file.name}" to: ${backendUrl}`);
+    logger.debug(`[Upload Terms Proxy] Forwarding file "${file.name}" to: ${backendUrl}`);
 
     // Create a fresh FormData instance to avoid stream consumption issues
     const backendFormData = new FormData();
@@ -70,7 +71,7 @@ export async function POST(
     // Return response with same status code
     return NextResponse.json(data, { status: response.status });
   } catch (error) {
-    console.error("[Upload Terms Proxy] Error:", error);
+    logger.error("[Upload Terms Proxy] Error", { error: error });
     return NextResponse.json(
       {
         success: false,

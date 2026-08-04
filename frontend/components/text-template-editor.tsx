@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { logger } from "@/lib/utils/logger";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -63,7 +64,7 @@ function EditDialog({ template, open, onClose, onSave }: EditDialogProps) {
       }
       onClose();
     } catch (err) {
-      console.error("Failed to save template:", err);
+      logger.error("Failed to save template", { err: err });
       setError(err instanceof Error ? err.message : "保存模板失敗");
     } finally {
       setIsSaving(false);
@@ -338,7 +339,7 @@ export function TextTemplateEditor() {
       const response = await api.emailManagement.getEmailTemplates();
       setTemplates(response.data || []);
     } catch (err) {
-      console.error("Failed to fetch templates:", err);
+      logger.error("Failed to fetch templates", { err: err });
       setError(err instanceof Error ? err.message : "載入模板失敗");
     } finally {
       setIsLoading(false);

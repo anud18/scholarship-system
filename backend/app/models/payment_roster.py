@@ -17,7 +17,6 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
-    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -63,6 +62,57 @@ class StudentVerificationStatus(enum.Enum):
     NOT_FOUND = "not_found"  # 查無此人
 
 
+# 學籍驗證狀態的繁體中文顯示名稱（單一真相來源）。exclusion_reason 會直接呈現在
+# 造冊詳情與 Excel 的「排除原因」欄位，屬使用者可見文案，不得外洩英文列舉值。
+# excel_export_service / student_verification_service 的標籤一律轉呼叫此表。
+STUDENT_VERIFICATION_STATUS_LABELS = {
+    StudentVerificationStatus.VERIFIED: "已驗證",
+    StudentVerificationStatus.GRADUATED: "已畢業",
+    StudentVerificationStatus.SUSPENDED: "休學中",
+    StudentVerificationStatus.WITHDRAWN: "已退學",
+    StudentVerificationStatus.API_ERROR: "驗證錯誤",
+    StudentVerificationStatus.NOT_FOUND: "查無此人",
+}
+
+
+def verification_status_label(status: StudentVerificationStatus) -> str:
+    """取得學籍驗證狀態的繁體中文顯示名稱（未知狀態退回原始值）。"""
+    return STUDENT_VERIFICATION_STATUS_LABELS.get(status, getattr(status, "value", str(status)))
+
+
+# exclusion_reason 前綴：標記「鎖定後手動移除」與「比對分發移除」兩種
+# 人為移除（相對於產生造冊時因資格不符的自動排除）。由 roster_service 寫入、
+# 由 excel_export_service 的審閱視圖過濾——共用同一份常數避免兩端漂移。
+MANUAL_REMOVAL_PREFIX_LOCKED = "鎖定後移除"
+MANUAL_REMOVAL_PREFIX_RECONCILE = "比對分發移除"
+MANUAL_REMOVAL_PREFIXES = (MANUAL_REMOVAL_PREFIX_LOCKED, MANUAL_REMOVAL_PREFIX_RECONCILE)
+
+# 「排除造冊明細」(POST /{roster_id}/items/{item_id}/exclude) 的原因分類 →
+# 顯示標籤。寫入的 exclusion_reason 形如「學生繳回」或「其他: 補充說明」。
+MANUAL_EXCLUSION_CATEGORY_LABELS = {
+    "returned": "學生繳回",
+    "declined": "學生放棄",
+    "other": "其他",
+}
+
+# 「人為排除」= 管理員針對這位學生本身下的判斷（排除明細／鎖定後移除）。
+# 重建造冊時必須跨重建保留，否則已繳回／已放棄的學生會被重新納入造冊，
+# 並灌水該生的累計領取月份（博士 36 個月上限的依據）。
+#
+# 刻意「不」包含 MANUAL_REMOVAL_PREFIX_RECONCILE（比對分發移除）：那不是對學生的
+# 判斷，而是「不在分發名單」這個事實的推導結果，重建時會重新推導。一筆帶著該原因
+# 卻仍出現在重建名單中的申請，代表它已重新獲得分發——原因已然過期，保留它會讓
+# 學生卡在一個當下不成立的理由下。
+MANUAL_EXCLUSION_PREFIXES = (MANUAL_REMOVAL_PREFIX_LOCKED,) + tuple(MANUAL_EXCLUSION_CATEGORY_LABELS.values())
+
+
+def is_manual_exclusion(exclusion_reason: str | None) -> bool:
+    """該筆排除是否為管理員針對學生的人為決定，而非可重新推導的自動判定。"""
+    if not exclusion_reason:
+        return False
+    return exclusion_reason.startswith(MANUAL_EXCLUSION_PREFIXES)
+
+
 class PaymentRoster(Base):
     """造冊主檔"""
 
@@ -79,6 +129,14 @@ class PaymentRoster(Base):
     period_label = Column(String(20), nullable=False, index=True)  # 2025-01, 2025-H1, 2025
     academic_year = Column(Integer, nullable=False)  # 113
     roster_cycle = Column(Enum(RosterCycle, values_callable=lambda obj: [e.value for e in obj]), nullable=False)
+
+    # 矩陣分發造冊欄位（多年補發支援）
+    sub_type = Column(String(50), nullable=True)  # 獎學金子類型 (e.g. nstc, moe_1w)，非矩陣模式為 NULL
+    allocation_config_id = Column(
+        Integer, ForeignKey("scholarship_configurations.id"), nullable=True
+    )  # 消耗配額的 config (NULL 僅代表 whole-period sentinel)
+    allocation_year = Column(Integer, nullable=True)  # 消耗 config 的 academic_year — 凍結 display snapshot (§8)
+    project_number = Column(String(100), nullable=True)  # 計畫編號 e.g. 115RXXXXXXX
 
     # 造冊狀態與觸發方式
     status = Column(
@@ -116,22 +174,26 @@ class PaymentRoster(Base):
     notes = Column(Text)
     processing_log = Column(JSON)  # 處理過程日誌
 
+    # Set True when an item is removed from a LOCKED roster — UI shows
+    # "請重新匯出 Excel" hint. Cleared after re-export.
+    excel_stale = Column(Boolean, default=False, nullable=False, server_default="false")
+
     # 時間戳記
     created_at = Column(DateTime(timezone=True), default=func.now())
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
 
     # 關聯
-    scholarship_configuration = relationship("ScholarshipConfiguration")
+    scholarship_configuration = relationship("ScholarshipConfiguration", foreign_keys=[scholarship_configuration_id])
     ranking = relationship("CollegeRanking", lazy="select")  # 關聯的排名（可選）
     creator = relationship("User", foreign_keys=[created_by])
     locker = relationship("User", foreign_keys=[locked_by])
     items = relationship("PaymentRosterItem", back_populates="roster", cascade="all, delete-orphan")
     audit_logs = relationship("RosterAuditLog", back_populates="roster", cascade="all, delete-orphan")
 
-    # 唯一約束：每個獎學金配置+期間標記只能有一個造冊（除非明確覆蓋）
-    __table_args__ = (
-        UniqueConstraint("scholarship_configuration_id", "period_label", name="uq_roster_scholarship_period"),
-    )
+    # 唯一約束：每個獎學金配置+期間+子類型+消耗 config 只能有一個造冊
+    # 實際約束由 migration 建立的 functional unique index 實施：
+    # UNIQUE(scholarship_configuration_id, period_label, COALESCE(allocation_config_id, -1), COALESCE(sub_type, ''))
+    __table_args__ = ()
 
     def __repr__(self):
         return f"<PaymentRoster(id={self.id}, code={self.roster_code}, status={self.status})>"
@@ -161,8 +223,8 @@ class PaymentRoster(Base):
         self.locked_by = locked_by_user_id
 
     def generate_excel_filename(self) -> str:
-        """產生Excel檔案名稱"""
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        """產生Excel檔案名稱 (timestamp in UTC for cross-server consistency)"""
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         return f"roster_{self.roster_code}_{timestamp}.xlsx"
 
 
@@ -176,7 +238,13 @@ class PaymentRosterItem(Base):
     application_id = Column(Integer, ForeignKey("applications.id"), nullable=False, index=True)
 
     # 學生基本資料（造冊當時快照）
-    student_id_number = Column(String(20), nullable=False)  # 身分證字號
+    student_id_number = Column(String(20), nullable=False)  # 身分證字號 (national ID / std_pid)
+    # 學號 (student number / std_stdcode) snapshot — the system's canonical
+    # student identifier, used for cross-roster student matching (received-months
+    # cumulative count, 36-month cap, scholarship history). student_id_number was
+    # repurposed to hold the national ID for the 身分證字號 Excel column, so a
+    # separate 學號 snapshot is required for identity matching.
+    student_number = Column(String(20), nullable=True, index=True)
     student_name = Column(String(100), nullable=False)  # 姓名
     student_email = Column(String(255))  # Email
 
@@ -197,6 +265,12 @@ class PaymentRosterItem(Base):
     scholarship_name = Column(String(200), nullable=False)
     scholarship_amount = Column(Numeric(10, 2), nullable=False)
     scholarship_subtype = Column(String(50))
+    allocation_config_id = Column(
+        Integer, ForeignKey("scholarship_configurations.id"), nullable=True
+    )  # 消耗配額的 config (NULL 僅代表 whole-period sentinel)
+    allocation_year = Column(Integer, nullable=True)  # 消耗 config 的 academic_year — 凍結 display snapshot (§8)
+    allocated_sub_type = Column(String(50), nullable=True)  # 分發到的子類型快照 (e.g. nstc, moe_1w)
+    application_identity = Column(String(50), nullable=True)  # 申請身分快照 (e.g. "114新申請", "114續領")
 
     # 學籍驗證結果
     verification_status = Column(
@@ -208,7 +282,8 @@ class PaymentRosterItem(Base):
     verification_at = Column(DateTime(timezone=True))  # 驗證時間
     verification_snapshot = Column(JSON)  # 驗證時的完整資料快照
 
-    # 是否納入造冊
+    # 是否納入造冊 — 造冊人數/總金額的唯一判準（Excel「納入造冊」欄同源）。
+    # 缺少郵局帳號「不」影響此旗標：學生補件即可撥款，僅在 Excel 說明欄提醒。
     is_included = Column(Boolean, default=True, nullable=False)
     exclusion_reason = Column(String(500))  # 排除原因
 
@@ -249,9 +324,16 @@ class PaymentRosterItem(Base):
         return f"<PaymentRosterItem(id={self.id}, student={self.student_name}, amount={self.scholarship_amount})>"
 
     @property
-    def is_qualified(self) -> bool:
-        """檢查是否合格"""
-        return self.verification_status == StudentVerificationStatus.VERIFIED and self.is_included and self.bank_account
+    def is_eligible(self) -> bool | None:
+        """規則資格：造冊產生當下的獎學金規則驗證快照判定。
+
+        Distinct from is_included (whether the row is counted in the roster) —
+        this reflects the rule engine's verdict frozen at generation time.
+        None when the item predates rule-validation snapshots.
+        """
+        if not self.rule_validation_result:
+            return None
+        return bool(self.rule_validation_result.get("is_eligible", not self.failed_rules))
 
     def generate_excel_remarks(self, period_label: str, scholarship_code: str) -> str:
         """產生Excel說明欄內容"""
@@ -260,7 +342,7 @@ class PaymentRosterItem(Base):
         if not self.is_included:
             remarks.append(f"排除原因: {self.exclusion_reason}")
         elif self.verification_status != StudentVerificationStatus.VERIFIED:
-            remarks.append(f"學籍狀態: {self.verification_status.value}")
+            remarks.append(f"學籍狀態: {verification_status_label(self.verification_status)}")
         elif not self.bank_account:
             remarks.append("缺少郵局帳號資訊")
         else:

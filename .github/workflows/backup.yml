@@ -1,0 +1,322 @@
+# Production Backup Workflow
+# Copy this file to the PRIVATE production repository at .github/workflows/backup.yml
+#
+# Rewritten for the real two-VM production topology and the self-hosted runner.
+# The previous version could not work as written:
+#   - `runs-on: ubuntu-latest` + `ssh $PRODUCTION_USER@$PRODUCTION_SERVER`:
+#     GitHub-hosted runners cannot route to the campus VMs (the same constraint
+#     that forced deploy.yml onto a self-hosted runner).
+#   - `docker compose exec -T postgres pg_dump` assumed PostgreSQL sits next to
+#     the app. It does not — the AP VM runs app+nginx+redis, while PostgreSQL
+#     and object storage live on the DB VM. There is no `postgres` container to
+#     exec into on the runner host.
+#   - Three quoted-heredoc bodies were written at column 0, which terminated
+#     the enclosing `run: |` block scalar and made the whole file unparseable,
+#     so GitHub rejected it on every push.
+#
+# Now: the job runs ON the AP VM and reaches PostgreSQL over TCP with the same
+# DB_* secrets deploy.yml already uses. No SSH, no PRODUCTION_SSH_KEY.
+#
+# The DB VM has no internet access, so backups stay on disk for IT to collect —
+# see the manifest written by the verify job.
+#
+# Prerequisites:
+#   - Self-hosted runner on the production AP VM, labels [self-hosted, linux].
+#   - Secrets: DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME.
+#   - Passwordless sudo for the runner user (already required by deploy.yml).
+
+name: Backup Production Data
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM UTC
+  workflow_dispatch:
+    inputs:
+      backup_type:
+        description: 'Type of backup'
+        required: true
+        type: choice
+        options:
+          - full
+          - database-only
+          - files-only
+        default: 'full'
+      retention_days:
+        description: 'Keep backups for N days'
+        required: false
+        type: number
+        default: 7
+
+env:
+  BACKUP_DIR: /var/backups/scholarship-system
+  RETENTION_DAYS: 7
+  # Must match the server major version or pg_dump refuses to run.
+  PG_IMAGE: postgres:15-alpine
+
+jobs:
+  backup-database:
+    name: Backup PostgreSQL Database
+    runs-on: [self-hosted, linux]
+    if: |
+      github.event_name == 'schedule' ||
+      github.event.inputs.backup_type == 'full' ||
+      github.event.inputs.backup_type == 'database-only'
+
+    steps:
+      - name: Create database backup
+        id: db-backup
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+        run: |
+          set -euo pipefail
+          BACKUP_DATE=$(date +%Y%m%d)
+          BACKUP_FILE="database-backup-$(date +%Y%m%d-%H%M%S).sql.gz"
+          DEST="${BACKUP_DIR}/database/${BACKUP_DATE}"
+
+          sudo mkdir -p "$DEST"
+          sudo chown -R "$(id -u):$(id -g)" "${BACKUP_DIR}"
+          chmod 750 "${BACKUP_DIR}"
+
+          echo "📁 Backup directory: $DEST"
+          echo "🗄️  Dumping ${DB_NAME} from ${DB_HOST}:${DB_PORT}"
+
+          # pg_dump runs in a throwaway container so the AP VM needs no
+          # postgresql-client package. `set -o pipefail` above means a failed
+          # dump fails the step instead of leaving a truncated .gz behind.
+          docker run --rm -e PGPASSWORD="$DB_PASSWORD" "$PG_IMAGE" \
+            pg_dump -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
+                    --no-owner --no-acl \
+            | gzip > "${DEST}/${BACKUP_FILE}"
+
+          BACKUP_SIZE=$(du -h "${DEST}/${BACKUP_FILE}" | cut -f1)
+          echo "✅ Database backup created (${BACKUP_SIZE})"
+          echo "📍 Location: ${DEST}/${BACKUP_FILE}"
+          chmod 640 "${DEST}/${BACKUP_FILE}"
+
+          ( cd "$DEST" && sha256sum "${BACKUP_FILE}" > "${BACKUP_FILE}.sha256" )
+          echo "🔒 Checksum written"
+
+          echo "backup_file=${BACKUP_FILE}" >> "$GITHUB_OUTPUT"
+          echo "backup_dest=${DEST}" >> "$GITHUB_OUTPUT"
+          echo "backup_size=${BACKUP_SIZE}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify backup integrity
+        env:
+          DEST: ${{ steps.db-backup.outputs.backup_dest }}
+          BACKUP_FILE: ${{ steps.db-backup.outputs.backup_file }}
+        run: |
+          set -euo pipefail
+          cd "$DEST"
+          sha256sum -c "${BACKUP_FILE}.sha256"
+          echo "✅ Checksum verified"
+
+          # A gzip stream that decompresses cleanly and still carries the
+          # pg_dump header is the cheapest proof the dump is not truncated.
+          gunzip -t "${BACKUP_FILE}"
+
+          # Read the header via command substitution, NOT `gunzip | head | grep`:
+          # `head` exits after 20 lines, `gunzip` dies of SIGPIPE (141), and
+          # `set -o pipefail` then fails the step on a perfectly good backup.
+          HEADER=$(gunzip -c "${BACKUP_FILE}" 2>/dev/null | head -20 || true)
+          case "$HEADER" in
+            *"PostgreSQL database dump"*) ;;
+            *) echo "::error::Backup does not look like pg_dump output"; exit 1 ;;
+          esac
+          echo "✅ Backup content verified"
+
+      - name: Cleanup old database backups
+        env:
+          RETENTION: ${{ github.event.inputs.retention_days || env.RETENTION_DAYS }}
+        run: |
+          set -euo pipefail
+          cd "${BACKUP_DIR}/database"
+          echo "🧹 Removing database backups older than ${RETENTION} days"
+          find . -mindepth 1 -maxdepth 1 -type d -mtime "+${RETENTION}" -print -exec rm -rf {} +
+          echo "Remaining: $(find . -mindepth 1 -maxdepth 1 -type d | wc -l) daily directories"
+
+  backup-files:
+    name: Backup Application Files
+    runs-on: [self-hosted, linux]
+    if: |
+      github.event_name == 'schedule' ||
+      github.event.inputs.backup_type == 'full' ||
+      github.event.inputs.backup_type == 'files-only'
+
+    steps:
+      - name: Backup uploaded files and configs
+        run: |
+          set -euo pipefail
+          # Resolved here, not in `env:` — workflow env values are literal
+          # strings, so a `$HOME/...` default would never be expanded.
+          DEPLOY_DIR="$HOME/scholarship-production"
+          BACKUP_DATE=$(date +%Y%m%d)
+          BACKUP_FILE="files-backup-$(date +%Y%m%d-%H%M%S).tar.gz"
+          DEST="${BACKUP_DIR}/files/${BACKUP_DATE}"
+
+          sudo mkdir -p "$DEST"
+          sudo chown -R "$(id -u):$(id -g)" "${BACKUP_DIR}"
+          chmod 750 "${BACKUP_DIR}"
+
+          # Only AP-VM state is in scope here: locally stored uploads plus the
+          # deployment config. Documents in object storage live on the DB VM
+          # and are covered by that VM's own storage backup.
+          echo "📦 Archiving deployment state from ${DEPLOY_DIR}"
+          tar -czf "${DEST}/${BACKUP_FILE}" \
+            -C "${DEPLOY_DIR}" \
+            backend/uploads nginx docker-compose.yml
+
+          BACKUP_SIZE=$(du -h "${DEST}/${BACKUP_FILE}" | cut -f1)
+          echo "✅ File backup created (${BACKUP_SIZE})"
+          chmod 640 "${DEST}/${BACKUP_FILE}"
+
+          ( cd "$DEST" && sha256sum "${BACKUP_FILE}" > "${BACKUP_FILE}.sha256" )
+          echo "🔒 Checksum written"
+
+      - name: Cleanup old file backups
+        env:
+          RETENTION: ${{ github.event.inputs.retention_days || env.RETENTION_DAYS }}
+        run: |
+          set -euo pipefail
+          cd "${BACKUP_DIR}/files"
+          echo "🧹 Removing file backups older than ${RETENTION} days"
+          find . -mindepth 1 -maxdepth 1 -type d -mtime "+${RETENTION}" -print -exec rm -rf {} +
+          echo "Remaining: $(find . -mindepth 1 -maxdepth 1 -type d | wc -l) daily directories"
+
+  verify-backups:
+    name: Verify & Report Backups
+    runs-on: [self-hosted, linux]
+    needs: [backup-database, backup-files]
+    if: always()
+
+    steps:
+      - name: List and verify backups
+        run: |
+          set -uo pipefail
+          echo "=========================================="
+          echo "📊 Backup Status Report"
+          echo "=========================================="
+          echo "📍 Location: ${BACKUP_DIR}"
+          echo ""
+
+          for kind in database files; do
+            echo "🗄️  ${kind} backups:"
+            if [ -d "${BACKUP_DIR}/${kind}" ]; then
+              ( cd "${BACKUP_DIR}/${kind}" && du -sh ./* 2>/dev/null ) || echo "  (empty)"
+            else
+              echo "  No ${kind} backups found"
+            fi
+            echo ""
+          done
+
+          echo "💾 Total backup storage:"
+          du -sh "${BACKUP_DIR}" 2>/dev/null || echo "  Unable to calculate"
+
+      - name: Generate backup manifest for IT
+        run: |
+          set -euo pipefail
+          TODAY=$(date +%Y%m%d)
+          MANIFEST_FILE="${BACKUP_DIR}/backup-manifest-${TODAY}.txt"
+          GENERATED=$(date '+%Y-%m-%d %H:%M:%S %Z')
+
+          # Built from `echo` blocks rather than heredocs on purpose: a
+          # heredoc body has to sit flush-left to land unindented in the
+          # output file, and flush-left text terminates the enclosing YAML
+          # block scalar — which is exactly what made this workflow
+          # unparseable before. echo blocks keep the YAML valid.
+          {
+            echo "===================================================================="
+            echo "Scholarship System - Backup Manifest"
+            echo "Generated: ${GENERATED}"
+            echo "===================================================================="
+            echo ""
+            echo "BACKUP LOCATION: ${BACKUP_DIR}"
+            echo ""
+            echo "ACTION REQUIRED BY IT:"
+            echo "These backups are stored on the production AP VM and should be"
+            echo "transferred to external backup storage according to the backup"
+            echo "policy. The DB VM has no internet access."
+            echo ""
+            echo "===================================================================="
+            echo "DATABASE BACKUPS"
+            echo "===================================================================="
+            echo ""
+          } > "${MANIFEST_FILE}"
+
+          if [ -d "${BACKUP_DIR}/database" ]; then
+            ( cd "${BACKUP_DIR}/database"
+              for dir in */; do
+                [ -d "$dir" ] || continue
+                echo "Date: ${dir%/}" >> "${MANIFEST_FILE}"
+                find "$dir" -type f \( -name '*.sql.gz' -o -name '*.sha256' \) \
+                  -printf '  - %p  %TY-%Tm-%Td  %s bytes\n' >> "${MANIFEST_FILE}"
+                echo "" >> "${MANIFEST_FILE}"
+              done )
+          fi
+
+          {
+            echo "===================================================================="
+            echo "FILE BACKUPS"
+            echo "===================================================================="
+            echo ""
+          } >> "${MANIFEST_FILE}"
+
+          if [ -d "${BACKUP_DIR}/files" ]; then
+            ( cd "${BACKUP_DIR}/files"
+              for dir in */; do
+                [ -d "$dir" ] || continue
+                echo "Date: ${dir%/}" >> "${MANIFEST_FILE}"
+                find "$dir" -type f \( -name '*.tar.gz' -o -name '*.sha256' \) \
+                  -printf '  - %p  %TY-%Tm-%Td  %s bytes\n' >> "${MANIFEST_FILE}"
+                echo "" >> "${MANIFEST_FILE}"
+              done )
+          fi
+
+          {
+            echo "===================================================================="
+            echo "CHECKSUM VERIFICATION"
+            echo "===================================================================="
+            echo ""
+            echo "To verify backup integrity before transfer:"
+            echo ""
+            echo "  cd ${BACKUP_DIR}/database/YYYYMMDD"
+            echo "  sha256sum -c database-backup-*.sha256"
+            echo ""
+            echo "  cd ${BACKUP_DIR}/files/YYYYMMDD"
+            echo "  sha256sum -c files-backup-*.sha256"
+            echo ""
+            echo "===================================================================="
+            echo "TRANSFER INSTRUCTIONS FOR IT"
+            echo "===================================================================="
+            echo ""
+            echo "1. Verify checksums before transfer"
+            echo "2. Transfer entire daily directories to backup storage"
+            echo "3. Verify transfer completion"
+            echo "4. Files are kept on the AP VM for ${RETENTION_DAYS} days"
+            echo "5. After successful external backup, old files are auto-cleaned"
+            echo ""
+            echo "===================================================================="
+          } >> "${MANIFEST_FILE}"
+
+          chmod 644 "${MANIFEST_FILE}"
+          echo "✅ Manifest created: ${MANIFEST_FILE}"
+          cat "${MANIFEST_FILE}"
+
+      - name: Generate backup report
+        if: always()
+        run: |
+          {
+            echo "# 💾 Backup Report"
+            echo ""
+            echo "| Job | Result |"
+            echo "|-----|--------|"
+            echo "| Database backup | ${{ needs.backup-database.result }} |"
+            echo "| Files backup | ${{ needs.backup-files.result }} |"
+            echo ""
+            echo "**Location**: \`${BACKUP_DIR}\` on the production AP VM"
+            echo "**Retention**: ${RETENTION_DAYS} days"
+            echo "**Timestamp**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          } >> "$GITHUB_STEP_SUMMARY"

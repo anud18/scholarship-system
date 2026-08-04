@@ -50,8 +50,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
         user_id: str = payload.get("sub")
         if user_id is None:
             raise credentials_exception
-    except jwt.PyJWTError:
-        raise credentials_exception
+    except jwt.PyJWTError as exc:
+        raise credentials_exception from exc
 
     stmt = select(User).options(selectinload(User.admin_scholarships)).where(User.id == int(user_id))
     result = await db.execute(stmt)
@@ -60,6 +60,16 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
         raise credentials_exception
 
     return user
+
+
+async def get_current_admin_user(current_user: User = Depends(get_current_user)) -> User:
+    """Get current user, requiring admin or super_admin role."""
+    if current_user.role.value not in ("admin", "super_admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+    return current_user
 
 
 async def get_dynamic_config():

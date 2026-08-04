@@ -55,17 +55,13 @@ async def seed_lookup_tables(session: AsyncSession):
         print("  📖 Initializing lookup tables...")
         # Initialize lookup tables inline
         print("  📖 Initializing degrees...")
-        await session.execute(
-            text(
-                """
+        await session.execute(text("""
             INSERT INTO degrees (id, name) VALUES
             (1, '博士'),
             (2, '碩士'),
             (3, '學士')
             ON CONFLICT (id) DO NOTHING
-        """
-            )
-        )
+        """))
 
         print("  🎓 Initializing student identities...")
         # Add other lookup table initialization as needed
@@ -125,9 +121,9 @@ async def seed_test_users(session: AsyncSession):
             "role": UserRole.college,
         },
         {
-            "nycu_id": "stu_under",
+            "nycu_id": "stuunder1",
             "name": "陳小明",
-            "email": "stu_under@nycu.edu.tw",
+            "email": "stuunder1@nycu.edu.tw",
             "user_type": UserType.student,
             "status": EmployeeStatus.student,
             "dept_code": "CS",
@@ -135,9 +131,9 @@ async def seed_test_users(session: AsyncSession):
             "role": UserRole.student,
         },
         {
-            "nycu_id": "stu_phd",
+            "nycu_id": "stuphd001",
             "name": "王博士",
-            "email": "stu_phd@nycu.edu.tw",
+            "email": "stuphd001@nycu.edu.tw",
             "user_type": UserType.student,
             "status": EmployeeStatus.student,
             "dept_code": "CS",
@@ -145,9 +141,9 @@ async def seed_test_users(session: AsyncSession):
             "role": UserRole.student,
         },
         {
-            "nycu_id": "stu_direct",
+            "nycu_id": "studirect",
             "name": "李逕升",
-            "email": "stu_direct@nycu.edu.tw",
+            "email": "studirect@nycu.edu.tw",
             "user_type": UserType.student,
             "status": EmployeeStatus.student,
             "dept_code": "CS",
@@ -155,9 +151,9 @@ async def seed_test_users(session: AsyncSession):
             "role": UserRole.student,
         },
         {
-            "nycu_id": "stu_master",
+            "nycu_id": "stumaster",
             "name": "張碩士",
-            "email": "stu_master@nycu.edu.tw",
+            "email": "stumaster@nycu.edu.tw",
             "user_type": UserType.student,
             "status": EmployeeStatus.student,
             "dept_code": "CS",
@@ -165,9 +161,29 @@ async def seed_test_users(session: AsyncSession):
             "role": UserRole.student,
         },
         {
-            "nycu_id": "phd_china",
+            "nycu_id": "phdchina1",
             "name": "陸生",
-            "email": "phd_china@nycu.edu.tw",
+            "email": "phdchina1@nycu.edu.tw",
+            "user_type": UserType.student,
+            "status": EmployeeStatus.student,
+            "dept_code": "CS",
+            "dept_name": "資訊工程學系",
+            "role": UserRole.student,
+        },
+        {
+            "nycu_id": "stuchina1",
+            "name": "陸生學士",
+            "email": "stuchina1@nycu.edu.tw",
+            "user_type": UserType.student,
+            "status": EmployeeStatus.student,
+            "dept_code": "CS",
+            "dept_name": "資訊工程學系",
+            "role": UserRole.student,
+        },
+        {
+            "nycu_id": "stuleave1",
+            "name": "休學博士",
+            "email": "stuleave1@nycu.edu.tw",
             "user_type": UserType.student,
             "status": EmployeeStatus.student,
             "dept_code": "CS",
@@ -197,9 +213,26 @@ async def seed_test_users(session: AsyncSession):
             "role": UserRole.college,
         },
         {
-            "nycu_id": "cs_phd001",
+            # 電機學院 reviewer. College access is scoped to the reviewer's own
+            # college (#1223 A), and the primary demo cohort (stuunder1 /
+            # stuphd001 / stumaster / studirect) sits in 電機學院 ("E") — without
+            # this account none of them is reviewable by any seeded college user.
+            # Having BOTH a "C" and an "E" reviewer is also what makes the
+            # cross-college DENIAL exercisable in the dev environment.
+            "nycu_id": "ee_college",
+            "name": "電機學院審核員",
+            "email": "ee_college@nycu.edu.tw",
+            "user_type": UserType.employee,
+            "status": EmployeeStatus.active,
+            "dept_code": "EE",
+            "dept_name": "電機工程學系",
+            "college_code": "E",
+            "role": UserRole.college,
+        },
+        {
+            "nycu_id": "csphd0001",
             "name": "王博士研究生",
-            "email": "cs_phd001@nycu.edu.tw",
+            "email": "csphd0001@nycu.edu.tw",
             "user_type": UserType.student,
             "status": EmployeeStatus.student,
             "dept_code": "CS",
@@ -207,9 +240,9 @@ async def seed_test_users(session: AsyncSession):
             "role": UserRole.student,
         },
         {
-            "nycu_id": "cs_phd002",
+            "nycu_id": "csphd0002",
             "name": "陳AI博士",
-            "email": "cs_phd002@nycu.edu.tw",
+            "email": "csphd0002@nycu.edu.tw",
             "user_type": UserType.student,
             "status": EmployeeStatus.student,
             "dept_code": "CS",
@@ -217,9 +250,9 @@ async def seed_test_users(session: AsyncSession):
             "role": UserRole.student,
         },
         {
-            "nycu_id": "cs_phd003",
+            "nycu_id": "csphd0003",
             "name": "林機器學習博士",
-            "email": "cs_phd003@nycu.edu.tw",
+            "email": "csphd0003@nycu.edu.tw",
             "user_type": UserType.student,
             "status": EmployeeStatus.student,
             "dept_code": "CS",
@@ -231,8 +264,7 @@ async def seed_test_users(session: AsyncSession):
     for user_data in test_users_data:
         # 使用原生 SQL 的 ON CONFLICT 實現冪等 upsert
         await session.execute(
-            text(
-                """
+            text("""
             INSERT INTO users (nycu_id, name, email, user_type, status, dept_code, dept_name,
                                college_code, role, created_at, updated_at)
             VALUES (:nycu_id, :name, :email, :user_type, :status, :dept_code, :dept_name, :college_code, :role, NOW(), NOW())
@@ -246,8 +278,7 @@ async def seed_test_users(session: AsyncSession):
                 college_code = EXCLUDED.college_code,
                 role = EXCLUDED.role,
                 updated_at = NOW()
-        """
-            ),
+        """),
             {
                 "nycu_id": user_data["nycu_id"],
                 "name": user_data["name"],
@@ -273,10 +304,10 @@ async def seed_professor_student_relationships(session: AsyncSession):
     professor_result = await session.execute(text("SELECT id FROM users WHERE nycu_id = 'professor'"))
     professor_id = professor_result.scalar()
 
-    student_phd_result = await session.execute(text("SELECT id FROM users WHERE nycu_id = 'stu_phd'"))
+    student_phd_result = await session.execute(text("SELECT id FROM users WHERE nycu_id = 'stuphd001'"))
     student_phd_id = student_phd_result.scalar()
 
-    student_under_result = await session.execute(text("SELECT id FROM users WHERE nycu_id = 'stu_under'"))
+    student_under_result = await session.execute(text("SELECT id FROM users WHERE nycu_id = 'stuunder1'"))
     student_under_id = student_under_result.scalar()
 
     if not all([professor_id, student_phd_id, student_under_id]):
@@ -290,8 +321,8 @@ async def seed_professor_student_relationships(session: AsyncSession):
             "student_id": student_phd_id,
             "relationship_type": "advisor",
             "department": "資訊工程學系",
-            "academic_year": 113,
-            "semester": "first",
+            "academic_year": 114,
+            "semester": "second",
             "is_active": True,
             "can_view_applications": True,
             "can_upload_documents": True,
@@ -303,8 +334,8 @@ async def seed_professor_student_relationships(session: AsyncSession):
             "student_id": student_under_id,
             "relationship_type": "supervisor",
             "department": "資訊工程學系",
-            "academic_year": 113,
-            "semester": "first",
+            "academic_year": 114,
+            "semester": "second",
             "is_active": True,
             "can_view_applications": True,
             "can_upload_documents": False,
@@ -315,8 +346,7 @@ async def seed_professor_student_relationships(session: AsyncSession):
 
     for rel_data in relationships:
         await session.execute(
-            text(
-                """
+            text("""
                 INSERT INTO professor_student_relationships
                 (professor_id, student_id, relationship_type, department, academic_year,
                  semester, is_active, can_view_applications, can_upload_documents,
@@ -331,8 +361,7 @@ async def seed_professor_student_relationships(session: AsyncSession):
                     can_upload_documents = EXCLUDED.can_upload_documents,
                     can_review_applications = EXCLUDED.can_review_applications,
                     updated_at = NOW()
-            """
-            ),
+            """),
             rel_data,
         )
 
@@ -353,8 +382,7 @@ async def seed_admin_user(session: AsyncSession):
 
     # 使用 UPSERT - 只在用戶不存在時才設定角色
     await session.execute(
-        text(
-            """
+        text("""
         INSERT INTO users (nycu_id, name, email, user_type, status, role, created_at, updated_at)
         VALUES (:nycu_id, :name, :email, 'employee', '在職', 'super_admin', NOW(), NOW())
         ON CONFLICT (nycu_id) DO UPDATE
@@ -364,8 +392,7 @@ async def seed_admin_user(session: AsyncSession):
             status = '在職',
             updated_at = NOW()
         -- Note: role is NOT updated on conflict to preserve manual role changes
-    """
-        ),
+    """),
         {"nycu_id": admin_nycu_id, "name": "System Administrator", "email": admin_email},
     )
 
@@ -404,7 +431,7 @@ async def seed_scholarships(session: AsyncSession):
             "application_cycle": ApplicationCycle.yearly.value,
             "sub_type_list": ["nstc", "moe_1w"],
             "whitelist_enabled": False,
-            "sub_type_selection_mode": SubTypeSelectionMode.hierarchical.value,
+            "sub_type_selection_mode": SubTypeSelectionMode.multiple.value,
             "status": ScholarshipStatus.active.value,
         },
         {
@@ -426,8 +453,7 @@ async def seed_scholarships(session: AsyncSession):
             scholarship_data["sub_type_list"] = json.dumps(scholarship_data["sub_type_list"])
 
         await session.execute(
-            text(
-                """
+            text("""
                 INSERT INTO scholarship_types (code, name, name_en, description, description_en,
                                               application_cycle, whitelist_enabled,
                                               sub_type_selection_mode, status, sub_type_list)
@@ -436,8 +462,7 @@ async def seed_scholarships(session: AsyncSession):
                         :sub_type_selection_mode, :status, :sub_type_list)
                 ON CONFLICT (code) DO NOTHING
                 -- Note: Changed from DO UPDATE to DO NOTHING to preserve manual changes in production
-            """
-            ),
+            """),
             {
                 **scholarship_data,
                 "sub_type_list": scholarship_data.get("sub_type_list"),
@@ -446,6 +471,54 @@ async def seed_scholarships(session: AsyncSession):
 
     await session.commit()
     print(f"  ✓ {len(scholarships_data)} scholarship types created/updated")
+
+
+async def seed_admin_scholarships(session: AsyncSession):
+    """
+    Link the seeded 'admin' user to all scholarship types via AdminScholarship.
+    Required so the admin user can create/edit scholarship configurations in E2E tests.
+    """
+    print("🔗 Linking admin user to all scholarship types...")
+
+    admin_result = await session.execute(text("SELECT id FROM users WHERE nycu_id = 'admin'"))
+    admin_id = admin_result.scalar()
+    if not admin_id:
+        print("  ❌ admin user not found — skipping AdminScholarship seeding")
+        return
+
+    scholarship_result = await session.execute(text("SELECT id FROM scholarship_types"))
+    scholarship_ids = [row[0] for row in scholarship_result.fetchall()]
+
+    for sid in scholarship_ids:
+        await session.execute(
+            text("""
+                INSERT INTO admin_scholarships (admin_id, scholarship_id, assigned_at)
+                VALUES (:admin_id, :scholarship_id, NOW())
+                ON CONFLICT ON CONSTRAINT uq_admin_scholarship DO NOTHING
+            """),
+            {"admin_id": admin_id, "scholarship_id": sid},
+        )
+
+    # College reviewer cs_college needs explicit permission for the doctoral
+    # (phd / 博士生獎學金) scholarship so it can review doctoral applications out
+    # of the box — _check_scholarship_permission gates college users on this row.
+    cs_college_id = (await session.execute(text("SELECT id FROM users WHERE nycu_id = 'cs_college'"))).scalar()
+    phd_scholarship_id = (await session.execute(text("SELECT id FROM scholarship_types WHERE code = 'phd'"))).scalar()
+    if cs_college_id and phd_scholarship_id:
+        await session.execute(
+            text("""
+                INSERT INTO admin_scholarships (admin_id, scholarship_id, assigned_at)
+                VALUES (:admin_id, :scholarship_id, NOW())
+                ON CONFLICT ON CONSTRAINT uq_admin_scholarship DO NOTHING
+            """),
+            {"admin_id": cs_college_id, "scholarship_id": phd_scholarship_id},
+        )
+        print("  ✓ cs_college linked to doctoral (phd) scholarship")
+    else:
+        print("  ⚠ cs_college or phd scholarship not found — skipping cs_college link")
+
+    await session.commit()
+    print(f"  ✓ admin linked to {len(scholarship_ids)} scholarship types")
 
 
 async def seed_application_fields(session: AsyncSession):
@@ -502,17 +575,17 @@ async def seed_application_fields(session: AsyncSession):
         {
             "scholarship_type": "phd",
             "field_name": "master_school_info",
-            "field_label": "碩士畢業學校學院系所",
+            "field_label": "碩士畢業學校/學院/系所",
             "field_label_en": "Master's Degree School/College/Department",
             "field_type": "text",
             "is_required": True,
-            "placeholder": "例如：國立陽明交通大學 資訊學院 資訊工程學系",
-            "placeholder_en": "e.g., NYCU College of Computer Science, Department of Computer Science",
+            "placeholder": "陽明交通大學工學院土木工程學系",
+            "placeholder_en": "e.g., NYCU College of Engineering, Department of Civil Engineering",
             "max_length": 200,
             "display_order": 1,
             "is_active": True,
-            "help_text": "請填寫完整的畢業學校、學院、系所名稱",
-            "help_text_en": "Please provide complete school, college, and department names",
+            "help_text": "1.碩逕博請填原就讀碩士班、學逕博請填學士班畢業學系\n2.請填完整名稱",
+            "help_text_en": "1. PhD via Master's: provide the original Master's program; PhD via Bachelor's: provide the Bachelor's department.\n2. Please provide the complete name.",
             "created_by": admin_id,
             "updated_by": admin_id,
         },
@@ -520,8 +593,7 @@ async def seed_application_fields(session: AsyncSession):
 
     for field_data in direct_phd_fields:
         await session.execute(
-            text(
-                """
+            text("""
                 INSERT INTO application_fields (scholarship_type, field_name, field_label, field_label_en,
                                                 field_type, is_required, placeholder, placeholder_en, max_length,
                                                 display_order, is_active, help_text, help_text_en, created_by, updated_by)
@@ -530,8 +602,7 @@ async def seed_application_fields(session: AsyncSession):
                         :display_order, :is_active, :help_text, :help_text_en, :created_by, :updated_by)
                 ON CONFLICT (scholarship_type, field_name) DO NOTHING
                 -- Note: Changed from DO UPDATE to DO NOTHING to preserve manual changes in production
-            """
-            ),
+            """),
             field_data,
         )
 
@@ -541,8 +612,7 @@ async def seed_application_fields(session: AsyncSession):
     # Insert phd_fields
     for field_data in phd_fields:
         await session.execute(
-            text(
-                """
+            text("""
                 INSERT INTO application_fields (scholarship_type, field_name, field_label, field_label_en,
                                                 field_type, is_required, placeholder, placeholder_en, max_length,
                                                 display_order, is_active, help_text, help_text_en, created_by, updated_by)
@@ -551,8 +621,7 @@ async def seed_application_fields(session: AsyncSession):
                         :display_order, :is_active, :help_text, :help_text_en, :created_by, :updated_by)
                 ON CONFLICT (scholarship_type, field_name) DO NOTHING
                 -- Note: Changed from DO UPDATE to DO NOTHING to preserve manual changes in production
-            """
-            ),
+            """),
             field_data,
         )
 
@@ -587,6 +656,9 @@ async def seed_development():
             # 3. Scholarships
             await seed_scholarships(session)
 
+            # 3.1. Admin-scholarship links (required for admin E2E tests)
+            await seed_admin_scholarships(session)
+
             # 4. Application fields
             await seed_application_fields(session)
 
@@ -612,15 +684,21 @@ async def seed_development():
 
             await _seed_system_settings(session, system_user_id=1)
 
+            # 7. 獎學金要點 system document (uploaded to MinIO + registered)
+            print("\n📄 Initializing 獎學金要點 system document...")
+            from app.db.seed_regulations_doc import seed_regulations_doc
+
+            await seed_regulations_doc(session, system_user_id=1)
+
             print("\n📋 Test User Accounts:")
             print("- Admin: admin@nycu.edu.tw")
             print("- Super Admin: super_admin@nycu.edu.tw")
             print("- Professor: professor@nycu.edu.tw")
             print("- College: college@nycu.edu.tw")
-            print("- Student (學士): stu_under@nycu.edu.tw")
-            print("- Student (博士): stu_phd@nycu.edu.tw")
-            print("- Student (逕讀博士): stu_direct@nycu.edu.tw")
-            print("- Student (碩士): stu_master@nycu.edu.tw")
+            print("- Student (學士): stuunder1@nycu.edu.tw")
+            print("- Student (博士): stuphd001@nycu.edu.tw")
+            print("- Student (逕讀博士): studirect@nycu.edu.tw")
+            print("- Student (碩士): stumaster@nycu.edu.tw")
 
             print("\n✅ Development seed completed successfully!")
 
@@ -682,6 +760,12 @@ async def seed_production():
             from app.db.seed_system_settings import seed_system_settings as _seed_system_settings_prod
 
             await _seed_system_settings_prod(session, system_user_id=1)
+
+            # 獎學金要點 system document (uploaded to MinIO + registered)
+            print("\n📄 Initializing 獎學金要點 system document...")
+            from app.db.seed_regulations_doc import seed_regulations_doc
+
+            await seed_regulations_doc(session, system_user_id=1)
 
             print("\n⚠️ Production mode: Only admin user configured")
             print("  Please set initial password through admin panel")

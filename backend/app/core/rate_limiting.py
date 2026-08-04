@@ -50,8 +50,8 @@ class RateLimiter:
 
             return is_limited, remaining
 
-        except Exception as e:
-            logger.error(f"Rate limiting check failed: {e}")
+        except Exception:
+            logger.exception("Rate limiting check failed")
             # Fail open - don't block requests if Redis is down
             return False, limit
 
@@ -73,8 +73,8 @@ def get_rate_limiter() -> RateLimiter:
 
             redis_url = settings.redis_url
             _rate_limiter = RateLimiter(redis_url)
-        except Exception as e:
-            logger.warning(f"Could not initialize rate limiter: {e}")
+        except Exception:
+            logger.warning("Could not initialize rate limiter", exc_info=True)
             # Create with default URL as fallback
             _rate_limiter = RateLimiter()
     return _rate_limiter

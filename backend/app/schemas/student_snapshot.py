@@ -63,11 +63,17 @@ class StudentSnapshotSchema(BaseModel):
     trm_ascore_gpa: float = Field(..., description="GPA")
 
     # ===== Internal Metadata =====
-    _api_fetched_at: Optional[datetime] = Field(None, description="API 資料取得時間")
-    _term_data_status: Optional[str] = Field(None, description="學期資料狀態 (success/error/partial)")
-    _term_error_message: Optional[str] = Field(None, description="學期資料錯誤訊息")
+    # Pydantic v2 forbids leading-underscore field names (Issue #459).
+    # Use alias to preserve the `_`-prefixed JSON wire format documented
+    # in CLAUDE.md §7 while satisfying Pydantic's identifier rules.
+    api_fetched_at: Optional[datetime] = Field(None, alias="_api_fetched_at", description="API 資料取得時間")
+    term_data_status: Optional[str] = Field(
+        None, alias="_term_data_status", description="學期資料狀態 (success/error/partial)"
+    )
+    term_error_message: Optional[str] = Field(None, alias="_term_error_message", description="學期資料錯誤訊息")
 
     model_config = ConfigDict(
+        populate_by_name=True,
         json_schema_extra={
             "example": {
                 "std_stdcode": "310460031",

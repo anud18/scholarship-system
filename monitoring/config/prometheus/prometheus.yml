@@ -9,18 +9,8 @@ global:
     cluster: 'scholarship-system'
     monitor: 'main-prometheus'
 
-# Alertmanager removed - no alerting configured
-# If you need alerting, add AlertManager service and uncomment:
-# alerting:
-#   alertmanagers:
-#     - static_configs:
-#         - targets:
-#             - alertmanager:9093
-
-# Alert rules (disabled - no AlertManager)
-# rule_files:
-#   - '/etc/prometheus/alerts/*.yml'
-#   - '/etc/prometheus/recording-rules/*.yml'
+# Alerting and rule_files removed in Phase 2 — alerts now handled by Grafana
+# unified alerting (see monitoring/config/grafana/provisioning/alerting/).
 
 # Scrape configurations
 # NOTE: All application/system metrics are collected by Grafana Alloy

@@ -21,8 +21,9 @@ function validateId(id: string | null, paramName: string): void {
     throw new Error(`Invalid ${paramName}: path traversal detected`);
   }
 
-  // Only allow safe characters: letters, numbers, hyphens, underscores
-  const idPattern = /^[a-zA-Z0-9_-]+$/;
+  // Allow `.` for filenames with extensions (e.g. <hash>.pdf for bank documents);
+  // `..` / `/` / `\` are already rejected by the path-traversal check above.
+  const idPattern = /^[a-zA-Z0-9_.-]+$/;
   if (!idPattern.test(id)) {
     throw new Error(`Invalid ${paramName}: contains illegal characters`);
   }
@@ -96,12 +97,13 @@ export async function GET(request: NextRequest) {
           { status: 400 }
         );
       }
-    } catch (validationError: any) {
+    } catch (validationError: unknown) {
       logger.error("Input validation error", {});
-      return NextResponse.json(
-        { error: validationError.message },
-        { status: 400 }
-      );
+      const message =
+        validationError instanceof Error
+          ? validationError.message
+          : "Invalid input";
+      return NextResponse.json({ error: message }, { status: 400 });
     }
 
     if (!token) {
@@ -115,7 +117,7 @@ export async function GET(request: NextRequest) {
     let backendUrl: URL;
     try {
       backendUrl = getSafeBackendUrl();
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error("Backend URL validation error", {});
       return NextResponse.json(
         { error: "Invalid backend configuration" },
@@ -139,7 +141,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.log("Download API called:", {
+    logger.debug("Download API called:", {
       fileId,
       applicationId,
       userId,

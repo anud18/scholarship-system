@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { logger } from "@/lib/utils/logger";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +18,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Save, X } from "lucide-react";
 import { ScholarshipRule, SubTypeOption, api } from "@/lib/api";
+import { RULE_OPERATORS } from "@/lib/constants/rule-operators";
 
 interface ScholarshipRuleModalProps {
   isOpen: boolean;
@@ -32,19 +34,6 @@ interface ScholarshipRuleModalProps {
 const RULE_TYPES = [
   { value: "student", label: "學生資料" },
   { value: "student_term", label: "學生學期資料" },
-];
-
-const OPERATORS = [
-  { value: "==", label: "等於 (==)" },
-  { value: "!=", label: "不等於 (!=)" },
-  { value: ">", label: "大於 (>)" },
-  { value: "<", label: "小於 (<)" },
-  { value: ">=", label: "大於等於 (>=)" },
-  { value: "<=", label: "小於等於 (<=)" },
-  { value: "in", label: "包含於 (in)" },
-  { value: "not_in", label: "不包含於 (not_in)" },
-  { value: "contains", label: "包含 (contains)" },
-  { value: "not_contains", label: "不包含 (not_contains)" },
 ];
 
 const STUDENT_FIELDS = [
@@ -214,9 +203,9 @@ export function ScholarshipRuleModal({
         const response =
           await api.admin.getScholarshipRuleSubTypes(scholarshipTypeId);
         if (response.success && response.data && Array.isArray(response.data)) {
-          setSubTypeOptions(response.data);
+          setSubTypeOptions(response.data as SubTypeOption[]);
         } else {
-          console.error("Failed to load sub-types:", response.message);
+          logger.error("Failed to load sub-types", { responseMessage: response.message });
           // Keep default options on error
           setSubTypeOptions([
             {
@@ -228,7 +217,7 @@ export function ScholarshipRuleModal({
           ]);
         }
       } catch (error) {
-        console.error("Error loading sub-types:", error);
+        logger.error("Error loading sub-types", { error: error });
         // Keep default options on error
         setSubTypeOptions([
           { value: null, label: "通用", label_en: "General", is_default: true },
@@ -241,7 +230,10 @@ export function ScholarshipRuleModal({
     loadSubTypes();
   }, [isOpen, scholarshipTypeId]);
 
-  const handleChange = (field: keyof ScholarshipRule, value: any) => {
+  const handleChange = <K extends keyof ScholarshipRule>(
+    field: K,
+    value: ScholarshipRule[K]
+  ) => {
     setFormData(prev => {
       const newData = { ...prev, [field]: value };
 
@@ -291,7 +283,7 @@ export function ScholarshipRuleModal({
       await onSubmit(submitData);
       onClose();
     } catch (error) {
-      console.error("提交規則失敗:", error);
+      logger.error("提交規則失敗", { error: error });
     }
   };
 
@@ -356,7 +348,10 @@ export function ScholarshipRuleModal({
             <Select
               value={formData.sub_type || "__general__"}
               onValueChange={value =>
-                handleChange("sub_type", value === "__general__" ? null : value)
+                handleChange(
+                  "sub_type",
+                  value === "__general__" ? undefined : value
+                )
               }
               disabled={loadingSubTypes}
             >
@@ -440,7 +435,7 @@ export function ScholarshipRuleModal({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {OPERATORS.map(op => (
+                  {RULE_OPERATORS.map(op => (
                     <SelectItem key={op.value} value={op.value}>
                       {op.label}
                     </SelectItem>

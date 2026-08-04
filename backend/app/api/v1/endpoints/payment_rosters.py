@@ -8,27 +8,40 @@ import os
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.sql.functions import count
 
+from app.core.cache import LockBusy, with_lock_sync
 from app.core.deps import get_current_user
 from app.core.exceptions import RosterAlreadyExistsError, RosterGenerationError, RosterLockedError, RosterNotFoundError
 from app.core.path_security import validate_object_name_minio
 from app.core.security import check_user_roles
 from app.db.deps import get_db, get_sync_db
 from app.models.payment_roster import (
+    MANUAL_EXCLUSION_CATEGORY_LABELS,
     PaymentRoster,
     PaymentRosterItem,
     RosterStatus,
     RosterTriggerType,
     StudentVerificationStatus,
+    verification_status_label,
 )
 from app.models.user import User, UserRole
 from app.schemas.response import ApiResponse
+from app.schemas.payment_roster import (
+    DistributionDiff,
+    ReconcileRequest,
+    ReconcileResult,
+    RegenerateRosterRequest,
+    RegenerateRosterResult,
+    RemoveLockedItemRequest,
+    RestoreItemRequest,
+    RevokedSuspendedListResponse,
+)
 from app.schemas.roster import (
     RosterAuditLogResponse,
     RosterCreateRequest,
@@ -39,29 +52,82 @@ from app.schemas.roster import (
     RosterStatisticsResponse,
 )
 from app.services.excel_export_service import ExcelExportService
+from app.services.roster_regeneration_service import RosterRegenerationService
 from app.services.roster_service import RosterService
 from app.services.student_verification_service import StudentVerificationService
 from app.utils.academic_period import get_roster_period_dates
+from app.utils.pii_masking import mask_id_number
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-@router.post("/generate")
-def generate_payment_roster(
-    request: RosterCreateRequest,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_sync_db),
-    current_user: User = Depends(get_current_user),
-):
-    """
-    產生造冊
-    Generate payment roster
-    """
-    # 檢查權限：只有管理員和處理人員可以產生造冊
-    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
+def _require_admin(user: User) -> None:
+    """Raise 403 if user is not admin or super_admin."""
+    if user.role not in (UserRole.admin, UserRole.super_admin):
+        raise HTTPException(status_code=403, detail="Admin role required")
 
+
+def _roster_items_lock_key(roster_id: int) -> str:
+    """Shared distributed lock for the roster-id-scoped whole-roster mutations.
+
+    Reconcile mutates items by id while regenerate hard-deletes and rebuilds
+    all of them, so those two MUST be mutually exclusive — a shared key is what
+    makes that true. Do not give either its own key.
+
+    NOTE the batch path POST /manual-distribution/generate-rosters-from-distribution
+    (force_regenerate) resolves its roster ids inside the service, so it cannot
+    take this key and is NOT serialized against these two. It defends itself with
+    a `SELECT ... FOR UPDATE` on the roster row instead (see
+    `_generate_one_sub_type_roster`), which serializes batch-vs-batch rebuilds but
+    NOT batch-vs-regenerate — that gap is known and unguarded.
+    """
+    return f"roster:items:{roster_id}"
+
+
+# Large per-item JSON snapshots that only the 查看名單 detail view reads;
+# list views serialize many rosters × items and must not ship them.
+_HEAVY_ITEM_FIELDS = {"rule_validation_result", "verification_snapshot"}
+
+
+def _roster_config_fields(roster: PaymentRoster) -> dict:
+    """Structured links to the owning scholarship config (issue #1033).
+
+    The roster only stores scholarship_configuration_id; scholarship_type_id
+    and semester live on the related ScholarshipConfiguration. Surface them
+    (plus config_id, the frontend's name for the config FK) so reports/audits
+    can filter without parsing roster_code. Requires scholarship_configuration
+    to be eager-loaded to avoid MissingGreenlet under async.
+    """
+    config = roster.scholarship_configuration
+    return {
+        "config_id": roster.scholarship_configuration_id,
+        "scholarship_type_id": config.scholarship_type_id if config else None,
+        "semester": config.semester.value if config and config.semester else None,
+    }
+
+
+def _roster_item_dict_with_display_year(item: PaymentRosterItem, roster: PaymentRoster, *, slim: bool = False) -> dict:
+    """Serialize a roster item for the UI, resolving the display year.
+
+    Uses the per-item snapshot when set (the consumed/borrowed prior-year quota
+    for shared-quota allocations), else the roster's own academic_year — so
+    every 分發名單 row shows which year's quota it draws from. Monthly/legacy
+    rosters never snapshot allocation_year, so without this they'd show no year.
+    """
+    data = RosterItemResponse.model_validate(item).model_dump(exclude=_HEAVY_ITEM_FIELDS if slim else None)
+    if data.get("allocation_year") is None:
+        data["allocation_year"] = roster.academic_year
+    return data
+
+
+def _generate_payment_roster_inner(
+    request: RosterCreateRequest,
+    db: Session,
+    current_user: User,
+):
+    """Body of generate_payment_roster — runs inside the Redis idempotency lock."""
     roster = None  # 用於錯誤處理時檢查是否需要標記為 FAILED
     try:
         roster_service = RosterService(db)
@@ -152,25 +218,25 @@ def generate_payment_roster(
 
     except RosterAlreadyExistsError as e:
         # Roster already exists for this configuration/period
-        logger.warning(f"Roster already exists: {e}")
+        logger.warning("Roster already exists", exc_info=True)
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
 
     except RosterLockedError as e:
         # Trying to regenerate a locked roster
-        logger.warning(f"Roster is locked: {e}")
+        logger.warning("Roster is locked", exc_info=True)
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
 
     except RosterNotFoundError as e:
         # Referenced roster not found (for regeneration)
-        logger.warning(f"Roster not found: {e}")
+        logger.warning("Roster not found", exc_info=True)
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
     except RosterGenerationError as e:
         # General roster generation failure (including data consistency errors)
-        logger.error(f"Roster generation error: {e}")
+        logger.exception("Roster generation error")
 
         # 保存 roster ID (如果存在) 用於後續標記
         roster_id_to_mark = roster.id if (roster and hasattr(roster, "id") and roster.id) else None
@@ -199,13 +265,34 @@ def generate_payment_roster(
             finally:
                 independent_db.close()
 
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        # generate_roster wraps every internal failure in RosterGenerationError,
+        # preserving the original exception as __cause__ (contract pinned by
+        # test_roster_generate_concurrency). Re-dispatch on that cause so the
+        # client sees the REAL reason + correct HTTP status instead of an opaque
+        # 「造冊產生失敗」. Only curated domain messages are surfaced; raw/unexpected
+        # causes stay generic so internal detail (filesystem paths, SQL, SDK
+        # errors) never leaks — see test_no_exception_leak_in_endpoints.
+        cause = e.__cause__
+        if isinstance(cause, RosterAlreadyExistsError):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(cause)) from e
+        if isinstance(cause, RosterLockedError):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(cause)) from e
+        if isinstance(cause, RosterNotFoundError):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(cause)) from e
+        if isinstance(cause, ValueError):
+            # Curated validation messages (missing config/ranking, distribution
+            # not executed, no allocated ranking) — safe and actionable.
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(cause)) from e
+        if isinstance(cause, RosterGenerationError):
+            # Curated data-consistency summary from validate_roster_consistency.
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(cause)) from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="造冊產生失敗") from e
 
     except ValueError as e:
         # Validation errors (missing data, invalid parameters)
-        logger.warning(f"Roster generation validation error: {e}")
+        logger.warning("Roster generation validation error", exc_info=True)
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
     except Exception as e:
         # Unexpected errors (including Excel export failures)
@@ -252,7 +339,40 @@ def generate_payment_roster(
             logger.error(f"Error updating roster status to FAILED: {update_error}")
             db.rollback()
 
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"造冊產生失敗: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="造冊產生失敗") from e
+
+
+@router.post("/generate")
+def generate_payment_roster(
+    request: RosterCreateRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_sync_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    產生造冊 / Generate payment roster.
+
+    Wraps the generation in a Redis SET-NX-EX mutex so a double-click on
+    "產生造冊" can't produce two parallel rosters for the same
+    (scholarship_configuration_id, period_label). The 300s TTL also acts
+    as a safety net if the backend dies mid-generation — the lock auto-
+    expires and the next attempt succeeds.
+    """
+    # 檢查權限：只有管理員和處理人員可以產生造冊
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
+
+    lock_key = f"roster:{request.scholarship_configuration_id}:{request.period_label}"
+    try:
+        with with_lock_sync(lock_key, ttl_seconds=300):
+            return _generate_payment_roster_inner(request, db, current_user)
+    except LockBusy as exc:
+        # Concurrent generation in flight — fail fast rather than queue.
+        # UI already handles 409 from RosterAlreadyExistsError, so the
+        # path is well-trodden.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="造冊產生中，請稍候再試",
+        ) from exc
 
 
 @router.get("/available-rankings")
@@ -294,7 +414,7 @@ def get_available_rankings(
             and_(
                 CollegeRanking.scholarship_type_id == config.scholarship_type_id,
                 CollegeRanking.academic_year == academic_year,
-                CollegeRanking.distribution_executed == True,  # 必須已執行分配
+                CollegeRanking.distribution_executed.is_(True),  # 必須已執行分配
             )
         )
 
@@ -335,10 +455,10 @@ def get_available_rankings(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error fetching available rankings: {e}")
+        logger.exception("Error fetching available rankings")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch available rankings"
-        )
+        ) from e
 
 
 @router.get("")
@@ -346,6 +466,7 @@ async def list_payment_rosters(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     scholarship_configuration_id: Optional[int] = Query(None),
+    scholarship_type_id: Optional[int] = Query(None, description="依獎學金類型過濾（透過所屬配置）"),
     status_filter: Optional[RosterStatus] = Query(None),
     period_label: Optional[str] = Query(None),
     academic_year: Optional[int] = Query(None),
@@ -356,6 +477,12 @@ async def list_payment_rosters(
     取得造冊清單
     Get payment roster list
     """
+    # SECURITY: roster rows embed recipient 身分證字號 and 郵局帳號. Every mutating
+    # handler in this router already role-checks; the read/export handlers did not,
+    # so any authenticated user (including a student) could read every roster.
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
+    from app.models.scholarship import ScholarshipConfiguration
+
     try:
         # Build query with eager loading to avoid MissingGreenlet errors
         stmt = select(PaymentRoster).options(
@@ -369,6 +496,13 @@ async def list_payment_rosters(
         # 套用篩選條件
         if scholarship_configuration_id:
             stmt = stmt.where(PaymentRoster.scholarship_configuration_id == scholarship_configuration_id)
+        if scholarship_type_id is not None:
+            # Filter by scholarship type via the owning config (issue #1033):
+            # rosters don't store scholarship_type_id directly.
+            stmt = stmt.join(
+                ScholarshipConfiguration,
+                PaymentRoster.scholarship_configuration_id == ScholarshipConfiguration.id,
+            ).where(ScholarshipConfiguration.scholarship_type_id == scholarship_type_id)
         if status_filter:
             stmt = stmt.where(PaymentRoster.status == status_filter)
         if period_label:
@@ -400,10 +534,13 @@ async def list_payment_rosters(
             roster_dict["student_count"] = roster.qualified_count + roster.disqualified_count
             roster_dict["roster_name"] = roster.roster_code
             roster_dict["roster_period"] = roster.roster_cycle.value
+            roster_dict.update(_roster_config_fields(roster))
 
             # 添加關聯資料（已 eager loaded，避免 MissingGreenlet）
             if roster.items:
-                roster_dict["items"] = [RosterItemResponse.model_validate(item).model_dump() for item in roster.items]
+                roster_dict["items"] = [
+                    _roster_item_dict_with_display_year(item, roster, slim=True) for item in roster.items
+                ]
             if roster.audit_logs:
                 roster_dict["audit_logs"] = [
                     RosterAuditLogResponse.model_validate(log).model_dump() for log in roster.audit_logs
@@ -419,8 +556,8 @@ async def list_payment_rosters(
         )
 
     except Exception as e:
-        logger.error(f"Failed to list rosters: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="取得造冊清單失敗")
+        logger.exception("Failed to list rosters")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="取得造冊清單失敗") from e
 
 
 @router.get("/preview-students")
@@ -498,22 +635,10 @@ async def preview_roster_students(
         # Check if has matrix distribution
         has_matrix_distribution = config.quota_management_mode == QuotaManagementMode.matrix_based
 
-        # Auto-detect ranking_id if needed
-        if has_matrix_distribution and not ranking_id:
-            ranking = (
-                db.query(CollegeRanking)
-                .filter(
-                    and_(
-                        CollegeRanking.scholarship_type_id == config.scholarship_type_id,
-                        CollegeRanking.distribution_executed == True,
-                    )
-                )
-                .order_by(CollegeRanking.created_at.desc())
-                .first()
-            )
-            if ranking:
-                ranking_id = ranking.id
-                logger.info(f"Auto-detected ranking_id: {ranking_id}")
+        # NOTE: 不在此處自挑單一排名。ranking_id 為 None 時交由
+        # roster_service._get_eligible_applications 聚合「所有」已執行分發的排名
+        # （= 全院），與 generate_roster 走同一條路 → 預覽與產生保證一致。
+        # 明確指定 ranking_id 時則只預覽該排名。
 
         # Get eligible applications using RosterService
         logger.info(
@@ -528,6 +653,47 @@ async def preview_roster_students(
         )
         logger.info(f"Found {len(applications)} eligible applications")
 
+        # 查詢分發資訊：從同學年度排名中取得各 application 的分配結果
+        from app.models.college_review import CollegeRankingItem
+
+        app_ids = [a.id for a in applications]
+        allocation_map: dict = {}
+        if app_ids:
+            alloc_items = (
+                db.query(CollegeRankingItem)
+                .join(CollegeRanking, CollegeRankingItem.ranking_id == CollegeRanking.id)
+                .filter(
+                    and_(
+                        CollegeRankingItem.application_id.in_(app_ids),
+                        CollegeRankingItem.is_allocated.is_(True),
+                        CollegeRanking.academic_year == academic_year,
+                    )
+                )
+                .all()
+            )
+            # Resolve the display year per allocation: the CONSUMED config's
+            # academic_year (borrowing prior-year shared quota shows that year).
+            # allocation_config_id NULL ⇒ own requesting config ⇒ this year.
+            consumed_ids = {ri.allocation_config_id for ri in alloc_items if ri.allocation_config_id is not None}
+            consumed_year_by_id: dict = {}
+            if consumed_ids:
+                for cid, cyear in (
+                    db.query(ScholarshipConfiguration.id, ScholarshipConfiguration.academic_year)
+                    .filter(ScholarshipConfiguration.id.in_(consumed_ids))
+                    .all()
+                ):
+                    consumed_year_by_id[cid] = cyear
+            for ri in alloc_items:
+                allocation_map[ri.application_id] = {
+                    "allocated_sub_type": ri.allocated_sub_type,
+                    "allocation_config_id": ri.allocation_config_id,
+                    "allocation_year": (
+                        consumed_year_by_id.get(ri.allocation_config_id)
+                        if ri.allocation_config_id is not None
+                        else academic_year
+                    ),
+                }
+
         # Initialize summary statistics
         students = []
         summary = {
@@ -538,8 +704,9 @@ async def preview_roster_students(
                 "missing_data": 0,
                 "verification_failed": 0,
                 "rules_failed": 0,
-                "no_bank_account": 0,
             },
+            # 缺少銀行帳戶不排除造冊，僅提醒補件（撥款前仍會擋）
+            "missing_bank_account_count": 0,
             "total_amount": 0.0,
             "verification_stats": {
                 "verified": 0,
@@ -561,7 +728,9 @@ async def preview_roster_students(
                 "application_id": application.id,
                 "student_name": student_name or "",
                 "student_id": student_id_number or "",
-                "student_id_number": student_data.get("std_pid", ""),
+                # 身分證字號 masked at the response boundary — only the display
+                # is needed here, so the full national ID never leaves the server.
+                "student_id_number": mask_id_number(student_data.get("std_pid", "")),
                 "email": student_data.get("com_email", ""),
                 "college": college,
                 "department": student_data.get("std_depno", ""),
@@ -570,6 +739,9 @@ async def preview_roster_students(
                 "amount": float(application.amount or config.amount or 0),
                 "rank_position": None,
                 "backup_info": [],
+                "allocated_sub_type": allocation_map.get(application.id, {}).get("allocated_sub_type"),
+                "allocation_config_id": allocation_map.get(application.id, {}).get("allocation_config_id"),
+                "allocation_year": allocation_map.get(application.id, {}).get("allocation_year"),
                 # Validation fields
                 "is_included": False,
                 "exclusion_reason": None,
@@ -613,7 +785,7 @@ async def preview_roster_students(
                         student_info["has_fresh_data"] = bool(fresh_student_data)
 
                 except Exception as e:
-                    logger.warning(f"Verification failed for student {student_id_number}: {e}")
+                    logger.warning(f"Verification failed for student {student_id_number}", exc_info=True)
                     student_info["verification_status"] = "error"
                     student_info["verification_message"] = str(e)
                     summary["verification_stats"]["api_errors"] += 1
@@ -628,11 +800,11 @@ async def preview_roster_students(
                 student_info["is_eligible"] = eligibility_result.get("is_eligible", True)
                 student_info["failed_rules"] = eligibility_result.get("failed_rules", [])
                 student_info["warning_rules"] = eligibility_result.get("warning_rules", [])
-            except Exception as e:
-                logger.warning(f"Eligibility validation failed for application {application.id}: {e}")
+            except Exception:
+                logger.warning(f"Eligibility validation failed for application {application.id}", exc_info=True)
                 student_info["is_eligible"] = True  # Don't exclude on validation error
 
-            # Validation Step 4: Bank account check
+            # Validation Step 4: Bank account check（僅提醒，不影響納入與否）
             bank_account, field_name = extract_bank_account(application)
             student_info["has_bank_account"] = bool(bank_account)
             student_info["bank_account_field"] = field_name
@@ -644,7 +816,7 @@ async def preview_roster_students(
             # Check verification status
             if verification_status != StudentVerificationStatus.VERIFIED:
                 is_included = False
-                exclusion_reason = f"學籍驗證未通過: {verification_status.value}"
+                exclusion_reason = f"學籍驗證未通過：{verification_status_label(verification_status)}"
                 summary["exclusion_breakdown"]["verification_failed"] += 1
 
             # Check eligibility rules
@@ -654,14 +826,13 @@ async def preview_roster_students(
                 exclusion_reason = f"不符合獎學金規則: {'; '.join(failed_rules)}"
                 summary["exclusion_breakdown"]["rules_failed"] += 1
 
-            # Check bank account
-            elif not bank_account:
-                is_included = False
-                exclusion_reason = "缺少銀行帳戶資訊"
-                summary["exclusion_breakdown"]["no_bank_account"] += 1
-
             student_info["is_included"] = is_included
             student_info["exclusion_reason"] = exclusion_reason
+
+            # 只統計「仍列入造冊」但缺帳戶的學生 — 這個數字驅動前端的補件提醒，
+            # 被其他原因排除者不需補件，不應計入
+            if is_included and not bank_account:
+                summary["missing_bank_account_count"] += 1
 
             if is_included:
                 summary["included_count"] += 1
@@ -700,11 +871,11 @@ async def preview_roster_students(
         raise
     except ValueError as e:
         # Handle validation errors with specific messages (e.g., missing ranking)
-        logger.error(f"Failed to preview students for config {config_id}: {e}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        logger.exception(f"Failed to preview students for config {config_id}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except Exception as e:
-        logger.error(f"Failed to preview students for config {config_id}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="預覽學生名單失敗")
+        logger.exception(f"Failed to preview students for config {config_id}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="預覽學生名單失敗") from e
     finally:
         db.close()
 
@@ -763,12 +934,90 @@ async def get_roster_cycle_status(
         result = await db.execute(stmt)
         existing_rosters = result.scalars().all()
 
-        # Create a map of period_label -> roster
-        roster_map = {roster.period_label: roster for roster in existing_rosters}
+        # Create a map of period_label -> [rosters] (supports multiple rosters per period for matrix distribution)
+        roster_groups: dict = {}
+        for roster in existing_rosters:
+            roster_groups.setdefault(roster.period_label, []).append(roster)
 
         # Generate period list based on roster_cycle
         periods = []
         academic_year = config.academic_year
+
+        # Resolve ranking for matrix-based scholarships (used for eligible-count estimation)
+        from app.models.application import Application
+        from app.models.college_review import CollegeRanking, CollegeRankingItem
+        from app.models.enums import QuotaManagementMode
+
+        ranking_id_for_estimate: Optional[int] = None
+        is_matrix_based = config.quota_management_mode == QuotaManagementMode.matrix_based
+        if is_matrix_based:
+            ranking_stmt = (
+                select(CollegeRanking.id)
+                .where(
+                    and_(
+                        CollegeRanking.scholarship_type_id == config.scholarship_type_id,
+                        CollegeRanking.academic_year == academic_year,
+                        CollegeRanking.is_finalized.is_(True),
+                        CollegeRanking.distribution_executed.is_(True),
+                    )
+                )
+                .order_by(CollegeRanking.finalized_at.desc())
+                .limit(1)
+            )
+            ranking_id_for_estimate = (await db.execute(ranking_stmt)).scalar_one_or_none()
+
+        # Cache counts by semester filter to avoid duplicate queries across periods
+        estimate_cache: dict = {}
+
+        async def _estimate_eligible_count(semester_filter: Optional[str]) -> int:
+            """Count approved applications eligible for the given period semester."""
+            if semester_filter in estimate_cache:
+                return estimate_cache[semester_filter]
+
+            # Matrix-based scholarships require an executed ranking; without one, no students are eligible
+            if is_matrix_based and ranking_id_for_estimate is None:
+                estimate_cache[semester_filter] = 0
+                return 0
+
+            count_stmt = select(func.count(Application.id)).where(
+                and_(
+                    or_(
+                        Application.scholarship_configuration_id == config_id,
+                        and_(
+                            Application.scholarship_configuration_id.is_(None),
+                            Application.scholarship_type_id == config.scholarship_type_id,
+                        ),
+                    ),
+                    Application.status == "approved",
+                    Application.academic_year == academic_year,
+                    Application.deleted_at.is_(None),
+                )
+            )
+
+            if is_matrix_based:
+                count_stmt = count_stmt.join(
+                    CollegeRankingItem, CollegeRankingItem.application_id == Application.id
+                ).where(
+                    and_(
+                        CollegeRankingItem.ranking_id == ranking_id_for_estimate,
+                        CollegeRankingItem.is_allocated.is_(True),
+                    )
+                )
+
+            if semester_filter:
+                count_stmt = count_stmt.where(Application.semester == semester_filter)
+
+            value = (await db.execute(count_stmt)).scalar() or 0
+            estimate_cache[semester_filter] = value
+            return value
+
+        def _semester_for_month(month_int: int) -> Optional[str]:
+            """Map a month to a semester for semester-based scholarships."""
+            if month_int in (2, 3, 4, 5, 6, 7):
+                return "second"
+            if month_int in (8, 9, 10, 11, 12, 1):
+                return "first"
+            return None
 
         if schedule.roster_cycle.value == "monthly":
             # Determine if this is a yearly (academic year) scholarship
@@ -784,7 +1033,7 @@ async def get_roster_cycle_status(
 
             for month in month_sequence:
                 period_label = f"{academic_year}-{month:02d}"
-                roster = roster_map.get(period_label)
+                rosters_for_period = roster_groups.get(period_label, [])
 
                 # Calculate period dates
                 period_dates = get_roster_period_dates(
@@ -800,56 +1049,48 @@ async def get_roster_cycle_status(
                 western_date = f"{calendar_year}-{month:02d}"
                 display_label = f"{period_label} ({calendar_year}年{month}月)"
 
-                # 根據造冊的實際狀態決定期間狀態
-                if roster and roster.status in [RosterStatus.COMPLETED, RosterStatus.LOCKED]:
-                    periods.append(
-                        {
+                if rosters_for_period:
+                    for roster in rosters_for_period:
+                        entry = {
                             "label": period_label,
                             "western_date": western_date,
                             "display_label": display_label,
-                            "status": "completed",
                             "roster_id": roster.id,
                             "roster_code": roster.roster_code,
                             "roster_status": roster.status.value,
-                            "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
-                            "total_amount": float(roster.total_amount) if roster.total_amount else 0,
-                            "qualified_count": roster.qualified_count,
+                            "excel_stale": roster.excel_stale,
+                            "sub_type": roster.sub_type,
+                            "allocation_year": roster.allocation_year,
+                            "project_number": roster.project_number,
                             "period_start_date": period_dates["start_date"].isoformat(),
                             "period_end_date": period_dates["end_date"].isoformat(),
                         }
-                    )
-                elif roster and roster.status == RosterStatus.FAILED:
-                    periods.append(
-                        {
-                            "label": period_label,
-                            "western_date": western_date,
-                            "display_label": display_label,
-                            "status": "failed",
-                            "roster_id": roster.id,
-                            "roster_code": roster.roster_code,
-                            "roster_status": roster.status.value,
-                            "error_message": roster.notes,
-                            "total_amount": float(roster.total_amount) if roster.total_amount else 0,
-                            "qualified_count": roster.qualified_count,
-                            "period_start_date": period_dates["start_date"].isoformat(),
-                            "period_end_date": period_dates["end_date"].isoformat(),
-                        }
-                    )
-                elif roster and roster.status == RosterStatus.PROCESSING:
-                    periods.append(
-                        {
-                            "label": period_label,
-                            "western_date": western_date,
-                            "display_label": display_label,
-                            "status": "processing",
-                            "roster_id": roster.id,
-                            "roster_code": roster.roster_code,
-                            "roster_status": roster.status.value,
-                            "period_start_date": period_dates["start_date"].isoformat(),
-                            "period_end_date": period_dates["end_date"].isoformat(),
-                        }
-                    )
+                        if roster.status in [RosterStatus.COMPLETED, RosterStatus.LOCKED]:
+                            entry.update(
+                                {
+                                    "status": "completed",
+                                    "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
+                                    "total_amount": float(roster.total_amount) if roster.total_amount else 0,
+                                    "qualified_count": roster.qualified_count,
+                                }
+                            )
+                        elif roster.status == RosterStatus.FAILED:
+                            entry.update(
+                                {
+                                    "status": "failed",
+                                    "error_message": roster.notes,
+                                    "total_amount": float(roster.total_amount) if roster.total_amount else 0,
+                                    "qualified_count": roster.qualified_count,
+                                }
+                            )
+                        elif roster.status == RosterStatus.PROCESSING:
+                            entry["status"] = "processing"
+                        else:
+                            entry["status"] = "draft"
+                        periods.append(entry)
                 else:
+                    semester_filter = None if is_yearly else _semester_for_month(month)
+                    estimated_count = await _estimate_eligible_count(semester_filter)
                     periods.append(
                         {
                             "label": period_label,
@@ -857,7 +1098,7 @@ async def get_roster_cycle_status(
                             "display_label": display_label,
                             "status": "waiting",
                             "next_schedule": schedule.next_run_at.isoformat() if schedule.next_run_at else None,
-                            "estimated_count": 0,  # TODO: Calculate estimated count
+                            "estimated_count": estimated_count,
                             "period_start_date": period_dates["start_date"].isoformat(),
                             "period_end_date": period_dates["end_date"].isoformat(),
                         }
@@ -867,7 +1108,7 @@ async def get_roster_cycle_status(
             # Generate 2 half-year periods
             for half in ["H1", "H2"]:
                 period_label = f"{academic_year}-{half}"
-                roster = roster_map.get(period_label)
+                rosters_for_period = roster_groups.get(period_label, [])
 
                 # Calculate period dates
                 period_dates = get_roster_period_dates(
@@ -877,65 +1118,64 @@ async def get_roster_cycle_status(
                     period_label=period_label,
                 )
 
-                # 根據造冊的實際狀態決定期間狀態
-                if roster and roster.status in [RosterStatus.COMPLETED, RosterStatus.LOCKED]:
-                    periods.append(
-                        {
+                if rosters_for_period:
+                    for roster in rosters_for_period:
+                        entry = {
                             "label": period_label,
-                            "status": "completed",
                             "roster_id": roster.id,
                             "roster_code": roster.roster_code,
                             "roster_status": roster.status.value,
-                            "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
-                            "total_amount": float(roster.total_amount) if roster.total_amount else 0,
-                            "qualified_count": roster.qualified_count,
+                            "excel_stale": roster.excel_stale,
+                            "sub_type": roster.sub_type,
+                            "allocation_year": roster.allocation_year,
+                            "project_number": roster.project_number,
                             "period_start_date": period_dates["start_date"].isoformat(),
                             "period_end_date": period_dates["end_date"].isoformat(),
                         }
-                    )
-                elif roster and roster.status == RosterStatus.FAILED:
-                    periods.append(
-                        {
-                            "label": period_label,
-                            "status": "failed",
-                            "roster_id": roster.id,
-                            "roster_code": roster.roster_code,
-                            "roster_status": roster.status.value,
-                            "error_message": roster.notes,
-                            "total_amount": float(roster.total_amount) if roster.total_amount else 0,
-                            "qualified_count": roster.qualified_count,
-                            "period_start_date": period_dates["start_date"].isoformat(),
-                            "period_end_date": period_dates["end_date"].isoformat(),
-                        }
-                    )
-                elif roster and roster.status == RosterStatus.PROCESSING:
-                    periods.append(
-                        {
-                            "label": period_label,
-                            "status": "processing",
-                            "roster_id": roster.id,
-                            "roster_code": roster.roster_code,
-                            "roster_status": roster.status.value,
-                            "period_start_date": period_dates["start_date"].isoformat(),
-                            "period_end_date": period_dates["end_date"].isoformat(),
-                        }
-                    )
+                        if roster.status in [RosterStatus.COMPLETED, RosterStatus.LOCKED]:
+                            entry.update(
+                                {
+                                    "status": "completed",
+                                    "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
+                                    "total_amount": float(roster.total_amount) if roster.total_amount else 0,
+                                    "qualified_count": roster.qualified_count,
+                                }
+                            )
+                        elif roster.status == RosterStatus.FAILED:
+                            entry.update(
+                                {
+                                    "status": "failed",
+                                    "error_message": roster.notes,
+                                    "total_amount": float(roster.total_amount) if roster.total_amount else 0,
+                                    "qualified_count": roster.qualified_count,
+                                }
+                            )
+                        elif roster.status == RosterStatus.PROCESSING:
+                            entry["status"] = "processing"
+                        else:
+                            entry["status"] = "draft"
+                        periods.append(entry)
                 else:
+                    if config.semester is None:
+                        semester_filter = None
+                    else:
+                        semester_filter = "first" if half == "H1" else "second"
+                    estimated_count = await _estimate_eligible_count(semester_filter)
                     periods.append(
                         {
                             "label": period_label,
                             "status": "waiting",
                             "next_schedule": schedule.next_run_at.isoformat() if schedule.next_run_at else None,
-                            "estimated_count": 0,
+                            "estimated_count": estimated_count,
                             "period_start_date": period_dates["start_date"].isoformat(),
                             "period_end_date": period_dates["end_date"].isoformat(),
                         }
                     )
 
         elif schedule.roster_cycle.value == "yearly":
-            # Generate 1 yearly period
+            # Generate 1 yearly period (may expand to multiple rows for matrix distribution)
             period_label = str(academic_year)
-            roster = roster_map.get(period_label)
+            rosters_for_period = roster_groups.get(period_label, [])
 
             # Calculate period dates
             period_dates = get_roster_period_dates(
@@ -945,60 +1185,95 @@ async def get_roster_cycle_status(
                 period_label=period_label,
             )
 
-            # 根據造冊的實際狀態決定期間狀態
-            if roster and roster.status in [RosterStatus.COMPLETED, RosterStatus.LOCKED]:
-                periods.append(
-                    {
+            if rosters_for_period:
+                for roster in rosters_for_period:
+                    entry = {
                         "label": period_label,
-                        "status": "completed",
                         "roster_id": roster.id,
                         "roster_code": roster.roster_code,
                         "roster_status": roster.status.value,
-                        "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
-                        "total_amount": float(roster.total_amount) if roster.total_amount else 0,
-                        "qualified_count": roster.qualified_count,
+                        "excel_stale": roster.excel_stale,
+                        "sub_type": roster.sub_type,
+                        "allocation_year": roster.allocation_year,
+                        "project_number": roster.project_number,
                         "period_start_date": period_dates["start_date"].isoformat(),
                         "period_end_date": period_dates["end_date"].isoformat(),
                     }
-                )
-            elif roster and roster.status == RosterStatus.FAILED:
-                periods.append(
-                    {
-                        "label": period_label,
-                        "status": "failed",
-                        "roster_id": roster.id,
-                        "roster_code": roster.roster_code,
-                        "roster_status": roster.status.value,
-                        "error_message": roster.notes,
-                        "total_amount": float(roster.total_amount) if roster.total_amount else 0,
-                        "qualified_count": roster.qualified_count,
-                        "period_start_date": period_dates["start_date"].isoformat(),
-                        "period_end_date": period_dates["end_date"].isoformat(),
-                    }
-                )
-            elif roster and roster.status == RosterStatus.PROCESSING:
-                periods.append(
-                    {
-                        "label": period_label,
-                        "status": "processing",
-                        "roster_id": roster.id,
-                        "roster_code": roster.roster_code,
-                        "roster_status": roster.status.value,
-                        "period_start_date": period_dates["start_date"].isoformat(),
-                        "period_end_date": period_dates["end_date"].isoformat(),
-                    }
-                )
+                    if roster.status in [RosterStatus.COMPLETED, RosterStatus.LOCKED]:
+                        entry.update(
+                            {
+                                "status": "completed",
+                                "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
+                                "total_amount": float(roster.total_amount) if roster.total_amount else 0,
+                                "qualified_count": roster.qualified_count,
+                            }
+                        )
+                    elif roster.status == RosterStatus.FAILED:
+                        entry.update(
+                            {
+                                "status": "failed",
+                                "error_message": roster.notes,
+                                "total_amount": float(roster.total_amount) if roster.total_amount else 0,
+                                "qualified_count": roster.qualified_count,
+                            }
+                        )
+                    elif roster.status == RosterStatus.PROCESSING:
+                        entry["status"] = "processing"
+                    else:
+                        entry["status"] = "draft"
+                    periods.append(entry)
             else:
+                estimated_count = await _estimate_eligible_count(None)
                 periods.append(
                     {
                         "label": period_label,
                         "status": "waiting",
                         "next_schedule": schedule.next_run_at.isoformat() if schedule.next_run_at else None,
-                        "estimated_count": 0,
+                        "estimated_count": estimated_count,
                         "period_start_date": period_dates["start_date"].isoformat(),
                         "period_end_date": period_dates["end_date"].isoformat(),
                     }
                 )
+
+        # Append any distribution-generated rosters whose period_label was not covered
+        # by the schedule template (e.g., yearly period_label "114" when cycle is monthly)
+        covered_roster_ids = {p["roster_id"] for p in periods if p.get("roster_id")}
+        for period_label, rosters_list in roster_groups.items():
+            for roster in rosters_list:
+                if roster.id not in covered_roster_ids:
+                    entry = {
+                        "label": period_label,
+                        "roster_id": roster.id,
+                        "roster_code": roster.roster_code,
+                        "roster_status": roster.status.value,
+                        "excel_stale": roster.excel_stale,
+                        "sub_type": roster.sub_type,
+                        "allocation_year": roster.allocation_year,
+                        "project_number": roster.project_number,
+                    }
+                    if roster.status in [RosterStatus.COMPLETED, RosterStatus.LOCKED]:
+                        entry.update(
+                            {
+                                "status": "completed",
+                                "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
+                                "total_amount": float(roster.total_amount) if roster.total_amount else 0,
+                                "qualified_count": roster.qualified_count,
+                            }
+                        )
+                    elif roster.status == RosterStatus.FAILED:
+                        entry.update(
+                            {
+                                "status": "failed",
+                                "error_message": roster.notes,
+                                "total_amount": float(roster.total_amount) if roster.total_amount else 0,
+                                "qualified_count": roster.qualified_count,
+                            }
+                        )
+                    elif roster.status == RosterStatus.PROCESSING:
+                        entry["status"] = "processing"
+                    else:
+                        entry["status"] = "draft"
+                    periods.append(entry)
 
         return ApiResponse(
             success=True,
@@ -1021,8 +1296,8 @@ async def get_roster_cycle_status(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to get cycle status for config {config_id}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="查詢造冊週期狀態失敗")
+        logger.exception(f"Failed to get cycle status for config {config_id}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="查詢造冊週期狀態失敗") from e
 
 
 @router.get("/{roster_id}")
@@ -1035,6 +1310,7 @@ async def get_payment_roster(
     取得特定造冊詳細資訊
     Get specific payment roster details
     """
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
     try:
         # 使用 eager loading 避免 MissingGreenlet 錯誤
         stmt = (
@@ -1056,17 +1332,19 @@ async def get_payment_roster(
 
         # 使用 Pydantic model_validate 自動處理 Field alias 映射
         response_data = RosterResponse.model_validate(roster)
+        data = response_data.model_dump() if hasattr(response_data, "model_dump") else response_data.dict()
+        data.update(_roster_config_fields(roster))  # structured config FKs (issue #1033)
         return ApiResponse(
             success=True,
             message="查詢成功",
-            data=response_data.model_dump() if hasattr(response_data, "model_dump") else response_data.dict(),
+            data=data,
         )
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to get roster {roster_id}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="取得造冊詳情失敗")
+        logger.exception(f"Failed to get roster {roster_id}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="取得造冊詳情失敗") from e
 
 
 @router.get("/{roster_id}/items")
@@ -1075,7 +1353,7 @@ async def get_roster_items(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     verification_status: Optional[StudentVerificationStatus] = Query(None),
-    is_qualified: Optional[bool] = Query(None),
+    is_included: Optional[bool] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -1083,6 +1361,7 @@ async def get_roster_items(
     取得造冊明細項目
     Get roster items
     """
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
     try:
         # 檢查造冊是否存在
         roster_stmt = select(PaymentRoster).where(PaymentRoster.id == roster_id)
@@ -1092,31 +1371,47 @@ async def get_roster_items(
         if not roster:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到指定的造冊")
 
-        stmt = select(PaymentRosterItem).where(PaymentRosterItem.roster_id == roster_id)
+        stmt = (
+            select(PaymentRosterItem)
+            .where(PaymentRosterItem.roster_id == roster_id)
+            .options(selectinload(PaymentRosterItem.application))
+        )
 
         # 套用篩選條件
         if verification_status:
             stmt = stmt.where(PaymentRosterItem.verification_status == verification_status)
-        if is_qualified is not None:
-            stmt = stmt.where(PaymentRosterItem.is_qualified == is_qualified)
+        if is_included is not None:
+            stmt = stmt.where(PaymentRosterItem.is_included.is_(is_included))
 
         # 分頁查詢
         stmt = stmt.order_by(PaymentRosterItem.created_at).offset(skip).limit(limit)
         result = await db.execute(stmt)
         items = result.scalars().all()
 
-        items_data = [RosterItemResponse.from_orm(item) for item in items]
+        items_data = []
+        for item in items:
+            item_dict = _roster_item_dict_with_display_year(item, roster)
+            # 從 application.student_data 補充學號/學院/系所資訊
+            # (PaymentRosterItem 只存 student_id_number=身分證，學號需從快照取得)
+            if item.application and item.application.student_data:
+                sd = item.application.student_data
+                item_dict["student_id"] = sd.get("std_stdcode")
+                item_dict["college_code"] = sd.get("std_academyno") or sd.get("trm_academyno")
+                item_dict["college_name"] = sd.get("trm_academyname")
+                item_dict["department_name"] = sd.get("trm_depname")
+            items_data.append(item_dict)
+
         return ApiResponse(
             success=True,
             message="查詢成功",
-            data=[item.model_dump() if hasattr(item, "model_dump") else item.dict() for item in items_data],
+            data=items_data,
         )
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to get roster items for {roster_id}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="取得造冊明細失敗")
+        logger.exception(f"Failed to get roster items for {roster_id}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="取得造冊明細失敗") from e
 
 
 @router.post("/{roster_id}/lock")
@@ -1130,7 +1425,7 @@ async def lock_roster(
     Lock roster
     """
     # 檢查權限：只有管理員可以鎖定造冊
-    check_user_roles([UserRole.admin], current_user)
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
 
     try:
         stmt = select(PaymentRoster).where(PaymentRoster.id == roster_id)
@@ -1144,7 +1439,7 @@ async def lock_roster(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="造冊已經被鎖定")
 
         roster.status = RosterStatus.LOCKED
-        roster.locked_at = datetime.utcnow()
+        roster.locked_at = datetime.now(timezone.utc)
         roster.locked_by_user_id = current_user.id
 
         await db.commit()
@@ -1160,9 +1455,9 @@ async def lock_roster(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to lock roster {roster_id}: {e}")
+        logger.exception(f"Failed to lock roster {roster_id}")
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="鎖定造冊失敗")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="鎖定造冊失敗") from e
 
 
 @router.post("/{roster_id}/unlock")
@@ -1176,7 +1471,7 @@ async def unlock_roster(
     Unlock roster
     """
     # 檢查權限：只有管理員可以解鎖造冊
-    check_user_roles([UserRole.admin], current_user)
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
 
     try:
         stmt = select(PaymentRoster).where(PaymentRoster.id == roster_id)
@@ -1208,9 +1503,9 @@ async def unlock_roster(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to unlock roster {roster_id}: {e}")
+        logger.exception(f"Failed to unlock roster {roster_id}")
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="解鎖造冊失敗")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="解鎖造冊失敗") from e
 
 
 @router.get("/{roster_id}/preview")
@@ -1227,6 +1522,7 @@ def preview_roster_export(
     預覽造冊Excel匯出內容
     Preview roster Excel export content
     """
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
     try:
         roster = db.query(PaymentRoster).filter(PaymentRoster.id == roster_id).first()
 
@@ -1262,8 +1558,8 @@ def preview_roster_export(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to preview roster {roster_id}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="預覽產生失敗")
+        logger.exception(f"Failed to preview roster {roster_id}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="預覽產生失敗") from e
 
 
 @router.post("/{roster_id}/dry-run")
@@ -1313,8 +1609,8 @@ def dry_run_roster_generation(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to dry run roster generation: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="預演失敗")
+        logger.exception("Failed to dry run roster generation")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="預演失敗") from e
 
 
 @router.post("/{roster_id}/export")
@@ -1329,6 +1625,7 @@ def export_roster_to_excel(
     匯出造冊至Excel (STD_UP_MIXLISTA格式)
     Export roster to Excel (STD_UP_MIXLISTA format)
     """
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
     try:
         roster = db.query(PaymentRoster).filter(PaymentRoster.id == roster_id).first()
 
@@ -1383,6 +1680,13 @@ def export_roster_to_excel(
             current_user.id,
         )
 
+        # The freshly exported file reflects the current items, so the roster is
+        # no longer stale. Clear the flag (set True by reconcile / post-lock
+        # remove) so the 「需重新匯出 Excel」banner clears.
+        if "error" not in export_result:
+            roster.excel_stale = False
+            db.commit()
+
         return ApiResponse(
             success=True,
             message="Excel檔案匯出成功",
@@ -1398,13 +1702,14 @@ def export_roster_to_excel(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to export roster {roster_id}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Excel匯出失敗")
+        logger.exception(f"Failed to export roster {roster_id}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Excel匯出失敗") from e
 
 
 @router.get("/{roster_id}/download")
 async def download_roster_excel(
     roster_id: int,
+    request: Request,
     use_minio: bool = Query(True, description="是否使用MinIO下載"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -1413,8 +1718,14 @@ async def download_roster_excel(
     下載造冊Excel檔案 (支援MinIO和本地檔案)
     Download roster Excel file (supports MinIO and local files)
     """
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
+    # trace_id is injected by add_trace_id_middleware (see backend/app/main.py).
+    # We thread it into every download-path log line so the e2e diagnose helper
+    # (frontend/e2e/helpers/logs.ts) can correlate failures via grep — without
+    # it, the 500's traceback gets stranded in the docker log tail.
+    trace_id = getattr(request.state, "trace_id", "unknown")
     try:
-        stmt = select(PaymentRoster).where(PaymentRoster.id == roster_id)
+        stmt = select(PaymentRoster).options(selectinload(PaymentRoster.items)).where(PaymentRoster.id == roster_id)
 
         result = await db.execute(stmt)
 
@@ -1430,11 +1741,11 @@ async def download_roster_excel(
             # SECURITY: Validate MinIO object name (CLAUDE.md requirement)
             try:
                 validate_object_name_minio(roster.minio_object_name)
-            except HTTPException:
-                logger.error(f"Invalid minio_object_name from database: {roster.minio_object_name}")
+            except HTTPException as exc:
+                logger.error(f"Invalid minio_object_name from database: {roster.minio_object_name} trace_id={trace_id}")
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="MinIO object name驗證失敗"
-                )
+                ) from exc
 
             # 使用MinIO下載
             try:
@@ -1450,12 +1761,18 @@ async def download_roster_excel(
                     db=db,
                 )
 
-                logger.info(f"Roster {roster.roster_code} downloaded from MinIO by user {current_user.id}")
+                logger.info(
+                    f"Roster {roster.roster_code} downloaded from MinIO by user {current_user.id} trace_id={trace_id}"
+                )
 
                 # 直接返回二進制檔案內容
                 from fastapi.responses import Response
 
-                filename = metadata.get("original-filename", f"{roster.roster_code}.xlsx")
+                # Custom metadata comes back PREFIXED (x-amz-meta-*) — the bare
+                # key was always None, so the timestamped original filename was
+                # never used (same dead-key class as the minio_service
+                # file-hash fix).
+                filename = metadata.get("x-amz-meta-original-filename", f"{roster.roster_code}.xlsx")
                 content_type = metadata.get(
                     "Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
@@ -1469,11 +1786,14 @@ async def download_roster_excel(
                     },
                 )
 
-            except Exception as e:
-                logger.warning(f"MinIO download failed, falling back to local file: {e}")
+            except Exception:
+                logger.warning(
+                    f"MinIO download failed, falling back to local file trace_id={trace_id}",
+                    exc_info=True,
+                )
                 use_minio = False
 
-        if not use_minio:
+        if not use_minio or not (hasattr(roster, "minio_object_name") and roster.minio_object_name):
             # 本地檔案下載或MinIO失敗後的回退方案
             if hasattr(roster, "excel_file_path") and roster.excel_file_path and os.path.exists(roster.excel_file_path):
                 # 記錄下載日誌
@@ -1486,7 +1806,9 @@ async def download_roster_excel(
                     db=db,
                 )
 
-                logger.info(f"Roster {roster.roster_code} downloaded locally by user {current_user.id}")
+                logger.info(
+                    f"Roster {roster.roster_code} downloaded locally by user {current_user.id} trace_id={trace_id}"
+                )
 
                 return FileResponse(
                     path=roster.excel_file_path,
@@ -1495,28 +1817,69 @@ async def download_roster_excel(
                 )
             else:
                 # 沒有可用的檔案，重新產生
+                # 當 use_minio=False 時跳過 MinIO 上傳/清理，確保本地檔案存在供 FileResponse 直接回傳
+                logger.info(
+                    f"Roster {roster.roster_code} has no excel_file_path nor minio_object_name; "
+                    f"regenerating (skip_minio_upload={not use_minio}) trace_id={trace_id}"
+                )
                 export_service = ExcelExportService()
-                export_result = export_service.export_roster_to_excel(
-                    roster=roster,
-                    template_name="STD_UP_MIXLISTA",
-                    include_header=True,
-                    include_statistics=True,
-                    include_excluded=False,
+                try:
+                    export_result = export_service.export_roster_to_excel(
+                        roster=roster,
+                        template_name="STD_UP_MIXLISTA",
+                        include_header=True,
+                        include_statistics=True,
+                        include_excluded=False,
+                        skip_minio_upload=not use_minio,
+                    )
+                except Exception:
+                    logger.exception(
+                        f"export_roster_to_excel raised during download "
+                        f"(roster_id={roster_id}, skip_minio_upload={not use_minio}) trace_id={trace_id}"
+                    )
+                    raise
+
+                regen_file_path = export_result.get("file_path")
+                regen_exists = bool(regen_file_path) and os.path.exists(regen_file_path)
+                logger.info(
+                    f"Roster {roster.roster_code} regenerated: file_path={regen_file_path}, "
+                    f"exists={regen_exists}, minio_object_name={export_result.get('minio_object_name')} "
+                    f"trace_id={trace_id}"
                 )
 
-                logger.info(f"Roster {roster.roster_code} re-generated and downloaded by user {current_user.id}")
+                if regen_exists:
+                    return FileResponse(
+                        path=regen_file_path,
+                        filename=f"{roster.roster_code}.xlsx",
+                        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    )
 
-                return FileResponse(
-                    path=export_result["file_path"],
-                    filename=f"{roster.roster_code}.xlsx",
-                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                # Local file was cleaned up after MinIO upload — serve from MinIO.
+                minio_obj = export_result.get("minio_object_name")
+                if minio_obj:
+                    from fastapi.responses import Response
+
+                    file_content, _ = minio_service.download_roster_file(minio_obj)
+                    return Response(
+                        content=file_content,
+                        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        headers={
+                            "Content-Disposition": f'attachment; filename="{roster.roster_code}.xlsx"',
+                            "Content-Length": str(len(file_content)),
+                        },
+                    )
+
+                logger.error(
+                    f"Download fell through: regen produced no usable file_path "
+                    f"({regen_file_path!r}) and no minio_object_name trace_id={trace_id}"
                 )
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="下載造冊失敗")
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to download roster {roster_id}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="下載造冊失敗")
+        logger.exception(f"Failed to download roster {roster_id} trace_id={trace_id}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="下載造冊失敗") from e
 
 
 @router.get("/{roster_id}/statistics")
@@ -1529,6 +1892,7 @@ async def get_roster_statistics(
     取得造冊統計資訊
     Get roster statistics
     """
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
     try:
         stmt = select(PaymentRoster).where(PaymentRoster.id == roster_id)
 
@@ -1553,11 +1917,11 @@ async def get_roster_statistics(
             ).scalar()
             verification_stats[status_val.value] = item_count
 
-        # 統計合格/不合格人數
+        # 統計納入造冊/排除人數（與造冊詳情、Excel「納入造冊」欄同源）
         qualified_stmt = (
             select(count())
             .select_from(PaymentRosterItem)
-            .where(PaymentRosterItem.roster_id == roster_id, PaymentRosterItem.is_qualified.is_(True))
+            .where(PaymentRosterItem.roster_id == roster_id, PaymentRosterItem.is_included.is_(True))
         )
         qualified_result = await db.execute(qualified_stmt)
         qualified_count = qualified_result.scalar() or 0
@@ -1565,7 +1929,7 @@ async def get_roster_statistics(
         disqualified_stmt = (
             select(count())
             .select_from(PaymentRosterItem)
-            .where(PaymentRosterItem.roster_id == roster_id, PaymentRosterItem.is_qualified.is_(False))
+            .where(PaymentRosterItem.roster_id == roster_id, PaymentRosterItem.is_included.is_(False))
         )
         disqualified_result = await db.execute(disqualified_stmt)
         disqualified_count = disqualified_result.scalar() or 0
@@ -1589,8 +1953,154 @@ async def get_roster_statistics(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to get roster statistics for {roster_id}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="取得造冊統計失敗")
+        logger.exception(f"Failed to get roster statistics for {roster_id}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="取得造冊統計失敗") from e
+
+
+@router.post("/{roster_id}/items/{item_id}/exclude")
+async def exclude_roster_item(
+    roster_id: int,
+    item_id: int,
+    request: Request,
+    reason_category: str = Body(..., description="排除原因分類:'returned'(繳回) / 'declined'(放棄) / 'other'(其他)"),
+    reason_note: Optional[str] = Body(None, description="補充說明,自由文字"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    從造冊明細中排除指定項目(學生繳回 / 放棄獎學金等情境)。
+
+    Soft-deletes by setting `is_included=False` + `exclusion_reason` so the
+    item still appears in audit trails / re-exports with the exclusion
+    metadata, rather than being hard-deleted (#66).
+
+    Notes:
+      - Only admins / super admins may exclude items. Roster must NOT be LOCKED.
+      - This does NOT decrement the student's cumulative received_months;
+        if the funds are actually being returned, the admin should adjust
+        received_months separately (it lives on CollegeRankingItem and the
+        update path is intentionally manual).
+      - A RosterAuditLog row is created with action=ITEM_REMOVE.
+    """
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
+
+    if reason_category not in MANUAL_EXCLUSION_CATEGORY_LABELS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="reason_category must be one of: returned / declined / other",
+        )
+    if reason_category == "other" and not reason_note:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="reason_note is required when reason_category is 'other'",
+        )
+
+    try:
+        # Load item with its parent roster in one round-trip
+        stmt = (
+            select(PaymentRosterItem)
+            .options(selectinload(PaymentRosterItem.roster))
+            .where(PaymentRosterItem.id == item_id)
+        )
+        result = await db.execute(stmt)
+        item = result.scalar_one_or_none()
+
+        if not item:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到指定的造冊明細")
+
+        if item.roster_id != roster_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="造冊明細不屬於指定的造冊",
+            )
+
+        roster = item.roster
+        if roster is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到指定的造冊")
+        if roster.status == RosterStatus.LOCKED:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="造冊已鎖定,無法排除明細;請先解鎖",
+            )
+
+        # Idempotent: refuse if already excluded so the audit trail isn't muddled
+        if not item.is_included:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(f"明細已被排除(原因:{item.exclusion_reason or '未填'})。" f"如需修改原因請先取消排除。"),
+            )
+
+        # Build the human-readable reason string. The labels are shared with
+        # `is_manual_exclusion()` — regeneration keys off this exact prefix to
+        # know an exclusion was a human decision, so the two must not drift.
+        category_label = MANUAL_EXCLUSION_CATEGORY_LABELS[reason_category]
+        full_reason = f"{category_label}: {reason_note}" if reason_note else category_label
+
+        # Capture old/new for audit before mutation
+        old_values = {
+            "is_included": item.is_included,
+            "exclusion_reason": item.exclusion_reason,
+        }
+        item.is_included = False
+        item.exclusion_reason = full_reason
+        new_values = {
+            "is_included": False,
+            "exclusion_reason": full_reason,
+        }
+
+        # Audit log
+        from app.models.roster_audit import RosterAuditAction, RosterAuditLog
+
+        audit = RosterAuditLog.create_audit_log(
+            roster_id=roster.id,
+            action=RosterAuditAction.ITEM_REMOVE,
+            title=f"排除造冊明細 #{item.id} ({item.student_name})",
+            description=(
+                f"原因分類: {category_label}; 補充說明: {reason_note or '(無)'}; " f"獎學金: {item.scholarship_name}"
+            ),
+            user_id=current_user.id,
+            user_name=current_user.name,
+            user_role=current_user.role.value if current_user.role else None,
+            client_ip=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+            old_values=old_values,
+            new_values=new_values,
+            api_endpoint=str(request.url.path),
+            request_method=request.method,
+            request_payload={
+                "reason_category": reason_category,
+                "reason_note": reason_note,
+            },
+            affected_items_count=1,
+        )
+        db.add(audit)
+        await db.commit()
+        await db.refresh(item)
+
+        logger.info(
+            "Roster item %s excluded by user %s (%s)",
+            item.id,
+            current_user.id,
+            reason_category,
+        )
+
+        return ApiResponse(
+            success=True,
+            message="造冊明細已排除",
+            data={
+                "id": item.id,
+                "roster_id": item.roster_id,
+                "is_included": item.is_included,
+                "exclusion_reason": item.exclusion_reason,
+            },
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Failed to exclude roster item {item_id}")
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="排除造冊明細失敗") from e
 
 
 @router.delete("/{roster_id}")
@@ -1604,7 +2114,7 @@ async def delete_roster(
     Delete roster (only unlocked rosters)
     """
     # 檢查權限：只有管理員可以刪除造冊
-    check_user_roles([UserRole.admin], current_user)
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
 
     try:
         stmt = select(PaymentRoster).where(PaymentRoster.id == roster_id)
@@ -1634,9 +2144,9 @@ async def delete_roster(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to delete roster {roster_id}: {e}")
+        logger.exception(f"Failed to delete roster {roster_id}")
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="刪除造冊失敗")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="刪除造冊失敗") from e
 
 
 @router.get("/{roster_id}/audit-logs")
@@ -1651,6 +2161,7 @@ async def get_roster_audit_logs(
     取得造冊稽核日誌
     Get roster audit logs
     """
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
     try:
         stmt = select(PaymentRoster).where(PaymentRoster.id == roster_id)
 
@@ -1686,9 +2197,11 @@ async def get_roster_audit_logs(
                         "level": log.level.value,
                         "title": log.title,
                         "description": log.description,
-                        "created_by_user_id": log.created_by_user_id,
-                        "created_at": log.created_at,
+                        "user_id": log.user_id,
+                        "user_name": log.user_name,
+                        "user_role": log.user_role,
                         "audit_metadata": log.audit_metadata,
+                        "created_at": log.created_at,
                     }
                     for log in logs
                 ],
@@ -1701,5 +2214,218 @@ async def get_roster_audit_logs(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to get audit logs for roster {roster_id}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="查詢稽核日誌失敗")
+        logger.exception(f"Failed to get audit logs for roster {roster_id}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="查詢稽核日誌失敗") from e
+
+
+@router.get("/{roster_id}/revoked-suspended")
+def get_revoked_suspended(
+    roster_id: int,
+    db: Session = Depends(get_sync_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List students still embedded in this roster whose allocation was
+    later revoked or suspended."""
+    _require_admin(current_user)
+    svc = RosterService(db)
+    try:
+        result = svc.get_revoked_suspended_for_roster(roster_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    payload = RevokedSuspendedListResponse(**result).model_dump()
+    return {"success": True, "message": "OK", "data": payload}
+
+
+@router.delete("/{roster_id}/items/{item_id}")
+def remove_locked_roster_item(
+    roster_id: int,
+    item_id: int,
+    request: RemoveLockedItemRequest,
+    db: Session = Depends(get_sync_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Soft-remove a single item from a LOCKED roster (sets is_included=False;
+    row survives for restore). Roster stays LOCKED; excel_stale is set to True;
+    audit log written."""
+    _require_admin(current_user)
+    svc = RosterService(db)
+    try:
+        result = svc.remove_item_from_locked_roster(
+            roster_id=roster_id,
+            item_id=item_id,
+            admin_user_id=current_user.id,
+            reason=request.reason,
+            reason_category=request.reason_category,
+        )
+    except (ValueError, RosterLockedError) as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return {"success": True, "message": "已從造冊移除", "data": result}
+
+
+@router.post("/{roster_id}/items/{item_id}/restore")
+def restore_roster_item(
+    roster_id: int,
+    item_id: int,
+    request: RestoreItemRequest,
+    db: Session = Depends(get_sync_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Re-include a soft-removed roster item (回復). Admin only. Works on
+    COMPLETED and LOCKED rosters; sets excel_stale; audits ITEM_RESTORE."""
+    _require_admin(current_user)
+    svc = RosterService(db)
+    try:
+        result = svc.restore_item(
+            roster_id=roster_id,
+            item_id=item_id,
+            admin_user_id=current_user.id,
+            reason=request.reason_note,
+        )
+    except ValueError as e:
+        # restore_item raises typed exceptions for the precise codes: not-found
+        # → NotFoundError/RosterNotFoundError (404) and already-included →
+        # ConflictError (409), both handled by the global ScholarshipException
+        # handler. A plain ValueError reaching here is a 400 case (item belongs
+        # to another roster, or roster is not in a restorable status).
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    return {"success": True, "message": "已回復造冊明細", "data": result}
+
+
+@router.get("/{roster_id}/distribution-diff")
+def get_distribution_diff(
+    roster_id: int,
+    db: Session = Depends(get_sync_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Compare a generated roster against its slice of the distribution.
+    Returns allocated-but-missing (to_add) and in-roster-but-unallocated
+    (to_remove) lists for the admin to selectively reconcile."""
+    _require_admin(current_user)
+    svc = RosterService(db)
+    try:
+        result = svc.get_distribution_diff_for_roster(roster_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    payload = DistributionDiff(**result).model_dump()
+    return {"success": True, "message": "OK", "data": payload}
+
+
+@router.post("/{roster_id}/reconcile")
+def reconcile_roster_endpoint(
+    roster_id: int,
+    request: ReconcileRequest,
+    db: Session = Depends(get_sync_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Selectively add allocated students missing from the roster (補充人) and/or
+    remove items no longer allocated. Works on COMPLETED and LOCKED rosters;
+    sets excel_stale; audits each change. Presentation-layer only — does not
+    touch quota."""
+    _require_admin(current_user)
+    try:
+        with with_lock_sync(_roster_items_lock_key(roster_id), ttl_seconds=300):
+            svc = RosterService(db)
+            result = svc.reconcile_roster(
+                roster_id=roster_id,
+                add_application_ids=request.add_application_ids,
+                remove_item_ids=request.remove_item_ids,
+                admin_user_id=current_user.id,
+                reason=request.reason,
+            )
+    except LockBusy as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="造冊處理中，請稍候再試") from exc
+    except (ValueError, RosterLockedError) as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    payload = ReconcileResult(**result).model_dump()
+    return {"success": True, "message": "已更新造冊名單", "data": payload}
+
+
+def _build_regeneration_message(rebuilt: int, preserved: int, newly_excluded: int, dropped: int, failed: int) -> str:
+    """Honest summary of a roster regeneration.
+
+    Every way a student can leave the roster is named: preserved manual
+    exclusions, students the fresh verdicts newly excluded (which also undoes a
+    prior 回復), students who left the 名單 entirely, and applications that could
+    not be rebuilt. An admin must be able to tell from the message alone —
+    counting only `rebuilt` would let people disappear in silence. Pure function
+    so the wording stays under test.
+    """
+    message = f"已重新生成造冊：{rebuilt} 筆明細"
+    if preserved:
+        message += f"；保留 {preserved} 筆人為排除"
+    if newly_excluded:
+        message += f"；有 {newly_excluded} 筆先前納入的明細依當下資料改為排除"
+    if dropped:
+        message += f"；有 {dropped} 位先前納入的學生已不在分發名單中，已移出造冊"
+    if failed:
+        message += f"；有 {failed} 筆申請資料不全，未能重建"
+    return message
+
+
+@router.post("/{roster_id}/regenerate")
+def regenerate_roster_endpoint(
+    roster_id: int,
+    request: Optional[RegenerateRosterRequest] = None,
+    db: Session = Depends(get_sync_db),
+    current_user: User = Depends(get_current_user),
+):
+    """重新生成造冊：依當下的分發名單、學生資料、獎學金規則與配置重建全部明細。
+
+    不需要人員有異動即可執行——「比對分發名單」(reconcile) 只在名單有差異時
+    才有動作可做，本端點則刷新每一筆明細的內容（金額、計畫編號、學籍驗證、
+    規則判定、郵局帳號…）並重新匯出 Excel。
+
+    管理員的人為排除／移除與人工銀行覆核狀態會跨重建保留。已鎖定的造冊不可
+    重新生成（400），請先解鎖。
+    """
+    _require_admin(current_user)
+    try:
+        with with_lock_sync(_roster_items_lock_key(roster_id), ttl_seconds=300):
+            svc = RosterRegenerationService(db)
+            result = svc.regenerate_roster(
+                roster_id=roster_id,
+                admin_user_id=current_user.id,
+                student_verification_enabled=(request.student_verification_enabled if request else None),
+            )
+    except LockBusy as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="造冊處理中，請稍候再試") from exc
+    except RosterNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except (ValueError, RosterLockedError) as e:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    except Exception as e:
+        db.rollback()
+        logger.exception(f"Failed to regenerate roster {roster_id}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="重新生成造冊失敗") from e
+
+    roster = result.roster
+    logger.info(f"Roster {roster.roster_code} regenerated by user {current_user.id}")
+    payload = RegenerateRosterResult(
+        roster_id=roster.id,
+        roster_code=roster.roster_code,
+        status=roster.status.value,
+        project_number=roster.project_number,
+        rebuilt_items=result.rebuilt_items,
+        failed_items=result.failed_items,
+        preserved_exclusions=result.preserved_exclusions,
+        newly_excluded=result.newly_excluded,
+        dropped_members=result.dropped_members,
+        qualified_count=roster.qualified_count or 0,
+        disqualified_count=roster.disqualified_count or 0,
+        total_applications=roster.total_applications or 0,
+        total_amount=float(roster.total_amount or 0),
+        excel_exported=result.excel_exported,
+        excel_stale=roster.excel_stale,
+    ).model_dump()
+    return {
+        "success": True,
+        "message": _build_regeneration_message(
+            result.rebuilt_items,
+            result.preserved_exclusions,
+            result.newly_excluded,
+            result.dropped_members,
+            result.failed_items,
+        ),
+        "data": payload,
+    }

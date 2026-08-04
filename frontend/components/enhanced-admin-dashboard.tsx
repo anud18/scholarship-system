@@ -5,6 +5,7 @@
 
 "use client";
 
+import { logger } from "@/lib/utils/logger";
 import React, { useState, useEffect } from "react";
 import {
   Card,
@@ -27,21 +28,28 @@ import {
   RefreshCw,
   Filter,
 } from "lucide-react";
-import { api } from "@/lib/api";
+import {
+  api,
+  apiClient,
+  Application,
+  DashboardStats,
+  NotificationResponse,
+  User,
+} from "@/lib/api";
 import SemesterSelector from "./semester-selector";
 import { getDisplayStatusInfo } from "@/lib/utils/application-helpers";
 
 interface EnhancedAdminDashboardProps {
-  stats: any;
-  recentApplications: any[];
-  systemAnnouncements: any[];
+  stats: DashboardStats | null;
+  recentApplications: Application[];
+  systemAnnouncements: NotificationResponse[];
   isStatsLoading: boolean;
   isRecentLoading: boolean;
   isAnnouncementsLoading: boolean;
   error: string | null;
   isAuthenticated: boolean;
-  user: any;
-  login: (token: string, userData: any) => void;
+  user: User | null;
+  login: (token: string, userData: User) => void;
   logout: () => void;
   fetchRecentApplications: () => void;
   fetchDashboardStats: () => void;
@@ -68,8 +76,12 @@ export function EnhancedAdminDashboard({
   const [selectedCombination, setSelectedCombination] = useState<string>();
   const [currentAcademicYear, setCurrentAcademicYear] = useState<number>();
   const [currentSemester, setCurrentSemester] = useState<string>();
-  const [filteredStats, setFilteredStats] = useState<any>(null);
-  const [filteredApplications, setFilteredApplications] = useState<any[]>([]);
+  const [filteredStats, setFilteredStats] = useState<DashboardStats | null>(
+    null
+  );
+  const [filteredApplications, setFilteredApplications] = useState<
+    Application[]
+  >([]);
 
   // 處理學期選擇變更
   const handleSemesterChange = async (
@@ -91,36 +103,20 @@ export function EnhancedAdminDashboard({
     semester: string | null
   ) => {
     try {
-      const statsResponse = await api.request<any>("/admin/dashboard/stats", {
-        method: "GET",
-        params: {
-          academic_year: academicYear,
-          semester: semester ?? undefined,
-        },
-      });
+      const statsResponse = await apiClient.admin.getDashboardStats();
       if (statsResponse.success) {
-        setFilteredStats(statsResponse.data);
+        setFilteredStats(statsResponse.data ?? null);
       }
 
-      const applicationsResponse = await api.request<any>(
-        "/admin/recent-applications",
-        {
-          method: "GET",
-          params: {
-            academic_year: academicYear,
-            semester: semester ?? undefined,
-            limit: 10,
-          },
-        }
-      );
+      const applicationsResponse = await apiClient.admin.getRecentApplications(10);
       if (
         applicationsResponse.success &&
         Array.isArray(applicationsResponse.data)
       ) {
-        setFilteredApplications(applicationsResponse.data);
+        setFilteredApplications(applicationsResponse.data as Application[]);
       }
     } catch (error) {
-      console.error("Error fetching filtered data:", error);
+      logger.error("Error fetching filtered data", { error: error });
       // 如果API不支援篩選，使用原始資料
       setFilteredStats(stats);
       setFilteredApplications(recentApplications);
@@ -242,7 +238,7 @@ export function EnhancedAdminDashboard({
               {isStatsLoading ? (
                 <Loader2 className="h-6 w-6 animate-spin" />
               ) : (
-                displayStats?.pending_applications || 0
+                displayStats?.pending_review || 0
               )}
             </div>
             <p className="text-xs text-muted-foreground">待審核申請</p>
@@ -259,7 +255,7 @@ export function EnhancedAdminDashboard({
               {isStatsLoading ? (
                 <Loader2 className="h-6 w-6 animate-spin" />
               ) : (
-                displayStats?.approved_applications || 0
+                displayStats?.approved || 0
               )}
             </div>
             <p className="text-xs text-muted-foreground">核准申請數</p>
@@ -276,7 +272,15 @@ export function EnhancedAdminDashboard({
               {isStatsLoading ? (
                 <Loader2 className="h-6 w-6 animate-spin" />
               ) : (
-                `${displayStats?.approval_rate || 0}%`
+                `${
+                  displayStats && displayStats.total_applications > 0
+                    ? Math.round(
+                        (displayStats.approved /
+                          displayStats.total_applications) *
+                          100
+                      )
+                    : 0
+                }%`
               )}
             </div>
             <p className="text-xs text-muted-foreground">申請核准比例</p>
@@ -307,7 +311,7 @@ export function EnhancedAdminDashboard({
               </div>
             ) : displayApplications.length > 0 ? (
               <div className="space-y-4">
-                {displayApplications.slice(0, 5).map((application: any) => (
+                {displayApplications.slice(0, 5).map((application: Application) => (
                   <div
                     key={application.id}
                     className="flex items-center justify-between p-3 border rounded-lg"
@@ -317,7 +321,7 @@ export function EnhancedAdminDashboard({
                         {application.scholarship_name}
                       </div>
                       <div className="text-sm text-gray-500">
-                        申請人: {application.user_name || "未知"}
+                        申請人: {application.student_name || "未知"}
                       </div>
                       <div className="text-xs text-gray-400">
                         {new Date(application.created_at).toLocaleString(
@@ -369,11 +373,11 @@ export function EnhancedAdminDashboard({
               </div>
             ) : systemAnnouncements.length > 0 ? (
               <div className="space-y-4">
-                {systemAnnouncements.slice(0, 5).map((announcement: any) => (
+                {systemAnnouncements.slice(0, 5).map((announcement: NotificationResponse) => (
                   <div key={announcement.id} className="p-3 border rounded-lg">
                     <div className="font-medium">{announcement.title}</div>
                     <div className="text-sm text-gray-600 mt-1">
-                      {announcement.content}
+                      {announcement.message}
                     </div>
                     <div className="text-xs text-gray-400 mt-2">
                       {new Date(announcement.created_at).toLocaleString(

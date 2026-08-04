@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { logger } from "@/lib/utils/logger";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -145,7 +146,7 @@ export function ScheduledEmailsTable({
         }));
       }
     } catch (error) {
-      console.error("Failed to load scheduled emails:", error);
+      logger.error("Failed to load scheduled emails", { error: error });
     } finally {
       setLoading(false);
     }
@@ -162,7 +163,7 @@ export function ScheduledEmailsTable({
         await loadScheduledEmails();
       }
     } catch (error) {
-      console.error("Failed to approve email:", error);
+      logger.error("Failed to approve email", { error: error });
     }
   };
 
@@ -175,7 +176,7 @@ export function ScheduledEmailsTable({
         await loadScheduledEmails();
       }
     } catch (error) {
-      console.error("Failed to cancel email:", error);
+      logger.error("Failed to cancel email", { error: error });
     }
   };
 
@@ -223,6 +224,16 @@ export function ScheduledEmailsTable({
     if (category.includes("REVIEW")) return "outline";
     if (category.includes("RESULT")) return "destructive";
     return "default";
+  };
+
+  const isHtmlContent = (body: string): boolean => {
+    if (!body) return false;
+    const trimmed = body.trim();
+    return (
+      /^<!doctype/i.test(trimmed) ||
+      /^<html/i.test(trimmed) ||
+      /<(table|div|p|span|br|h[1-6]|ul|ol|li|a\s|img)\b/i.test(trimmed)
+    );
   };
 
   const renderTemplateVariables = (content: string) => {
@@ -277,7 +288,7 @@ export function ScheduledEmailsTable({
       );
       setIsEditMode(false);
     } catch (error) {
-      console.error("Failed to update scheduled email:", error);
+      logger.error("Failed to update scheduled email", { error: error });
     }
   };
 
@@ -697,6 +708,16 @@ export function ScheduledEmailsTable({
                                       className="min-h-64 text-sm"
                                       placeholder="請輸入郵件內容"
                                     />
+                                  ) : isHtmlContent(selectedEmail.body) ? (
+                                    <div className="border rounded-md overflow-hidden">
+                                      <iframe
+                                        srcDoc={selectedEmail.body}
+                                        className="w-full"
+                                        style={{ height: "480px", border: "none" }}
+                                        sandbox="allow-same-origin"
+                                        title="郵件內容預覽"
+                                      />
+                                    </div>
                                   ) : (
                                     <div className="bg-gray-50 p-4 rounded-md border max-h-96 overflow-y-auto">
                                       <div className="whitespace-pre-wrap text-sm leading-relaxed text-gray-900">

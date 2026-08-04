@@ -25,14 +25,18 @@ from fastapi import APIRouter
 # Import all modularized routers (✅ All Completed)
 from .announcements import router as announcements_router
 from .applications import router as applications_router
+from .audit_logs import router as audit_logs_router
 from .bank_verification import router as bank_verification_router
+from .cache import router as cache_router
 from .configurations import router as configurations_router
 from .dashboard import router as dashboard_router
 from .email_templates import router as email_templates_router
 from .permissions import router as permissions_router
 from .professors import router as professors_router
+from .received_months import router as received_months_router
 from .rules import router as rules_router
 from .scholarships import router as scholarships_router
+from .student_history import router as student_history_router
 from .students import router as students_router
 from .system_settings import router as system_settings_router
 
@@ -52,5 +56,17 @@ router.include_router(configurations_router, tags=["Admin - Configurations"])
 router.include_router(professors_router, tags=["Admin - Professors"])
 router.include_router(bank_verification_router, tags=["Admin - Bank Verification"])
 router.include_router(students_router, prefix="/students", tags=["Admin - Students"])
+router.include_router(
+    student_history_router,
+    prefix="/student-history",
+    tags=["Admin - Student History"],
+)
+router.include_router(
+    received_months_router,
+    prefix="/received-months",
+    tags=["Admin - Received Months"],
+)
+router.include_router(cache_router, tags=["Admin - Cache"])
+router.include_router(audit_logs_router, tags=["Admin - Audit Logs"])
 
 __all__ = ["router"]

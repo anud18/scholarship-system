@@ -10,11 +10,30 @@ import { School, CheckCircle, AlertCircle } from "lucide-react";
 
 type SubTypeQuotaBreakdown = Record<string, { quota?: number; label?: string; label_en?: string }>;
 
+type EligibleSubtypeEntry =
+  | string
+  | {
+      code?: string;
+      sub_type?: string;
+      subType?: string;
+      name?: string;
+      label?: string;
+      value?: string;
+    };
+
+interface ApplicationRow {
+  is_allocated?: boolean;
+  // Backend may emit eligible_subtypes as a list, a comma-separated string, or
+  // a list of objects with a code-bearing field. The eligibleCounts reducer
+  // handles all three shapes.
+  eligible_subtypes?: EligibleSubtypeEntry[] | string;
+}
+
 interface DistributionQuotaSummaryProps {
   locale: "zh" | "en";
   totalQuota?: number;
   collegeQuota?: number;
-  applications?: Array<{ is_allocated?: boolean }>;
+  applications?: ApplicationRow[];
   breakdown?: SubTypeQuotaBreakdown;
   subTypeMeta?: Record<string, { code: string; label: string; label_en: string }>;
 }
@@ -57,7 +76,12 @@ export function DistributionQuotaSummary({
         let labelEn = subTypeMeta?.[code]?.label_en || label;
 
         if (raw && typeof raw === "object") {
-          const maybeQuota = (raw as any).quota;
+          const rawObj = raw as {
+            quota?: number | string;
+            label?: string;
+            label_en?: string;
+          };
+          const maybeQuota = rawObj.quota;
           if (typeof maybeQuota === "number" && !Number.isNaN(maybeQuota)) {
             quota = maybeQuota;
           } else if (maybeQuota !== undefined) {
@@ -65,12 +89,12 @@ export function DistributionQuotaSummary({
             quota = Number.isNaN(parsed) ? 0 : parsed;
           }
 
-          if ((raw as any).label) {
-            label = String((raw as any).label);
+          if (rawObj.label) {
+            label = String(rawObj.label);
           }
 
-          if ((raw as any).label_en) {
-            labelEn = String((raw as any).label_en);
+          if (rawObj.label_en) {
+            labelEn = String(rawObj.label_en);
           }
         } else if (raw !== undefined) {
           const parsed = Number(raw);
@@ -92,7 +116,7 @@ export function DistributionQuotaSummary({
       return {};
     }
 
-    return applications.reduce<Record<string, number>>((acc, app: any) => {
+    return applications.reduce<Record<string, number>>((acc, app: ApplicationRow) => {
       const rawEligible = app?.eligible_subtypes;
       if (!rawEligible) {
         return acc;

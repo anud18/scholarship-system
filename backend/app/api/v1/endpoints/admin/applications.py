@@ -13,7 +13,12 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from urllib.parse import quote
+
+from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import BaseModel, Field
+from sqlalchemy import delete as sqla_delete
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,7 +28,9 @@ from app.core.exceptions import AuthorizationError, NotFoundError
 from app.core.security import require_admin
 from app.db.deps import get_db
 from app.models.application import Application, ApplicationStatus
-from app.models.enums import Semester
+from app.models.college_review import CollegeRankingItem
+from app.models.enums import Semester, ReviewStage
+from app.models.payment_roster import PaymentRosterItem
 from app.models.scholarship import ScholarshipType
 from app.models.user import User
 from app.schemas.application import (
@@ -34,8 +41,10 @@ from app.schemas.application import (
     ProfessorAssignmentRequest,
 )
 from app.schemas.common import PaginatedResponse
+from app.services.application_audit_service import ApplicationAuditService
 from app.services.application_service import ApplicationService
 from app.services.bulk_approval_service import BulkApprovalService
+from app.utils.excel_safety import sanitize_excel_cell
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +57,7 @@ async def get_all_applications(
     size: int = Query(20, ge=1, le=100, description="Page size"),
     status: Optional[str] = Query(None, description="Filter by status"),
     search: Optional[str] = Query(None, description="Search by student name or ID"),
+    missing_professor: Optional[bool] = Query(None, description="Filter apps awaiting professor assignment"),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -61,12 +71,21 @@ async def get_all_applications(
         .outerjoin(ScholarshipType, Application.scholarship_type_id == ScholarshipType.id)
     )
 
+    # Exclude soft-deleted applications
+    stmt = stmt.where(Application.deleted_at.is_(None))
+
     # Apply filters
     if status:
         stmt = stmt.where(Application.status == status)
     else:
         # Default: exclude draft applications for admin view
         stmt = stmt.where(Application.status != ApplicationStatus.draft.value)
+
+    if missing_professor is True:
+        stmt = stmt.where(
+            Application.professor_id.is_(None),
+            Application.status == ApplicationStatus.submitted.value,
+        )
 
     if search:
         stmt = stmt.where(
@@ -129,12 +148,12 @@ async def get_all_applications(
             "scholarship_configuration": (
                 {
                     "requires_professor_recommendation": (
-                        app.scholarship_configuration.requires_professor_recommendation
+                        app.scholarship_configuration.requires_professor_review_for(bool(app.is_renewal))
                         if app.scholarship_configuration
                         else False
                     ),
                     "requires_college_review": (
-                        app.scholarship_configuration.requires_college_review
+                        app.scholarship_configuration.requires_college_review_for(bool(app.is_renewal))
                         if app.scholarship_configuration
                         else False
                     ),
@@ -181,7 +200,15 @@ async def get_historical_applications(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get historical applications with advanced filtering (admin only)"""
+    """Get historical applications with advanced filtering (admin only).
+
+    Deleted-records policy (issue #974 / G12): soft-deleted applications are
+    INCLUDED here on purpose — the history view is the retention surface, and
+    a 獎學金 record must stay reviewable for its statutory retention period.
+    Each row carries deleted_at/deletion_reason + is_deleted so the UI badges
+    them; the operational list endpoint (GET /applications) keeps excluding
+    them via deleted_at IS NULL.
+    """
 
     # Build base query with joins
     stmt = (
@@ -261,6 +288,13 @@ async def get_historical_applications(
         # Extract student data from JSON if available
         student_data = app.student_data or {}
         student_department = student_data.get("department") or student_data.get("dept_name")
+        # #68: surface nationality + identity from the SIS snapshot
+        student_nationality = student_data.get("std_nation") or student_data.get("nationality")
+        raw_identity = student_data.get("std_identity") or student_data.get("identity")
+        try:
+            student_identity = int(raw_identity) if raw_identity is not None else None
+        except (TypeError, ValueError):
+            student_identity = None
 
         historical_app = HistoricalApplicationResponse(
             id=app.id,
@@ -272,6 +306,8 @@ async def get_historical_applications(
             student_id=row.student_nycu_id,
             student_email=row.student_email,
             student_department=student_department,
+            student_nationality=student_nationality,
+            student_identity=student_identity,
             # Scholarship information
             scholarship_name=row.scholarship_name,
             scholarship_type_code=row.scholarship_type_code,
@@ -290,6 +326,17 @@ async def get_historical_applications(
             # Review information
             professor_name=getattr(row, "professor_name", None),
             reviewer_name=getattr(row, "reviewer_name", None),
+            # Revocation / deletion context (#975 G13, #974 G12)
+            revoked_at=app.revoked_at,
+            revoked_by=app.revoked_by,
+            revoke_reason=app.revoke_reason,
+            suspended_at=app.suspended_at,
+            suspended_by=app.suspended_by,
+            suspend_reason=app.suspend_reason,
+            deleted_at=app.deleted_at,
+            deleted_by_id=app.deleted_by_id,
+            deletion_reason=app.deletion_reason,
+            is_deleted=app.deleted_at is not None,
         )
 
         historical_applications.append(historical_app)
@@ -303,6 +350,148 @@ async def get_historical_applications(
         "message": "Historical applications retrieved successfully",
         "data": response_data.model_dump() if hasattr(response_data, "model_dump") else response_data.dict(),
     }
+
+
+@router.get("/applications/history/export")
+async def export_historical_applications(
+    status: Optional[str] = Query(None, description="Filter by status"),
+    scholarship_type: Optional[str] = Query(None, description="Filter by scholarship type"),
+    academic_year: Optional[int] = Query(None, description="Filter by academic year"),
+    semester: Optional[str] = Query(None, description="Filter by semester"),
+    search: Optional[str] = Query(None, description="Search by student name or ID"),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Export the filtered 歷史申請 view to XLSX (issue #985 / G23).
+
+    Same filters and deleted-records policy as GET /applications/history
+    (soft-deleted rows are included and flagged), but unpaginated — the
+    export is the audit-friendly artifact 財務稽核 previously had to
+    screenshot together by hand.
+    """
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    stmt = (
+        select(
+            Application,
+            User.name.label("student_name"),
+            User.nycu_id.label("student_nycu_id"),
+            User.email.label("student_email"),
+            ScholarshipType.name.label("scholarship_name"),
+            ScholarshipType.code.label("scholarship_type_code"),
+        )
+        .join(User, Application.user_id == User.id)
+        .outerjoin(ScholarshipType, Application.scholarship_type_id == ScholarshipType.id)
+    )
+    if status:
+        stmt = stmt.where(Application.status == status)
+    if scholarship_type:
+        stmt = stmt.where(ScholarshipType.code == scholarship_type)
+    if academic_year:
+        stmt = stmt.where(Application.academic_year == academic_year)
+    if semester and semester != "all":
+        if semester == "first":
+            stmt = stmt.where(Application.semester == Semester.first)
+        elif semester == "second":
+            stmt = stmt.where(Application.semester == Semester.second)
+        elif semester == "yearly":
+            stmt = stmt.where(Application.semester == Semester.yearly)
+    if search:
+        search_term = f"%{search}%"
+        stmt = stmt.where(
+            or_(
+                User.name.ilike(search_term),
+                User.nycu_id.ilike(search_term),
+                User.email.ilike(search_term),
+                Application.app_id.ilike(search_term),
+                ScholarshipType.name.ilike(search_term),
+            )
+        )
+    stmt = stmt.order_by(Application.created_at.desc())
+
+    result = await db.execute(stmt)
+    rows = result.fetchall()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "歷史申請"
+    headers = [
+        "申請編號",
+        "學生姓名",
+        "學號",
+        "Email",
+        "獎學金",
+        "子類型",
+        "金額",
+        "學年",
+        "學期",
+        "狀態",
+        "是否續領",
+        "提交時間",
+        "核准時間",
+        "撤銷時間",
+        "撤銷原因",
+        "停發時間",
+        "停發原因",
+        "已刪除",
+        "刪除時間",
+        "刪除原因",
+        "建立時間",
+    ]
+    ws.append(headers)
+
+    def _dt(value):
+        return value.strftime("%Y-%m-%d %H:%M") if value else ""
+
+    for row in rows:
+        app = row.Application
+        # SECURITY (#1081 G / #1223 A): neutralize spreadsheet formula injection.
+        # 姓名/Email come from SIS and the *_reason columns are staff free-text, so a
+        # value leading with "=" would be written by openpyxl as a LIVE formula and
+        # execute when a reviewer opens the download. sanitize_excel_cell only touches
+        # str values that lead with a trigger char — numbers/dates keep their native
+        # type, so the export is byte-identical for normal data.
+        ws.append(
+            [
+                sanitize_excel_cell(value)
+                for value in (
+                    app.app_id,
+                    row.student_name,
+                    row.student_nycu_id,
+                    row.student_email,
+                    row.scholarship_name,
+                    app.sub_scholarship_type or "",
+                    float(app.amount) if app.amount is not None else "",
+                    app.academic_year,
+                    app.semester.value if app.semester else "yearly",
+                    app.status.value if hasattr(app.status, "value") else str(app.status),
+                    "是" if app.is_renewal else "否",
+                    _dt(app.submitted_at),
+                    _dt(app.approved_at),
+                    _dt(app.revoked_at),
+                    app.revoke_reason or "",
+                    _dt(app.suspended_at),
+                    app.suspend_reason or "",
+                    "是" if app.deleted_at is not None else "否",
+                    _dt(app.deleted_at),
+                    app.deletion_reason or "",
+                    _dt(app.created_at),
+                )
+            ]
+        )
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+
+    filename = f"歷史申請_{academic_year or 'all'}.xlsx"
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+    )
 
 
 @router.put("/applications/{id}/assign-professor")
@@ -361,19 +550,19 @@ async def assign_professor_to_application(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND if isinstance(e, NotFoundError) else status.HTTP_403_FORBIDDEN,
             detail=str(e),
-        )
+        ) from e
     except SQLAlchemyError as e:
-        logger.error(f"Database error assigning professor: {str(e)}")
+        logger.exception("Database error assigning professor")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to assign professor due to a database error.",
-        )
+        ) from e
     except Exception as e:
-        logger.error(f"Unexpected error assigning professor: {str(e)}")
+        logger.exception("Unexpected error assigning professor")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to assign professor due to an unexpected error.",
-        )
+        ) from e
 
 
 @router.post("/applications/bulk-approve")
@@ -387,7 +576,6 @@ async def bulk_approve_applications_endpoint(
         application_ids=payload.application_ids,
         approver_user_id=current_user.id,
         approval_notes=payload.comments,
-        send_notifications=payload.send_notifications,
     )
 
     return {"success": True, "message": "Bulk approval processed successfully", "data": result}
@@ -411,4 +599,109 @@ async def admin_update_application_status(
         "success": True,
         "message": "Application status updated successfully",
         "data": result,
+    }
+
+
+class DeleteApplicationRequest(BaseModel):
+    reason: str = Field(..., min_length=1, max_length=500)
+
+
+# Only applications still in the student-facing stage can be deleted.
+# Once review has started or a final decision is recorded, the application
+# must be preserved for audit/history purposes.
+DELETABLE_APPLICATION_STATUSES: frozenset[str] = frozenset(
+    {
+        ApplicationStatus.draft.value,
+        ApplicationStatus.submitted.value,
+    }
+)
+
+
+@router.delete("/applications/{id}")
+async def delete_application(
+    id: int,
+    payload: DeleteApplicationRequest,
+    request: Request = None,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Hard-delete an application (admin only).
+
+    Only allowed while the application is still in the student-facing stage
+    (draft / submitted). Once review has started the row must be preserved.
+
+    Performs a cascade delete:
+    - Removes related CollegeRankingItem and PaymentRosterItem rows explicitly.
+    - SQLAlchemy cascades remove ApplicationReview, ApplicationFile, DocumentRequest rows.
+    - The application row itself is permanently removed.
+
+    Records an AuditLog entry describing the deletion so the operation
+    history persists even after the application row is gone.
+    """
+    stmt = select(Application).where(Application.id == id)
+    result = await db.execute(stmt)
+    app = result.scalar_one_or_none()
+
+    if not app:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+
+    app_status_value = app.status.value if hasattr(app.status, "value") else str(app.status)
+    if app_status_value not in DELETABLE_APPLICATION_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="只有在學生申請階段（草稿或已送出）的申請才可刪除",
+        )
+
+    # G30 (#992): status alone is not enough — an application can sit at
+    # status=submitted while review_stage already advanced (e.g.
+    # professor_reviewed). Once ANY review work exists the row is part of the
+    # decision chain and must be preserved, exactly as the docstring promises.
+    stage_value = app.review_stage.value if hasattr(app.review_stage, "value") else app.review_stage
+    if stage_value and stage_value not in (ReviewStage.student_draft.value, ReviewStage.student_submitted.value):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="申請已進入審核流程（review_stage 已推進），不可刪除",
+        )
+
+    app_id_str = app.app_id
+    reason = payload.reason.strip()
+
+    # Capture scholarship/student snapshot so the audit log remains
+    # attributable after the application row is hard-deleted.
+    student_name = None
+    if isinstance(app.student_data, dict):
+        student_name = app.student_data.get("std_cname") or app.student_data.get("student_name")
+
+    audit_service = ApplicationAuditService(db)
+    await audit_service.log_delete_application(
+        application_id=app.id,
+        app_id=app_id_str,
+        user=current_user,
+        reason=reason,
+        request=request,
+        scholarship_type_id=app.scholarship_type_id,
+        student_name=student_name,
+    )
+
+    try:
+        # Explicit cascade for FKs without ON DELETE CASCADE.
+        await db.execute(sqla_delete(PaymentRosterItem).where(PaymentRosterItem.application_id == id))
+        await db.execute(sqla_delete(CollegeRankingItem).where(CollegeRankingItem.application_id == id))
+
+        # ORM delete so relationship-level cascades (reviews/files/document_requests) fire.
+        await db.delete(app)
+        await db.commit()
+    except SQLAlchemyError as e:
+        await db.rollback()
+        logger.exception(f"Database error deleting application {id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete application due to a database error.",
+        ) from e
+
+    return {
+        "success": True,
+        "message": f"Application {app_id_str} has been deleted",
+        "data": {"id": id, "app_id": app_id_str, "reason": reason},
     }

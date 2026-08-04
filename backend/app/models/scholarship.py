@@ -58,7 +58,7 @@ class ScholarshipType(Base):
     # 類別設定
     # category removed - no longer needed for classification
     # Sub-types are configuration-driven, default to "general"
-    sub_type_list = Column(JSON, default=["general"])  # ["nstc", "moe_1w", "moe_2w", "custom_type", ...]
+    sub_type_list = Column(JSON, default=lambda: ["general"])  # ["nstc", "moe_1w", "moe_2w", "custom_type", ...]
     sub_type_selection_mode = Column(
         Enum(SubTypeSelectionMode, values_callable=lambda obj: [e.value for e in obj]),
         default=SubTypeSelectionMode.single,
@@ -77,6 +77,10 @@ class ScholarshipType(Base):
 
     # 申請條款文件
     terms_document_url = Column(String(500), nullable=True)  # 申請條款文件 URL
+
+    # 申請文件區塊說明文字（學生申請步驟3「申請文件」下方，admin 可編輯）
+    application_document_note = Column(Text, nullable=True)
+    application_document_note_en = Column(Text, nullable=True)
 
     # 狀態與設定
     status = Column(String(20), default=ScholarshipStatus.active.value)
@@ -247,56 +251,6 @@ class ScholarshipType(Base):
             translations["en"][config.sub_type_code] = config.name_en or config.name
 
         return translations
-
-    def can_student_apply(
-        self,
-        student_id: int,
-        existing_applications: List["Application"],
-        is_renewal: bool = None,
-    ) -> bool:
-        """
-        Check if student can apply for this scholarship based on semester limits and application type
-
-        Args:
-            student_id: Student ID to check
-            existing_applications: List of existing applications for this student
-            is_renewal: True for renewal, False for general, None to auto-detect based on current period
-
-        Returns:
-            bool: True if student can apply, False otherwise
-        """
-        # Check whitelist first
-        if not self.is_student_in_whitelist(student_id):
-            return False
-
-        # Auto-detect application type if not provided
-        if is_renewal is None:
-            is_renewal = self.current_application_type == "renewal"
-
-        # Check if we're in the correct application period
-        if is_renewal and not self.is_renewal_application_period:
-            return False
-        elif not is_renewal and not self.is_general_application_period:
-            return False
-
-        # Check if student already has an application for this semester
-        for application in existing_applications:
-            if (
-                application.scholarship_type_id == self.id
-                and application.student_id == student_id
-                and application.is_renewal == is_renewal
-            ):
-                return False
-
-        return True
-
-    def can_student_apply_renewal(self, student_id: int, existing_applications: List["Application"]) -> bool:
-        """Check if student can apply for renewal"""
-        return self.can_student_apply(student_id, existing_applications, True)
-
-    def can_student_apply_general(self, student_id: int, existing_applications: List["Application"]) -> bool:
-        """Check if student can apply for general application"""
-        return self.can_student_apply(student_id, existing_applications, False)
 
     def get_application_timeline(self) -> Dict[str, Dict[str, datetime]]:
         """Get complete application timeline"""
@@ -502,6 +456,7 @@ class ScholarshipRule(Base):
             semester_label = {
                 Semester.first: "第一學期",
                 Semester.second: "第二學期",
+                Semester.yearly: "全年",
             }.get(self.semester, "")
             return f"{self.academic_year}學年度 {semester_label}"
         return f"{self.academic_year}學年度"
@@ -592,12 +547,22 @@ class ScholarshipConfiguration(Base):
         JSON, nullable=True
     )  # 配額配置，矩陣格式 {"nstc": {"EE": 5, "EN": 4}, "moe_1w": {"EE": 6, "EN": 5}}
 
+    # 計畫編號設定（flat，own-year only）
+    project_numbers = Column(
+        JSON, nullable=True
+    )  # 計畫編號，依子類型 {sub_type: own-year-code} e.g. {"nstc": "114R000001", "moe_1w": "114E000001"}
+
+    # 跨配置共享配額來源 — 依 config_code 連結前年度配置，per sub_type，無數量
+    shared_quota_sources = Column(
+        JSON, nullable=True
+    )  # [{"source_config_code": "phd_114", "sub_types": ["nstc"]}, ...]
+
     # 金額設定 (從 ScholarshipType 移至此處)
     amount = Column(Integer, nullable=False)  # 獎學金金額（整數）
     currency = Column(String(10), default="TWD")
 
     whitelist_student_ids = Column(
-        JSON, default={}
+        JSON, default=lambda: {}
     )  # 白名單學號列表，依子獎學金區分 {"general": ["0856001", "0856002"], "nstc": ["0856003"]}
 
     # 申請時間 (從 ScholarshipType 移至此處)
@@ -610,8 +575,11 @@ class ScholarshipConfiguration(Base):
     application_end_date = Column(DateTime(timezone=True), nullable=True)
 
     # 續領審查期間 (從 ScholarshipType 移至此處)
+    # 管理員決定續領是否需要教授/學院審查（與一般申請的 requires_* 各自獨立）
+    renewal_requires_professor_review = Column(Boolean, default=False, nullable=False, server_default="false")
     renewal_professor_review_start = Column(DateTime(timezone=True), nullable=True)
     renewal_professor_review_end = Column(DateTime(timezone=True), nullable=True)
+    renewal_requires_college_review = Column(Boolean, default=False, nullable=False, server_default="false")
     renewal_college_review_start = Column(DateTime(timezone=True), nullable=True)
     renewal_college_review_end = Column(DateTime(timezone=True), nullable=True)
 
@@ -625,6 +593,12 @@ class ScholarshipConfiguration(Base):
     college_review_end = Column(DateTime(timezone=True), nullable=True)
 
     review_deadline = Column(DateTime(timezone=True), nullable=True)
+
+    # 補充匯入開關 — admin 控制，是否開放學院匯入新的申請學生（Excel）
+    allow_supplementary_import = Column(Boolean, default=False, nullable=False, server_default="false")
+
+    # 分發結果查看開關 — admin 控制，是否開放學院查看自己學生的分發結果（正取/備取/未錄取）
+    allow_college_view_distribution = Column(Boolean, default=False, nullable=False, server_default="false")
 
     # 狀態與有效性
     is_active = Column(Boolean, default=True, nullable=False)
@@ -661,6 +635,20 @@ class ScholarshipConfiguration(Base):
     def __repr__(self):
         return f"<ScholarshipConfiguration(id={self.id}, config_code={self.config_code}, name={self.config_name})>"
 
+    # Review-requirement resolvers — renewal applications carry their own
+    # admin-configured flags, independent of the general-application ones.
+    def requires_professor_review_for(self, is_renewal: bool) -> bool:
+        """Whether an application of the given kind needs professor review."""
+        if is_renewal:
+            return bool(self.renewal_requires_professor_review)
+        return bool(self.requires_professor_recommendation)
+
+    def requires_college_review_for(self, is_renewal: bool) -> bool:
+        """Whether an application of the given kind needs college review."""
+        if is_renewal:
+            return bool(self.renewal_requires_college_review)
+        return bool(self.requires_college_review)
+
     @property
     def cycle(self) -> str:
         """Get cycle string representation for compatibility"""
@@ -675,6 +663,7 @@ class ScholarshipConfiguration(Base):
             semester_label = {
                 Semester.first: "第一學期",
                 Semester.second: "第二學期",
+                Semester.yearly: "全年",
             }.get(self.semester, "")
             return f"{self.academic_year}學年度 {semester_label}"
         return f"{self.academic_year}學年度"
@@ -806,13 +795,13 @@ class ScholarshipConfiguration(Base):
                 errors.append(f"學院配額總和 ({college_total}) 超過總配額 ({self.total_quota})")
 
         # Validate renewal review dates
-        if not self.requires_professor_recommendation:
+        if not self.renewal_requires_professor_review:
             if self.renewal_professor_review_start or self.renewal_professor_review_end:
-                errors.append("續領教授審查時間不應設定當不需要教授推薦時")
+                errors.append("續領教授審查時間不應設定當續領不需要教授審查時")
 
-        if not self.requires_college_review:
+        if not self.renewal_requires_college_review:
             if self.renewal_college_review_start or self.renewal_college_review_end:
-                errors.append("續領學院審查時間不應設定當不需要學院審查時")
+                errors.append("續領學院審查時間不應設定當續領不需要學院審查時")
 
         return errors
 
@@ -908,6 +897,57 @@ class ScholarshipConfiguration(Base):
         elif self.is_general_application_period:
             return "general"
         return None
+
+    def can_student_apply(
+        self,
+        student_id: int,
+        existing_applications: List["Application"],
+        is_renewal: bool = None,
+    ) -> bool:
+        """
+        Check if student can apply for this configuration based on the current
+        application period and existing applications.
+
+        Args:
+            student_id: Student (user) ID to check
+            existing_applications: List of existing applications for this student
+            is_renewal: True for renewal, False for general, None to auto-detect based on current period
+
+        Returns:
+            bool: True if student can apply, False otherwise
+        """
+        # Check whitelist first
+        if not self.is_student_in_whitelist(student_id):
+            return False
+
+        # Auto-detect application type if not provided
+        if is_renewal is None:
+            is_renewal = self.current_application_type == "renewal"
+
+        # Check if we're in the correct application period
+        if is_renewal and not self.is_renewal_application_period:
+            return False
+        elif not is_renewal and not self.is_general_application_period:
+            return False
+
+        # Check if student already has an application for this configuration
+        for application in existing_applications:
+            if (
+                application.scholarship_configuration_id == self.id
+                and application.user_id == student_id
+                and application.is_renewal == is_renewal
+            ):
+                return False
+
+        return True
+
+    def can_student_apply_renewal(self, student_id: int, existing_applications: List["Application"]) -> bool:
+        """Check if student can apply for renewal"""
+        return self.can_student_apply(student_id, existing_applications, True)
+
+    def can_student_apply_general(self, student_id: int, existing_applications: List["Application"]) -> bool:
+        """Check if student can apply for general application"""
+        return self.can_student_apply(student_id, existing_applications, False)
 
     def is_renewal_professor_review_period(self) -> bool:
         """Check if within renewal professor review period"""

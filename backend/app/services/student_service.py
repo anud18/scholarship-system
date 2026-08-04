@@ -3,8 +3,6 @@ Student service that handles student data from external API.
 Supports both mock API (development) and production student information system.
 """
 
-import hashlib
-import hmac
 import json
 import logging
 from datetime import datetime, timezone
@@ -24,33 +22,14 @@ class StudentService:
     def __init__(self):
         # Get API configuration from settings
         self.api_base_url = getattr(settings, "student_api_base_url", None)
-        self.api_account = getattr(settings, "student_api_account", None)
-        self.hmac_key_hex = getattr(settings, "student_api_hmac_key", None)
         self.api_timeout = getattr(settings, "student_api_timeout", 10.0)
         self.api_enabled = getattr(settings, "student_api_enabled", False)
 
-        # Validate configuration
-        if self.api_enabled and not all([self.api_base_url, self.api_account, self.hmac_key_hex]):
-            logger.warning(
-                "Student API is enabled but not properly configured. "
-                "Please set STUDENT_API_BASE_URL, STUDENT_API_ACCOUNT, and STUDENT_API_HMAC_KEY"
-            )
+        # Validate configuration. The external API no longer requires HMAC/account
+        # auth, so only the base URL is needed to reach it.
+        if self.api_enabled and not self.api_base_url:
+            logger.warning("Student API is enabled but STUDENT_API_BASE_URL is not set.")
             self.api_enabled = False
-
-        if self.api_enabled and self.hmac_key_hex:
-            try:
-                self.hmac_key = bytes.fromhex(self.hmac_key_hex)
-            except ValueError:
-                logger.error("Invalid STUDENT_API_HMAC_KEY format. Must be a valid hex string.")
-                self.api_enabled = False
-
-    def _generate_hmac_auth_header(self, request_body: str) -> str:
-        """Generate HMAC-SHA256 authorization header"""
-        time_str = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-        message = time_str + request_body
-        signature = hmac.new(self.hmac_key, message.encode("utf-8"), hashlib.sha256).hexdigest().lower()
-
-        return f"HMAC-SHA256:{time_str}:{self.api_account}:{signature}"
 
     async def get_student_basic_info(self, student_code: str) -> Optional[Dict[str, Any]]:
         """
@@ -68,16 +47,13 @@ class StudentService:
 
         try:
             request_data = {
-                "account": self.api_account,
                 "action": "qrySoaaScholarshipStudent",
                 "stdcode": student_code,
             }
 
             request_body = json.dumps(request_data, separators=(",", ":"))
-            auth_header = self._generate_hmac_auth_header(request_body)
 
             headers = {
-                "Authorization": auth_header,
                 "Content-Type": "application/json;charset=UTF-8",
             }
 
@@ -112,15 +88,15 @@ class StudentService:
                     logger.error(f"Student API request failed: {response.status_code}")
                     raise ServiceUnavailableError("Student API is unavailable")
 
-        except httpx.TimeoutException:
+        except httpx.TimeoutException as exc:
             logger.error(f"Student API request timed out for {student_code}")
-            raise ServiceUnavailableError("Student API request timed out")
+            raise ServiceUnavailableError("Student API request timed out") from exc
         except httpx.RequestError as e:
-            logger.error(f"Student API request error: {str(e)}")
-            raise ServiceUnavailableError(f"Student API request failed: {str(e)}")
+            logger.exception("Student API request error")
+            raise ServiceUnavailableError(f"Student API request failed: {str(e)}") from e
         except Exception as e:
-            logger.error(f"Unexpected error fetching student data for {student_code}: {str(e)}")
-            raise ServiceUnavailableError(f"Failed to fetch student data: {str(e)}")
+            logger.exception(f"Unexpected error fetching student data for {student_code}")
+            raise ServiceUnavailableError(f"Failed to fetch student data: {str(e)}") from e
 
     async def get_student_term_info(self, student_code: str, academic_year: str, term: str) -> Optional[Dict[str, Any]]:
         """
@@ -140,7 +116,6 @@ class StudentService:
 
         try:
             request_data = {
-                "account": self.api_account,
                 "action": "qrySoaaScholarshipStudent",
                 "stdcode": student_code,
                 "trmyear": academic_year,
@@ -148,10 +123,8 @@ class StudentService:
             }
 
             request_body = json.dumps(request_data, separators=(",", ":"))
-            auth_header = self._generate_hmac_auth_header(request_body)
 
             headers = {
-                "Authorization": auth_header,
                 "Content-Type": "application/json;charset=UTF-8",
             }
 
@@ -192,15 +165,15 @@ class StudentService:
                     logger.error(f"Student term API request failed: {response.status_code}")
                     raise ServiceUnavailableError("Student API is unavailable")
 
-        except httpx.TimeoutException:
+        except httpx.TimeoutException as exc:
             logger.error(f"Student term API request timed out for {student_code}")
-            raise ServiceUnavailableError("Student API request timed out")
+            raise ServiceUnavailableError("Student API request timed out") from exc
         except httpx.RequestError as e:
-            logger.error(f"Student term API request error: {str(e)}")
-            raise ServiceUnavailableError(f"Student API request failed: {str(e)}")
+            logger.exception("Student term API request error")
+            raise ServiceUnavailableError(f"Student API request failed: {str(e)}") from e
         except Exception as e:
-            logger.error(f"Unexpected error fetching student term data for {student_code}: {str(e)}")
-            raise ServiceUnavailableError(f"Failed to fetch student term data: {str(e)}")
+            logger.exception(f"Unexpected error fetching student term data for {student_code}")
+            raise ServiceUnavailableError(f"Failed to fetch student term data: {str(e)}") from e
 
     async def get_student_snapshot(
         self, student_code: str, academic_year: Optional[str] = None, semester: Optional[str] = None
@@ -270,7 +243,7 @@ class StudentService:
                         term_error_message = f"No data for {academic_year} in both term 1 and 2"
 
             except Exception as e:
-                logger.warning(f"Failed to fetch term data for {student_code}: {e}")
+                logger.warning(f"Failed to fetch term data for {student_code}", exc_info=True)
                 term_data_status = "error"
                 term_error_message = str(e)
 

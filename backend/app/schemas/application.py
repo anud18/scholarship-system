@@ -6,7 +6,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.application import ApplicationStatus
 
@@ -112,26 +112,30 @@ class ApplicationFormData(BaseModel):
     fields: Dict[str, DynamicFormField] = Field(
         ...,
         description="動態表單欄位",
-        example={
-            "bank_account": {
-                "field_id": "bank_account",
-                "field_type": "text",
-                "value": "123123",
-                "required": True,
+        examples=[
+            {
+                "bank_account": {
+                    "field_id": "bank_account",
+                    "field_type": "text",
+                    "value": "123123",
+                    "required": True,
+                }
             }
-        },
+        ],
     )
     documents: List[DocumentData] = Field(
         default=[],
         description="文件列表",
-        example=[
-            {
-                "document_id": "bank_account_cover",
-                "document_type": "存摺封面",
-                "file_path": "test.pdf",
-                "original_filename": "test.pdf",
-                "upload_time": "2024-03-19T10:00:00Z",
-            }
+        examples=[
+            [
+                {
+                    "document_id": "bank_account_cover",
+                    "document_type": "存摺封面",
+                    "file_path": "test.pdf",
+                    "original_filename": "test.pdf",
+                    "upload_time": "2024-03-19T10:00:00Z",
+                }
+            ]
         ],
     )
 
@@ -165,16 +169,37 @@ class ApplicationFormData(BaseModel):
 class ApplicationCreate(BaseModel):
     """建立申請"""
 
-    scholarship_type: str = Field(..., description="獎學金類型代碼", example="undergraduate_freshman")
+    scholarship_type: str = Field(..., description="獎學金類型代碼", examples=["undergraduate_freshman"])
     configuration_id: int = Field(
-        ..., description="獎學金配置ID (必須從eligible scholarships取得，確保學生有申請資格)", example=1
+        ..., description="獎學金配置ID (必須從eligible scholarships取得，確保學生有申請資格)", examples=[1]
     )
     scholarship_subtype_list: List[str] = Field(
-        default=[], description="獎學金子類型列表", example=["general", "special"]
+        default=[], description="獎學金子類型列表", examples=[["general", "special"]]
     )
     form_data: ApplicationFormData = Field(..., description="表單資料")
     agree_terms: Optional[bool] = Field(False, description="同意條款")
     is_renewal: Optional[bool] = Field(False, description="是否為續領申請")
+    sub_type_preferences: Optional[List[str]] = Field(None, description="Ordered sub-type preference list")
+
+    @field_validator("sub_type_preferences")
+    @classmethod
+    def validate_sub_type_preferences(cls, v):
+        if v is None:
+            return v
+        if len(v) == 0:
+            return None  # Empty list treated as null
+        if len(v) != len(set(v)):
+            raise ValueError("sub_type_preferences must not contain duplicates")
+        return v
+
+    @model_validator(mode="after")
+    def validate_preferences_match_subtype_list(self):
+        prefs = self.sub_type_preferences
+        subtype_list = self.scholarship_subtype_list
+        if prefs and subtype_list:
+            if set(prefs) != set(subtype_list):
+                raise ValueError("sub_type_preferences must be a permutation of scholarship_subtype_list")
+        return self
 
     model_config = ConfigDict(
         json_encoders={datetime: lambda v: v.isoformat()},
@@ -212,9 +237,25 @@ class ApplicationUpdate(BaseModel):
 
     scholarship_subtype_list: Optional[List[str]] = Field(None, description="獎學金子類型列表")
     form_data: Optional[ApplicationFormData] = Field(None, description="表單資料")
-    status: Optional[str] = Field(None, description="申請狀態")
+    # SECURITY: `status` is deliberately NOT accepted here. It used to be assigned
+    # straight onto the model in ApplicationService.update_application, letting a
+    # student PUT {"status": "approved"} onto their own editable draft and skip
+    # professor review, college ranking and quota allocation entirely. Workflow
+    # transitions belong to the guarded PUT /applications/{id}/status path.
     agree_terms: Optional[bool] = Field(None, description="同意條款")
     is_renewal: Optional[bool] = Field(None, description="是否為續領申請")
+    sub_type_preferences: Optional[List[str]] = Field(None, description="Ordered sub-type preference list")
+
+    @field_validator("sub_type_preferences")
+    @classmethod
+    def validate_sub_type_preferences(cls, v):
+        if v is None:
+            return v
+        if len(v) == 0:
+            return None
+        if len(v) != len(set(v)):
+            raise ValueError("sub_type_preferences must not contain duplicates")
+        return v
 
     model_config = ConfigDict(json_encoders={datetime: lambda v: v.isoformat()})
 
@@ -274,9 +315,25 @@ class ApplicationResponse(BaseModel):
     amount: Optional[Decimal] = None  # Scholarship amount
     currency: Optional[str] = "TWD"  # Scholarship currency
     scholarship_subtype_list: Optional[List[str]] = []
+    sub_scholarship_type: Optional[str] = Field(
+        None,
+        description="本申請的代表性 sub_type（單一字串；若為續領則承襲自前一申請）",
+    )
+    sub_type_preferences: Optional[List[str]] = Field(None, description="Ordered sub-type preference list")
     status: str
     status_name: Optional[str]
+    review_stage: Optional[str] = None  # 審核階段（用於前端進度顯示）
     is_renewal: bool = Field(False, description="是否為續領申請")
+    renewal_year: Optional[int] = Field(None, description="續領年份 (民國年，如 113)；批次匯入指定，或承接自前一申請")
+    previous_application_id: Optional[int] = Field(None, description="承接的前一份核可申請 ID（續領申請填）")
+    challenges_application_id: Optional[int] = Field(
+        None,
+        description="挑戰的目標續領申請 ID（挑戰申請填）— 一旦挑戰核可，被挑戰之續領自動取消",
+    )
+    cancelled_due_to_application_id: Optional[int] = Field(
+        None,
+        description="因哪份挑戰申請而被取消（被取代之續領申請填）",
+    )
     academic_year: int
     semester: Optional[str] = None
     student_data: Dict[str, Any]
@@ -295,6 +352,7 @@ class ApplicationResponse(BaseModel):
     meta_data: Optional[Dict[str, Any]] = None
 
     reviews: List[ApplicationReviewResponse] = []
+    professor_review_items: List[Dict[str, Any]] = []  # Per sub-type professor recommendations with comments
 
     # Additional display fields
     student_name: Optional[str] = None
@@ -303,6 +361,14 @@ class ApplicationResponse(BaseModel):
     student_pid: Optional[str] = None  # std_pid
     student_email: Optional[str] = None  # com_email
     student_phone: Optional[str] = None  # com_cellphone
+    postal_account: Optional[str] = Field(
+        None, description="郵局帳號（來自學生 UserProfile.account_number，非 submitted_form_data）"
+    )
+    # 指導教授資訊與郵局帳號一樣存放在 UserProfile（申請精靈的固定欄位區塊），
+    # 表單設定卻把它們列為 advisor_* 固定欄位，因此表單資料頁需要從這裡取值。
+    advisor_name: Optional[str] = Field(None, description="指導教授姓名（來自學生 UserProfile）")
+    advisor_email: Optional[str] = Field(None, description="指導教授Email（來自學生 UserProfile）")
+    advisor_nycu_id: Optional[str] = Field(None, description="指導教授本校人事編號（來自學生 UserProfile）")
 
     # === Academic Organization ===
     academy_code: Optional[str] = None  # std_academyno / trm_academyno
@@ -320,6 +386,7 @@ class ApplicationResponse(BaseModel):
     term_count: Optional[int] = None  # std_termcount / trm_termcount
 
     # === Identity & Status ===
+    student_nationality: Optional[str] = None  # std_nation
     student_identity: Optional[int] = None  # std_identity
     school_identity: Optional[int] = None  # std_schoolid
     gender: Optional[int] = None  # std_sex
@@ -330,6 +397,13 @@ class ApplicationResponse(BaseModel):
     class_ranking_percent: Optional[float] = None  # trm_placingsrate
     dept_ranking: Optional[int] = None  # trm_depplacing
     dept_ranking_percent: Optional[float] = None  # trm_depplacingrate
+
+    # Workflow configuration flags
+    requires_professor_recommendation: bool = False
+    requires_college_review: bool = False
+    # Admin toggle (ScholarshipConfiguration.allow_college_view_distribution):
+    # the student timeline's final step is only checked once this is opened
+    allow_college_view_distribution: bool = False
 
     @property
     def is_editable(self) -> bool:
@@ -393,9 +467,23 @@ class ApplicationStatusUpdateResponse(BaseModel):
     amount: Optional[Decimal] = None
     currency: Optional[str] = "TWD"
     scholarship_subtype_list: Optional[List[str]] = []
+    sub_scholarship_type: Optional[str] = Field(
+        None,
+        description="本申請的代表性 sub_type（單一字串；若為續領則承襲自前一申請）",
+    )
     status: str
     status_name: Optional[str]
     is_renewal: bool = Field(False, description="是否為續領申請")
+    renewal_year: Optional[int] = Field(None, description="續領年份 (民國年，如 113)；批次匯入指定，或承接自前一申請")
+    previous_application_id: Optional[int] = Field(None, description="承接的前一份核可申請 ID（續領申請填）")
+    challenges_application_id: Optional[int] = Field(
+        None,
+        description="挑戰的目標續領申請 ID（挑戰申請填）— 一旦挑戰核可，被挑戰之續領自動取消",
+    )
+    cancelled_due_to_application_id: Optional[int] = Field(
+        None,
+        description="因哪份挑戰申請而被取消（被取代之續領申請填）",
+    )
     academic_year: int
     semester: Optional[str] = None
     student_data: Dict[str, Any]
@@ -436,6 +524,7 @@ class ApplicationStatusUpdateResponse(BaseModel):
     term_count: Optional[int] = None
 
     # === Identity & Status ===
+    student_nationality: Optional[str] = None
     student_identity: Optional[int] = None
     school_identity: Optional[int] = None
     gender: Optional[int] = None
@@ -478,10 +567,25 @@ class ApplicationListResponse(BaseModel):
     scholarship_name: Optional[str] = None  # Full scholarship configuration name
     amount: Optional[Decimal] = None  # Scholarship amount
     currency: Optional[str] = "TWD"  # Scholarship currency
-    scholarship_subtype_list: Optional[List[str]] = []  # 獎學金子類型列表
+    scholarship_subtype_list: Optional[List[str]] = []
+    sub_scholarship_type: Optional[str] = Field(
+        None,
+        description="本申請的代表性 sub_type（單一字串；若為續領則承襲自前一申請）",
+    )  # 獎學金子類型列表
     status: str
     status_name: Optional[str]
+    review_stage: Optional[str] = None  # 審核階段（用於前端進度顯示）
     is_renewal: bool = Field(False, description="是否為續領申請")
+    renewal_year: Optional[int] = Field(None, description="續領年份 (民國年，如 113)；批次匯入指定，或承接自前一申請")
+    previous_application_id: Optional[int] = Field(None, description="承接的前一份核可申請 ID（續領申請填）")
+    challenges_application_id: Optional[int] = Field(
+        None,
+        description="挑戰的目標續領申請 ID（挑戰申請填）— 一旦挑戰核可，被挑戰之續領自動取消",
+    )
+    cancelled_due_to_application_id: Optional[int] = Field(
+        None,
+        description="因哪份挑戰申請而被取消（被取代之續領申請填）",
+    )
     academic_year: int
     semester: Optional[str] = None
     student_data: Dict[str, Any]
@@ -523,6 +627,7 @@ class ApplicationListResponse(BaseModel):
     term_count: Optional[int] = None  # std_termcount / trm_termcount
 
     # === Identity & Status ===
+    student_nationality: Optional[str] = None  # std_nation
     student_identity: Optional[int] = None  # std_identity
     school_identity: Optional[int] = None  # std_schoolid
     gender: Optional[int] = None  # std_sex
@@ -541,6 +646,17 @@ class ApplicationListResponse(BaseModel):
 
     # Scholarship configuration for professor review requirements
     scholarship_configuration: Optional[Dict[str, Any]] = None
+
+    # Workflow configuration flags
+    requires_professor_recommendation: bool = False
+    requires_college_review: bool = False
+    # Admin toggle (ScholarshipConfiguration.allow_college_view_distribution):
+    # the student timeline's final step is only checked once this is opened
+    allow_college_view_distribution: bool = False
+    # Professor-centric review status for the professor queue: True once the
+    # viewing professor has an ApplicationReview row for this application.
+    # None for endpoints/roles where "the professor" is not defined.
+    has_professor_reviewed: Optional[bool] = None
 
     @property
     def is_editable(self) -> bool:
@@ -596,7 +712,18 @@ class BulkApproveRequest(BaseModel):
 
     application_ids: List[int] = Field(..., min_length=1, description="Application IDs to approve")
     comments: Optional[str] = Field(None, description="Optional approval notes")
-    send_notifications: bool = Field(True, description="Whether to notify applicants")
+
+
+class RevokeRequest(BaseModel):
+    """Request body for revoking a scholarship allocation."""
+
+    reason: str = Field(..., min_length=1, max_length=500, description="Reason for revocation")
+
+
+class SuspendRequest(BaseModel):
+    """Request body for suspending a scholarship allocation."""
+
+    reason: str = Field(..., min_length=1, max_length=500, description="Reason for suspension")
 
 
 class HistoricalApplicationResponse(BaseModel):
@@ -614,6 +741,11 @@ class HistoricalApplicationResponse(BaseModel):
     student_id: Optional[str] = None
     student_email: Optional[str] = None
     student_department: Optional[str] = None
+    # #68: nationality + identity from student_data snapshot, surfaced so
+    # admin reviewers can apply scholarship-specific eligibility rules
+    # (NSTC excludes mainland/HK/Macau, MoE caveats, etc.).
+    student_nationality: Optional[str] = None
+    student_identity: Optional[int] = None
 
     # Scholarship information
     scholarship_name: Optional[str] = None
@@ -639,6 +771,24 @@ class HistoricalApplicationResponse(BaseModel):
     reviewer_name: Optional[str] = None
     # Note: review_score, review_comments, rejection_reason removed
     # Get these from ApplicationReview if needed
+
+    # Revocation / suspension context (issue #975 / G13): the DB stores who
+    # revoked an allocation, when and why — compliance review must see it in
+    # the history view, not only via direct DB access.
+    revoked_at: Optional[datetime] = None
+    revoked_by: Optional[int] = None
+    revoke_reason: Optional[str] = None
+    suspended_at: Optional[datetime] = None
+    suspended_by: Optional[int] = None
+    suspend_reason: Optional[str] = None
+
+    # Soft-deletion context (issue #974 / G12 policy: soft-deleted
+    # applications REMAIN visible in the history view — they are retained
+    # records, not vanished ones — and are flagged so the UI can badge them).
+    deleted_at: Optional[datetime] = None
+    deleted_by_id: Optional[int] = None
+    deletion_reason: Optional[str] = None
+    is_deleted: bool = False
 
     # Status helpers
     @classmethod

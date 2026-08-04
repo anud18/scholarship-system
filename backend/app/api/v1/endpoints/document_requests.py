@@ -60,6 +60,7 @@ async def create_document_request(
         requested_documents=request_data.requested_documents,
         reason=request_data.reason,
         notes=request_data.notes,
+        deadline=request_data.deadline,
         status=DocumentRequestStatus.pending.value,
     )
 
@@ -80,43 +81,8 @@ async def create_document_request(
         request=request,
     )
 
-    # 觸發補件要求事件（會觸發自動化郵件規則）
-    try:
-        from app.services.email_automation_service import email_automation_service
-
-        # Get student email from application
-        stmt_student = (
-            select(Application).options(joinedload(Application.student)).where(Application.id == application_id)
-        )
-        result_student = await db.execute(stmt_student)
-        app_with_user = result_student.scalar_one_or_none()
-
-        if app_with_user and app_with_user.student:
-            student_data = app_with_user.student_data or {}
-            student_email = student_data.get("email") or app_with_user.student.email
-            student_name = student_data.get("name") or app_with_user.student.name
-
-            await email_automation_service.trigger_supplement_requested(
-                db=db,
-                application_id=application.id,
-                request_data={
-                    "app_id": application.app_id,
-                    "student_name": student_name,
-                    "student_email": student_email,
-                    "requested_documents": request_data.requested_documents,
-                    "reason": request_data.reason,
-                    "notes": request_data.notes or "",
-                    "requester_name": current_user.name or current_user.email,
-                    "deadline": "",  # Add if deadline field exists in DocumentRequest model
-                    "scholarship_type": application.scholarship_name,
-                    "scholarship_type_id": application.scholarship_type_id,
-                    "request_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-                },
-            )
-            logger.info(f"Document request automation triggered for {student_email}")
-    except Exception as e:
-        # Log error but don't fail the request creation
-        logger.error(f"Failed to trigger supplement request automation: {e}")
+    # No email is sent for a supplementary-document request: students only ever
+    # receive mail on submission and on the 3-day draft deadline reminder.
 
     # Build response
     response_data = DocumentRequestResponse.model_validate(document_request)
@@ -268,6 +234,15 @@ async def fulfill_document_request(
 
     # Verify student owns the application
     if document_request.application.user_id != current_user.id:
+        logger.warning(
+            "SECURITY: student attempted to fulfill another user's document request",
+            extra={
+                "user_id": current_user.id,
+                "request_id": request_id,
+                "application_id": document_request.application_id,
+                "owner_user_id": document_request.application.user_id,
+            },
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only fulfill document requests for your own applications",

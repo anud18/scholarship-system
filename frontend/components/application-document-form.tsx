@@ -90,6 +90,8 @@ export function ApplicationDocumentForm({
     description: "",
     description_en: "",
     is_required: true,
+    display_in_list: true,
+    requires_upload: true,
     accepted_file_types: ["PDF"],
     max_file_size: "5MB",
     max_file_count: 1,
@@ -113,6 +115,8 @@ export function ApplicationDocumentForm({
         description: document.description,
         description_en: document.description_en,
         is_required: document.is_required,
+        display_in_list: document.display_in_list ?? true,
+        requires_upload: document.requires_upload ?? true,
         accepted_file_types: document.accepted_file_types,
         max_file_size: document.max_file_size,
         max_file_count: document.max_file_count,
@@ -129,6 +133,8 @@ export function ApplicationDocumentForm({
         description: "",
         description_en: "",
         is_required: true,
+        display_in_list: true,
+        requires_upload: true,
         accepted_file_types: ["PDF"],
         max_file_size: "5MB",
         max_file_count: 1,
@@ -301,6 +307,28 @@ export function ApplicationDocumentForm({
                   }
                 />
                 <Label htmlFor="is_required">必要文件</Label>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="display_in_list"
+                  checked={formData.display_in_list ?? true}
+                  onCheckedChange={checked =>
+                    setFormData(prev => ({ ...prev, display_in_list: checked }))
+                  }
+                />
+                <Label htmlFor="display_in_list">顯示於獎學金列表</Label>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="requires_upload"
+                  checked={formData.requires_upload ?? true}
+                  onCheckedChange={checked =>
+                    setFormData(prev => ({ ...prev, requires_upload: checked }))
+                  }
+                />
+                <Label htmlFor="requires_upload">需要學生上傳</Label>
               </div>
 
               <div className="grid grid-cols-3 gap-4">

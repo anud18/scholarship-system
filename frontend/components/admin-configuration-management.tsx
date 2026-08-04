@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { logger } from "@/lib/utils/logger";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,13 +59,109 @@ import apiClient, {
   ScholarshipConfigurationFormData,
 } from "@/lib/api";
 import { WhitelistManagementDialog } from "./whitelist-management-dialog";
+import { ConfigToggleSwitch } from "@/components/admin/config/ConfigToggleSwitch";
+import { QuotaExcelButtons } from "@/components/admin/quota-import/QuotaExcelButtons";
 import { QuotaManagementMode, getQuotaManagementModeLabel } from "@/lib/enums";
 import { toast } from "sonner";
 const api = apiClient;
 
 interface AdminConfigurationManagementProps {
   scholarshipTypes: ScholarshipType[];
-  onScholarshipTypeUpdate?: (id: number, updates: Partial<ScholarshipType>) => void;
+  onScholarshipTypeUpdate?: (
+    id: number,
+    updates: Partial<ScholarshipType>
+  ) => void;
+}
+
+function SharedQuotaSourcesPicker({
+  value,
+  onChange,
+  subTypes,
+  candidateConfigs,
+}: {
+  value: { source_config_code: string; sub_types: string[] }[];
+  onChange: (next: { source_config_code: string; sub_types: string[] }[]) => void;
+  subTypes: string[];
+  candidateConfigs: { config_code: string; academic_year: number }[];
+}) {
+  const entryFor = (code: string) =>
+    value.find(e => e.source_config_code === code);
+
+  const toggleConfig = (code: string, on: boolean) => {
+    if (on) {
+      onChange([...value, { source_config_code: code, sub_types: [] }]);
+    } else {
+      onChange(value.filter(e => e.source_config_code !== code));
+    }
+  };
+
+  const toggleSubType = (code: string, st: string, on: boolean) => {
+    onChange(
+      value.map(e => {
+        if (e.source_config_code !== code) return e;
+        const sub_types = on
+          ? [...e.sub_types, st]
+          : e.sub_types.filter(s => s !== st);
+        return { ...e, sub_types };
+      })
+    );
+  };
+
+  return (
+    <div>
+      <Label>共用前年度配額來源</Label>
+      <p className="mt-1 mb-2 text-sm text-muted-foreground">
+        勾選要借用剩餘名額的前年度配置（依代碼），並選擇可借用的子類型。
+      </p>
+      {candidateConfigs.length === 0 ? (
+        <p className="text-xs text-muted-foreground">無可借用的前年度配置</p>
+      ) : (
+        <div className="space-y-2">
+          {candidateConfigs.map(c => {
+            const entry = entryFor(c.config_code);
+            const checked = !!entry;
+            return (
+              <div key={c.config_code} className="border rounded-lg p-2">
+                <label className="flex items-center gap-2 text-sm font-medium">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={e => toggleConfig(c.config_code, e.target.checked)}
+                  />
+                  {c.config_code}（{c.academic_year} 學年）
+                </label>
+                {checked && (
+                  <div className="mt-2 flex flex-wrap gap-3 pl-6">
+                    {subTypes.length === 0 ? (
+                      <span className="text-xs text-muted-foreground">
+                        請先設定本配置的配額子類型
+                      </span>
+                    ) : (
+                      subTypes.map(st => (
+                        <label
+                          key={st}
+                          className="flex items-center gap-1 text-xs"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={entry?.sub_types.includes(st) ?? false}
+                            onChange={e =>
+                              toggleSubType(c.config_code, st, e.target.checked)
+                            }
+                          />
+                          {st}
+                        </label>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function AdminConfigurationManagement({
@@ -80,6 +177,16 @@ export function AdminConfigurationManagement({
   >([]);
   const [selectedScholarshipType, setSelectedScholarshipType] =
     useState<ScholarshipType | null>(null);
+  // `getMyScholarships` (admin/scholarships.py) returns `sub_type_list` (NOT `all_sub_type_list`),
+  // and it mirrors the column the backend quota validator checks — keep these in sync. The cast is
+  // needed because the ScholarshipType TS type declares only `all_sub_type_list`.
+  // Mirror the backend's `sub_type_list or DEFAULT_PHD_SUB_TYPES`: an empty list
+  // (the admin endpoint returns `sub_type_list or []`) must fall back to the default,
+  // not stay empty — otherwise FE rows would diverge from the BE allow-list.
+  const subTypeList = (selectedScholarshipType as { sub_type_list?: string[] })?.sub_type_list;
+  const quotaSubTypes = (subTypeList?.length ? subTypeList : ["nstc", "moe_1w", "moe_2w"]).map(
+    code => ({ code })
+  );
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
@@ -110,6 +217,14 @@ export function AdminConfigurationManagement({
   const taiwanYear = currentYear - 1911;
   const academicYears = Array.from({ length: 5 }, (_, i) => taiwanYear - 2 + i);
 
+  // Prior-year configs eligible to borrow shared quota from (own-year excluded).
+  // Shared by the create + edit dialogs' SharedQuotaSourcesPicker.
+  const sharedQuotaCandidateConfigs = configurations.filter(
+    c =>
+      c.academic_year < (formData.academic_year ?? 0) &&
+      c.config_code !== formData.config_code
+  );
+
   // Load academy codes from database
   useEffect(() => {
     const loadAcademyCodes = async () => {
@@ -123,7 +238,7 @@ export function AdminConfigurationManagement({
           setAcademyCodes(codesMap);
         }
       } catch (error) {
-        console.error("載入學院代碼失敗:", error);
+        logger.error("載入學院代碼失敗", { error: error });
         toast.error("載入學院代碼失敗: " + (error as Error).message);
       }
     };
@@ -218,9 +333,9 @@ export function AdminConfigurationManagement({
           ...(inactiveResponse.success ? inactiveResponse.data || [] : []),
         ];
 
-        setConfigurations(allConfigurations);
+        setConfigurations(allConfigurations as ScholarshipConfiguration[]);
       } catch (error) {
-        console.error("載入配置失敗:", error);
+        logger.error("載入配置失敗", { error: error });
         toast.error("載入配置失敗: " + (error as Error).message);
         setConfigurations([]);
         setFilteredConfigurations([]);
@@ -240,7 +355,8 @@ export function AdminConfigurationManagement({
       const processedData = {
         ...formData,
         has_quota_limit: quotaMode !== "none",
-        has_college_quota: quotaMode === "college_based" || quotaMode === "matrix_based",
+        has_college_quota:
+          quotaMode === "college_based" || quotaMode === "matrix_based",
       };
 
       const response = await api.admin.createScholarshipConfiguration(
@@ -252,10 +368,11 @@ export function AdminConfigurationManagement({
         await loadConfigurations(selectedScholarshipType!);
         toast.success("配置建立成功");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errShape = error as { response?: { data?: { message?: string; detail?: string } }; message?: string };
       const errorMessage =
-        error.response?.data?.message ||
-        error.response?.data?.detail ||
+        errShape.response?.data?.message ||
+        errShape.response?.data?.detail ||
         "建立配置失敗";
       toast.error("建立配置失敗: " + errorMessage);
     } finally {
@@ -274,7 +391,8 @@ export function AdminConfigurationManagement({
       const processedData = {
         ...formData,
         has_quota_limit: quotaMode !== "none",
-        has_college_quota: quotaMode === "college_based" || quotaMode === "matrix_based",
+        has_college_quota:
+          quotaMode === "college_based" || quotaMode === "matrix_based",
       };
 
       const response = await api.admin.updateScholarshipConfiguration(
@@ -288,10 +406,11 @@ export function AdminConfigurationManagement({
         await loadConfigurations(selectedScholarshipType!);
         toast.success("配置更新成功");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errShape = error as { response?: { data?: { message?: string; detail?: string } }; message?: string };
       const errorMessage =
-        error.response?.data?.message ||
-        error.response?.data?.detail ||
+        errShape.response?.data?.message ||
+        errShape.response?.data?.detail ||
         "更新配置失敗";
       toast.error("更新配置失敗: " + errorMessage);
     } finally {
@@ -313,10 +432,11 @@ export function AdminConfigurationManagement({
         await loadConfigurations(selectedScholarshipType!);
         toast.success("配置刪除成功");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errShape = error as { response?: { data?: { message?: string; detail?: string } }; message?: string };
       const errorMessage =
-        error.response?.data?.message ||
-        error.response?.data?.detail ||
+        errShape.response?.data?.message ||
+        errShape.response?.data?.detail ||
         "刪除配置失敗";
       toast.error("刪除配置失敗: " + errorMessage);
     } finally {
@@ -346,10 +466,11 @@ export function AdminConfigurationManagement({
         await loadConfigurations(selectedScholarshipType!);
         toast.success("配置複製成功");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errShape = error as { response?: { data?: { message?: string; detail?: string } }; message?: string };
       const errorMessage =
-        error.response?.data?.message ||
-        error.response?.data?.detail ||
+        errShape.response?.data?.message ||
+        errShape.response?.data?.detail ||
         "複製配置失敗";
       toast.error("複製配置失敗: " + errorMessage);
     } finally {
@@ -371,11 +492,14 @@ export function AdminConfigurationManagement({
           prev ? { ...prev, whitelist_enabled: enabled } : prev
         );
         // Update parent component's scholarshipTypes state
-        onScholarshipTypeUpdate?.(selectedScholarshipType.id, { whitelist_enabled: enabled });
+        onScholarshipTypeUpdate?.(selectedScholarshipType.id, {
+          whitelist_enabled: enabled,
+        });
         toast.success(`申請白名單已${enabled ? "啟用" : "停用"}`);
       }
-    } catch (error: any) {
-      const errorMessage = error.message || "切換申請白名單狀態失敗";
+    } catch (error: unknown) {
+      const errShape = error as { response?: { data?: { message?: string; detail?: string } }; message?: string };
+      const errorMessage = errShape.message || "切換申請白名單狀態失敗";
       toast.error("操作失敗: " + errorMessage);
     }
   };
@@ -394,6 +518,8 @@ export function AdminConfigurationManagement({
       quota_management_mode: "none",
       total_quota: 0,
       quotas: {},
+      project_numbers: {},
+      shared_quota_sources: [],
       whitelist_student_ids: {},
     });
     setShowCreateDialog(true);
@@ -404,15 +530,16 @@ export function AdminConfigurationManagement({
       // Refetch the latest configuration to ensure quotas and other data are up-to-date
       const response = await api.admin.getScholarshipConfiguration(config.id);
       if (response.success && response.data) {
-        setSelectedConfig(response.data);
+        setSelectedConfig(response.data as ScholarshipConfiguration);
         setShowViewDialog(true);
       } else {
         toast.error("無法載入配置詳情");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errShape = error as { response?: { data?: { message?: string; detail?: string } }; message?: string };
       const errorMessage =
-        error.response?.data?.message ||
-        error.response?.data?.detail ||
+        errShape.response?.data?.message ||
+        errShape.response?.data?.detail ||
         "載入配置詳情失敗";
       toast.error(errorMessage);
     }
@@ -421,6 +548,9 @@ export function AdminConfigurationManagement({
   const openEditDialog = (config: ScholarshipConfiguration) => {
     setSelectedConfig(config);
     setFormData({
+      // academic_year is the reference year the shared-quota picker filters
+      // prior-year candidates against; without it the picker is always empty.
+      academic_year: config.academic_year,
       config_name: config.config_name,
       config_code: config.config_code,
       description: config.description || "",
@@ -432,6 +562,8 @@ export function AdminConfigurationManagement({
       quota_management_mode: config.quota_management_mode || "none",
       total_quota: config.total_quota,
       quotas: config.quotas,
+      project_numbers: config.project_numbers || {},
+      shared_quota_sources: config.shared_quota_sources || [],
       whitelist_student_ids: config.whitelist_student_ids,
       renewal_application_start_date: formatDateTimeLocal(
         config.renewal_application_start_date
@@ -443,12 +575,15 @@ export function AdminConfigurationManagement({
         config.application_start_date
       ),
       application_end_date: formatDateTimeLocal(config.application_end_date),
+      renewal_requires_professor_review:
+        config.renewal_requires_professor_review,
       renewal_professor_review_start: formatDateTimeLocal(
         config.renewal_professor_review_start
       ),
       renewal_professor_review_end: formatDateTimeLocal(
         config.renewal_professor_review_end
       ),
+      renewal_requires_college_review: config.renewal_requires_college_review,
       renewal_college_review_start: formatDateTimeLocal(
         config.renewal_college_review_start
       ),
@@ -513,7 +648,7 @@ export function AdminConfigurationManagement({
       const date = new Date(dateString);
       // 檢查日期是否有效
       if (isNaN(date.getTime())) {
-        console.warn("Invalid date string:", dateString);
+        logger.warn("Invalid date string:", dateString);
         return "";
       }
 
@@ -534,6 +669,7 @@ export function AdminConfigurationManagement({
     if (!semester) return "全學年";
     if (semester === "first" || semester === "1") return "第一學期";
     if (semester === "second" || semester === "2") return "第二學期";
+    if (semester === "yearly" || semester === "0") return "全年";
     return semester;
   };
 
@@ -625,7 +761,10 @@ export function AdminConfigurationManagement({
                           申請期間
                         </th>
                         <th className="text-left p-4 font-semibold">狀態</th>
-                        <th className="text-right p-4 font-semibold">操作</th>
+                        <th className="text-left p-4 font-semibold">學院功能</th>
+                        <th className="text-right p-4 font-semibold">
+                          設定申請/審查期間
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -724,6 +863,56 @@ export function AdminConfigurationManagement({
                               </Badge>
                             </td>
                             <td className="p-4">
+                              <div className="flex flex-col gap-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="w-16 shrink-0 text-xs text-muted-foreground">
+                                    補充匯入
+                                  </span>
+                                  <ConfigToggleSwitch
+                                    initialOpen={!!config.allow_supplementary_import}
+                                    ariaLabel="開放/關閉學院補充匯入"
+                                    successOn="已開放補充匯入"
+                                    successOff="已關閉補充匯入"
+                                    tooltipOn="學院可上傳新申請學生 Excel；學生以一般申請身分進入審查與排名流程"
+                                    tooltipOff="點擊以開放學院匯入新的申請學生（Excel）"
+                                    onToggle={next =>
+                                      api.college.toggleConfigSupplementaryImport(
+                                        config.id,
+                                        next
+                                      )
+                                    }
+                                    onChange={() =>
+                                      selectedScholarshipType &&
+                                      void loadConfigurations(selectedScholarshipType)
+                                    }
+                                  />
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="w-16 shrink-0 text-xs text-muted-foreground">
+                                    查看分發
+                                  </span>
+                                  <ConfigToggleSwitch
+                                    initialOpen={!!config.allow_college_view_distribution}
+                                    ariaLabel="開放/關閉學院查看分發結果"
+                                    successOn="已開放學院查看分發結果"
+                                    successOff="已關閉學院查看分發結果"
+                                    tooltipOn="學院可查看自己學生的分發結果（正取／備取／未錄取）"
+                                    tooltipOff="點擊以開放學院查看分發結果"
+                                    onToggle={next =>
+                                      api.college.toggleConfigCollegeViewDistribution(
+                                        config.id,
+                                        next
+                                      )
+                                    }
+                                    onChange={() =>
+                                      selectedScholarshipType &&
+                                      void loadConfigurations(selectedScholarshipType)
+                                    }
+                                  />
+                                </div>
+                              </div>
+                            </td>
+                            <td className="p-4">
                               <div className="flex justify-end gap-1">
                                 <Button
                                   variant="ghost"
@@ -780,9 +969,12 @@ export function AdminConfigurationManagement({
       <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
         <DialogContent
           className="max-w-3xl max-h-[90vh]"
-          onInteractOutside={(e) => {
+          onInteractOutside={e => {
             const target = e.target as HTMLElement;
-            if (target.closest('[data-sonner-toast]') || target.closest('[data-radix-toast-viewport]')) {
+            if (
+              target.closest("[data-sonner-toast]") ||
+              target.closest("[data-radix-toast-viewport]")
+            ) {
               e.preventDefault();
             }
           }}
@@ -981,68 +1173,106 @@ export function AdminConfigurationManagement({
                       續領審查期間
                     </h4>
                     <div className="space-y-2 text-sm">
-                      <div>
-                        <span className="text-muted-foreground font-medium">
-                          教授審查：
+                      <div className="flex items-center space-x-2">
+                        <span className="text-muted-foreground">
+                          需要教授審查：
                         </span>
-                        <div className="ml-4 space-y-1">
-                          <div>
-                            <span className="text-muted-foreground">
-                              開始：
-                            </span>
-                            <span className="ml-2">
-                              {selectedConfig?.renewal_professor_review_start
-                                ? formatDateTime(
-                                    selectedConfig.renewal_professor_review_start
-                                  )
-                                : "未設定"}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">
-                              截止：
-                            </span>
-                            <span className="ml-2">
-                              {selectedConfig?.renewal_professor_review_end
-                                ? formatDateTime(
-                                    selectedConfig.renewal_professor_review_end
-                                  )
-                                : "未設定"}
-                            </span>
+                        <Badge
+                          variant={
+                            selectedConfig?.renewal_requires_professor_review
+                              ? "default"
+                              : "secondary"
+                          }
+                          className="text-xs"
+                        >
+                          {selectedConfig?.renewal_requires_professor_review
+                            ? "是"
+                            : "否"}
+                        </Badge>
+                      </div>
+                      {selectedConfig?.renewal_requires_professor_review && (
+                        <div>
+                          <span className="text-muted-foreground font-medium">
+                            教授審查：
+                          </span>
+                          <div className="ml-4 space-y-1">
+                            <div>
+                              <span className="text-muted-foreground">
+                                開始：
+                              </span>
+                              <span className="ml-2">
+                                {selectedConfig?.renewal_professor_review_start
+                                  ? formatDateTime(
+                                      selectedConfig.renewal_professor_review_start
+                                    )
+                                  : "未設定"}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">
+                                截止：
+                              </span>
+                              <span className="ml-2">
+                                {selectedConfig?.renewal_professor_review_end
+                                  ? formatDateTime(
+                                      selectedConfig.renewal_professor_review_end
+                                    )
+                                  : "未設定"}
+                              </span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground font-medium">
-                          學院審查：
+                      )}
+                      <div className="flex items-center space-x-2">
+                        <span className="text-muted-foreground">
+                          需要學院審查：
                         </span>
-                        <div className="ml-4 space-y-1">
-                          <div>
-                            <span className="text-muted-foreground">
-                              開始：
-                            </span>
-                            <span className="ml-2">
-                              {selectedConfig?.renewal_college_review_start
-                                ? formatDateTime(
-                                    selectedConfig.renewal_college_review_start
-                                  )
-                                : "未設定"}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">
-                              截止：
-                            </span>
-                            <span className="ml-2">
-                              {selectedConfig?.renewal_college_review_end
-                                ? formatDateTime(
-                                    selectedConfig.renewal_college_review_end
-                                  )
-                                : "未設定"}
-                            </span>
+                        <Badge
+                          variant={
+                            selectedConfig?.renewal_requires_college_review
+                              ? "default"
+                              : "secondary"
+                          }
+                          className="text-xs"
+                        >
+                          {selectedConfig?.renewal_requires_college_review
+                            ? "是"
+                            : "否"}
+                        </Badge>
+                      </div>
+                      {selectedConfig?.renewal_requires_college_review && (
+                        <div>
+                          <span className="text-muted-foreground font-medium">
+                            學院審查：
+                          </span>
+                          <div className="ml-4 space-y-1">
+                            <div>
+                              <span className="text-muted-foreground">
+                                開始：
+                              </span>
+                              <span className="ml-2">
+                                {selectedConfig?.renewal_college_review_start
+                                  ? formatDateTime(
+                                      selectedConfig.renewal_college_review_start
+                                    )
+                                  : "未設定"}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">
+                                截止：
+                              </span>
+                              <span className="ml-2">
+                                {selectedConfig?.renewal_college_review_end
+                                  ? formatDateTime(
+                                      selectedConfig.renewal_college_review_end
+                                    )
+                                  : "未設定"}
+                              </span>
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   </div>
 
@@ -1207,7 +1437,9 @@ export function AdminConfigurationManagement({
                     </span>
                     <span className="ml-2 font-medium">
                       {selectedConfig?.quota_management_mode &&
-                        getQuotaManagementModeLabel(selectedConfig.quota_management_mode as QuotaManagementMode)}
+                        getQuotaManagementModeLabel(
+                          selectedConfig.quota_management_mode as QuotaManagementMode
+                        )}
                     </span>
                   </div>
                   <div>
@@ -1232,6 +1464,45 @@ export function AdminConfigurationManagement({
                       </div>
                     </div>
                   )}
+
+                {/* Display shared_quota_sources if exists */}
+                {Array.isArray(selectedConfig?.shared_quota_sources) &&
+                  selectedConfig.shared_quota_sources.length > 0 && (
+                    <div className="mt-4">
+                      <h4 className="text-sm font-medium mb-2">
+                        共用前年度配額來源
+                      </h4>
+                      <div className="space-y-2">
+                        {selectedConfig.shared_quota_sources.map(source => (
+                          <div
+                            key={source.source_config_code}
+                            className="flex items-center gap-2 text-sm"
+                          >
+                            <span className="font-medium min-w-[80px]">
+                              {source.source_config_code}
+                            </span>
+                            {source.sub_types.length > 0 ? (
+                              <div className="flex gap-1 flex-wrap">
+                                {source.sub_types.map(st => (
+                                  <Badge
+                                    key={st}
+                                    variant="secondary"
+                                    className="text-xs"
+                                  >
+                                    {st}
+                                  </Badge>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                未指定子類型
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
               </div>
 
               <Separator />
@@ -1242,7 +1513,9 @@ export function AdminConfigurationManagement({
                   0 && (
                   <>
                     <div>
-                      <h3 className="text-sm font-medium mb-3">申請白名單設定</h3>
+                      <h3 className="text-sm font-medium mb-3">
+                        申請白名單設定
+                      </h3>
                       <div className="space-y-2">
                         {Object.entries(
                           selectedConfig.whitelist_student_ids
@@ -1328,9 +1601,12 @@ export function AdminConfigurationManagement({
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
         <DialogContent
           className="max-w-2xl max-h-[90vh]"
-          onInteractOutside={(e) => {
+          onInteractOutside={e => {
             const target = e.target as HTMLElement;
-            if (target.closest('[data-sonner-toast]') || target.closest('[data-radix-toast-viewport]')) {
+            if (
+              target.closest("[data-sonner-toast]") ||
+              target.closest("[data-radix-toast-viewport]")
+            ) {
               e.preventDefault();
             }
           }}
@@ -1569,24 +1845,84 @@ export function AdminConfigurationManagement({
                           ? JSON.stringify(formData.quotas, null, 2)
                           : formData.quotas || ""
                       }
-                    onChange={e => {
-                      try {
-                        const parsed = e.target.value
-                          ? JSON.parse(e.target.value)
-                          : {};
-                        setFormData(prev => ({ ...prev, quotas: parsed }));
-                      } catch {
-                        // 如果 JSON 無效，保持字串狀態讓使用者繼續編輯
-                        setFormData(prev => ({
-                          ...prev,
-                          quotas: e.target.value,
-                        }));
-                      }
-                    }}
-                    placeholder='{"sub_type": {"college": quota_number}}'
-                    className="min-h-[100px] font-mono text-sm"
+                      onChange={e => {
+                        try {
+                          const parsed = e.target.value
+                            ? JSON.parse(e.target.value)
+                            : {};
+                          setFormData(prev => ({ ...prev, quotas: parsed }));
+                        } catch {
+                          // 如果 JSON 無效，保持字串狀態讓使用者繼續編輯
+                          setFormData(prev => ({
+                            ...prev,
+                            quotas: e.target.value,
+                          }));
+                        }
+                      }}
+                      placeholder='{"sub_type": {"college": quota_number}}'
+                      className="min-h-[100px] font-mono text-sm"
+                    />
+                  </div>
+                )}
+
+                {formData.quota_management_mode === "matrix_based" && (
+                  <QuotaExcelButtons
+                    quotas={(typeof formData.quotas === "object" && formData.quotas) || {}}
+                    subTypes={quotaSubTypes}
+                    configCode={formData.config_code}
+                    onApply={next => setFormData(prev => ({ ...prev, quotas: next }))}
                   />
-                </div>
+                )}
+
+                {formData.quota_management_mode === "matrix_based" && (
+                  <SharedQuotaSourcesPicker
+                    value={
+                      Array.isArray(formData.shared_quota_sources)
+                        ? formData.shared_quota_sources
+                        : []
+                    }
+                    onChange={next =>
+                      setFormData(prev => ({ ...prev, shared_quota_sources: next }))
+                    }
+                    subTypes={Object.keys(
+                      (typeof formData.quotas === "object" && formData.quotas) || {}
+                    )}
+                    candidateConfigs={sharedQuotaCandidateConfigs}
+                  />
+                )}
+
+                {formData.quota_management_mode === "matrix_based" && (
+                  <div>
+                    <Label>計畫編號 (JSON 格式)</Label>
+                    <p className="mt-1 mb-2 text-sm text-muted-foreground">
+                      每個子類型一組計畫編號，格式：{`{"nstc": "114R000001"}`}
+                    </p>
+                    <Textarea
+                      value={
+                        typeof formData.project_numbers === "object"
+                          ? JSON.stringify(formData.project_numbers, null, 2)
+                          : formData.project_numbers || ""
+                      }
+                      onChange={e => {
+                        try {
+                          const parsed = e.target.value
+                            ? JSON.parse(e.target.value)
+                            : {};
+                          setFormData(prev => ({
+                            ...prev,
+                            project_numbers: parsed,
+                          }));
+                        } catch {
+                          setFormData(prev => ({
+                            ...prev,
+                            project_numbers: e.target.value,
+                          }));
+                        }
+                      }}
+                      placeholder='{"nstc": "114R000001"}'
+                      className="min-h-[60px] font-mono text-sm"
+                    />
+                  </div>
                 )}
 
                 {/* 申請白名單功能控制 */}
@@ -1594,28 +1930,42 @@ export function AdminConfigurationManagement({
                   <Label>申請白名單功能</Label>
                   <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">申請白名單功能</span>
-                      <Badge variant={selectedScholarshipType?.whitelist_enabled ? "default" : "outline"} className="text-xs">
-                        {selectedScholarshipType?.whitelist_enabled ? "已啟用" : "未啟用"}
+                      <span className="text-sm font-medium">
+                        申請白名單功能
+                      </span>
+                      <Badge
+                        variant={
+                          selectedScholarshipType?.whitelist_enabled
+                            ? "default"
+                            : "outline"
+                        }
+                        className="text-xs"
+                      >
+                        {selectedScholarshipType?.whitelist_enabled
+                          ? "已啟用"
+                          : "未啟用"}
                       </Badge>
                     </div>
                     <Switch
-                      checked={selectedScholarshipType?.whitelist_enabled || false}
+                      checked={
+                        selectedScholarshipType?.whitelist_enabled || false
+                      }
                       onCheckedChange={handleToggleWhitelist}
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">
                     啟用後，只有申請白名單中的學生才能申請此獎學金
                   </p>
-                  {selectedScholarshipType?.whitelist_enabled && selectedConfig && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowWhitelistDialog(true)}
-                    >
-                      管理申請白名單學生
-                    </Button>
-                  )}
+                  {selectedScholarshipType?.whitelist_enabled &&
+                    selectedConfig && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowWhitelistDialog(true)}
+                      >
+                        管理申請白名單學生
+                      </Button>
+                    )}
                 </div>
 
                 <div>
@@ -1797,9 +2147,12 @@ export function AdminConfigurationManagement({
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
         <DialogContent
           className="max-w-2xl max-h-[90vh]"
-          onInteractOutside={(e) => {
+          onInteractOutside={e => {
             const target = e.target as HTMLElement;
-            if (target.closest('[data-sonner-toast]') || target.closest('[data-radix-toast-viewport]')) {
+            if (
+              target.closest("[data-sonner-toast]") ||
+              target.closest("[data-radix-toast-viewport]")
+            ) {
               e.preventDefault();
             }
           }}
@@ -2007,33 +2360,107 @@ export function AdminConfigurationManagement({
                   </div>
                 )}
 
+                {formData.quota_management_mode === "matrix_based" && (
+                  <QuotaExcelButtons
+                    quotas={(typeof formData.quotas === "object" && formData.quotas) || {}}
+                    subTypes={quotaSubTypes}
+                    configCode={formData.config_code}
+                    onApply={next => setFormData(prev => ({ ...prev, quotas: next }))}
+                  />
+                )}
+
+                {formData.quota_management_mode === "matrix_based" && (
+                  <SharedQuotaSourcesPicker
+                    value={
+                      Array.isArray(formData.shared_quota_sources)
+                        ? formData.shared_quota_sources
+                        : []
+                    }
+                    onChange={next =>
+                      setFormData(prev => ({ ...prev, shared_quota_sources: next }))
+                    }
+                    subTypes={Object.keys(
+                      (typeof formData.quotas === "object" && formData.quotas) || {}
+                    )}
+                    candidateConfigs={sharedQuotaCandidateConfigs}
+                  />
+                )}
+
+                {formData.quota_management_mode === "matrix_based" && (
+                  <div>
+                    <Label>計畫編號 (JSON 格式)</Label>
+                    <p className="mt-1 mb-2 text-sm text-muted-foreground">
+                      每個子類型一組計畫編號，格式：{`{"nstc": "114R000001"}`}
+                    </p>
+                    <Textarea
+                      value={
+                        typeof formData.project_numbers === "object"
+                          ? JSON.stringify(formData.project_numbers, null, 2)
+                          : formData.project_numbers || ""
+                      }
+                      onChange={e => {
+                        try {
+                          const parsed = e.target.value
+                            ? JSON.parse(e.target.value)
+                            : {};
+                          setFormData(prev => ({
+                            ...prev,
+                            project_numbers: parsed,
+                          }));
+                        } catch {
+                          setFormData(prev => ({
+                            ...prev,
+                            project_numbers: e.target.value,
+                          }));
+                        }
+                      }}
+                      placeholder='{"nstc": "114R000001"}'
+                      className="min-h-[60px] font-mono text-sm"
+                    />
+                  </div>
+                )}
+
                 {/* 申請白名單功能控制 */}
                 <div className="space-y-3">
                   <Label>申請白名單功能</Label>
                   <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">申請白名單功能</span>
-                      <Badge variant={selectedScholarshipType?.whitelist_enabled ? "default" : "outline"} className="text-xs">
-                        {selectedScholarshipType?.whitelist_enabled ? "已啟用" : "未啟用"}
+                      <span className="text-sm font-medium">
+                        申請白名單功能
+                      </span>
+                      <Badge
+                        variant={
+                          selectedScholarshipType?.whitelist_enabled
+                            ? "default"
+                            : "outline"
+                        }
+                        className="text-xs"
+                      >
+                        {selectedScholarshipType?.whitelist_enabled
+                          ? "已啟用"
+                          : "未啟用"}
                       </Badge>
                     </div>
                     <Switch
-                      checked={selectedScholarshipType?.whitelist_enabled || false}
+                      checked={
+                        selectedScholarshipType?.whitelist_enabled || false
+                      }
                       onCheckedChange={handleToggleWhitelist}
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">
                     啟用後，只有申請白名單中的學生才能申請此獎學金
                   </p>
-                  {selectedScholarshipType?.whitelist_enabled && selectedConfig && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowWhitelistDialog(true)}
-                    >
-                      管理申請白名單學生
-                    </Button>
-                  )}
+                  {selectedScholarshipType?.whitelist_enabled &&
+                    selectedConfig && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowWhitelistDialog(true)}
+                      >
+                        管理申請白名單學生
+                      </Button>
+                    )}
                 </div>
 
                 <div>
@@ -2170,75 +2597,136 @@ export function AdminConfigurationManagement({
                   {/* 續領審查期間 */}
                   <div>
                     <h5 className="text-sm font-medium mb-2">續領審查期間</h5>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="edit_renewal_professor_review_start">
-                          續領教授審查開始
-                        </Label>
-                        <Input
-                          id="edit_renewal_professor_review_start"
-                          type="datetime-local"
-                          value={formData.renewal_professor_review_start || ""}
-                          onChange={e =>
-                            setFormData(prev => ({
-                              ...prev,
-                              renewal_professor_review_start: e.target.value,
-                            }))
-                          }
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="edit_renewal_professor_review_end">
-                          續領教授審查截止
-                        </Label>
-                        <Input
-                          id="edit_renewal_professor_review_end"
-                          type="datetime-local"
-                          value={formData.renewal_professor_review_end || ""}
-                          onChange={e =>
-                            setFormData(prev => ({
-                              ...prev,
-                              renewal_professor_review_end: e.target.value,
-                            }))
-                          }
-                        />
-                      </div>
+
+                    <div className="flex items-center space-x-2 mb-2">
+                      <input
+                        type="checkbox"
+                        id="edit_renewal_requires_professor_review"
+                        checked={
+                          formData.renewal_requires_professor_review || false
+                        }
+                        onChange={e =>
+                          setFormData(prev => ({
+                            ...prev,
+                            renewal_requires_professor_review: e.target.checked,
+                            // 取消時一併清除審查時間，避免留下無效設定
+                            ...(e.target.checked
+                              ? {}
+                              : {
+                                  renewal_professor_review_start: "",
+                                  renewal_professor_review_end: "",
+                                }),
+                          }))
+                        }
+                        className="h-4 w-4"
+                      />
+                      <Label htmlFor="edit_renewal_requires_professor_review">
+                        續領需要教授審查
+                      </Label>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4 mt-2">
-                      <div>
-                        <Label htmlFor="edit_renewal_college_review_start">
-                          續領學院審查開始
-                        </Label>
-                        <Input
-                          id="edit_renewal_college_review_start"
-                          type="datetime-local"
-                          value={formData.renewal_college_review_start || ""}
-                          onChange={e =>
-                            setFormData(prev => ({
-                              ...prev,
-                              renewal_college_review_start: e.target.value,
-                            }))
-                          }
-                        />
+                    {formData.renewal_requires_professor_review && (
+                      <div className="grid grid-cols-2 gap-4 mb-2">
+                        <div>
+                          <Label htmlFor="edit_renewal_professor_review_start">
+                            續領教授審查開始
+                          </Label>
+                          <Input
+                            id="edit_renewal_professor_review_start"
+                            type="datetime-local"
+                            value={
+                              formData.renewal_professor_review_start || ""
+                            }
+                            onChange={e =>
+                              setFormData(prev => ({
+                                ...prev,
+                                renewal_professor_review_start: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="edit_renewal_professor_review_end">
+                            續領教授審查截止
+                          </Label>
+                          <Input
+                            id="edit_renewal_professor_review_end"
+                            type="datetime-local"
+                            value={formData.renewal_professor_review_end || ""}
+                            onChange={e =>
+                              setFormData(prev => ({
+                                ...prev,
+                                renewal_professor_review_end: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
                       </div>
-                      <div>
-                        <Label htmlFor="edit_renewal_college_review_end">
-                          續領學院審查截止
-                        </Label>
-                        <Input
-                          id="edit_renewal_college_review_end"
-                          type="datetime-local"
-                          value={formData.renewal_college_review_end || ""}
-                          onChange={e =>
-                            setFormData(prev => ({
-                              ...prev,
-                              renewal_college_review_end: e.target.value,
-                            }))
-                          }
-                        />
-                      </div>
+                    )}
+
+                    <div className="flex items-center space-x-2 mb-2">
+                      <input
+                        type="checkbox"
+                        id="edit_renewal_requires_college_review"
+                        checked={
+                          formData.renewal_requires_college_review || false
+                        }
+                        onChange={e =>
+                          setFormData(prev => ({
+                            ...prev,
+                            renewal_requires_college_review: e.target.checked,
+                            // 取消時一併清除審查時間，避免留下無效設定
+                            ...(e.target.checked
+                              ? {}
+                              : {
+                                  renewal_college_review_start: "",
+                                  renewal_college_review_end: "",
+                                }),
+                          }))
+                        }
+                        className="h-4 w-4"
+                      />
+                      <Label htmlFor="edit_renewal_requires_college_review">
+                        續領需要學院審查
+                      </Label>
                     </div>
+
+                    {formData.renewal_requires_college_review && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="edit_renewal_college_review_start">
+                            續領學院審查開始
+                          </Label>
+                          <Input
+                            id="edit_renewal_college_review_start"
+                            type="datetime-local"
+                            value={formData.renewal_college_review_start || ""}
+                            onChange={e =>
+                              setFormData(prev => ({
+                                ...prev,
+                                renewal_college_review_start: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="edit_renewal_college_review_end">
+                            續領學院審查截止
+                          </Label>
+                          <Input
+                            id="edit_renewal_college_review_end"
+                            type="datetime-local"
+                            value={formData.renewal_college_review_end || ""}
+                            onChange={e =>
+                              setFormData(prev => ({
+                                ...prev,
+                                renewal_college_review_end: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* 一般申請審查期間 */}
@@ -2457,9 +2945,12 @@ export function AdminConfigurationManagement({
       {/* Duplicate Configuration Dialog */}
       <Dialog open={showDuplicateDialog} onOpenChange={setShowDuplicateDialog}>
         <DialogContent
-          onInteractOutside={(e) => {
+          onInteractOutside={e => {
             const target = e.target as HTMLElement;
-            if (target.closest('[data-sonner-toast]') || target.closest('[data-radix-toast-viewport]')) {
+            if (
+              target.closest("[data-sonner-toast]") ||
+              target.closest("[data-radix-toast-viewport]")
+            ) {
               e.preventDefault();
             }
           }}
@@ -2589,9 +3080,12 @@ export function AdminConfigurationManagement({
       <Dialog open={showCodeTableDialog} onOpenChange={setShowCodeTableDialog}>
         <DialogContent
           className="max-w-2xl"
-          onInteractOutside={(e) => {
+          onInteractOutside={e => {
             const target = e.target as HTMLElement;
-            if (target.closest('[data-sonner-toast]') || target.closest('[data-radix-toast-viewport]')) {
+            if (
+              target.closest("[data-sonner-toast]") ||
+              target.closest("[data-radix-toast-viewport]")
+            ) {
               e.preventDefault();
             }
           }}
@@ -2653,8 +3147,11 @@ export function AdminConfigurationManagement({
           onClose={() => setShowWhitelistDialog(false)}
           configuration={selectedConfig}
           subTypes={
-            selectedScholarshipType.eligible_sub_types && selectedScholarshipType.eligible_sub_types.length > 0
-              ? selectedScholarshipType.eligible_sub_types.map(st => st.value || st).filter((v): v is string => typeof v === 'string')
+            selectedScholarshipType.eligible_sub_types &&
+            selectedScholarshipType.eligible_sub_types.length > 0
+              ? selectedScholarshipType.eligible_sub_types
+                  .map(st => st.value || st)
+                  .filter((v): v is string => typeof v === "string")
               : ["general"]
           }
         />

@@ -140,6 +140,7 @@ htmlcov/
 .coverage
 .coverage.*
 coverage.json
+coverage.xml
 
 # pytest
 .pytest_cache/
@@ -171,3 +172,32 @@ minio_data/
 # Test results
 test-results/
 playwright-report/
+
+# Git worktrees
+.worktrees/
+
+# ─────────────────────────────────────────────────────────────────────────
+# Staging-test evidence (see scripts/evidence/render.mjs +
+# .github/workflows/staging-evidence.yml).
+# Live in dedicated `evidence/<date>` orphan branches, NOT on feature
+# branches. Only REPORT.md, .gitkeep, and README.md may be committed on a
+# feature branch (REPORT.md as a code-PR companion summary).
+docs/staging-tests/**/*
+!docs/staging-tests/**/REPORT.md
+!docs/staging-tests/.gitkeep
+!docs/staging-tests/README.md
+
+# bun-managed repo (bun.lock is the single committed lockfile) — never
+# commit npm lockfiles or test report artifacts
+frontend/package-lock.json
+frontend/junit.xml
+# claude 
+.claude/worktrees/
+# codegraph
+.codegraph/
+
+# Local-only mock student datasets (contain real-looking student IDs)
+mock-student-api/students_local.py
+
+# Hypothesis test cache
+.hypothesis/

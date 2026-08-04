@@ -13,6 +13,45 @@ import { typedClient } from '../typed-client';
 import { toApiResponse } from '../compat';
 import type { ApiResponse } from '../types';
 
+/**
+ * Shape of an email automation rule as returned by GET /api/v1/email-automation.
+ * Matches the canonical response of email_automation.py.
+ */
+export interface EmailAutomationRule {
+  id: number;
+  name: string;
+  description?: string;
+  trigger_event: string;
+  template_key: string;
+  delay_hours: number;
+  condition_query?: string;
+  is_active: boolean;
+  created_by_user_id?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Shape of an entry returned by GET /api/v1/email-automation/trigger-events.
+ */
+export interface EmailAutomationTriggerEvent {
+  value: string;
+  label: string;
+  description: string;
+}
+
+/**
+ * Request body for creating or updating an email automation rule.
+ * The backend POST/PUT bodies are validated by Pydantic and remain
+ * permissive via openapi-fetch (Record<string, never> generated body
+ * schema); a flexible object is the only practical shape here.
+ */
+export type EmailAutomationRulePayload = Partial<Omit<EmailAutomationRule, "id" | "created_at" | "updated_at" | "created_by_user_id">> & {
+  name: string;
+  trigger_event: string;
+  template_key: string;
+};
+
 export function createEmailAutomationApi() {
   return {
     /**
@@ -22,7 +61,7 @@ export function createEmailAutomationApi() {
     getRules: async (params?: {
       is_active?: boolean;
       trigger_event?: string;
-    }): Promise<ApiResponse<any[]>> => {
+    }): Promise<ApiResponse<EmailAutomationRule[]>> => {
       const response = await typedClient.raw.GET('/api/v1/email-automation', {
         params: {
           query: {
@@ -31,18 +70,18 @@ export function createEmailAutomationApi() {
           },
         },
       });
-      return toApiResponse<any[]>(response);
+      return toApiResponse<EmailAutomationRule[]>(response);
     },
 
     /**
      * Create a new email automation rule
      * Type-safe: Request body validated against OpenAPI
      */
-    createRule: async (ruleData: any): Promise<ApiResponse<any>> => {
+    createRule: async (ruleData: EmailAutomationRulePayload): Promise<ApiResponse<EmailAutomationRule>> => {
       const response = await typedClient.raw.POST('/api/v1/email-automation', {
-        body: ruleData,
+        body: ruleData as never,
       });
-      return toApiResponse(response);
+      return toApiResponse<EmailAutomationRule>(response);
     },
 
     /**
@@ -51,13 +90,13 @@ export function createEmailAutomationApi() {
      */
     updateRule: async (
       ruleId: number,
-      ruleData: any
-    ): Promise<ApiResponse<any>> => {
+      ruleData: EmailAutomationRulePayload
+    ): Promise<ApiResponse<EmailAutomationRule>> => {
       const response = await typedClient.raw.PUT('/api/v1/email-automation/{rule_id}', {
         params: { path: { rule_id: ruleId } },
-        body: ruleData,
+        body: ruleData as never,
       });
-      return toApiResponse(response);
+      return toApiResponse<EmailAutomationRule>(response);
     },
 
     /**
@@ -75,20 +114,20 @@ export function createEmailAutomationApi() {
      * Toggle an email automation rule on/off
      * Type-safe: Path parameter validated against OpenAPI
      */
-    toggleRule: async (ruleId: number): Promise<ApiResponse<any>> => {
+    toggleRule: async (ruleId: number): Promise<ApiResponse<EmailAutomationRule>> => {
       const response = await typedClient.raw.PATCH('/api/v1/email-automation/{rule_id}/toggle', {
         params: { path: { rule_id: ruleId } },
       });
-      return toApiResponse(response);
+      return toApiResponse<EmailAutomationRule>(response);
     },
 
     /**
      * Get available trigger events for automation rules
      * Type-safe: Response type inferred from OpenAPI
      */
-    getTriggerEvents: async (): Promise<ApiResponse<any[]>> => {
+    getTriggerEvents: async (): Promise<ApiResponse<EmailAutomationTriggerEvent[]>> => {
       const response = await typedClient.raw.GET('/api/v1/email-automation/trigger-events');
-      return toApiResponse<any[]>(response);
+      return toApiResponse<EmailAutomationTriggerEvent[]>(response);
     },
   };
 }

@@ -3,12 +3,36 @@ Date and time utility functions for the scholarship system
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone, tzinfo
+from functools import lru_cache
 from typing import Optional, Union
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import dateutil.parser
 
 logger = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=1)
+def _taipei_tz() -> tzinfo:
+    """Asia/Taipei tzinfo, falling back to UTC if tzdata is unavailable.
+
+    Cached so the missing-tzdata warning is logged at most once per process."""
+    try:
+        return ZoneInfo("Asia/Taipei")
+    except ZoneInfoNotFoundError:
+        logger.warning("Asia/Taipei timezone unavailable; falling back to UTC", exc_info=True)
+        return timezone.utc
+
+
+def now_taipei_str(format_string: str = "%Y-%m-%d %H:%M %z") -> str:
+    """Current time converted to the institution's locale (Asia/Taipei), formatted.
+
+    Use this for human-facing timestamps (emails, exports); UTC wall-clock
+    would silently shift them 8 hours. The default format includes the UTC
+    offset so a tzdata-fallback timestamp can't be mistaken for Taipei time.
+    """
+    return datetime.now(timezone.utc).astimezone(_taipei_tz()).strftime(format_string)
 
 
 def parse_date_field(date_input: Optional[Union[str, datetime]]) -> Optional[datetime]:
@@ -47,14 +71,14 @@ def parse_date_field(date_input: Optional[Union[str, datetime]]) -> Optional[dat
             # Fallback to dateutil parser for other formats
             else:
                 return dateutil.parser.parse(date_input)
-        except (ValueError, TypeError) as e:
-            logger.warning(f"Failed to parse date string '{date_input}': {e}")
+        except (ValueError, TypeError):
+            logger.warning("Failed to parse date string %r", date_input, exc_info=True)
             # Try dateutil as last resort
             try:
                 return dateutil.parser.parse(date_input)
             except Exception as e2:
-                logger.error(f"Could not parse date '{date_input}' with any method: {e2}")
-                raise ValueError(f"Invalid date format: {date_input}")
+                logger.exception("Could not parse date %r with any method", date_input)
+                raise ValueError(f"Invalid date format: {date_input}") from e2
 
     return None
 
@@ -76,8 +100,8 @@ def format_date_for_display(date_obj: Optional[datetime], format_string: str = "
 
     try:
         return date_obj.strftime(format_string)
-    except Exception as e:
-        logger.error(f"Failed to format date {date_obj}: {e}")
+    except Exception:
+        logger.exception(f"Failed to format date {date_obj}")
         return default
 
 

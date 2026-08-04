@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { toast } from "sonner";
+import { logger } from "@/lib/utils/logger";
 import { Search, MoreHorizontal, Play, Pause, Square, Trash2, Edit, Calendar, FileText } from "lucide-react"
 import { EditScheduleDialog } from "./edit-schedule-dialog"
 import { formatDateTime, getStatusBadgeVariant } from "@/lib/utils"
@@ -62,7 +63,12 @@ export function RosterScheduleList({ onScheduleChange, onRosterGenerated }: Rost
   const fetchSchedules = async () => {
     try {
       setLoading(true)
-      const params: any = {
+      const params: {
+        skip: number
+        limit: number
+        search?: string
+        status?: string
+      } = {
         skip: pagination.skip,
         limit: pagination.limit,
       }
@@ -70,15 +76,16 @@ export function RosterScheduleList({ onScheduleChange, onRosterGenerated }: Rost
       if (search) params.search = search
       if (statusFilter !== "all") params.status = statusFilter
 
-      const response = await apiClient.request("/roster-schedules", { params })
-      const data = response.data || response
+      const response = await apiClient.rosterSchedules.listSchedules(params)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (response.data || response) as any
 
       if (data.items) {
         setSchedules(data.items)
         setPagination(prev => ({ ...prev, total: data.total }))
       }
     } catch (error) {
-      console.error("獲取排程列表失敗:", error)
+      logger.error("獲取排程列表失敗", { error: error })
       toast.error("無法載入排程列表")
     } finally {
       setLoading(false)
@@ -89,17 +96,14 @@ export function RosterScheduleList({ onScheduleChange, onRosterGenerated }: Rost
     try {
       setActionLoading(prev => ({ ...prev, [scheduleId]: true }))
 
-      await apiClient.request(`/roster-schedules/${scheduleId}/status`, {
-        method: "PATCH",
-        body: JSON.stringify({ status: newStatus }),
-      })
+      await apiClient.rosterSchedules.updateScheduleStatus(scheduleId, { status: newStatus as never })
 
       toast.success(`排程狀態已更新為 ${getStatusLabel(newStatus)}`)
 
       fetchSchedules()
       onScheduleChange()
     } catch (error) {
-      console.error("狀態更新失敗:", error)
+      logger.error("狀態更新失敗", { error: error })
       toast.error("無法更新排程狀態")
     } finally {
       setActionLoading(prev => ({ ...prev, [scheduleId]: false }))
@@ -110,9 +114,7 @@ export function RosterScheduleList({ onScheduleChange, onRosterGenerated }: Rost
     try {
       setActionLoading(prev => ({ ...prev, [scheduleId]: true }))
 
-      await apiClient.request(`/roster-schedules/${scheduleId}/execute`, {
-        method: "POST",
-      })
+      await apiClient.rosterSchedules.executeSchedule(scheduleId)
 
       toast.success("排程已觸發執行")
 
@@ -120,7 +122,7 @@ export function RosterScheduleList({ onScheduleChange, onRosterGenerated }: Rost
       onScheduleChange()
       onRosterGenerated?.()
     } catch (error) {
-      console.error("執行排程失敗:", error)
+      logger.error("執行排程失敗", { error: error })
       toast.error("無法執行排程")
     } finally {
       setActionLoading(prev => ({ ...prev, [scheduleId]: false }))
@@ -131,9 +133,7 @@ export function RosterScheduleList({ onScheduleChange, onRosterGenerated }: Rost
     if (!selectedSchedule) return
 
     try {
-      await apiClient.request(`/roster-schedules/${selectedSchedule.id}`, {
-        method: "DELETE",
-      })
+      await apiClient.rosterSchedules.deleteSchedule(selectedSchedule.id)
 
       toast.success("排程已刪除")
 
@@ -142,7 +142,7 @@ export function RosterScheduleList({ onScheduleChange, onRosterGenerated }: Rost
       setDeleteDialogOpen(false)
       setSelectedSchedule(null)
     } catch (error) {
-      console.error("刪除排程失敗:", error)
+      logger.error("刪除排程失敗", { error: error })
       toast.error("無法刪除排程")
     }
   }
@@ -160,7 +160,7 @@ export function RosterScheduleList({ onScheduleChange, onRosterGenerated }: Rost
   const getCycleLabel = (cycle: string) => {
     const labels: { [key: string]: string } = {
       monthly: "月度",
-      half_yearly: "半年度",
+      semi_yearly: "半年度",
       yearly: "年度"
     }
     return labels[cycle] || cycle

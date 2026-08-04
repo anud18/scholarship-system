@@ -32,7 +32,7 @@ export type BankVerificationResult = {
     };
   };
   form_data?: { [key: string]: string };
-  ocr_data?: { [key: string]: any };
+  ocr_data?: { [key: string]: unknown };
   passbook_document?: {
     file_path: string;
     original_filename: string;
@@ -84,7 +84,12 @@ export type BankVerificationTask = {
   is_completed: boolean;
   is_running: boolean;
   error_message?: string;
-  results?: { [appId: number]: any };
+  results?: { [appId: number]: BankVerificationTaskResult };
+};
+
+export type BankVerificationTaskResult = {
+  status?: string;
+  [key: string]: unknown;
 };
 
 export type BatchVerificationAsyncResponse = {
@@ -132,7 +137,7 @@ export function createBankVerificationApi() {
       forceRecheck: boolean = false
     ): Promise<ApiResponse<BankVerificationResult>> => {
       const response = await typedClient.raw.POST('/api/v1/admin/bank-verification', {
-        body: { application_id: applicationId, force_recheck: forceRecheck } as any,
+        body: { application_id: applicationId, force_recheck: forceRecheck },
       });
       return toApiResponse<BankVerificationResult>(response);
     },
@@ -146,7 +151,7 @@ export function createBankVerificationApi() {
       forceRecheck: boolean = false
     ): Promise<ApiResponse<BankVerificationBatchResult>> => {
       const response = await typedClient.raw.POST('/api/v1/admin/bank-verification/batch', {
-        body: { application_ids: applicationIds, force_recheck: forceRecheck } as any,
+        body: { application_ids: applicationIds, force_recheck: forceRecheck },
       });
       return toApiResponse<BankVerificationBatchResult>(response);
     },
@@ -159,7 +164,7 @@ export function createBankVerificationApi() {
       reviewData: ManualBankReviewRequest
     ): Promise<ApiResponse<ManualBankReviewResult>> => {
       const response = await typedClient.raw.POST('/api/v1/admin/bank-verification/manual-review', {
-        body: reviewData as any,
+        body: reviewData,
       });
       return toApiResponse<ManualBankReviewResult>(response);
     },
@@ -172,7 +177,7 @@ export function createBankVerificationApi() {
       applicationIds: number[]
     ): Promise<ApiResponse<BatchVerificationAsyncResponse>> => {
       const response = await typedClient.raw.POST('/api/v1/admin/bank-verification/batch-async', {
-        body: { application_ids: applicationIds } as any,
+        body: { application_ids: applicationIds } as never,
       });
       return toApiResponse<BatchVerificationAsyncResponse>(response);
     },
@@ -194,7 +199,7 @@ export function createBankVerificationApi() {
       status?: string,
       limit: number = 50,
       offset: number = 0
-    ): Promise<ApiResponse<{ tasks: BankVerificationTask[]; pagination: any }>> => {
+    ): Promise<ApiResponse<{ tasks: BankVerificationTask[]; pagination: Record<string, unknown> }>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/bank-verification/tasks', {
         params: {
           query: {
@@ -204,7 +209,7 @@ export function createBankVerificationApi() {
           },
         },
       });
-      return toApiResponse<{ tasks: BankVerificationTask[]; pagination: any }>(response);
+      return toApiResponse<{ tasks: BankVerificationTask[]; pagination: Record<string, unknown> }>(response);
     },
 
     /**

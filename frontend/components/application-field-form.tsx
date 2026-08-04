@@ -95,6 +95,8 @@ export function ApplicationFieldForm({
     help_text_en: "",
     validation_rules: {},
     conditional_rules: {},
+    include_in_college_export: false,
+    export_column_label: "",
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -127,6 +129,8 @@ export function ApplicationFieldForm({
         help_text_en: field.help_text_en,
         validation_rules: field.validation_rules,
         conditional_rules: field.conditional_rules,
+        include_in_college_export: field.include_in_college_export ?? false,
+        export_column_label: field.export_column_label ?? "",
       });
     } else if (mode === "create") {
       setFormData({
@@ -148,6 +152,8 @@ export function ApplicationFieldForm({
         help_text_en: "",
         validation_rules: {},
         conditional_rules: {},
+        include_in_college_export: false,
+        export_column_label: "",
       });
     }
   }, [field, mode]);
@@ -272,7 +278,16 @@ export function ApplicationFieldForm({
                   <Select
                     value={formData.field_type}
                     onValueChange={value =>
-                      setFormData(prev => ({ ...prev, field_type: value }))
+                      setFormData(prev => ({
+                        ...prev,
+                        field_type: value,
+                        ...(value !== "text"
+                          ? {
+                              include_in_college_export: false,
+                              export_column_label: "",
+                            }
+                          : {}),
+                      }))
                     }
                   >
                     <SelectTrigger>
@@ -610,7 +625,7 @@ export function ApplicationFieldForm({
             <CardHeader>
               <CardTitle className="text-lg">狀態設定</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
               <div className="flex items-center space-x-2">
                 <Switch
                   id="is_active"
@@ -621,6 +636,59 @@ export function ApplicationFieldForm({
                 />
                 <Label htmlFor="is_active">啟用此欄位</Label>
               </div>
+
+              {formData.field_type === "text" && (
+                <div className="space-y-3 rounded-md border p-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label
+                        htmlFor="include_in_college_export"
+                        className="text-sm font-medium"
+                      >
+                        顯示於學院匯出 Excel
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        勾選後此欄位會出現在學院下載的「學生資料彙整表」
+                      </p>
+                    </div>
+                    <Switch
+                      id="include_in_college_export"
+                      checked={!!formData.include_in_college_export}
+                      onCheckedChange={checked =>
+                        setFormData(prev => ({
+                          ...prev,
+                          include_in_college_export: checked,
+                          ...(checked ? {} : { export_column_label: "" }),
+                        }))
+                      }
+                    />
+                  </div>
+                  {formData.include_in_college_export && (
+                    <div className="space-y-1">
+                      <Label
+                        htmlFor="export_column_label"
+                        className="text-sm"
+                      >
+                        學院匯出顯示名稱（選填）
+                      </Label>
+                      <Input
+                        id="export_column_label"
+                        maxLength={200}
+                        placeholder={
+                          formData.field_label || "留空則使用上方的欄位中文名稱"
+                        }
+                        value={formData.export_column_label ?? ""}
+                        onChange={e =>
+                          setFormData(prev => ({
+                            ...prev,
+                            export_column_label: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         </form>

@@ -33,7 +33,7 @@ type CompleteUserProfile = {
     user_type?: string;
     status?: string;
     role?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   student_info?: {
     std_stdcode?: string;
@@ -41,8 +41,11 @@ type CompleteUserProfile = {
     std_degree?: string;
     std_studingstatus?: string;
     std_enrollyear?: string;
+    std_enrollterm?: string;
     std_termcount?: string;
-    [key: string]: any;
+    std_nation?: string;
+    std_identity?: string;
+    [key: string]: unknown;
   };
   profile?: {
     id?: number;
@@ -52,9 +55,9 @@ type CompleteUserProfile = {
     advisor_nycu_id?: string;
     account_number?: string;
     bank_document_photo_url?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
-  [key: string]: any;
+  [key: string]: unknown;
 };
 
 /**

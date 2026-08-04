@@ -85,7 +85,7 @@ export function createQuotaApi() {
       request: UpdateMatrixQuotaRequest
     ): Promise<ApiResponse<UpdateQuotaResponse>> => {
       const response = await typedClient.raw.PUT('/api/v1/scholarship-configurations/matrix-quota', {
-        body: request as any, // Frontend UpdateMatrixQuotaRequest structure differs from generated schema
+        body: request as never, // Frontend UpdateMatrixQuotaRequest structure differs from generated schema
       });
       return toApiResponse<UpdateQuotaResponse>(response);
     },
@@ -103,9 +103,9 @@ export function createQuotaApi() {
      * Get scholarship type configurations
      * Type-safe: Response type inferred from OpenAPI
      */
-    getScholarshipTypeConfigs: async (): Promise<ApiResponse<any[]>> => {
+    getScholarshipTypeConfigs: async (): Promise<ApiResponse<unknown[]>> => {
       const response = await typedClient.raw.GET('/api/v1/scholarship-configurations/scholarship-types');
-      return toApiResponse<any[]>(response);
+      return toApiResponse<unknown[]>(response);
     },
 
     /**
@@ -121,7 +121,7 @@ export function createQuotaApi() {
       for (const update of updates) {
         try {
           const response = await typedClient.raw.PUT('/api/v1/scholarship-configurations/matrix-quota', {
-            body: update as any, // Frontend UpdateMatrixQuotaRequest structure differs from generated schema
+            body: update as never, // Frontend UpdateMatrixQuotaRequest structure differs from generated schema
           });
           const apiResponse = toApiResponse<UpdateQuotaResponse>(response);
           if (apiResponse.success && apiResponse.data) {
@@ -187,7 +187,10 @@ export function createQuotaApi() {
     getQuotaHistory: async (
       academicYear: string,
       limit: number = 50
-    ): Promise<ApiResponse<any[]>> => {
+    ): Promise<ApiResponse<unknown[]>> => {
+      // Path is not in the generated OpenAPI schema (orphan endpoint, see
+      // issue #665). The function-cast bypasses typed-route inference.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const response = await (typedClient.raw.GET as any)('/api/v1/scholarship-configurations/quota-history', {
         params: {
           query: {
@@ -196,7 +199,7 @@ export function createQuotaApi() {
           },
         },
       });
-      return toApiResponse<any[]>(response);
+      return toApiResponse<unknown[]>(response);
     },
 
     /**
@@ -206,6 +209,9 @@ export function createQuotaApi() {
     validateQuotaChange: async (
       request: UpdateMatrixQuotaRequest
     ): Promise<ApiResponse<{ valid: boolean; warnings: string[] }>> => {
+      // Path is not in the generated OpenAPI schema (orphan endpoint, see
+      // issue #665). The function-cast bypasses typed-route inference.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const response = await (typedClient.raw.POST as any)('/api/v1/scholarship-configurations/validate-quota', {
         body: request,
       });

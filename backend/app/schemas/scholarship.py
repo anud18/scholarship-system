@@ -70,7 +70,10 @@ class ScholarshipTypeBase(BaseModel):
     @field_validator("amount")
     @classmethod
     def validate_amount(cls, v):
-        if v <= 0:
+        # None is allowed so ScholarshipTypeResponse can represent a type with no
+        # active configuration yet (#1115); inputs (ScholarshipTypeCreate) keep
+        # `amount: Decimal` required, so a positive amount is still enforced there.
+        if v is not None and v <= 0:
             raise ValueError("Amount must be greater than 0")
         return v
 
@@ -124,6 +127,10 @@ class ScholarshipTypeUpdate(BaseModel):
 
 class ScholarshipTypeResponse(ScholarshipTypeBase):
     id: int
+    # A scholarship type whose active ScholarshipConfiguration does not exist yet
+    # has no configured amount — represent it as null rather than 500ing on the
+    # base's `amount > 0` rule (#1115).
+    amount: Optional[Decimal] = None
     created_at: datetime
     updated_at: datetime
     created_by: Optional[int] = None
@@ -244,6 +251,18 @@ class SubTypeOption(BaseModel):
     is_default: bool = False
 
 
+class SubtypeRuleDetail(BaseModel):
+    rule_name: str
+    message: Optional[str] = None
+    tag: Optional[str] = None
+
+
+class SubtypeEligibilityInfo(BaseModel):
+    eligible: bool
+    failed_rules: List[SubtypeRuleDetail] = []
+    warning_rules: List[SubtypeRuleDetail] = []
+
+
 class EligibleScholarshipResponse(BaseModel):
     id: int
     configuration_id: int  # Add configuration ID for application creation
@@ -264,10 +283,18 @@ class EligibleScholarshipResponse(BaseModel):
     college_review_end: Optional[datetime] = None
     sub_type_selection_mode: SubTypeSelectionModeEnum
     terms_document_url: Optional[str] = None
+    application_document_note: Optional[str] = None
+    application_document_note_en: Optional[str] = None
     passed: List[RuleMessage]
     warnings: List[RuleMessage]
     errors: List[RuleMessage]
     created_at: datetime
+    all_sub_type_list: List[str] = []
+    subtype_eligibility: Dict[str, SubtypeEligibilityInfo] = {}
+    already_submitted: bool = False
+    # Whether the scholarship is currently accepting applications. False for
+    # effective-but-closed (生效但已截止) scholarships, which are shown read-only.
+    is_application_period: bool = True
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -394,7 +421,7 @@ class RuleTemplateRequest(BaseModel):
     template_name: str = Field(..., min_length=1, max_length=100, description="Template name")
     template_description: Optional[str] = Field(None, description="Template description")
     scholarship_type_id: int = Field(..., ge=1, description="Scholarship type ID")
-    rule_ids: List[int] = Field(..., min_items=1, description="Rule IDs to include in template")
+    rule_ids: List[int] = Field(..., min_length=1, description="Rule IDs to include in template")
 
     @field_validator("rule_ids")
     @classmethod
@@ -432,7 +459,7 @@ class BulkRuleOperation(BaseModel):
     """Schema for bulk rule operations"""
 
     operation: str = Field(..., pattern=r"^(activate|deactivate|delete)$", description="Operation type")
-    rule_ids: List[int] = Field(..., min_items=1, description="Rule IDs to operate on")
+    rule_ids: List[int] = Field(..., min_length=1, description="Rule IDs to operate on")
     parameters: Optional[Dict[str, Any]] = Field(None, description="Operation-specific parameters")
 
     @field_validator("rule_ids")

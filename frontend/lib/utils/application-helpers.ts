@@ -1,5 +1,6 @@
 import { Locale } from "@/lib/validators";
 import { api } from "@/lib/api";
+import { logger } from "@/lib/utils/logger";
 import {
   ApplicationStatus,
   ReviewStage,
@@ -8,6 +9,27 @@ import {
   getReviewStageLabel,
   getReviewStageBadgeVariant,
 } from "@/lib/enums";
+
+// Shape of document entries in `submitted_form_data.documents` from
+// the backend. All fields optional because the upstream JSON can come
+// from several sources (form_data, submitted_form_data, SIS upload).
+interface DocumentPayload {
+  file_id?: string | number;
+  id?: string | number;
+  filename?: string;
+  original_filename?: string;
+  file_size?: number;
+  mime_type?: string;
+  document_type?: string;
+  file_type?: string;
+  file_path?: string;
+  download_url?: string;
+  is_verified?: boolean;
+  upload_time?: string;
+  uploaded_at?: string;
+  document_id?: string;
+}
+
 
 export type BadgeVariant = "secondary" | "default" | "outline" | "destructive";
 
@@ -58,9 +80,27 @@ const hasReachedStage = (currentStage: string | undefined, targetStage: string):
   return currentOrder >= targetOrder;
 };
 
+// Structural shape consumed by the helpers below. Matches the canonical
+// Application interface plus the review-stage extensions surfaced by the
+// /applications/{id} backend response.
+type ApplicationTimelineInput = {
+  status: string;
+  review_stage?: string;
+  professor_reviews?: Array<{ reviewed_at?: string }>;
+  application_reviews?: Array<{ review_stage?: string; reviewed_at?: string }>;
+  professor?: { name?: string; nycu_id?: string };
+  requires_professor_recommendation?: boolean;
+  requires_college_review?: boolean;
+  allow_college_view_distribution?: boolean;
+  submitted_at?: string;
+  created_at?: string;
+  approved_at?: string;
+  reviewed_at?: string;
+};
+
 // 獲取申請時間軸
 export const getApplicationTimeline = (
-  application: any,
+  application: ApplicationTimelineInput,
   locale: Locale
 ): TimelineStep[] => {
   const status = application.status as ApplicationStatus;
@@ -72,41 +112,67 @@ export const getApplicationTimeline = (
 
   // 獲取學院審核資訊
   const collegeReview = application.application_reviews?.find(
-    (r: any) => r.review_stage === "college_review"
+    (r: { review_stage?: string; reviewed_at?: string }) =>
+      r.review_stage === "college_review"
   );
   const hasCollegeReview = Boolean(collegeReview?.reviewed_at);
 
   // 教授姓名
   const professorName = application.professor?.name || application.professor?.nycu_id;
 
-  // 判斷步驟狀態的輔助函數
+  // 判斷合併步驟狀態的輔助函數:
+  // entryStage 為進入此步驟的階段,exitStage 為此步驟完成時所到達的階段
+  // (review_stage 達到 exitStage 即視為此步驟已完成)
   const getStepStatus = (
-    targetStage: string,
-    nextStage: string,
+    entryStage: string,
+    exitStage: string,
     hasCompletedEvidence?: boolean
   ): "completed" | "current" | "pending" | "rejected" => {
     // 如果被拒絕,且已達到該階段,標記為 rejected
-    if (status === "rejected" && hasReachedStage(reviewStage, targetStage)) {
+    if (status === "rejected" && hasReachedStage(reviewStage, entryStage)) {
       return "rejected";
     }
 
-    // 如果有明確的完成證據 (如審核記錄)
-    if (hasCompletedEvidence) {
+    // 如果有明確的完成證據 (如審核記錄),或已進入後續階段
+    if (hasCompletedEvidence || hasReachedStage(reviewStage, exitStage)) {
       return "completed";
     }
 
-    // 如果已達到下一階段,則此階段已完成
-    if (hasReachedStage(reviewStage, nextStage)) {
-      return "completed";
-    }
-
-    // 如果正好在此階段
-    if (reviewStage === targetStage) {
+    // 已進入此步驟但尚未完成
+    if (hasReachedStage(reviewStage, entryStage)) {
       return "current";
     }
 
     // 尚未達到
     return "pending";
+  };
+
+  // Workflow configuration flags
+  const requiresProfessor = application.requires_professor_recommendation ?? false;
+  const requiresCollege = application.requires_college_review ?? false;
+  // 管理員「開放學院查看分發結果」開關:開啟後最終步驟才會打勾
+  const allowCollegeViewDistribution = application.allow_college_view_distribution ?? false;
+
+  const isTerminated =
+    status === "rejected" ||
+    status === "returned" ||
+    status === "withdrawn" ||
+    status === "cancelled" ||
+    status === "cancelled_by_challenge";
+
+  // 是否已有分發結果。未獲配額的申請「不會」被改成 approved(見後端
+  // manual_distribution_service 的 #45 註解:通過審核但未上榜者維持原狀態,
+  // 只有 review_stage 前進到 quota_distributed),因此不能只看 approved,
+  // 否則這些學生的最終步驟永遠停在未完成。
+  const hasDistributionOutcome =
+    status === "approved" || hasReachedStage(reviewStage, "quota_distributed");
+
+  // 最終步驟只揭露「結果已出爐,請洽院辦」,不揭露是否獲獎,
+  // 因此以管理員的「開放學院查看分發結果」開關為打勾時機。
+  const getFinalStepStatus = (): TimelineStep["status"] => {
+    if (isTerminated) return "rejected";
+    if (!hasDistributionOutcome) return "pending";
+    return allowCollegeViewDistribution ? "completed" : "current";
   };
 
   const steps: TimelineStep[] = [
@@ -119,75 +185,46 @@ export const getApplicationTimeline = (
         ? ""
         : formatDate(application.submitted_at || application.created_at, locale),
     },
-
-    // 2. 等待教授審核
-    {
-      id: "wait_professor",
-      title: locale === "zh"
-        ? `等待教授審核${professorName ? ` (${professorName})` : ""}`
-        : `Waiting for Professor Review${professorName ? ` (${professorName})` : ""}`,
-      status: getStepStatus("student_submitted", "professor_review"),
-      date: "",
-    },
-
-    // 3. 教授審核中
-    {
-      id: "professor_reviewing",
-      title: locale === "zh" ? "教授審核中" : "Professor Reviewing",
-      status: getStepStatus("professor_review", "professor_reviewed", hasProfessorReview),
-      date: "",
-    },
-
-    // 4. 教授已送出審核
-    {
-      id: "professor_submitted",
-      title: locale === "zh" ? "教授已送出審核" : "Professor Review Submitted",
-      status: getStepStatus("professor_reviewed", "college_review", hasProfessorReview),
-      date: hasProfessorReview ? formatDate(professorReview.reviewed_at, locale) : "",
-    },
-
-    // 5. 等待學院審核
-    {
-      id: "wait_college",
-      title: locale === "zh" ? "等待學院審核" : "Waiting for College Review",
-      status: getStepStatus("professor_reviewed", "college_review"),
-      date: "",
-    },
-
-    // 6. 學院審核中
-    {
-      id: "college_reviewing",
-      title: locale === "zh" ? "學院審核中" : "College Reviewing",
-      status: getStepStatus("college_review", "college_reviewed", hasCollegeReview),
-      date: "",
-    },
-
-    // 7. 學院已送出審核
-    {
-      id: "college_submitted",
-      title: locale === "zh" ? "學院已送出審核" : "College Review Submitted",
-      status: getStepStatus("college_reviewed", "admin_review", hasCollegeReview),
-      date: hasCollegeReview ? formatDate(collegeReview.reviewed_at, locale) : "",
-    },
-
-    // 8. 最終核定
-    {
-      id: "final_decision",
-      title: locale === "zh" ? "最終核定" : "Final Decision",
-      status:
-        status === "approved"
-          ? "completed"
-          : status === "rejected" || status === "returned" || status === "withdrawn" || status === "cancelled"
-            ? "rejected"
-            : "pending",
-      date:
-        status === "approved"
-          ? formatDate(application.approved_at, locale)
-          : status === "rejected" || status === "returned" || status === "withdrawn" || status === "cancelled"
-            ? formatDate(application.reviewed_at, locale)
-            : "",
-    },
   ];
+
+  // 2. 教授審核 (only if required)
+  if (requiresProfessor) {
+    steps.push({
+      id: "professor_review",
+      title: locale === "zh"
+        ? `教授審核${professorName ? ` (${professorName})` : ""}`
+        : `Professor Review${professorName ? ` (${professorName})` : ""}`,
+      status: getStepStatus("student_submitted", "professor_reviewed", hasProfessorReview),
+      date: hasProfessorReview ? formatDate(professorReview?.reviewed_at, locale) : "",
+    });
+  }
+
+  // 3. 學院審核 (only if required)
+  if (requiresCollege) {
+    steps.push({
+      id: "college_review",
+      title: locale === "zh" ? "學院審核" : "College Review",
+      status: getStepStatus(
+        requiresProfessor ? "professor_reviewed" : "student_submitted",
+        "college_reviewed",
+        hasCollegeReview
+      ),
+      date: hasCollegeReview ? formatDate(collegeReview?.reviewed_at, locale) : "",
+    });
+  }
+
+  // 4. 已核定(請洽院辦) — 僅在管理員開放學院查看分發結果後才打勾
+  const finalStepStatus = getFinalStepStatus();
+  steps.push({
+    id: "final_decision",
+    title: locale === "zh" ? "已核定(請洽院辦)" : "Finalized (Contact College Office)",
+    status: finalStepStatus,
+    date: isTerminated
+      ? formatDate(application.reviewed_at, locale)
+      : finalStepStatus === "completed"
+        ? formatDate(application.approved_at, locale)
+        : "",
+  });
 
   return steps;
 };
@@ -216,7 +253,7 @@ export const shouldShowReviewStage = (
 
 // 獲取顯示狀態 - 返回狀態和階段的組合資訊
 export const getDisplayStatusInfo = (
-  application: any,
+  application: { status: string; review_stage?: string },
   locale: Locale
 ): {
   showStatus: boolean;
@@ -271,6 +308,14 @@ export const formatFieldName = (fieldName: string, locale: Locale) => {
     contact_email: locale === "zh" ? "聯絡信箱" : "Contact Email",
     contact_address: locale === "zh" ? "通訊地址" : "Contact Address",
     bank_account: locale === "zh" ? "銀行帳戶" : "Bank Account",
+    account_number: locale === "zh" ? "郵局帳號" : "Post Office Account",
+    // Fixed fields injected into every form config (see the backend's
+    // FIXED_FIELD_LABELS) — needed as a fallback when the config fails to load.
+    postal_account: locale === "zh" ? "郵局帳號" : "Post Office Account",
+    advisor_name: locale === "zh" ? "指導教授姓名" : "Advisor Name",
+    advisor_email: locale === "zh" ? "指導教授Email" : "Advisor Email",
+    advisor_nycu_id:
+      locale === "zh" ? "指導教授本校人事編號" : "Advisor NYCU ID",
     research_proposal: locale === "zh" ? "研究計畫" : "Research Proposal",
     budget_plan: locale === "zh" ? "預算規劃" : "Budget Plan",
     milestone_plan: locale === "zh" ? "里程碑規劃" : "Milestone Plan",
@@ -283,9 +328,45 @@ export const formatFieldName = (fieldName: string, locale: Locale) => {
 };
 
 // 格式化欄位值（從資料庫獲取獎學金類型名稱）
+/**
+ * Render a form-field value as a human-readable string. Used by the
+ * application-form-data-display component to show dynamic-form data
+ * collected from students.
+ *
+ * Why:
+ * - String/number/boolean: use `String(value)` (handles 0, false, etc.).
+ * - null/undefined: return empty string (caller decides placeholder).
+ * - Array: comma-separated stringified items (matches the array-test
+ *   contract from PR #244 and the eye-test of "hobbies: reading, coding").
+ * - Plain object: JSON.stringify so nested data renders as readable JSON
+ *   instead of the default `[object Object]`. (Replaces TODO at
+ *   `application-form-data-display.test.tsx:215`.)
+ *
+ * Truncation is the caller's responsibility — different render paths
+ * use different cap lengths.
+ */
+export const formatDisplayValue = (value: unknown): string => {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => formatDisplayValue(item)).join(", ");
+  }
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
+};
+
 export const formatFieldValue = async (
   fieldName: string,
-  value: any,
+  value: unknown,
   locale: Locale
 ) => {
   if (fieldName === "scholarship_type") {
@@ -301,10 +382,10 @@ export const formatFieldValue = async (
         }
       }
     } catch (error) {
-      console.warn(
-        `Failed to fetch scholarship type for code: ${value}`,
-        error
-      );
+      logger.warn("Failed to fetch scholarship type for code", {
+        code: value,
+        error,
+      });
     }
     // API 失敗時直接顯示 code
     return value;
@@ -366,7 +447,7 @@ export const fetchApplicationFiles = async (applicationId: number) => {
       appResponse.data?.submitted_form_data?.documents
     ) {
       // 將 documents 轉換為 ApplicationFile 格式以保持向後兼容
-      return appResponse.data.submitted_form_data.documents.map((doc: any) => ({
+      return appResponse.data.submitted_form_data.documents.map((doc: DocumentPayload) => ({
         id: doc.file_id,
         filename: doc.filename,
         original_filename: doc.original_filename,
@@ -389,7 +470,78 @@ export const fetchApplicationFiles = async (applicationId: number) => {
 
     return [];
   } catch (error) {
-    console.error("Failed to fetch application files:", error);
+    logger.error("Failed to fetch application files", { error });
     return [];
   }
 };
+
+// Shape of a single entry inside `submitted_form_data.fields`.
+export interface SubmittedFormFieldValue {
+  field_id: string;
+  field_type: string;
+  value: string;
+  required: boolean;
+}
+
+/**
+ * Build the `submitted_form_data.fields` map sent when a student submits an
+ * application.
+ *
+ * Why: the applicant's post-office account (郵局帳號, 限本人) is collected in a
+ * dedicated wizard section and persisted to the user profile, but the admin
+ * review dialog and the backend bank-verification service both read the
+ * account number from the application's `submitted_form_data.fields`
+ * (see backend `extract_bank_fields_from_application`, which looks up the
+ * `account_number` key). If it is omitted here the account never reaches the
+ * admin side, so we always fold it into the form fields.
+ */
+// Taiwan mobile number: pure digits, starts with 09, exactly 10 digits.
+// Mirrors the backend contact_phone validation so client and server agree.
+export const TAIWAN_MOBILE_PATTERN = /^09\d{8}$/;
+export const TAIWAN_MOBILE_MESSAGE = "請輸入本人有效的台灣手機 (09xxxxxx)";
+
+export const isValidTaiwanMobile = (value: unknown): boolean =>
+  typeof value === "string" && TAIWAN_MOBILE_PATTERN.test(value);
+
+export const buildApplicationFormFields = (
+  dynamicFormData: Record<string, unknown>,
+  accountNumber?: string | null
+): Record<string, SubmittedFormFieldValue> => {
+  const fields: Record<string, SubmittedFormFieldValue> = {};
+
+  Object.entries(dynamicFormData).forEach(([fieldName, value]) => {
+    fields[fieldName] = {
+      field_id: fieldName,
+      field_type: "text",
+      value: String(value),
+      required: true,
+    };
+  });
+
+  const trimmedAccount = accountNumber?.trim();
+  if (trimmedAccount) {
+    fields.account_number = {
+      field_id: "account_number",
+      field_type: "text",
+      value: trimmedAccount,
+      required: true,
+    };
+  }
+
+  return fields;
+};
+
+// Admin-configurable document visibility (see application_documents.display_in_list
+// / requires_upload). `!== false` keeps pre-flag API payloads behaving as before.
+export const isDocumentListedInScholarshipCard = (doc: {
+  is_active: boolean;
+  display_in_list?: boolean;
+}): boolean => doc.is_active && doc.display_in_list !== false;
+
+export const isDocumentUploadRequired = (doc: {
+  is_active: boolean;
+  is_required: boolean;
+  requires_upload?: boolean;
+  is_fixed?: boolean;
+}): boolean =>
+  doc.is_active && doc.is_required && doc.requires_upload !== false && !doc.is_fixed;

@@ -4,30 +4,83 @@ Roster service core logic for scholarship payment roster generation
 """
 
 import logging
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import and_, or_
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, case as sa_case, func, or_
+from sqlalchemy.orm import Session, joinedload
 
-from app.core.exceptions import RosterAlreadyExistsError, RosterGenerationError, RosterLockedError, RosterNotFoundError
+from app.core.exceptions import (
+    ConflictError,
+    NotFoundError,
+    RosterAlreadyExistsError,
+    RosterGenerationError,
+    RosterLockedError,
+    RosterNotFoundError,
+)
+from app.core.metrics import payment_rosters_total
+from app.core.pii_crypto import redact_dict_pii
 from app.models.application import Application
 from app.models.enums import QuotaManagementMode
 from app.models.payment_roster import (
+    MANUAL_REMOVAL_PREFIX_LOCKED,
+    MANUAL_REMOVAL_PREFIX_RECONCILE,
     PaymentRoster,
     PaymentRosterItem,
     RosterCycle,
     RosterStatus,
     RosterTriggerType,
     StudentVerificationStatus,
+    is_manual_exclusion,
+    verification_status_label,
 )
-from app.models.roster_audit import RosterAuditAction, RosterAuditLevel
+from app.models.roster_audit import RosterAuditAction, RosterAuditLevel, RosterAuditLog
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule
 from app.models.user import User
+from app.schemas.payment_roster import DistributionDiffEntry, RevokedSuspendedEntry
 from app.services.audit_service import audit_service
 from app.services.student_verification_service import StudentVerificationService
+from app.utils.pii_masking import mask_id_number
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class RosterGenerationResult:
+    """Outcome of a batch roster generation (issue #1033).
+
+    `created` are the rosters newly produced (or rebuilt under
+    force_regenerate); `skipped` are pre-existing rosters left untouched
+    because they already existed and force_regenerate was not set; `locked`
+    are pre-existing rosters that force_regenerate could NOT rebuild because
+    they are locked. Carrying these lets the API tell the admin honestly what
+    happened instead of returning a misleading "produced 0" success — or, for
+    locked rosters under force, aborting the whole batch with a 500.
+    """
+
+    created: List["PaymentRoster"] = field(default_factory=list)
+    skipped: List["PaymentRoster"] = field(default_factory=list)
+    locked: List["PaymentRoster"] = field(default_factory=list)
+
+
+# 由人工覆核流程寫入、重建無法重新推導的明細欄位——必須跨重建搬運。
+PRESERVED_ITEM_FIELDS = (
+    "bank_account_number_status",
+    "bank_account_holder_status",
+    "bank_verification_details",
+    "bank_manual_review_notes",
+)
+
+
+@dataclass
+class PreservedItemState:
+    """一筆造冊明細中「不由重建推導」的狀態快照（以 application_id 為 key）。"""
+
+    is_manually_excluded: bool
+    was_included: bool
+    exclusion_reason: Optional[str]
+    review_fields: Dict[str, Any] = field(default_factory=dict)
 
 
 class RosterService:
@@ -36,6 +89,47 @@ class RosterService:
     def __init__(self, db: Session):
         self.db = db
         self.student_verification_service = StudentVerificationService()
+
+    # ------------------------------------------------------------------
+    # 重建造冊明細時必須跨重建保留的人為狀態
+    # ------------------------------------------------------------------
+
+    def _snapshot_manual_state(self, roster_id: int) -> Dict[int, "PreservedItemState"]:
+        """重建前，以 application_id 為 key 快照「不由重建推導」的明細狀態。
+
+        EVERY path that wipes and rebuilds a roster's items must call this first
+        and re-apply it with `_apply_preserved_state` afterwards. Skipping it
+        silently re-includes students the admin excluded (學生繳回／放棄／鎖定後移除),
+        which inflates their cumulative received_months — the PhD 36-month cap.
+        """
+        items = self.db.query(PaymentRosterItem).filter(PaymentRosterItem.roster_id == roster_id).all()
+        return {
+            item.application_id: PreservedItemState(
+                is_manually_excluded=(not item.is_included and is_manual_exclusion(item.exclusion_reason)),
+                was_included=bool(item.is_included),
+                exclusion_reason=item.exclusion_reason,
+                review_fields={f: getattr(item, f) for f in PRESERVED_ITEM_FIELDS},
+            )
+            for item in items
+        }
+
+    @staticmethod
+    def _apply_preserved_state(item: PaymentRosterItem, state: Optional["PreservedItemState"]) -> bool:
+        """把快照的人為狀態套回新建的明細。回傳是否套用了人為排除。
+
+        人為排除優先於重建算出的納入判定；重建自己算出的排除原因不會消失——
+        它完整保存在 rule_validation_result / failed_rules / verification_status。
+        """
+        if state is None:
+            return False
+        for field_name, value in state.review_fields.items():
+            if value is not None:
+                setattr(item, field_name, value)
+        if not state.is_manually_excluded:
+            return False
+        item.is_included = False
+        item.exclusion_reason = state.exclusion_reason
+        return True
 
     def generate_roster(
         self,
@@ -132,10 +226,14 @@ class RosterService:
             # 產生造冊代碼
             roster_code = self._generate_roster_code(scholarship_configuration_id, period_label, academic_year)
 
+            # 人為排除／人工帳戶覆核在重建前先取快照，重建後套回（見 _snapshot_manual_state）。
+            preserved: Dict[int, PreservedItemState] = {}
+
             # 建立造冊主檔
             if existing_roster and force_regenerate:
                 # 更新現有造冊
                 roster = existing_roster
+                preserved = self._snapshot_manual_state(roster.id)
                 roster.status = RosterStatus.PROCESSING
                 roster.trigger_type = trigger_type
                 roster.student_verification_enabled = student_verification_enabled
@@ -150,6 +248,8 @@ class RosterService:
 
                 # 清除舊的明細
                 self.db.query(PaymentRosterItem).filter(PaymentRosterItem.roster_id == roster.id).delete()
+                self.db.flush()
+                self.db.expire(roster, ["items"])
 
                 logger.info(f"Regenerating roster {roster_code}")
             else:
@@ -171,6 +271,11 @@ class RosterService:
                 self.db.flush()  # 取得ID
 
                 logger.info(f"Creating new roster {roster_code}")
+
+                # Business metric: count roster creations so the
+                # Scholarship System Overview dashboard reflects when
+                # admins kick off a new payment cycle (issue #159).
+                payment_rosters_total.labels(status="processing").inc()
 
             # 記錄稽核日誌
             user = self.db.query(User).filter(User.id == created_by_user_id).first()
@@ -273,8 +378,17 @@ class RosterService:
                                 logger.info(f"Updated {key} for application {application.id}: {old_value} -> {value}")
 
                         if has_changes:
-                            # 更新Application的student_data欄位（稽核用）
+                            # 更新Application的student_data欄位（稽核用）。
+                            # stored_student_data is the same dict reference as
+                            # application.student_data; flag_modified() is required
+                            # because SQLAlchemy's default JSON change detection
+                            # compares object identity, not contents — without
+                            # this, the in-place mutations on line 270 would be
+                            # silently discarded on commit.
+                            from sqlalchemy.orm.attributes import flag_modified
+
                             application.student_data = stored_student_data
+                            flag_modified(application, "student_data")
                             self.db.add(application)
 
                             # 記錄更新日誌
@@ -285,10 +399,18 @@ class RosterService:
                                 user_id=created_by_user_id,
                                 user_name=user_name,
                                 description=f"學籍驗證後更新欄位: {', '.join(updated_fields)}",
-                                old_values={f: stored_student_data.get(f) for f in updated_fields},
-                                new_values={
-                                    f: fresh_student_data[f] for f in updated_fields if f in fresh_student_data
-                                },
+                                # Redact std_pid (and any other PII keys configured in
+                                # `redact_dict_pii` defaults) before persisting to
+                                # audit_logs.old_values / new_values. The ORM-loaded
+                                # `stored_student_data` has already been decrypted by
+                                # the PII TypeDecorator, so without this guard a
+                                # `std_pid` entry in `updated_fields` would write
+                                # plaintext into the audit trail and bypass at-rest
+                                # encryption. Defense in depth — see PR #202.
+                                old_values=redact_dict_pii({f: stored_student_data.get(f) for f in updated_fields}),
+                                new_values=redact_dict_pii(
+                                    {f: fresh_student_data[f] for f in updated_fields if f in fresh_student_data}
+                                ),
                                 level=RosterAuditLevel.INFO,
                                 metadata={
                                     "application_id": application.id,
@@ -310,15 +432,20 @@ class RosterService:
                     roster_item = self._create_roster_item(
                         roster, application, verification_result, verification_status, eligibility_result
                     )
+                    # 重建時把管理員的人為排除／人工帳戶覆核套回，且必須在統計之前——
+                    # 否則已排除的學生會被重新計入人數與總金額。
+                    self._apply_preserved_state(roster_item, preserved.get(application.id))
 
-                    if roster_item.is_qualified:
+                    # 統計以「納入造冊」為準，與 Excel 的「納入造冊」欄、
+                    # 造冊詳情的「納入造冊人數」及 _recompute_roster_totals_sync 同源
+                    if roster_item.is_included:
                         qualified_count += 1
                         total_amount += roster_item.scholarship_amount
                     else:
                         disqualified_count += 1
 
                 except Exception as e:
-                    logger.error(f"Error processing application {application.id}: {e}")
+                    logger.exception(f"Error processing application {application.id}")
                     disqualified_count += 1
 
                     # 記錄錯誤日誌
@@ -360,7 +487,7 @@ class RosterService:
             audit_service.log_roster_operation(
                 roster_id=roster.id,
                 action=RosterAuditAction.CREATE,
-                title=f"造冊資料產生: 合格{qualified_count}人, 不合格{disqualified_count}人",
+                title=f"造冊資料產生: 納入造冊{qualified_count}人, 排除{disqualified_count}人",
                 user_id=created_by_user_id,
                 user_name=user_name,
                 description=f"造冊資料產生完成，總金額: ${total_amount}，API失敗: {verification_failures}次",
@@ -387,8 +514,8 @@ class RosterService:
         except Exception as e:
             # 不在此處執行 rollback，讓調用者決定如何處理事務
             # 這避免了與 API 端點的 rollback 重複執行
-            logger.error(f"Error generating roster: {e}")
-            raise RosterGenerationError(f"Failed to generate roster: {e}")
+            logger.exception("Error generating roster")
+            raise RosterGenerationError(f"Failed to generate roster: {e}") from e
 
     def validate_roster_consistency(self, roster: PaymentRoster) -> Dict[str, Any]:
         """
@@ -419,9 +546,14 @@ class RosterService:
             )
 
         # 2. 檢查金額總計是否正確
+        # Skip None amounts in the sum — the per-item check below catches them
+        # as an error. Without this guard, sum() raises TypeError on None and
+        # the validator crashes instead of returning a clean error dict.
         if roster.items:
             actual_total = sum(
-                item.scholarship_amount for item in roster.items if item.is_included and item.is_qualified
+                item.scholarship_amount
+                for item in roster.items
+                if item.is_included and item.scholarship_amount is not None
             )
             if abs(float(actual_total) - float(roster.total_amount)) > 0.01:
                 errors.append(f"總金額不一致: 計算值={actual_total}, 儲存值={roster.total_amount}")
@@ -577,17 +709,28 @@ class RosterService:
 
         # 2. 基本查詢：已核准的申請
         # 容錯處理：如果 scholarship_configuration_id 為 NULL，則比對 scholarship_type_id
-        query = self.db.query(Application).filter(
-            and_(
-                or_(
-                    Application.scholarship_configuration_id == scholarship_configuration_id,
-                    and_(
-                        Application.scholarship_configuration_id.is_(None),
-                        Application.scholarship_type_id == config.scholarship_type_id,
+        # Eager-load the to-one relationships that _create_roster_item / verification
+        # loops read per row (student, scholarship_configuration → scholarship_type),
+        # otherwise each roster row triggers extra lazy round-trips (N+1).
+        query = (
+            self.db.query(Application)
+            .options(
+                joinedload(Application.student),
+                joinedload(Application.scholarship_configuration).joinedload(ScholarshipConfiguration.scholarship_type),
+            )
+            .filter(
+                and_(
+                    or_(
+                        Application.scholarship_configuration_id == scholarship_configuration_id,
+                        and_(
+                            Application.scholarship_configuration_id.is_(None),
+                            Application.scholarship_type_id == config.scholarship_type_id,
+                        ),
                     ),
-                ),
-                Application.status == "approved",  # 已核准
-                Application.academic_year == academic_year,
+                    Application.status == "approved",  # 已核准
+                    Application.academic_year == academic_year,
+                    Application.deleted_at.is_(None),  # 排除已退件
+                )
             )
         )
 
@@ -601,43 +744,46 @@ class RosterService:
             # Matrix 模式：必須使用 ranking + is_allocated 過濾
             logger.info(f"Using matrix-based filtering for scholarship config {scholarship_configuration_id}")
 
-            # 如果沒有提供 ranking_id，自動偵測最新的已執行分發的 ranking
+            # 未指定 ranking_id：聚合「所有」已執行分發的排名 → 多學院全院納入。
+            # matrix 分發下每個學院各有一份 CollegeRanking；過去只取最新一份
+            # (.order_by(finalized_at.desc()).first()) 會讓造冊只含最後鎖定的那一院。
             if ranking_id is None:
-                # 從 period_label 推導學期
-                semester = self._extract_semester_from_period(period_label)
-
-                # 查詢最新的已完成分發的 ranking
-                ranking = (
+                rankings = (
                     self.db.query(CollegeRanking)
                     .filter(
                         and_(
                             CollegeRanking.scholarship_type_id == config.scholarship_type_id,
                             CollegeRanking.academic_year == academic_year,
-                            CollegeRanking.is_finalized == True,  # 必須已完成
-                            CollegeRanking.distribution_executed == True,  # 必須已執行分發
+                            CollegeRanking.is_finalized.is_(True),
+                            CollegeRanking.distribution_executed.is_(True),
                         )
                     )
-                    .order_by(CollegeRanking.finalized_at.desc())
-                    .first()
+                    .all()
                 )
 
-                if not ranking:
+                if not rankings:
                     raise ValueError(
                         f"找不到已執行分發的排名。Matrix 模式獎學金必須先執行矩陣分發才能產生造冊。"
                         f"獎學金類型ID: {config.scholarship_type_id}, 學年度: {academic_year}"
                     )
 
-                ranking_id = ranking.id
+                ranking_ids = [r.id for r in rankings]
                 logger.info(
-                    f"Auto-detected ranking ID {ranking_id} "
-                    f"(finalized at {ranking.finalized_at}, {ranking.allocated_count} students allocated)"
+                    f"Aggregating {len(ranking_ids)} executed ranking(s) {ranking_ids} for "
+                    f"all-college roster (type {config.scholarship_type_id}, year {academic_year})"
                 )
 
-            # 只選取該 ranking 中已分配(正取)的申請
+                # 聚合所有排名：一個申請最多屬於一份排名，故 .in_() 不會重複。
+                ranking_filter = CollegeRankingItem.ranking_id.in_(ranking_ids)
+            else:
+                # 明確指定排名：僅該排名（管理員刻意選擇單一排名）。
+                ranking_filter = CollegeRankingItem.ranking_id == ranking_id
+
+            # 只選取 ranking 中已分配(正取)的申請。
             query = query.join(CollegeRankingItem, CollegeRankingItem.application_id == Application.id).filter(
                 and_(
-                    CollegeRankingItem.ranking_id == ranking_id,
-                    CollegeRankingItem.is_allocated == True,  # 只選正取學生
+                    ranking_filter,
+                    CollegeRankingItem.is_allocated.is_(True),
                 )
             )
         else:
@@ -668,6 +814,11 @@ class RosterService:
                 year, month = period_label.split("-")
                 try:
                     month_int = int(month)
+                    if not 1 <= month_int <= 12:
+                        # Out-of-range months (e.g. 0, 13, 999) used to fall through
+                        # both `if` branches silently — no semester filter applied,
+                        # caller got an unfiltered query and didn't know.
+                        raise ValueError(f"month must be 1-12, got {month_int}")
                     # 2-7月 = 下學期(second), 8-1月 = 上學期(first)
                     if month_int in [2, 3, 4, 5, 6, 7]:
                         semester = "second"
@@ -675,14 +826,15 @@ class RosterService:
                         logger.info(
                             f"Filtering semester-based scholarship for semester '{semester}' (month {month_int})"
                         )
-                    elif month_int in [8, 9, 10, 11, 12, 1]:
+                    else:
+                        # months 1, 8, 9, 10, 11, 12 → first semester
                         semester = "first"
                         query = query.filter(Application.semester == semester)
                         logger.info(
                             f"Filtering semester-based scholarship for semester '{semester}' (month {month_int})"
                         )
                 except ValueError:
-                    logger.warning(f"Invalid month in period_label: {month}")
+                    logger.warning("Invalid month in period_label: %s", month, exc_info=True)
         else:
             # 學年制獎學金：不應用學期過濾
             # 申請的 semester 應該是 NULL
@@ -691,7 +843,7 @@ class RosterService:
                 f"not applying semester filter for period {period_label}"
             )
 
-        return query.all()
+        return query.order_by(Application.is_renewal.desc(), Application.submitted_at).all()
 
     def _extract_semester_from_period(self, period_label: str) -> Optional[str]:
         """從期間標記提取學期資訊"""
@@ -723,23 +875,22 @@ class RosterService:
         # 從申請中取得學生資料
         student_data = application.student_data or {}
 
-        # 判斷是否納入造冊
-        is_included = True
-        exclusion_reason = None
+        # 判斷是否納入造冊 — 收集「所有」排除原因，不得互相覆蓋 (#1142)
+        exclusion_reasons: list[str] = []
 
         # 1. 檢查學籍驗證狀態
         if verification_status != StudentVerificationStatus.VERIFIED:
-            is_included = False
-            exclusion_reason = f"學籍驗證未通過: {verification_status.value}"
+            exclusion_reasons.append(f"學籍驗證未通過：{verification_status_label(verification_status)}")
         # 2. 檢查獎學金規則符合性
         elif eligibility_result and not eligibility_result.get("is_eligible", True):
-            is_included = False
             failed_rules = eligibility_result.get("failed_rules", [])
             if failed_rules:
-                exclusion_reason = f"不符合獎學金規則: {'; '.join(failed_rules)}"
+                exclusion_reasons.append(f"不符合獎學金規則: {'; '.join(failed_rules)}")
             else:
-                exclusion_reason = "不符合獎學金資格條件"
-        # 3. 檢查銀行帳戶資訊
+                exclusion_reasons.append("不符合獎學金資格條件")
+        # 3. 擷取銀行帳戶資訊（僅作快照與提醒用，「缺少銀行帳戶」不構成排除原因，
+        #    也不影響造冊人數／總金額：學生補件後即可撥款。缺帳號僅在 Excel
+        #    說明欄提示「缺少郵局帳號資訊」，供承辦人催補件）
         # IMPORTANT: Support both nested (schema-compliant) and flat (legacy) data structures
         form_data = application.submitted_form_data or {}
         form_fields = form_data.get("fields", {})
@@ -759,18 +910,20 @@ class RosterService:
                 break
 
         if not bank_account:
-            is_included = False
-            exclusion_reason = "缺少銀行帳戶資訊"
             logger.warning(
                 f"Application {application.id} missing bank account. "
                 f"Checked nested and flat structures. submitted_form_data keys: {list(form_data.keys())}"
             )
 
-        # 查詢 CollegeRankingItem 以取得備取資訊
-        backup_info = None
-        if roster.ranking_id:
-            from app.models.college_review import CollegeRankingItem
+        is_included = not exclusion_reasons
+        exclusion_reason = "；".join(exclusion_reasons) if exclusion_reasons else None
 
+        # 查詢 CollegeRankingItem 以取得備取資訊與分發子類型
+        backup_info = None
+        allocated_sub_type = None
+        from app.models.college_review import CollegeRanking, CollegeRankingItem
+
+        if roster.ranking_id:
             ranking_item = (
                 self.db.query(CollegeRankingItem)
                 .filter(
@@ -782,20 +935,69 @@ class RosterService:
                 .first()
             )
 
-            if ranking_item and ranking_item.backup_allocations:
-                backup_info = ranking_item.backup_allocations
-                logger.info(f"Application {application.id} has backup allocations: {len(backup_info)} positions")
+            if ranking_item:
+                if ranking_item.backup_allocations:
+                    backup_info = ranking_item.backup_allocations
+                    logger.info(f"Application {application.id} has backup allocations: {len(backup_info)} positions")
+                allocated_sub_type = ranking_item.allocated_sub_type
+
+        # 若無 ranking_id（月份造冊），從同學年度已分發排名中查詢子類型。
+        # 此處僅 gate 在 is_allocated + academic_year（未含 is_finalized /
+        # distribution_executed）。其正確性依賴 _get_eligible_applications 已先以
+        # 「finalized + executed」篩選過申請：一個申請在同學年度只會有一筆有效正取
+        # （finalize 時會反鎖同 slot 的其他排名），故 .first() 取到的即為授權子類型。
+        if not allocated_sub_type:
+            alloc_item = (
+                self.db.query(CollegeRankingItem)
+                .join(CollegeRanking, CollegeRankingItem.ranking_id == CollegeRanking.id)
+                .filter(
+                    and_(
+                        CollegeRankingItem.application_id == application.id,
+                        CollegeRankingItem.is_allocated.is_(True),
+                        CollegeRanking.academic_year == roster.academic_year,
+                    )
+                )
+                .first()
+            )
+            if alloc_item:
+                allocated_sub_type = alloc_item.allocated_sub_type
+
+        # 續領申請沒有 CollegeRankingItem；子類型直接取自申請本身。
+        if not allocated_sub_type and application.is_renewal:
+            allocated_sub_type = application.sub_scholarship_type
+
+        # 載入消耗配置 (consumed config) — 借用前年度配額時不同於發放配置。
+        # allocation_config_id NULL ⇒ 全期 sentinel，退回造冊自身的發放配置。
+        consumed_config = None
+        if roster.allocation_config_id is not None:
+            consumed_config = self.db.get(ScholarshipConfiguration, roster.allocation_config_id)
+        if consumed_config is None:
+            consumed_config = application.scholarship_configuration
+        # allocation_year 顯示快照取自造冊（= 消耗配置學年度）
+        allocation_year = roster.allocation_year
+
+        # 計算申請身分別
+        application_identity = None
+        if application.is_renewal:
+            application_identity = f"{application.academic_year}續領"
+        else:
+            application_identity = f"{application.academic_year}新申請"
 
         roster_item = PaymentRosterItem(
             roster_id=roster.id,
             application_id=application.id,
-            student_id_number=student_data.get("std_stdcode", ""),
+            student_id_number=student_data.get("std_pid", ""),  # 身分證字號 (national ID)
+            student_number=student_data.get("std_stdcode", ""),  # 學號 — identity-matching key
             student_name=student_data.get("std_cname", ""),
             student_email=student_data.get("com_email", ""),
             bank_account=bank_account,  # From submitted_form_data, not student_data
             scholarship_name=application.scholarship_configuration.scholarship_type.name,
-            scholarship_amount=application.amount or application.scholarship_configuration.amount,
+            scholarship_amount=application.amount or consumed_config.amount,
             scholarship_subtype=application.sub_scholarship_type,
+            allocation_config_id=roster.allocation_config_id,  # 消耗配置 id 快照
+            allocation_year=allocation_year,  # 消耗配置學年度顯示快照
+            allocated_sub_type=allocated_sub_type,  # 分發到的子類型快照
+            application_identity=application_identity,  # 申請身分快照
             verification_status=verification_status,
             verification_message=verification_result.get("message") if verification_result else None,
             verification_at=datetime.now(timezone.utc) if verification_result else None,
@@ -806,7 +1008,7 @@ class RosterService:
             rule_validation_result=eligibility_result,
             failed_rules=eligibility_result.get("failed_rules", []) if eligibility_result else [],
             warning_rules=eligibility_result.get("warning_rules", []) if eligibility_result else [],
-            backup_info=backup_info,  # 新增：備取資訊
+            backup_info=backup_info,
         )
 
         self.db.add(roster_item)
@@ -936,16 +1138,23 @@ class RosterService:
             scholarship_config = application.scholarship_configuration
 
             if not scholarship_config or not student:
-                if not student and not scholarship_config:
-                    missing_reason = "缺少學生資訊/獎學金配置"
-                elif not student:
-                    missing_reason = "缺少學生資訊"
-                else:
-                    missing_reason = "缺少獎學金配置"
+                # 具體說明缺的是哪個關聯、為什麼會缺，讓管理員能直接修資料，
+                # 而不是只看到「缺少獎學金配置」卻不知道原因。
+                app_ref = getattr(application, "app_id", None) or f"#{application.id}"
+                missing_reasons: List[str] = []
+                if not student:
+                    missing_reasons.append(
+                        f"申請 {app_ref} 找不到對應的學生帳號（applications.user_id 無對應使用者，帳號可能已被刪除）"
+                    )
+                if not scholarship_config:
+                    missing_reasons.append(
+                        f"申請 {app_ref} 未關聯獎學金配置（applications.scholarship_configuration_id 為空，"
+                        f"常見於資料匯入或舊資料未建立配置關聯），無法載入該期驗證規則"
+                    )
 
                 return {
                     "is_eligible": False,
-                    "failed_rules": [missing_reason],
+                    "failed_rules": missing_reasons,
                     "warning_rules": [],
                     "details": {},
                 }
@@ -975,7 +1184,9 @@ class RosterService:
                 if not rule_result["passed"]:
                     if rule.is_hard_rule:
                         failed_rules.append(rule_result["message"])
-                    elif rule.is_warning:
+                    else:
+                        # 軟性規則失敗不影響 is_eligible，但必須留下紀錄，
+                        # 讓造冊 Excel 的資格欄位看得到（#1139）
                         warning_rules.append(rule_result["message"])
 
                 details[f"rule_{rule.id}"] = rule_result
@@ -996,7 +1207,7 @@ class RosterService:
             }
 
         except Exception as e:
-            logger.error(f"Error validating student eligibility for application {application.id}: {e}")
+            logger.exception(f"Error validating student eligibility for application {application.id}")
             return {
                 "is_eligible": False,
                 "failed_rules": [f"驗證過程發生錯誤: {str(e)}"],
@@ -1078,7 +1289,7 @@ class RosterService:
             }
 
         except Exception as e:
-            logger.error(f"Error evaluating rule {rule.id}: {e}")
+            logger.exception(f"Error evaluating rule {rule.id}")
             return {
                 "passed": False,
                 "rule_name": rule.rule_name,
@@ -1166,9 +1377,12 @@ class RosterService:
                 logger.warning(f"Unknown operator: {operator}")
                 return False
 
-        except (ValueError, TypeError) as e:
-            logger.error(
-                f"Error evaluating condition: actual={actual_value}, operator={operator}, expected={expected_value}, error={e}"
+        except (ValueError, TypeError):
+            logger.exception(
+                "Error evaluating condition: actual=%s, operator=%s, expected=%s",
+                actual_value,
+                operator,
+                expected_value,
             )
             return False
 
@@ -1222,11 +1436,11 @@ class RosterService:
             for application in eligible_applications:
                 try:
                     # 模擬規則驗證
-                    eligibility_result = self._validate_eligibility_rules(application, scholarship_config)
+                    eligibility_result = self._validate_student_eligibility(application, academic_year, period_label)
                     is_rule_passed = eligibility_result.get("is_eligible", False)
 
                     # 模擬學籍驗證
-                    verification_status = StudentVerificationStatus.NOT_VERIFIED
+                    verification_status = StudentVerificationStatus.VERIFIED
                     verification_passed = True
 
                     if student_verification_enabled:
@@ -1235,7 +1449,7 @@ class RosterService:
                             verification_status = StudentVerificationStatus.VERIFIED
                             verification_summary["verified"] += 1
                         else:
-                            verification_status = StudentVerificationStatus.FAILED
+                            verification_status = StudentVerificationStatus.NOT_FOUND
                             verification_passed = False
                             verification_summary["failed"] += 1
                             potential_issues.append(
@@ -1272,7 +1486,7 @@ class RosterService:
 
                 except Exception as e:
                     potential_issues.append(f"處理申請 {application.id} 時發生錯誤: {str(e)}")
-                    logger.warning(f"Error processing application {application.id} in dry run: {e}")
+                    logger.warning(f"Error processing application {application.id} in dry run", exc_info=True)
 
             # 5. 產生驗證摘要
             validation_summary = {
@@ -1325,5 +1539,1050 @@ class RosterService:
             return result
 
         except Exception as e:
-            logger.error(f"Dry run failed: {e}")
-            raise ValueError(f"預演失敗: {str(e)}")
+            logger.exception("Dry run failed")
+            raise ValueError("預演失敗") from e
+
+    @staticmethod
+    def _build_semester_filter(semester: Optional[str]):
+        """SQLAlchemy filter selecting CollegeRanking rows for a semester.
+        None / "annual" / "yearly" / "" all map to the yearly bucket
+        (semester IS NULL OR "annual" OR "yearly"); otherwise exact match.
+        Single source of truth shared by generation and reconcile so the diff
+        stays the exact inverse of generation."""
+        from app.models.college_review import CollegeRanking
+
+        if semester in (None, "annual", "yearly", ""):
+            return or_(
+                CollegeRanking.semester.is_(None),
+                CollegeRanking.semester == "annual",
+                CollegeRanking.semester == "yearly",
+            )
+        return CollegeRanking.semester == semester
+
+    def _build_application_semester_filter(self, semester: Optional[str]):
+        """Semester predicate on Application.semester.
+        None / "annual" / "yearly" / "" all map to the yearly bucket
+        (semester IS NULL OR "yearly"); otherwise exact match.
+
+        Unlike CollegeRanking.semester (String(20)), Application.semester is a
+        native Postgres enum {first, second, yearly} — emitting "annual" here
+        aborts the whole query with `invalid input value for enum semester`.
+        Mirror _config_semester_condition, not the String-column helpers."""
+        if semester in (None, "", "annual", "yearly"):
+            return or_(
+                Application.semester.is_(None),
+                Application.semester == "yearly",
+            )
+        return Application.semester == semester
+
+    def generate_rosters_from_distribution(
+        self,
+        scholarship_type_id: int,
+        academic_year: int,
+        semester: str,
+        created_by_user_id: int,
+        student_verification_enabled: bool = True,
+        force_regenerate: bool = False,
+    ) -> "RosterGenerationResult":
+        """
+        從矩陣分發結果批次產生造冊
+
+        針對每個唯一的 (allocation_config_id, sub_type) 組合建立獨立的造冊。
+        例如：
+          - 115 學年度分發完成後，若 nstc 借用了 phd_114/phd_113 的配額，
+            產生 nstc·115、nstc·114、nstc·113、moe_1w·115 四個造冊，各自記錄消耗配置。
+
+        Args:
+            scholarship_type_id: 獎學金類型 ID
+            academic_year: 學年度
+            semester: 學期
+            created_by_user_id: 操作者用戶 ID
+            student_verification_enabled: 是否啟用學籍驗證
+            force_regenerate: 是否強制重新產生已存在的造冊
+
+        Returns:
+            RosterGenerationResult: `.created` 為新產生的造冊，`.skipped` 為
+            已存在且未重新產生的造冊（force_regenerate=False 時）。
+
+        Raises:
+            ValueError: 找不到排名、尚未完成分發、或其他驗證錯誤
+        """
+        from app.models.college_review import CollegeRanking, CollegeRankingItem
+
+        # 1. 取得所有已完成分發的排名
+        sem_filter = self._build_semester_filter(semester)
+
+        rankings = (
+            self.db.query(CollegeRanking)
+            .filter(
+                and_(
+                    CollegeRanking.scholarship_type_id == scholarship_type_id,
+                    CollegeRanking.academic_year == academic_year,
+                    sem_filter,
+                    CollegeRanking.is_finalized.is_(True),
+                    CollegeRanking.distribution_executed.is_(True),
+                )
+            )
+            .all()
+        )
+
+        ranking_ids = [r.id for r in rankings]
+
+        # 2. 取得對應的獎學金配置
+        scholarship_config = (
+            self.db.query(ScholarshipConfiguration)
+            .filter(
+                and_(
+                    ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
+                    ScholarshipConfiguration.academic_year == academic_year,
+                )
+            )
+            .first()
+        )
+
+        if not scholarship_config:
+            raise ValueError(
+                f"找不到對應的獎學金配置：scholarship_type_id={scholarship_type_id}, " f"academic_year={academic_year}"
+            )
+
+        # 3a. 取得已核准的續領申請。續領申請永遠不會贏得 CollegeRankingItem
+        # （它們被排除在配額分發之外），所以矩陣分發造冊路徑看不到它們。此處直接撈出，
+        # 並以 (allocation_config_id, sub_scholarship_type) 為 key 併入分組 —— 與
+        # ManualDistributionService 消耗配額所用的 key 一致。
+        renewal_apps = (
+            self.db.query(Application)
+            .filter(
+                and_(
+                    Application.scholarship_type_id == scholarship_type_id,
+                    Application.academic_year == academic_year,
+                    Application.is_renewal.is_(True),
+                    Application.status == "approved",
+                    Application.deleted_at.is_(None),
+                    self._build_application_semester_filter(semester),
+                )
+            )
+            .all()
+        )
+
+        # 3b. 取得所有已分配的 ranking items，並按 (allocation_config_id, allocated_sub_type) 分組
+        allocated_items = (
+            self.db.query(CollegeRankingItem)
+            .filter(
+                and_(
+                    CollegeRankingItem.ranking_id.in_(ranking_ids),
+                    CollegeRankingItem.is_allocated.is_(True),
+                )
+            )
+            .all()
+            if ranking_ids
+            else []
+        )
+
+        if not allocated_items and not renewal_apps:
+            raise ValueError(
+                "沒有可造冊的資料：找不到已分配的排名學生，也沒有已核准的續領。"
+                "請先完成矩陣分發，或先匯入續領通過名單。"
+            )
+
+        # 分組：{(allocation_config_id, sub_type): [ranking_item, ...]}
+        # allocation_config_id NULL ⇒ 消耗本配置（requesting config）的配額。
+        groups: Dict[tuple, List] = {}
+        for item in allocated_items:
+            alloc_config_id = item.allocation_config_id or scholarship_config.id
+            sub_type = item.allocated_sub_type or "general"
+            key = (alloc_config_id, sub_type)
+            groups.setdefault(key, []).append(item)
+
+        # 將已核准的續領併入（可能是全新的）分組；記錄每個 key 的續領 application id。
+        renewal_ids_by_key: Dict[tuple, set] = {}
+        for app in renewal_apps:
+            key = (app.allocation_config_id or scholarship_config.id, app.sub_scholarship_type or "general")
+            renewal_ids_by_key.setdefault(key, set()).add(app.id)
+            groups.setdefault(key, [])
+
+        # 預先載入每個分組的「消耗配置」(consumed config) — 借用配額時是前年度的同代碼配置
+        consumed_configs: Dict[int, ScholarshipConfiguration] = {scholarship_config.id: scholarship_config}
+        for alloc_config_id, _sub_type in groups:
+            if alloc_config_id not in consumed_configs:
+                consumed = self.db.get(ScholarshipConfiguration, alloc_config_id)
+                if consumed is None:
+                    raise ValueError(f"找不到消耗配置 scholarship_configuration_id={alloc_config_id}")
+                consumed_configs[alloc_config_id] = consumed
+
+        logger.info(
+            f"Rankings {ranking_ids}: found {len(allocated_items)} allocated items in {len(groups)} groups: "
+            + ", ".join(f"{sub_type}-cfg{cid}({len(items)}人)" for (cid, sub_type), items in groups.items())
+        )
+
+        # 4. 為每個分組建立造冊（以該分組的消耗配置為準）
+        created_rosters: List[PaymentRoster] = []
+        skipped_rosters: List[PaymentRoster] = []
+        locked_rosters: List[PaymentRoster] = []
+
+        for (alloc_config_id, sub_type), group_items in groups.items():
+            application_ids_in_group = {item.application_id for item in group_items}
+            application_ids_in_group |= renewal_ids_by_key.get((alloc_config_id, sub_type), set())
+            consumed_config = consumed_configs[alloc_config_id]
+
+            try:
+                roster = self._generate_one_sub_type_roster(
+                    requesting_config=scholarship_config,
+                    consumed_config=consumed_config,
+                    ranking_ids=ranking_ids,
+                    sub_type=sub_type,
+                    application_ids_in_group=application_ids_in_group,
+                    created_by_user_id=created_by_user_id,
+                    student_verification_enabled=student_verification_enabled,
+                    force_regenerate=force_regenerate,
+                )
+                created_rosters.append(roster)
+            except RosterAlreadyExistsError as e:
+                logger.info(f"Roster for (cfg={alloc_config_id}, {sub_type}) already exists, skipping.")
+                if e.existing_roster is not None:
+                    skipped_rosters.append(e.existing_roster)
+                continue
+            except RosterLockedError as e:
+                # force_regenerate can't rebuild a locked roster. Report it
+                # rather than aborting the whole batch (issue #1033) — the
+                # honest message tells admins to use force, so don't let that
+                # advice 500 when one roster in the batch is locked.
+                logger.info(f"Roster for (cfg={alloc_config_id}, {sub_type}) is locked, cannot rebuild.")
+                if e.roster is not None:
+                    locked_rosters.append(e.roster)
+                continue
+            except Exception:
+                logger.exception(f"Failed to generate roster for (cfg={alloc_config_id}, {sub_type})")
+                raise
+
+        self.db.commit()
+        logger.info(
+            f"Generated {len(created_rosters)} rosters "
+            f"({len(skipped_rosters)} skipped as already-existing, "
+            f"{len(locked_rosters)} locked) "
+            f"from distribution rankings {ranking_ids}"
+        )
+        return RosterGenerationResult(created=created_rosters, skipped=skipped_rosters, locked=locked_rosters)
+
+    def _generate_one_sub_type_roster(
+        self,
+        requesting_config: ScholarshipConfiguration,
+        consumed_config: ScholarshipConfiguration,
+        ranking_ids: List[int],
+        sub_type: str,
+        application_ids_in_group: set,
+        created_by_user_id: int,
+        student_verification_enabled: bool,
+        force_regenerate: bool,
+    ) -> PaymentRoster:
+        """
+        為特定 (consumed_config, sub_type) 組合產生一個造冊。
+
+        計畫編號 / 金額 / allocation_year 顯示快照取自「消耗配置」(consumed_config)；
+        造冊歸屬於發放配置 (requesting_config)。借用前年度配額時兩者不同。
+
+        Returns:
+            PaymentRoster: 已建立的造冊
+        """
+        academic_year = requesting_config.academic_year
+        period_label = str(consumed_config.academic_year)  # 以消耗配置的學年度為期間 key
+        allocation_year = consumed_config.academic_year  # 顯示快照
+
+        # 取得計畫編號（扁平：consumed_config.project_numbers[sub_type]，無年度 key）
+        project_number = None
+        if consumed_config.project_numbers:
+            project_number = consumed_config.project_numbers.get(sub_type)
+
+        # 產生造冊代碼（包含 sub_type 與消耗配置代碼以確保唯一性）
+        roster_code = f"ROSTER-{academic_year}-{sub_type}-{consumed_config.config_code}-{requesting_config.config_code}"
+
+        # 檢查是否已存在（unique key: scholarship_configuration_id + period_label
+        # + allocation_config_id + sub_type）
+        #
+        # with_for_update：本批次路徑沒有分散式鎖，重建又是「先全刪再重插」。
+        # 兩個並行的重建若各自只看見自己快照裡的明細，會各刪各的、各插一份，
+        # 造冊最後帶著兩套明細與加倍金額。鎖住造冊主檔列即可把兩者序列化。
+        # （SQLite 測試環境會忽略 FOR UPDATE，不影響單執行緒測試。）
+        existing_roster = (
+            self.db.query(PaymentRoster)
+            .filter(
+                and_(
+                    PaymentRoster.scholarship_configuration_id == requesting_config.id,
+                    PaymentRoster.period_label == period_label,
+                    PaymentRoster.sub_type == sub_type,
+                    PaymentRoster.allocation_config_id == consumed_config.id,
+                )
+            )
+            .with_for_update()
+            .first()
+        )
+
+        if existing_roster and not force_regenerate:
+            raise RosterAlreadyExistsError(
+                f"造冊已存在：{sub_type} {allocation_year} 年度。使用 force_regenerate=True 可覆蓋。",
+                existing_roster=existing_roster,
+            )
+
+        if existing_roster and existing_roster.is_locked:
+            raise RosterLockedError(
+                f"無法重新產生已鎖定的造冊：{existing_roster.roster_code}",
+                roster=existing_roster,
+            )
+
+        user = self.db.query(User).filter(User.id == created_by_user_id).first()
+        user_name = user.name if user else "Unknown"
+
+        # 人為排除／人工帳戶覆核在重建前先取快照，重建後套回（見 _snapshot_manual_state）。
+        preserved: Dict[int, PreservedItemState] = {}
+
+        if existing_roster and force_regenerate:
+            roster = existing_roster
+            preserved = self._snapshot_manual_state(roster.id)
+            roster.status = RosterStatus.PROCESSING
+            roster.trigger_type = RosterTriggerType.MANUAL
+            roster.student_verification_enabled = student_verification_enabled
+            roster.started_at = datetime.now(timezone.utc)
+            roster.completed_at = None
+            roster.total_applications = 0
+            roster.qualified_count = 0
+            roster.disqualified_count = 0
+            roster.total_amount = 0
+            roster.verification_api_failures = 0
+            roster.project_number = project_number
+            roster.allocation_config_id = consumed_config.id
+            roster.allocation_year = allocation_year
+            self.db.query(PaymentRosterItem).filter(PaymentRosterItem.roster_id == roster.id).delete()
+            # flush + expire：Excel 匯出讀的是 roster.items 關聯集合，若不失效，
+            # 本 Session 先前載入的舊集合會讓匯出寫出過期名單。
+            self.db.flush()
+            self.db.expire(roster, ["items"])
+            logger.info(f"Regenerating roster {roster_code}")
+        else:
+            roster = PaymentRoster(
+                roster_code=roster_code,
+                scholarship_configuration_id=requesting_config.id,
+                allocation_config_id=consumed_config.id,
+                ranking_id=ranking_ids[0] if ranking_ids else None,  # Use first ranking_id for reference
+                period_label=period_label,
+                academic_year=academic_year,
+                roster_cycle=RosterCycle.YEARLY,
+                sub_type=sub_type,
+                allocation_year=allocation_year,  # 顯示快照 = 消耗配置學年度
+                project_number=project_number,
+                status=RosterStatus.PROCESSING,
+                trigger_type=RosterTriggerType.MANUAL,
+                created_by=created_by_user_id,
+                student_verification_enabled=student_verification_enabled,
+                started_at=datetime.now(timezone.utc),
+            )
+            self.db.add(roster)
+            self.db.flush()
+            logger.info(f"Creating roster {roster_code} ({len(application_ids_in_group)} students)")
+
+        # 取得本組的申請
+        applications = (
+            self.db.query(Application)
+            .filter(
+                and_(
+                    Application.id.in_(application_ids_in_group),
+                    Application.status == "approved",
+                )
+            )
+            .all()
+        )
+
+        roster.total_applications = len(applications)
+
+        qualified_count = 0
+        disqualified_count = 0
+        total_amount = 0
+        verification_failures = 0
+        preserved_exclusions = 0
+
+        for application in applications:
+            try:
+                stored_student_data = application.student_data or {}
+                student_id_number = stored_student_data.get("std_stdcode")
+                student_name = stored_student_data.get("std_cname")
+
+                if not student_id_number or not student_name:
+                    logger.warning(f"Application {application.id} missing student ID or name")
+                    disqualified_count += 1
+                    continue
+
+                verification_result = None
+                verification_status = StudentVerificationStatus.VERIFIED
+                fresh_student_data = None
+
+                if student_verification_enabled:
+                    verification_result = self.student_verification_service.verify_student(
+                        student_id_number, student_name
+                    )
+                    verification_status = verification_result.get("status", StudentVerificationStatus.VERIFIED)
+                    if verification_status == StudentVerificationStatus.API_ERROR:
+                        verification_failures += 1
+                    else:
+                        fresh_student_data = verification_result.get("student_info", {})
+
+                eligibility_result = self._validate_student_eligibility(
+                    application, academic_year, period_label, fresh_api_data=fresh_student_data
+                )
+
+                roster_item = self._create_roster_item(
+                    roster, application, verification_result, verification_status, eligibility_result
+                )
+                # 重建時把管理員的人為排除／人工帳戶覆核套回，且必須在統計之前——
+                # 否則已排除的學生會被重新計入人數與總金額。
+                if self._apply_preserved_state(roster_item, preserved.get(application.id)):
+                    preserved_exclusions += 1
+
+                # 同 generate_roster：統計以「納入造冊」為準
+                if roster_item.is_included:
+                    qualified_count += 1
+                    total_amount += roster_item.scholarship_amount
+                else:
+                    disqualified_count += 1
+
+            except Exception:
+                logger.exception(f"Error processing application {application.id}")
+                disqualified_count += 1
+
+        roster.qualified_count = qualified_count
+        roster.disqualified_count = disqualified_count
+        roster.total_amount = total_amount
+        roster.verification_api_failures = verification_failures
+        roster.status = RosterStatus.COMPLETED
+        roster.completed_at = datetime.now(timezone.utc)
+
+        # Business metric: roster reached the completed state. Pairs
+        # with the "processing" increment at creation so dashboards can
+        # show completion ratio over time (issue #159).
+        payment_rosters_total.labels(status="completed").inc()
+
+        self.db.flush()
+
+        logger.info(
+            f"Roster {roster_code} completed: {qualified_count} qualified, "
+            f"{disqualified_count} disqualified, total {total_amount}"
+        )
+
+        # 產生 Excel 並上傳至 MinIO（在 sync 環境中執行，避免 greenlet 問題）
+        from app.services.excel_export_service import ExcelExportService
+
+        try:
+            export_service = ExcelExportService()
+            export_service.export_roster_to_excel(
+                roster=roster,
+                template_name="STD_UP_MIXLISTA",
+                include_header=True,
+                include_statistics=True,
+                include_excluded=False,
+            )
+            self.db.flush()  # Persist minio_object_name and excel_filename
+            # 匯出成功 ⇒ 檔案與明細一致，清除「需重新匯出」提示（可能是先前的
+            # 移除／比對留下的）。失敗則標記為過期：MinIO 上那份已經對不上名單。
+            roster.excel_stale = False
+            logger.info(f"Excel generated for roster {roster_code}: {roster.minio_object_name}")
+        except Exception:
+            roster.excel_stale = True
+            logger.exception(f"Failed to generate Excel for roster {roster_code}")
+
+        audit_service.log_roster_operation(
+            roster_id=roster.id,
+            action=RosterAuditAction.CREATE,
+            title=f"批次造冊產生: {sub_type} {allocation_year}年度 納入造冊{qualified_count}人",
+            user_id=created_by_user_id,
+            user_name=user_name,
+            description=(
+                f"計畫編號: {project_number or '未設定'}，總金額: ${total_amount}"
+                + (f"，保留人為排除 {preserved_exclusions} 筆" if preserved_exclusions else "")
+            ),
+            old_values=None,
+            new_values=None,
+            level=RosterAuditLevel.INFO,
+            affected_items_count=qualified_count + disqualified_count,
+            metadata={
+                "sub_type": sub_type,
+                "allocation_year": allocation_year,
+                "project_number": project_number,
+                "qualified_count": qualified_count,
+                "disqualified_count": disqualified_count,
+                "preserved_exclusions": preserved_exclusions,
+                "total_amount": float(total_amount),
+            },
+            tags=["batch_generation", sub_type],
+            db=self.db,
+        )
+
+        return roster
+
+    # ------------------------------------------------------------------
+    # Post-lock roster item management
+    # ------------------------------------------------------------------
+
+    def get_revoked_suspended_for_roster(self, roster_id: int) -> dict:
+        """Return revoked / suspended entries for a roster — i.e. items still
+        present in this (LOCKED) roster whose linked Application has been
+        revoked or suspended after the lock."""
+        rows = (
+            self.db.query(PaymentRosterItem, Application)
+            .join(Application, PaymentRosterItem.application_id == Application.id)
+            .filter(
+                PaymentRosterItem.roster_id == roster_id,
+                # Only items STILL active in the roster. A soft-removed item
+                # (is_included=False, e.g. 鎖定後移除 / 排除) has already been
+                # handled and must NOT linger in the 撤銷/停發 needs-attention
+                # panel (pre soft-delete it was hard-deleted, so it vanished).
+                PaymentRosterItem.is_included.is_(True),
+                Application.quota_allocation_status.in_(("revoked", "suspended")),
+            )
+            .all()
+        )
+        revoked, suspended = [], []
+        for item, app in rows:
+            entry = RevokedSuspendedEntry(
+                application_id=app.id,
+                student_name=item.student_name,
+                # 身分證字號 masked for the needs-attention panel (display only).
+                # The roster Excel export reads item.student_id_number directly
+                # and keeps the full national ID for the payment process.
+                student_id_number=mask_id_number(item.student_id_number),
+                event_at=(app.revoked_at if app.quota_allocation_status == "revoked" else app.suspended_at),
+                reason=(app.revoke_reason if app.quota_allocation_status == "revoked" else app.suspend_reason),
+                item_id=item.id,
+            )
+            (revoked if app.quota_allocation_status == "revoked" else suspended).append(entry)
+        return {"revoked": revoked, "suspended": suspended}
+
+    def _recompute_roster_totals_sync(self, roster_id: int) -> tuple:
+        """Recompute + persist total_applications / qualified_count /
+        disqualified_count / total_amount for a roster from its items.
+        Returns (qualified, total_count, total_amount). SYNC."""
+        total_count, qualified, total_amount = (
+            self.db.query(
+                func.count(PaymentRosterItem.id),
+                func.coalesce(
+                    func.sum(sa_case((PaymentRosterItem.is_included.is_(True), 1), else_=0)),
+                    0,
+                ),
+                func.coalesce(
+                    func.sum(
+                        sa_case(
+                            (PaymentRosterItem.is_included.is_(True), PaymentRosterItem.scholarship_amount),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
+            )
+            .filter(PaymentRosterItem.roster_id == roster_id)
+            .one()
+        )
+        roster = self.db.get(PaymentRoster, roster_id)
+        roster.total_applications = total_count
+        roster.qualified_count = qualified
+        roster.disqualified_count = total_count - qualified
+        roster.total_amount = total_amount
+        return qualified, total_count, total_amount
+
+    _AUDIT_ACTION_LABELS = {
+        RosterAuditAction.ITEM_REMOVE: "移除",
+        RosterAuditAction.ITEM_ADD: "新增",
+        RosterAuditAction.ITEM_RESTORE: "回復",
+    }
+
+    def _write_roster_item_audit(
+        self,
+        roster_id: int,
+        action: "RosterAuditAction",
+        item: "PaymentRosterItem",
+        admin_user_id: int,
+        source: str,
+        reason: Optional[str] = None,
+    ) -> None:
+        """Add (not commit) one RosterAuditLog row for an item-level mutation.
+        Caller commits. `source` is one of exclude/reconcile/locked_remove/restore."""
+        user = self.db.get(User, admin_user_id)
+        student_id = None
+        if item.application is not None and item.application.student_data:
+            student_id = item.application.student_data.get("std_stdcode")
+        label = self._AUDIT_ACTION_LABELS.get(action, action.value)
+        self.db.add(
+            RosterAuditLog.create_audit_log(
+                roster_id=roster_id,
+                action=action,
+                title=f"{label} {item.student_name}",
+                description=f"{label} {item.student_name}（原因：{reason or '—'}）",
+                user_id=admin_user_id,
+                user_name=user.name if user else None,
+                user_role=(user.role.value if user and user.role else None),
+                audit_metadata={
+                    "student_name": item.student_name,
+                    "student_id": student_id,
+                    "application_id": item.application_id,
+                    "source": source,
+                    "reason": reason,
+                },
+                affected_items_count=1,
+            )
+        )
+
+    def _resolve_distribution_for_roster(
+        self, roster: PaymentRoster, config: Optional[ScholarshipConfiguration] = None
+    ) -> dict:
+        """Return {application_id: CollegeRankingItem} for allocated ranking
+        items that belong in THIS roster's (allocation_year, sub_type) group,
+        across all finalized + distribution_executed rankings for the roster's
+        scholarship_type / academic_year / semester. Mirrors
+        generate_rosters_from_distribution grouping exactly."""
+        from app.models.college_review import CollegeRanking, CollegeRankingItem
+
+        if config is None:
+            config = self.db.get(ScholarshipConfiguration, roster.scholarship_configuration_id)
+        if config is None:
+            raise ValueError(f"Scholarship configuration {roster.scholarship_configuration_id} not found")
+
+        semester = (
+            (config.semester.value if hasattr(config.semester, "value") else config.semester)
+            if config.semester
+            else None
+        )
+        sem_filter = self._build_semester_filter(semester)
+
+        rankings = (
+            self.db.query(CollegeRanking)
+            .filter(
+                and_(
+                    CollegeRanking.scholarship_type_id == config.scholarship_type_id,
+                    CollegeRanking.academic_year == config.academic_year,
+                    sem_filter,
+                    CollegeRanking.is_finalized.is_(True),
+                    CollegeRanking.distribution_executed.is_(True),
+                )
+            )
+            .all()
+        )
+        ranking_ids = [r.id for r in rankings]
+        if not ranking_ids:
+            return {}
+
+        allocated = (
+            self.db.query(CollegeRankingItem)
+            .options(joinedload(CollegeRankingItem.application))
+            .filter(
+                and_(
+                    CollegeRankingItem.ranking_id.in_(ranking_ids),
+                    CollegeRankingItem.is_allocated.is_(True),
+                )
+            )
+            .all()
+        )
+
+        # Whole-period roster (generate_roster / 立即產生造冊): sub_type and
+        # allocation_config_id are both NULL because that path holds EVERY
+        # allocated item in the ranking regardless of sub_type (mirrors
+        # _get_eligible_applications matrix mode). Slicing by a derived "general"
+        # sub_type would exclude every nstc/moe item → empty diff. So for these,
+        # the distribution is the full allocated set, no slicing.
+        if roster.sub_type is None and roster.allocation_config_id is None:
+            return {item.application_id: item for item in allocated}
+
+        # Per-slice roster (generate_rosters_from_distribution): one roster per
+        # (allocation_config_id, sub_type) group — match that exact group.
+        # allocation_config_id NULL on an item ⇒ consumed the requesting config.
+        roster_config_id = roster.allocation_config_id or config.id
+        roster_sub = roster.sub_type or "general"
+
+        result: dict = {}
+        for item in allocated:
+            item_config_id = item.allocation_config_id or config.id
+            item_sub = item.allocated_sub_type or "general"
+            if item_config_id == roster_config_id and item_sub == roster_sub:
+                result[item.application_id] = item
+        return result
+
+    def get_distribution_diff_for_roster(self, roster_id: int) -> dict:
+        """Compute the diff between this roster and its slice of the
+        distribution. Returns a dict with to_add (allocated-but-missing) and
+        to_remove (in-roster-but-unallocated) lists of DistributionDiffEntry."""
+        from app.models.application import ApplicationStatus
+
+        roster = self.db.get(PaymentRoster, roster_id)
+        if roster is None:
+            raise ValueError(f"Roster {roster_id} not found")
+
+        config = self.db.get(ScholarshipConfiguration, roster.scholarship_configuration_id)
+        if config is None:
+            raise ValueError(f"Scholarship configuration {roster.scholarship_configuration_id} not found")
+        allocated_map = self._resolve_distribution_for_roster(roster, config=config)
+
+        existing_items = self.db.query(PaymentRosterItem).filter(PaymentRosterItem.roster_id == roster_id).all()
+        existing_app_ids = {it.application_id for it in existing_items}
+
+        to_add = []
+        for app_id, ranking_item in allocated_map.items():
+            if app_id in existing_app_ids:
+                continue
+            application = ranking_item.application
+            if application is None or application.status != ApplicationStatus.approved:
+                continue
+            sd = application.student_data or {}
+            std_code = sd.get("std_stdcode")
+            std_name = sd.get("std_cname")
+            if not std_code or not std_name:
+                # _verify_and_create_item rejects these (ValueError), so offering
+                # them as addable would mislead the admin. Skip — but log rather
+                # than silently drop so a bad snapshot is still visible.
+                logger.warning(
+                    "Roster %s: skipping to_add candidate application %s — "
+                    "student_data missing std_stdcode/std_cname",
+                    roster_id,
+                    app_id,
+                )
+                continue
+            consumed = (
+                self.db.get(ScholarshipConfiguration, ranking_item.allocation_config_id)
+                if ranking_item.allocation_config_id is not None
+                else config
+            ) or config
+            to_add.append(
+                DistributionDiffEntry(
+                    application_id=app_id,
+                    item_id=None,
+                    student_id=std_code,
+                    student_name=std_name,
+                    department_name=sd.get("trm_depname"),
+                    college_name=sd.get("trm_academyname"),
+                    allocation_year=consumed.academic_year,
+                    allocated_sub_type=ranking_item.allocated_sub_type,
+                    application_identity=None,
+                    scholarship_amount=float(application.amount or consumed.amount or 0),
+                )
+            )
+
+        orphan_app_ids = {it.application_id for it in existing_items if it.application_id not in allocated_map}
+        orphan_apps = (
+            self.db.query(Application).filter(Application.id.in_(orphan_app_ids)).all() if orphan_app_ids else []
+        )
+        apps_by_id = {a.id: a for a in orphan_apps}
+
+        to_remove = []
+        for item in existing_items:
+            if item.application_id in allocated_map:
+                continue
+            if not item.is_included:
+                # Already soft-removed — not an actionable orphan anymore.
+                continue
+            app = apps_by_id.get(item.application_id)
+            sd = (app.student_data or {}) if app else {}
+            to_remove.append(
+                DistributionDiffEntry(
+                    application_id=item.application_id,
+                    item_id=item.id,
+                    # 學號 (std_stdcode) only — do NOT fall back to
+                    # item.student_id_number (that is the national ID / std_pid,
+                    # which would render under the 學號 column in the UI).
+                    student_id=sd.get("std_stdcode"),
+                    student_name=item.student_name,
+                    department_name=sd.get("trm_depname"),
+                    college_name=sd.get("trm_academyname"),
+                    allocation_year=item.allocation_year,
+                    allocated_sub_type=item.allocated_sub_type,
+                    application_identity=item.application_identity,
+                    scholarship_amount=float(item.scholarship_amount or 0),
+                )
+            )
+
+        return {
+            "roster_id": roster.id,
+            "roster_code": roster.roster_code,
+            "status": roster.status.value,
+            "allocation_year": roster.allocation_year,
+            "sub_type": roster.sub_type,
+            "to_add": to_add,
+            "to_remove": to_remove,
+        }
+
+    def _verify_and_create_item(
+        self,
+        roster: PaymentRoster,
+        application: Application,
+        verification_enabled: Optional[bool] = None,
+    ) -> PaymentRosterItem:
+        """Verify (if enabled) + validate eligibility + build a PaymentRosterItem.
+        Mirrors the generation per-application block. self.db.add()s the item
+        (does NOT flush/commit) and returns it.
+
+        `verification_enabled` overrides the roster's stored 學籍驗證 setting for
+        THIS call only — it is deliberately not written back to the roster, so a
+        one-off "also re-verify" run can never latch verification on permanently.
+        """
+        sd = application.student_data or {}
+        student_id_number = sd.get("std_stdcode")
+        student_name = sd.get("std_cname")
+        if not student_id_number or not student_name:
+            raise ValueError(f"Application {application.id} is missing student ID or name in student_data")
+
+        verification_result = None
+        verification_status = StudentVerificationStatus.VERIFIED
+        fresh_student_data = None
+
+        verify = roster.student_verification_enabled if verification_enabled is None else verification_enabled
+        if verify:
+            verification_result = self.student_verification_service.verify_student(
+                sd.get("std_stdcode"), sd.get("std_cname")
+            )
+            verification_status = verification_result.get("status", StudentVerificationStatus.VERIFIED)
+            if verification_status != StudentVerificationStatus.API_ERROR:
+                fresh_student_data = verification_result.get("student_info", {})
+
+        eligibility_result = self._validate_student_eligibility(
+            application, roster.academic_year, roster.period_label, fresh_api_data=fresh_student_data
+        )
+        return self._create_roster_item(
+            roster, application, verification_result, verification_status, eligibility_result
+        )
+
+    def reconcile_roster(
+        self,
+        roster_id: int,
+        add_application_ids: List[int],
+        remove_item_ids: List[int],
+        admin_user_id: int,
+        reason: Optional[str] = None,
+    ) -> dict:
+        """Apply a selective add/remove against a generated roster, validated
+        against the server-re-derived distribution diff. Works on COMPLETED and
+        LOCKED rosters. Recomputes totals, sets excel_stale=True, audits each
+        change, commits. NEVER touches quota_allocation_status."""
+        from app.models.application import ApplicationStatus
+
+        roster = self.db.get(PaymentRoster, roster_id)
+        if roster is None:
+            raise ValueError(f"Roster {roster_id} not found")
+        if roster.status not in (RosterStatus.COMPLETED, RosterStatus.LOCKED):
+            raise RosterLockedError(
+                f"Roster {roster_id} must be COMPLETED or LOCKED to reconcile " f"(status={roster.status.value})"
+            )
+
+        add_ids = list(dict.fromkeys(add_application_ids or []))
+        remove_ids = list(dict.fromkeys(remove_item_ids or []))
+
+        # Re-derive allowed sets — never trust the client.
+        allocated_map = self._resolve_distribution_for_roster(roster)
+        existing_items = self.db.query(PaymentRosterItem).filter(PaymentRosterItem.roster_id == roster_id).all()
+        existing_app_ids = {it.application_id for it in existing_items}
+        items_by_id = {it.id: it for it in existing_items}
+
+        allowed_add = {
+            aid
+            for aid, ri in allocated_map.items()
+            if aid not in existing_app_ids
+            and ri.application is not None
+            and ri.application.status == ApplicationStatus.approved
+        }
+        allowed_remove = {it.id for it in existing_items if it.is_included and it.application_id not in allocated_map}
+
+        bad_add = [a for a in add_ids if a not in allowed_add]
+        if bad_add:
+            raise ValueError(f"Applications {bad_add} are not addable from the current distribution diff")
+        bad_remove = [r for r in remove_ids if r not in allowed_remove]
+        if bad_remove:
+            raise ValueError(f"Items {bad_remove} are not removable from the current distribution diff")
+
+        added, removed = [], []
+
+        for app_id in add_ids:
+            application = self.db.get(Application, app_id)
+            if application is None:
+                raise ValueError(f"Application {app_id} not found")
+            # Defensive: if a (soft-removed) item already exists for this app,
+            # restore it instead of creating a duplicate row (no DB unique
+            # constraint protects us). Unreachable via the gated diff today,
+            # but keeps the invariant if gating changes.
+            existing = next((it for it in existing_items if it.application_id == app_id), None)
+            if existing is not None:
+                existing.is_included = True
+                existing.exclusion_reason = None
+                item = existing
+                action = RosterAuditAction.ITEM_RESTORE
+            else:
+                item = self._verify_and_create_item(roster, application)
+                action = RosterAuditAction.ITEM_ADD
+            self.db.flush()
+            added.append(
+                {
+                    "application_id": app_id,
+                    "item_id": item.id,
+                    "is_included": item.is_included,
+                    "exclusion_reason": item.exclusion_reason,
+                }
+            )
+            self._write_roster_item_audit(
+                roster_id=roster_id,
+                action=action,
+                item=item,
+                admin_user_id=admin_user_id,
+                source="reconcile",
+                reason=reason,
+            )
+
+        for item_id in remove_ids:
+            item = items_by_id[item_id]
+            item.is_included = False
+            item.exclusion_reason = f"{MANUAL_REMOVAL_PREFIX_RECONCILE}：不在分發名單"
+            removed.append({"item_id": item_id, "application_id": item.application_id})
+            self._write_roster_item_audit(
+                roster_id=roster_id,
+                action=RosterAuditAction.ITEM_REMOVE,
+                item=item,
+                admin_user_id=admin_user_id,
+                source="reconcile",
+                reason=reason,
+            )
+
+        self.db.flush()
+        qualified, total_count, total_amount = self._recompute_roster_totals_sync(roster_id)
+        if added or removed:
+            roster.excel_stale = True
+
+        self.db.commit()
+
+        return {
+            "added": added,
+            "removed": removed,
+            "qualified_count": qualified,
+            "total_applications": total_count,
+            "total_amount": float(total_amount),
+            "excel_stale": roster.excel_stale,
+        }
+
+    def remove_item_from_locked_roster(
+        self,
+        roster_id: int,
+        item_id: int,
+        admin_user_id: int,
+        reason: Optional[str],
+        reason_category: Optional[str] = None,
+    ) -> dict:
+        """Soft-remove a PaymentRosterItem from a LOCKED roster (sets is_included=False; row survives for restore).
+        Recompute roster totals, set excel_stale=True, write RosterAuditLog. Roster stays LOCKED."""
+        roster = self.db.get(PaymentRoster, roster_id)
+        if roster is None:
+            raise ValueError(f"Roster {roster_id} not found")
+        if roster.status != RosterStatus.LOCKED:
+            raise RosterLockedError(f"Roster {roster_id} is not LOCKED (status={roster.status.value})")
+
+        item = self.db.get(PaymentRosterItem, item_id)
+        if item is None or item.roster_id != roster_id:
+            raise ValueError(f"Item {item_id} not found in roster {roster_id}")
+
+        item.is_included = False
+        # G26 (#988): keep the structured category in front of the free text
+        # so removals are classifiable (e.g. "鎖定後移除[withdrawal]：休學").
+        category_tag = f"[{reason_category}]" if reason_category else ""
+        item.exclusion_reason = (
+            f"{MANUAL_REMOVAL_PREFIX_LOCKED}{category_tag}：{reason}"
+            if reason
+            else f"{MANUAL_REMOVAL_PREFIX_LOCKED}{category_tag}"
+        )
+        self.db.flush()
+
+        # Recompute totals via the shared sync helper (persists
+        # total_applications / qualified_count / disqualified_count / total_amount).
+        qualified, total_count, total_amount = self._recompute_roster_totals_sync(roster_id)
+        roster.excel_stale = True
+
+        self._write_roster_item_audit(
+            roster_id=roster_id,
+            action=RosterAuditAction.ITEM_REMOVE,
+            item=item,
+            admin_user_id=admin_user_id,
+            source="locked_remove",
+            reason=reason,
+        )
+        self.db.commit()
+        return {
+            "roster_id": roster_id,
+            "removed_item_id": item_id,
+            "qualified_count": qualified,
+            "total_amount": float(total_amount),
+            "excel_stale": True,
+        }
+
+    def restore_item(
+        self,
+        roster_id: int,
+        item_id: int,
+        admin_user_id: int,
+        reason: Optional[str] = None,
+    ) -> dict:
+        """Re-include a soft-removed PaymentRosterItem. Works on COMPLETED and
+        LOCKED rosters. Recompute totals, set excel_stale=True, write
+        RosterAuditLog(ITEM_RESTORE).
+
+        Raises (mapped to HTTP by the global ScholarshipException handler / the
+        endpoint): RosterNotFoundError / NotFoundError -> 404, ConflictError
+        (already-included, idempotency) -> 409, ValueError (wrong roster / not a
+        restorable status) -> 400."""
+        roster = self.db.get(PaymentRoster, roster_id)
+        if roster is None:
+            raise RosterNotFoundError(str(roster_id))
+
+        if roster.status not in (RosterStatus.COMPLETED, RosterStatus.LOCKED):
+            raise ValueError(
+                f"Roster {roster_id} must be COMPLETED or LOCKED to restore items " f"(status={roster.status.value})"
+            )
+
+        item = self.db.get(PaymentRosterItem, item_id)
+        if item is None:
+            raise NotFoundError("Roster item", str(item_id))
+        if item.roster_id != roster_id:
+            raise ValueError(f"Item {item_id} does not belong to roster {roster_id}")
+        if item.is_included:
+            raise ConflictError("明細未被移除，無需回復")
+
+        # #1081 finding K: re-read the underlying application's status before
+        # re-including. restore_item legitimately handles the quota
+        # revoke/suspend flow (status == cancelled), so we do NOT require
+        # `approved`; but an application the student has since WITHDRAWN, or that
+        # was REJECTED/DELETED, must not be silently re-included — that would
+        # inflate the student's received_months (feeds the PhD 36-month cap).
+        from app.models.application import ApplicationStatus
+
+        _NON_RESTORABLE = {
+            ApplicationStatus.withdrawn,
+            ApplicationStatus.rejected,
+            ApplicationStatus.deleted,
+        }
+        # A missing application row cannot happen in production (item.application_id
+        # is a NOT-NULL FK), so we only BLOCK on a positively-bad status — never on
+        # None — to avoid changing behavior for dangling-id contract fixtures.
+        application = self.db.get(Application, item.application_id)
+        if application is not None and application.status in _NON_RESTORABLE:
+            raise ValueError(
+                f"無法回復：申請目前狀態為 {application.status.value}，" "已撤回／駁回／刪除的申請不可回復造冊明細"
+            )
+
+        item.is_included = True
+        item.exclusion_reason = None
+        self.db.flush()
+
+        qualified, total_count, total_amount = self._recompute_roster_totals_sync(roster_id)
+        roster.excel_stale = True
+
+        self._write_roster_item_audit(
+            roster_id=roster_id,
+            action=RosterAuditAction.ITEM_RESTORE,
+            item=item,
+            admin_user_id=admin_user_id,
+            source="restore",
+            reason=reason,
+        )
+        self.db.commit()
+        return {
+            "roster_id": roster_id,
+            "restored_item_id": item_id,
+            "qualified_count": qualified,
+            "total_amount": float(total_amount),
+            "excel_stale": True,
+        }

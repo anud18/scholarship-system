@@ -6,8 +6,8 @@ Handles all environment variables and application settings.
 import os
 from typing import List, Optional
 
-from pydantic import field_validator
-from pydantic_settings import BaseSettings
+from pydantic import field_validator, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     smtp_password: Optional[str] = None
     smtp_use_tls: bool = False  # STARTTLS/TLS encryption (default: False for plain SMTP)
     email_from: str = "ss-test.aa@nycu.edu.tw"
-    email_from_name: str = "(測試)獎學金申請與簽核系統"
+    email_from_name: str = "(測試)獎學金申請與審核系統"
 
     # File Upload
     upload_dir: str = "./uploads"
@@ -100,6 +100,13 @@ class Settings(BaseSettings):
     metrics_include_endpoint_labels: bool = True  # Include detailed endpoint labels
     metrics_include_business_metrics: bool = True  # Include business-specific metrics
 
+    # PII encryption (issue #73)
+    # JSON map of {version: base64url 32-byte key}, e.g. '{"v1": "..."}'.
+    # In production this is populated by a KMS sidecar at boot; in development
+    # an empty value triggers a deterministic dev key in pii_crypto.py.
+    pii_encryption_keys: str = ""
+    pii_encryption_active_version: str = "v1"
+
     # Mock SSO for development
     enable_mock_sso: bool = True
     mock_sso_domain: str = "dev.university.edu"
@@ -109,6 +116,9 @@ class Settings(BaseSettings):
     portal_jwt_server_url: str = "https://portal.test.nycu.edu.tw/jwt/portal"
     portal_test_mode: bool = False  # Set to True for testing with mock data
     portal_sso_timeout: float = 10.0  # Timeout for Portal JWT verification
+    # Callback URL the Portal redirects to after JWT verification. Must be
+    # configured per environment via PORTAL_CALLBACK_URL rather than hardcoded.
+    portal_callback_url: str = "http://localhost:8000/api/v1/auth/portal-sso/verify"
 
     # Super Admin Configuration
     super_admin_nycu_id: str = "super_admin"  # NYCU ID that should be granted super_admin role
@@ -119,10 +129,6 @@ class Settings(BaseSettings):
     # Student API Configuration
     student_api_enabled: bool = True
     student_api_base_url: str = "http://localhost:8080"  # Mock API in development
-    student_api_account: str = "scholarship"
-    student_api_hmac_key: str = (
-        "4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a"  # Mock key for development
-    )
     student_api_timeout: float = 10.0
     student_api_encode_type: Optional[str] = "UTF-8"
 
@@ -226,7 +232,16 @@ class Settings(BaseSettings):
     @classmethod
     def create_upload_directory(cls, v: str) -> str:
         """Ensure upload directory exists"""
-        os.makedirs(v, exist_ok=True)
+        import sys
+
+        # Skip directory creation during Alembic migrations or when directory is not writable
+        try:
+            if "alembic" not in sys.argv:
+                os.makedirs(v, exist_ok=True)
+        except OSError:
+            # If we can't create the directory, just skip it
+            # This happens during Alembic migrations when running as non-root user
+            pass
         return v
 
     @property
@@ -259,14 +274,20 @@ class Settings(BaseSettings):
     @classmethod
     def create_roster_template_directory(cls, v: str) -> str:
         """Ensure roster template directory exists"""
-        os.makedirs(v, exist_ok=True)
+        try:
+            os.makedirs(v, exist_ok=True)
+        except OSError:
+            pass
         return v
 
     @field_validator("roster_export_dir", mode="before")
     @classmethod
     def create_roster_export_directory(cls, v: str) -> str:
         """Ensure roster export directory exists"""
-        os.makedirs(v, exist_ok=True)
+        try:
+            os.makedirs(v, exist_ok=True)
+        except OSError:
+            pass
         return v
 
     @property
@@ -284,9 +305,28 @@ class Settings(BaseSettings):
         """Check if we're in a testing environment"""
         return bool(os.getenv("PYTEST_CURRENT_TEST") or os.getenv("CI") or os.getenv("TESTING"))
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    @model_validator(mode="after")
+    def validate_production_secrets(self) -> "Settings":
+        """Fail fast if insecure development defaults leak into production.
+
+        Prevents a misconfigured production deployment from silently running with
+        mock SSO enabled.
+        """
+        # Only bypass under an actual test runner. Note: the loose ``self.testing``
+        # property treats any non-empty TESTING value (even "false") as truthy, so
+        # we check explicitly here to avoid accidentally disabling the production
+        # safety checks when TESTING is set to a non-empty, non-"true" value.
+        in_test_runner = bool(os.getenv("PYTEST_CURRENT_TEST") or os.getenv("CI")) or (
+            os.getenv("TESTING", "").lower() == "true"
+        )
+        if in_test_runner:
+            return self
+        if self.environment == "production":
+            if self.enable_mock_sso:
+                raise ValueError("ENABLE_MOCK_SSO must be false in production.")
+        return self
+
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 
 
 # Global settings instance

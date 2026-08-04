@@ -70,7 +70,7 @@ class SchemaValidationMiddleware(BaseHTTPMiddleware):
                         pass
                 else:
                     # Log other errors normally
-                    logger.error(f"Schema validation middleware error: {e}")
+                    logger.exception("Schema validation middleware error")
             except Exception as log_error:
                 # Fallback logging if logger fails
                 print(f"Schema validation middleware error (logger failed): {e}")
@@ -122,8 +122,8 @@ class SchemaValidationMiddleware(BaseHTTPMiddleware):
             response_model = route_info["response_model"]
             self._perform_validation(response_data, response_model, request.url.path, request.method)
 
-        except Exception as e:
-            logger.error(f"Response validation error: {e}")
+        except Exception:
+            logger.exception("Response validation error")
 
     def _get_route_info(self, request: Request) -> Dict[str, Any]:
         """Get route information including response model"""
@@ -182,8 +182,8 @@ class SchemaValidationMiddleware(BaseHTTPMiddleware):
                 logger.error("Response data structure:")
                 logger.error(json.dumps(data, indent=2, default=str))
 
-        except Exception as e:
-            logger.error(f"Validation error: {e}")
+        except Exception:
+            logger.exception("Validation error")
 
     def get_validation_errors(self) -> list:
         """Get all validation errors collected by this middleware"""

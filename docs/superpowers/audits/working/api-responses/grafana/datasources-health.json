@@ -1,0 +1,41 @@
+[
+  {
+    "uid": "alertmanager-uid",
+    "name": "AlertManager",
+    "type": "alertmanager",
+    "http": 500,
+    "message": "Plugin unavailable"
+  },
+  {
+    "uid": "loki-dev-uid",
+    "name": "Loki (Dev)",
+    "type": "loki",
+    "http": 200,
+    "status": "OK",
+    "message": "Data source successfully connected."
+  },
+  {
+    "uid": "loki-prod-uid",
+    "name": "Loki (Production)",
+    "type": "loki",
+    "http": 200,
+    "status": "OK",
+    "message": "Data source successfully connected."
+  },
+  {
+    "uid": "loki-staging-uid",
+    "name": "Loki (Staging)",
+    "type": "loki",
+    "http": 200,
+    "status": "OK",
+    "message": "Data source successfully connected."
+  },
+  {
+    "uid": "prometheus-uid",
+    "name": "Prometheus",
+    "type": "prometheus",
+    "http": 200,
+    "status": "OK",
+    "message": "Successfully queried the Prometheus API."
+  }
+]

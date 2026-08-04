@@ -24,18 +24,26 @@ import { createProfessorApi } from './modules/professor';
 import { createCollegeApi } from './modules/college';
 import { createWhitelistApi } from './modules/whitelist';
 import { createSystemSettingsApi } from './modules/system-settings';
+import { createFooterLinksApi } from './modules/footer-links';
 import { createBankVerificationApi } from './modules/bank-verification';
 import { createProfessorStudentApi } from './modules/professor-student';
 import { createEmailAutomationApi } from './modules/email-automation';
 import { createBatchImportApi } from './modules/batch-import';
+import { createRenewalImportApi } from './modules/renewal-import';
 import { createReferenceDataApi } from './modules/reference-data';
 import { createApplicationFieldsApi } from './modules/application-fields';
 import { createUserProfilesApi } from './modules/user-profiles';
 import { createEmailManagementApi } from './modules/email-management';
 import { createAdminApi } from './modules/admin';
+import { createAuditLogsApi } from './modules/audit-logs';
 import { createDocumentRequestsApi } from './modules/document-requests';
 import { createPaymentRostersApi } from './modules/payment-rosters';
+import { createRosterSchedulesApi } from './modules/roster-schedules';
 import { createStudentsApi } from './modules/students';
+import { createManualDistributionApi } from './modules/manual-distribution';
+import { createRenewalApi } from './modules/renewal';
+import { createStudentHistoryApi } from './modules/student-history';
+import { createReceivedMonthsApi } from './modules/received-months';
 // import { createReviewApi } from './modules/reviews'; // Not used - professor reviews use professor endpoints with adapter
 
 // Re-export ALL types from modular types file
@@ -114,6 +122,7 @@ export type {
 
 // Re-export Students module types
 export type {
+  AppliedScholarship,
   Student,
   StudentStats,
   StudentSISBasicInfo,
@@ -146,18 +155,26 @@ class ExtendedApiClient extends ApiClient {
   private _college?: ReturnType<typeof createCollegeApi>;
   private _whitelist?: ReturnType<typeof createWhitelistApi>;
   private _systemSettings?: ReturnType<typeof createSystemSettingsApi>;
+  private _footerLinks?: ReturnType<typeof createFooterLinksApi>;
   private _bankVerification?: ReturnType<typeof createBankVerificationApi>;
   private _professorStudent?: ReturnType<typeof createProfessorStudentApi>;
   private _emailAutomation?: ReturnType<typeof createEmailAutomationApi>;
   private _batchImport?: ReturnType<typeof createBatchImportApi>;
+  private _renewalImport?: ReturnType<typeof createRenewalImportApi>;
   private _referenceData?: ReturnType<typeof createReferenceDataApi>;
   private _applicationFields?: ReturnType<typeof createApplicationFieldsApi>;
   private _userProfiles?: ReturnType<typeof createUserProfilesApi>;
   private _emailManagement?: ReturnType<typeof createEmailManagementApi>;
   private _admin?: ReturnType<typeof createAdminApi>;
+  private _auditLogs?: ReturnType<typeof createAuditLogsApi>;
   private _documentRequests?: ReturnType<typeof createDocumentRequestsApi>;
   private _paymentRosters?: ReturnType<typeof createPaymentRostersApi>;
+  private _rosterSchedules?: ReturnType<typeof createRosterSchedulesApi>;
   private _students?: ReturnType<typeof createStudentsApi>;
+  private _manualDistribution?: ReturnType<typeof createManualDistributionApi>;
+  private _renewal?: ReturnType<typeof createRenewalApi>;
+  private _studentHistory?: ReturnType<typeof createStudentHistoryApi>;
+  private _receivedMonths?: ReturnType<typeof createReceivedMonthsApi>;
 
   // Lazy-loaded getters
   get auth(): ReturnType<typeof createAuthApi> {
@@ -210,6 +227,11 @@ class ExtendedApiClient extends ApiClient {
     return this._systemSettings;
   }
 
+  get footerLinks(): ReturnType<typeof createFooterLinksApi> {
+    if (!this._footerLinks) this._footerLinks = createFooterLinksApi();
+    return this._footerLinks;
+  }
+
   get bankVerification(): ReturnType<typeof createBankVerificationApi> {
     if (!this._bankVerification) this._bankVerification = createBankVerificationApi();
     return this._bankVerification;
@@ -228,6 +250,11 @@ class ExtendedApiClient extends ApiClient {
   get batchImport(): ReturnType<typeof createBatchImportApi> {
     if (!this._batchImport) this._batchImport = createBatchImportApi();
     return this._batchImport;
+  }
+
+  get renewalImport(): ReturnType<typeof createRenewalImportApi> {
+    if (!this._renewalImport) this._renewalImport = createRenewalImportApi();
+    return this._renewalImport;
   }
 
   get referenceData(): ReturnType<typeof createReferenceDataApi> {
@@ -250,6 +277,11 @@ class ExtendedApiClient extends ApiClient {
     return this._emailManagement;
   }
 
+  get auditLogs(): ReturnType<typeof createAuditLogsApi> {
+    if (!this._auditLogs) this._auditLogs = createAuditLogsApi();
+    return this._auditLogs;
+  }
+
   get admin(): ReturnType<typeof createAdminApi> {
     if (!this._admin) this._admin = createAdminApi();
     return this._admin;
@@ -265,9 +297,34 @@ class ExtendedApiClient extends ApiClient {
     return this._paymentRosters;
   }
 
+  get rosterSchedules(): ReturnType<typeof createRosterSchedulesApi> {
+    if (!this._rosterSchedules) this._rosterSchedules = createRosterSchedulesApi();
+    return this._rosterSchedules;
+  }
+
   get students(): ReturnType<typeof createStudentsApi> {
     if (!this._students) this._students = createStudentsApi();
     return this._students;
+  }
+
+  get manualDistribution(): ReturnType<typeof createManualDistributionApi> {
+    if (!this._manualDistribution) this._manualDistribution = createManualDistributionApi();
+    return this._manualDistribution;
+  }
+
+  get renewal(): ReturnType<typeof createRenewalApi> {
+    if (!this._renewal) this._renewal = createRenewalApi();
+    return this._renewal;
+  }
+
+  get studentHistory(): ReturnType<typeof createStudentHistoryApi> {
+    if (!this._studentHistory) this._studentHistory = createStudentHistoryApi();
+    return this._studentHistory;
+  }
+
+  get receivedMonths(): ReturnType<typeof createReceivedMonthsApi> {
+    if (!this._receivedMonths) this._receivedMonths = createReceivedMonthsApi();
+    return this._receivedMonths;
   }
 
   // Backward compatibility alias

@@ -26,9 +26,9 @@ async def get_professor_student_relationships(
     professor_id: Optional[int] = Query(None, description="Filter by professor ID"),
     student_id: Optional[int] = Query(None, description="Filter by student ID"),
     relationship_type: Optional[str] = Query(None, description="Filter by relationship type"),
-    status: Optional[str] = Query(None, description="Filter by active status (active/inactive)"),
+    active_status: Optional[str] = Query(None, alias="status", description="Filter by active status (active/inactive)"),
     page: int = Query(1, ge=1, description="Page number"),
-    size: int = Query(20, ge=1, le=100, description="Items per page"),
+    size: Optional[int] = Query(None, ge=1, description="Items per page; omit to return all relationships"),
     current_user: User = Depends(require_roles(UserRole.professor, UserRole.admin, UserRole.super_admin)),
     db: AsyncSession = Depends(get_db),
 ):
@@ -39,13 +39,22 @@ async def get_professor_student_relationships(
     Admins can view all relationships.
     """
     try:
+        # Authorization: a professor passing professor_id != self was previously
+        # accepted, letting any prof query other profs' student relationships.
+        # Reject before building the query.
+        if professor_id is not None and current_user.role == UserRole.professor and professor_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Professors may only query their own student relationships",
+            )
+
         # Build query
         query = select(ProfessorStudentRelationship)
 
         # Apply filters
         if professor_id is not None:
             query = query.where(ProfessorStudentRelationship.professor_id == professor_id)
-        elif current_user.role == "professor":
+        elif current_user.role == UserRole.professor:
             # Professors can only see their own relationships
             query = query.where(ProfessorStudentRelationship.professor_id == current_user.id)
 
@@ -55,12 +64,16 @@ async def get_professor_student_relationships(
         if relationship_type:
             query = query.where(ProfessorStudentRelationship.relationship_type == relationship_type)
 
-        if status:
-            is_active = status.lower() == "active"
+        if active_status:
+            is_active = active_status.lower() == "active"
             query = query.where(ProfessorStudentRelationship.is_active == is_active)
 
-        # Apply pagination
-        query = query.offset((page - 1) * size).limit(size)
+        # Stable ordering so explicit pagination is deterministic across requests
+        query = query.order_by(ProfessorStudentRelationship.id)
+
+        # Apply pagination only when explicitly requested (size=None → return all)
+        if size is not None:
+            query = query.offset((page - 1) * size).limit(size)
 
         # Execute query
         result = await db.execute(query)
@@ -89,12 +102,14 @@ async def get_professor_student_relationships(
             "data": relationships_data,
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error fetching professor-student relationships: {str(e)}")
+        logger.exception("Error fetching professor-student relationships")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while fetching relationships",
-        )
+        ) from e
 
 
 @router.post("")
@@ -102,7 +117,7 @@ async def create_professor_student_relationship(
     professor_id: int,
     student_id: int,
     relationship_type: str,
-    status: Optional[str] = "active",
+    active_status: Optional[str] = Query("active", alias="status", description="active|inactive"),
     start_date: Optional[str] = None,
     notes: Optional[str] = None,
     current_user: User = Depends(require_admin),
@@ -117,7 +132,10 @@ async def create_professor_student_relationship(
         # Verify users exist
         prof_query = await db.execute(select(User).where(User.id == professor_id))
         professor = prof_query.scalar_one_or_none()
-        if not professor or professor.role not in ["professor", "admin"]:
+        # #1112: User.role is a UserRole enum member, never equal to a bare
+        # string — comparing against ["professor", "admin"] rejected EVERY valid
+        # pair (the endpoint could never create a relationship). Compare enums.
+        if not professor or professor.role not in (UserRole.professor, UserRole.admin):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid professor ID or user is not a professor",
@@ -125,7 +143,7 @@ async def create_professor_student_relationship(
 
         student_query = await db.execute(select(User).where(User.id == student_id))
         student = student_query.scalar_one_or_none()
-        if not student or student.role != "student":
+        if not student or student.role != UserRole.student:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid student ID or user is not a student",
@@ -152,7 +170,7 @@ async def create_professor_student_relationship(
             professor_id=professor_id,
             student_id=student_id,
             relationship_type=relationship_type,
-            is_active=(status == "active"),
+            is_active=(active_status == "active"),
             notes=notes,
             created_by=current_user.id,
         )
@@ -181,18 +199,18 @@ async def create_professor_student_relationship(
         raise
     except Exception as e:
         await db.rollback()
-        logger.error(f"Error creating professor-student relationship: {str(e)}")
+        logger.exception("Error creating professor-student relationship")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while creating relationship",
-        )
+        ) from e
 
 
 @router.put("/{id}")
 async def update_professor_student_relationship(
     id: int = Path(..., description="Relationship ID"),
     relationship_type: Optional[str] = None,
-    status: Optional[str] = None,
+    active_status: Optional[str] = Query(None, alias="status", description="active|inactive"),
     end_date: Optional[str] = None,
     notes: Optional[str] = None,
     current_user: User = Depends(require_admin),
@@ -218,8 +236,8 @@ async def update_professor_student_relationship(
         if relationship_type is not None:
             relationship.relationship_type = relationship_type
 
-        if status is not None:
-            relationship.is_active = status == "active"
+        if active_status is not None:
+            relationship.is_active = active_status == "active"
 
         if notes is not None:
             relationship.notes = notes
@@ -252,11 +270,11 @@ async def update_professor_student_relationship(
         raise
     except Exception as e:
         await db.rollback()
-        logger.error(f"Error updating professor-student relationship: {str(e)}")
+        logger.exception("Error updating professor-student relationship")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while updating relationship",
-        )
+        ) from e
 
 
 @router.delete("/{id}")
@@ -297,8 +315,8 @@ async def delete_professor_student_relationship(
         raise
     except Exception as e:
         await db.rollback()
-        logger.error(f"Error deleting professor-student relationship: {str(e)}")
+        logger.exception("Error deleting professor-student relationship")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while deleting relationship",
-        )
+        ) from e

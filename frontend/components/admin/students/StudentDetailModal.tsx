@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { logger } from "@/lib/utils/logger";
 import { apiClient } from "@/lib/api";
 import type { Student, StudentSISData } from "@/lib/api";
 import {
@@ -57,7 +58,7 @@ export function StudentDetailModal({ student, open, onClose }: StudentDetailModa
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "網絡錯誤";
       setError(errorMsg);
-      console.error("Error fetching SIS data:", err);
+      logger.error("Error fetching SIS data", { err: err });
     } finally {
       setLoading(false);
     }

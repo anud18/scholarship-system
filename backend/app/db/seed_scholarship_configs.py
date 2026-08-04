@@ -20,6 +20,41 @@ from app.models.system_setting import EmailTemplate, SendingType
 
 logger = logging.getLogger(__name__)
 
+# --- 學院送出排名通知 -------------------------------------------------------
+# The third and last automatic trigger point in the system: a college finalizes
+# ("送出") its ranking and its own reviewers get a confirmation. Recipients are
+# resolved by college_code, so the rule is ranking-scoped, not application-scoped.
+COLLEGE_RANKING_SUBMITTED_TEMPLATE_KEY = "college_ranking_submitted"
+
+COLLEGE_RANKING_SUBMITTED_SUBJECT = "排名已送出 - {scholarship_name} {ranking_name}"
+
+COLLEGE_RANKING_SUBMITTED_BODY = """{college_name} 您好：
+
+貴學院的 {scholarship_name} 推薦排名已完成送出並鎖定，後續將由承辦單位進行配額分發。
+
+排名資訊：
+- 排名名稱：{ranking_name}
+- 申請類別：{sub_type_code}
+- 學年度學期：{academic_year} 學年度 {semester}
+- 排名人數：{total_applications}
+- 送出時間：{finalized_at}（操作人：{finalized_by}）
+
+排名送出後即無法修改。若需調整，請聯繫承辦單位解除鎖定。
+
+請至系統查看：{system_url}/college/rankings
+
+國立陽明交通大學
+獎學金管理系統"""
+
+COLLEGE_RANKING_SUBMITTED_CONDITION_QUERY = """
+                SELECT u.email
+                FROM users u
+                WHERE u.role = 'college'
+                AND u.college_code = {college_code}
+                AND u.email IS NOT NULL
+                AND u.email != ''
+            """
+
 
 async def seed_scholarship_configurations(session: AsyncSession) -> None:
     """Initialize scholarship configurations with quota and workflow settings"""
@@ -70,6 +105,104 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
             "effective_end_date": now + timedelta(days=90),
             "version": "1.0",
         },
+        # 學士班新生獎學金配置 (114-2)
+        {
+            "scholarship_type_id": undergrad_scholarship.id,
+            "config_code": "undergraduate_freshman_114_2",
+            "config_name": "學士班新生獎學金 114學年第二學期",
+            "academic_year": 114,
+            "semester": Semester.second,
+            "description": "114學年度第二學期學士班新生獎學金配置",
+            "description_en": "Undergraduate Freshman Scholarship Configuration for 114-2",
+            "has_quota_limit": False,
+            "has_college_quota": False,
+            "quota_management_mode": QuotaManagementMode.simple,
+            "total_quota": 50,
+            "amount": 10000,
+            "currency": "TWD",
+            "application_start_date": now - timedelta(days=30),
+            "application_end_date": now + timedelta(days=30),
+            "is_active": True,
+            "effective_start_date": now - timedelta(days=60),
+            "effective_end_date": now + timedelta(days=90),
+            "version": "1.0",
+        },
+        # 博士生獎學金配置 (112學年) - 前年度剩餘配額
+        {
+            "scholarship_type_id": phd_scholarship.id,
+            "config_code": "phd_112",
+            "config_name": "博士生獎學金 112學年",
+            "academic_year": 112,
+            "semester": None,  # 學年制
+            "description": "112學年度博士生獎學金配置（剩餘配額）",
+            "description_en": "PhD Scholarship Configuration for Academic Year 112 (Remaining Quota)",
+            "has_quota_limit": True,
+            "has_college_quota": True,
+            "quota_management_mode": QuotaManagementMode.matrix_based,
+            "total_quota": 15,
+            "quotas": {
+                "nstc": {
+                    "E": 2,
+                    "C": 1,
+                    "I": 1,
+                    "S": 1,
+                    "B": 1,
+                    "O": 1,
+                    "D": 1,
+                    "1": 1,
+                    "6": 1,
+                    "7": 1,
+                    "M": 1,
+                    "A": 1,
+                    "K": 1,
+                },
+            },
+            "project_numbers": {"nstc": "112R000001"},
+            "amount": 40000,
+            "currency": "TWD",
+            "is_active": False,
+            "effective_start_date": now - timedelta(days=840),
+            "effective_end_date": now - timedelta(days=480),
+            "version": "1.0",
+        },
+        # 博士生獎學金配置 (113學年) - 前年度剩餘配額 (for prior-year quota testing)
+        {
+            "scholarship_type_id": phd_scholarship.id,
+            "config_code": "phd_113",
+            "config_name": "博士生獎學金 113學年",
+            "academic_year": 113,
+            "semester": None,  # 學年制
+            "description": "113學年度博士生獎學金配置（剩餘配額）",
+            "description_en": "PhD Scholarship Configuration for Academic Year 113 (Remaining Quota)",
+            "has_quota_limit": True,
+            "has_college_quota": True,
+            "quota_management_mode": QuotaManagementMode.matrix_based,
+            "total_quota": 30,
+            "quotas": {
+                "nstc": {
+                    "E": 3,
+                    "C": 2,
+                    "I": 2,
+                    "S": 1,
+                    "B": 1,
+                    "O": 1,
+                    "D": 1,
+                    "1": 1,
+                    "6": 1,
+                    "7": 1,
+                    "M": 1,
+                    "A": 1,
+                    "K": 1,
+                },
+            },
+            "project_numbers": {"nstc": "113R000001"},
+            "amount": 40000,
+            "currency": "TWD",
+            "is_active": False,
+            "effective_start_date": now - timedelta(days=480),
+            "effective_end_date": now - timedelta(days=120),
+            "version": "1.0",
+        },
         # 博士生獎學金配置 (114學年) - Matrix Quota
         {
             "scholarship_type_id": phd_scholarship.id,
@@ -115,21 +248,39 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
                     "K": 1,
                 },
             },
+            "shared_quota_sources": [
+                {"source_config_code": "phd_113", "sub_types": ["nstc"]},
+                {"source_config_code": "phd_112", "sub_types": ["nstc"]},
+            ],
+            "project_numbers": {
+                "nstc": "114R000001",
+                "moe_1w": "114E000001",
+            },
             "amount": 40000,
             "currency": "TWD",
-            "renewal_application_start_date": now - timedelta(days=90),
-            "renewal_application_end_date": now - timedelta(days=60),
+            # The renewal cycle runs alongside the general cycle (續領 and 新申請
+            # open together in the real PhD process). Keeping it OPEN is what
+            # makes the admin 匯入續領生 surface usable on a freshly seeded DB —
+            # `renewal_import` rejects the upload with HTTP 400
+            # "此獎學金配置目前不在續領期間" whenever this window has closed.
+            "renewal_application_start_date": now - timedelta(days=45),
+            "renewal_application_end_date": now + timedelta(days=15),
             "application_start_date": now - timedelta(days=45),
             "application_end_date": now + timedelta(days=15),
-            "renewal_professor_review_start": now - timedelta(days=55),
-            "renewal_professor_review_end": now - timedelta(days=40),
-            "renewal_college_review_start": now - timedelta(days=35),
-            "renewal_college_review_end": now - timedelta(days=20),
+            "renewal_requires_professor_review": True,
+            "renewal_professor_review_start": now - timedelta(days=5),
+            "renewal_professor_review_end": now + timedelta(days=30),
+            "renewal_requires_college_review": True,
+            "renewal_college_review_start": now - timedelta(days=5),
+            "renewal_college_review_end": now + timedelta(days=60),
             "requires_professor_recommendation": True,
-            "professor_review_start": now,
+            "professor_review_start": now - timedelta(days=5),
             "professor_review_end": now + timedelta(days=30),
             "requires_college_review": True,
-            "college_review_start": now + timedelta(days=35),
+            # College review overlaps the professor window so a professor-reviewed
+            # application is immediately visible to college reviewers — the previous
+            # `now + 35d` start left a gap where prof review was open but college was not.
+            "college_review_start": now - timedelta(days=5),
             "college_review_end": now + timedelta(days=60),
             "review_deadline": now + timedelta(days=65),
             "is_active": True,
@@ -175,6 +326,18 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
             config = ScholarshipConfiguration(**config_data)
             session.add(config)
             logger.info(f"Created configuration: {config_data['config_code']}")
+        else:
+            # Update shared_quota_sources on existing configs if provided in seed data
+            if (
+                "shared_quota_sources" in config_data
+                and existing.shared_quota_sources != config_data["shared_quota_sources"]
+            ):
+                existing.shared_quota_sources = config_data["shared_quota_sources"]
+                logger.info(f"Updated shared_quota_sources for: {config_data['config_code']}")
+            # Update project_numbers on existing configs if provided in seed data
+            if "project_numbers" in config_data and existing.project_numbers != config_data["project_numbers"]:
+                existing.project_numbers = config_data["project_numbers"]
+                logger.info(f"Updated project_numbers for: {config_data['config_code']}")
 
     await session.commit()
     logger.info("Scholarship configurations initialized successfully!")
@@ -243,7 +406,9 @@ async def seed_scholarship_rules(session: AsyncSession) -> None:
             "expected_value": "1,2,3",
             "message": "博士生獎學金需要在學生身分 1: 在學 2: 應畢 3: 延畢",
             "message_en": "PhD scholarship requires active student status",
-            "is_hard_rule": False,
+            # 硬性規則（#1139）：休學/退學（4/5）必須在匯入預檢與造冊資格
+            # 檢查中被標記，不可静默通過
+            "is_hard_rule": True,
             "is_warning": False,
             "priority": 2,
             "is_active": True,
@@ -300,7 +465,7 @@ async def seed_scholarship_rules(session: AsyncSession) -> None:
             "created_by": admin_id,
             "updated_by": admin_id,
         },
-        # 博士生獎學金 教育部獎學金 (一萬元) 5. 中華民國國籍 6. 一至三年級
+        # 博士生獎學金 教育部獎學金 (每月 $5000 元) 5. 中華民國國籍 6. 一至三年級
         {
             "scholarship_type_id": 2,
             "sub_type": "moe_1w",
@@ -437,7 +602,9 @@ async def seed_scholarship_rules(session: AsyncSession) -> None:
             "expected_value": "1,2,3",
             "message": "逕讀博士獎學金需要在學生身分 1: 在學 2: 應畢 3: 延畢",
             "message_en": "Direct PhD scholarship requires active student status",
-            "is_hard_rule": False,
+            # 硬性規則（#1139）：休學/退學（4/5）必須在匯入預檢與造冊資格
+            # 檢查中被標記，不可静默通過
+            "is_hard_rule": True,
             "is_warning": False,
             "priority": 2,
             "is_active": True,
@@ -688,10 +855,10 @@ async def seed_scholarship_sub_type_configs(session: AsyncSession) -> None:
                     {
                         "scholarship_type_id": scholarship.id,
                         "sub_type_code": "moe_1w",
-                        "name": "教育部博士生獎學金 (指導教授配合款一萬)",
-                        "name_en": "MOE PHD Scholarship (Professor Match 10K)",
-                        "description": "教育部博士生獎學金，指導教授配合款一萬元",
-                        "description_en": "MOE PHD Scholarship with professor match of 10K",
+                        "name": "教育部博士生獎學金 (指導教授配合款每月 $5000 元)",
+                        "name_en": "MOE PHD Scholarship (Professor Match NT$5,000/month)",
+                        "description": "教育部博士生獎學金，指導教授配合款每月 $5000 元",
+                        "description_en": "MOE PHD Scholarship with professor match of NT$5,000/month",
                         "amount": None,  # 使用主獎學金金額
                         "display_order": 2,
                         "is_active": True,
@@ -727,13 +894,12 @@ async def seed_email_templates(session: AsyncSession) -> None:
     logger.info("Initializing email templates...")
     print("  📧 Initializing email templates...")
 
-    # Check if templates already exist
-    result = await session.execute(select(EmailTemplate))
-    existing_templates = result.scalars().all()
-
-    if existing_templates:
-        print(f"  ✓ Email templates already initialized ({len(existing_templates)} found)")
-        return
+    # Seed per key, NOT "skip if the table has any row". Migrations may legitimately
+    # insert a single template before this runs (alembic upgrade precedes seeding in
+    # scripts/reset_database.sh), and a table-level skip would then silently drop
+    # every other template — including the ones the submission emails depend on.
+    result = await session.execute(select(EmailTemplate.key).where(EmailTemplate.scholarship_type_id.is_(None)))
+    existing_keys = set(result.scalars().all())
 
     # Define default email templates
     default_templates = [
@@ -835,6 +1001,13 @@ async def seed_email_templates(session: AsyncSession) -> None:
             "sending_type": SendingType.single,
             "recipient_options": [{"label": "學院承辦人", "value": "college"}],
         },
+        {
+            "key": COLLEGE_RANKING_SUBMITTED_TEMPLATE_KEY,
+            "subject_template": COLLEGE_RANKING_SUBMITTED_SUBJECT,
+            "body_template": COLLEGE_RANKING_SUBMITTED_BODY,
+            "sending_type": SendingType.single,
+            "recipient_options": [{"label": "學院承辦人", "value": "college"}],
+        },
         # Bulk sending type templates
         {
             "key": "scholarship_announcement",
@@ -883,13 +1056,14 @@ async def seed_email_templates(session: AsyncSession) -> None:
         },
     ]
 
-    for template_data in default_templates:
+    missing = [t for t in default_templates if t["key"] not in existing_keys]
+    for template_data in missing:
         template = EmailTemplate(**template_data)
         session.add(template)
 
     await session.commit()
     logger.info("Email templates initialized successfully!")
-    print(f"  📊 Inserted: {len(default_templates)} email templates")
+    print(f"  📊 Inserted: {len(missing)} email templates ({len(existing_keys)} already present)")
 
 
 async def seed_email_automation_rules(session: AsyncSession) -> None:
@@ -899,15 +1073,15 @@ async def seed_email_automation_rules(session: AsyncSession) -> None:
     logger.info("Initializing email automation rules...")
     print("  🤖 Initializing email automation rules...")
 
-    # Check if automation rules already exist
-    result = await session.execute(select(EmailAutomationRule))
-    existing_rules = result.scalars().all()
+    # Seed per rule name, NOT "skip if the table has any row" — see the same note in
+    # seed_email_templates. email_timing_three_triggers_001 inserts 學院排名送出通知
+    # on a fresh DB, and a table-level skip would then drop the two submission rules,
+    # leaving trigger point 1 (student + professor) with no active rule at all.
+    result = await session.execute(select(EmailAutomationRule.name))
+    existing_names = set(result.scalars().all())
 
-    if existing_rules:
-        print(f"  ✓ Email automation rules already initialized ({len(existing_rules)} found)")
-        return
-
-    # Define initial automation rules (disabled by default, admin must activate)
+    # Define initial automation rules — these are the three trigger points the
+    # system actually sends mail for (see docs: 送出申請 / 草稿截止前三天 / 送出排名).
     initial_rules = [
         {
             "name": "申請提交確認郵件",
@@ -915,7 +1089,7 @@ async def seed_email_automation_rules(session: AsyncSession) -> None:
             "trigger_event": TriggerEvent.application_submitted,
             "template_key": "application_submitted_student",
             "delay_hours": 0,
-            "is_active": False,
+            "is_active": True,
             "condition_query": """
                 SELECT email FROM (
                     SELECT applications.student_data->>'com_email' as email
@@ -942,33 +1116,36 @@ async def seed_email_automation_rules(session: AsyncSession) -> None:
             "trigger_event": TriggerEvent.application_submitted,
             "template_key": "professor_review_notification",
             "delay_hours": 0,
-            "is_active": False,
+            "is_active": True,
             "condition_query": """
-                SELECT user_profiles.advisor_email as email
-                FROM applications
-                JOIN user_profiles ON applications.user_id = user_profiles.user_id
-                WHERE applications.id = {application_id}
-                AND user_profiles.advisor_email IS NOT NULL
-                AND user_profiles.advisor_email != ''
+                SELECT COALESCE(u.email, up.advisor_email) AS email
+                FROM applications a
+                LEFT JOIN users u ON u.id = a.professor_id
+                LEFT JOIN user_profiles up ON up.user_id = a.user_id
+                WHERE a.id = {application_id}
+                AND COALESCE(u.email, up.advisor_email) IS NOT NULL
+                AND COALESCE(u.email, up.advisor_email) != ''
             """,
         },
         {
-            "name": "學院審核通知",
-            "description": "當教授審核完成後，通知學院有新案件待審核",
-            "trigger_event": TriggerEvent.professor_review_submitted,
-            "template_key": "college_review_notification",
+            "name": "學院排名送出通知",
+            "description": "當學院送出（確認）排名後，通知該學院承辦人排名已送出",
+            "trigger_event": TriggerEvent.college_review_submitted,
+            "template_key": COLLEGE_RANKING_SUBMITTED_TEMPLATE_KEY,
             "delay_hours": 0,
-            "is_active": False,
+            "is_active": True,
+            "condition_query": COLLEGE_RANKING_SUBMITTED_CONDITION_QUERY,
         },
     ]
 
-    for rule_data in initial_rules:
+    missing = [r for r in initial_rules if r["name"] not in existing_names]
+    for rule_data in missing:
         rule = EmailAutomationRule(**rule_data)
         session.add(rule)
 
     await session.commit()
     logger.info("Email automation rules initialized successfully!")
-    print(f"  📊 Inserted: {len(initial_rules)} email automation rules (disabled by default)")
+    print(f"  📊 Inserted: {len(missing)} email automation rules ({len(existing_names)} already present)")
 
 
 async def init_all_scholarship_configs() -> None:
@@ -993,7 +1170,7 @@ async def init_all_scholarship_configs() -> None:
     print("- 3 scholarship configurations (114 academic year)")
     print("- 18 scholarship rules (114 academic year)")
     print("- 3 sub-type configurations (NSTC, MOE_1W, MOE_2W)")
-    print("- 6 email templates (single + bulk sending)")
+    print("- 7 email templates (single + bulk sending)")
 
 
 if __name__ == "__main__":

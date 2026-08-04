@@ -5,7 +5,7 @@ Payment roster Pydantic schemas
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Literal, Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -35,6 +35,7 @@ class PaymentRosterItemBase(BaseModel):
     scholarship_name: str = Field(..., description="獎學金名稱")
     scholarship_amount: Decimal = Field(..., description="獎學金金額")
     scholarship_subtype: Optional[str] = Field(None, description="獎學金子類型")
+    allocation_year: Optional[int] = Field(None, description="消耗哪一年的配額（補發時與學年度不同）")
     is_included: bool = Field(True, description="是否納入造冊")
     exclusion_reason: Optional[str] = Field(None, description="排除原因")
 
@@ -305,3 +306,144 @@ class RosterScheduleResponse(RosterScheduleBase):
     @property
     def is_active(self) -> bool:
         return self.is_enabled and bool(self.cron_expression)
+
+
+# G26 (#988): structured removal-reason vocabulary so 鎖定後移除 is
+# statistically auditable — free text alone cannot be classified. Stored as
+# String(50), configuration-driven style (no DB enum); the free-text reason
+# stays as the supplementary detail.
+LOCKED_ITEM_REMOVAL_CATEGORIES = (
+    "withdrawal",  # 退學/休學
+    "verification_failed",  # 學籍/帳戶驗證失敗
+    "duplicate",  # 重複造冊
+    "revoked",  # 獎學金遭撤銷
+    "admin_decision",  # 行政決定
+    "other",  # 其他（請於 reason 補充）
+)
+
+
+class RemoveLockedItemRequest(BaseModel):
+    """Body for DELETE /payment-rosters/{roster_id}/items/{item_id}"""
+
+    reason: Optional[str] = Field(None, max_length=500)
+    reason_category: Optional[Literal[LOCKED_ITEM_REMOVAL_CATEGORIES]] = Field(
+        None, description="結構化移除理由分類 (G26/#988)"
+    )
+
+
+class RestoreItemRequest(BaseModel):
+    """Body for POST /payment-rosters/{roster_id}/items/{item_id}/restore"""
+
+    reason_note: Optional[str] = Field(None, max_length=500)
+
+
+class RevokedSuspendedEntry(BaseModel):
+    """A single revoked- or suspended-allocation entry returned by
+    GET /payment-rosters/{roster_id}/revoked-suspended.
+
+    Field unification (intentional divergence from the spec's per-action
+    column names):
+        - `event_at` is populated from `Application.revoked_at` for entries
+          appearing in `revoked`, and from `Application.suspended_at` for
+          entries in `suspended`.
+        - `reason` is populated from `revoke_reason` / `suspend_reason`
+          symmetrically.
+        - `item_id` is the PaymentRosterItem.id (used by the LOCKED-roster
+          DELETE button in the frontend).
+    """
+
+    application_id: int
+    student_name: str
+    student_id_number: str
+    event_at: datetime
+    reason: Optional[str] = None
+    item_id: Optional[int] = None
+
+
+class RevokedSuspendedListResponse(BaseModel):
+    """Response body for GET /payment-rosters/{roster_id}/revoked-suspended"""
+
+    revoked: List[RevokedSuspendedEntry]
+    suspended: List[RevokedSuspendedEntry]
+
+
+class DistributionDiffEntry(BaseModel):
+    """One row in a roster↔distribution diff. Used for both add and remove sides."""
+
+    application_id: int
+    item_id: Optional[int] = None  # set only for to_remove rows (the PaymentRosterItem id)
+    student_id: Optional[str] = None  # 學號 (std_stdcode), display only
+    student_name: str
+    department_name: Optional[str] = None
+    college_name: Optional[str] = None
+    allocation_year: Optional[int] = None
+    allocated_sub_type: Optional[str] = None
+    application_identity: Optional[str] = None
+    scholarship_amount: float
+
+
+class DistributionDiff(BaseModel):
+    """Response for GET /payment-rosters/{roster_id}/distribution-diff."""
+
+    roster_id: int
+    roster_code: str
+    status: str
+    allocation_year: Optional[int] = None
+    sub_type: Optional[str] = None
+    to_add: List[DistributionDiffEntry]  # allocated in distribution, missing from roster
+    to_remove: List[DistributionDiffEntry]  # in roster, no longer allocated
+
+
+class ReconcileRequest(BaseModel):
+    """Body for POST /payment-rosters/{roster_id}/reconcile."""
+
+    add_application_ids: List[int] = Field(default_factory=list)
+    remove_item_ids: List[int] = Field(default_factory=list)
+    reason: Optional[str] = Field(None, max_length=500)
+
+
+class ReconcileResultEntry(BaseModel):
+    application_id: Optional[int] = None
+    item_id: Optional[int] = None
+    is_included: Optional[bool] = None
+    exclusion_reason: Optional[str] = None
+
+
+class ReconcileResult(BaseModel):
+    """Response for POST /payment-rosters/{roster_id}/reconcile."""
+
+    added: List[ReconcileResultEntry]
+    removed: List[ReconcileResultEntry]
+    qualified_count: int
+    total_applications: int
+    total_amount: float
+    excel_stale: bool
+
+
+class RegenerateRosterRequest(BaseModel):
+    """Body for POST /payment-rosters/{roster_id}/regenerate."""
+
+    student_verification_enabled: Optional[bool] = Field(
+        None,
+        description="本次是否重新驗證學籍（單次覆寫，不會寫回造冊設定）；未提供則沿用造冊原本的設定",
+    )
+
+
+class RegenerateRosterResult(BaseModel):
+    """Response for POST /payment-rosters/{roster_id}/regenerate."""
+
+    roster_id: int
+    roster_code: str
+    status: str
+    project_number: Optional[str] = None
+    rebuilt_items: int  # 重建成功的明細數
+    failed_items: int  # 重建失敗（資料不全）的申請數
+    preserved_exclusions: int  # 跨重建保留的人為排除數
+    newly_excluded: int  # 先前納入、依當下資料重新被排除的明細數
+    dropped_members: int  # 先前納入、如今整筆不在名單中的學生數
+    qualified_count: int
+    disqualified_count: int
+    total_applications: int
+    total_amount: float
+    excel_exported: bool
+    excel_stale: bool

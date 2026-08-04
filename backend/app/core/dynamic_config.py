@@ -118,28 +118,40 @@ class DynamicConfig:
         # Fall back to environment variable
         return getattr(settings, key)
 
-    async def get_bool(self, key: str, db: AsyncSession, default: Optional[bool] = None) -> bool:
-        """Get boolean configuration value."""
+    async def get_bool(self, key: str, db: AsyncSession, default: Optional[bool] = None) -> Optional[bool]:
+        """Get boolean configuration value. Returns None when key is missing
+        and default is None (instead of crashing on bool(None))."""
         value = await self.get(key, db, default)
+        if value is None:
+            return None
         if isinstance(value, bool):
             return value
         if isinstance(value, str):
             return value.lower() in ("true", "1", "yes", "on")
         return bool(value)
 
-    async def get_int(self, key: str, db: AsyncSession, default: Optional[int] = None) -> int:
-        """Get integer configuration value."""
+    async def get_int(self, key: str, db: AsyncSession, default: Optional[int] = None) -> Optional[int]:
+        """Get integer configuration value. Returns None when key is missing
+        and default is None (instead of crashing on int(None))."""
         value = await self.get(key, db, default)
+        if value is None:
+            return None
         return int(value)
 
-    async def get_float(self, key: str, db: AsyncSession, default: Optional[float] = None) -> float:
-        """Get float configuration value."""
+    async def get_float(self, key: str, db: AsyncSession, default: Optional[float] = None) -> Optional[float]:
+        """Get float configuration value. Returns None when key is missing
+        and default is None (instead of crashing on float(None))."""
         value = await self.get(key, db, default)
+        if value is None:
+            return None
         return float(value)
 
-    async def get_str(self, key: str, db: AsyncSession, default: Optional[str] = None) -> str:
-        """Get string configuration value."""
+    async def get_str(self, key: str, db: AsyncSession, default: Optional[str] = None) -> Optional[str]:
+        """Get string configuration value. Returns None when key is missing
+        and default is None (instead of returning the literal string 'None')."""
         value = await self.get(key, db, default)
+        if value is None:
+            return None
         return str(value)
 
     async def get_list(self, key: str, db: AsyncSession, separator: str = ",", default: Optional[list] = None) -> list:

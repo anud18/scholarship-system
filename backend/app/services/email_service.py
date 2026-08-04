@@ -9,10 +9,12 @@ from html.parser import HTMLParser
 from typing import List, Optional
 
 import aiosmtplib
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.dynamic_config import dynamic_config
+from app.core.metrics import email_sent_total
 from app.models.email_management import EmailCategory, EmailHistory, EmailStatus, EmailTestModeAudit, ScheduledEmail
 from app.services.system_setting_service import EmailTemplateService
 
@@ -111,13 +113,19 @@ class EmailService:
             return False, {}
 
         try:
-            # Get test mode configuration with row-level locking to prevent race conditions
             from sqlalchemy import select
 
             from app.models.system_setting import SystemSetting
 
-            # Use SELECT FOR UPDATE to lock the row while checking/updating
-            stmt = select(SystemSetting).where(SystemSetting.key == "email_test_mode").with_for_update()
+            # Plain read — NO row lock. This used to be SELECT ... FOR UPDATE,
+            # which kept the email_test_mode row locked for the whole open
+            # transaction — i.e. through a potentially 60-second SMTP send.
+            # Concurrent sends then blocked on this lock until their query
+            # timed out, which poisoned that session (PendingRollbackError on
+            # the next config read) and silently dropped the email WITHOUT an
+            # email_history row. The lock is only needed for the rare
+            # expiry-update, which takes it explicitly below.
+            stmt = select(SystemSetting).where(SystemSetting.key == "email_test_mode")
             result = await self.db.execute(stmt)
             config_row = result.scalar_one_or_none()
 
@@ -130,26 +138,45 @@ class EmailService:
             enabled = test_mode_config.get("enabled", False)
             expires_at_str = test_mode_config.get("expires_at")
 
-            # Check if expired (with row locked, only one request will update)
+            # Check if expired
             if enabled and expires_at_str:
                 expires_at = datetime.fromisoformat(expires_at_str)
                 if datetime.now(timezone.utc) > expires_at:
-                    # Auto-disable if expired
-                    test_mode_config["enabled"] = False
+                    # Auto-disable if expired. Re-select FOR UPDATE so only one
+                    # concurrent request performs the update; the lock is held
+                    # only for this short write, never across the SMTP send.
+                    locked = await self.db.execute(
+                        select(SystemSetting).where(SystemSetting.key == "email_test_mode").with_for_update()
+                    )
+                    locked_row = locked.scalar_one_or_none()
+                    if locked_row is not None:
+                        test_mode_config = (
+                            json.loads(locked_row.value) if isinstance(locked_row.value, str) else locked_row.value
+                        )
+                        if test_mode_config.get("enabled", False):
+                            test_mode_config["enabled"] = False
 
-                    # Log expiration event
-                    audit_log = EmailTestModeAudit.log_expired(test_mode_config)
-                    self.db.add(audit_log)
+                            # Log expiration event
+                            audit_log = EmailTestModeAudit.log_expired(test_mode_config)
+                            self.db.add(audit_log)
 
-                    # Update configuration
-                    config_row.value = json.dumps(test_mode_config)
-                    await self.db.commit()
+                            # Update configuration
+                            locked_row.value = json.dumps(test_mode_config)
+                            await self.db.commit()
                     enabled = False
 
             return enabled, test_mode_config
 
-        except Exception as e:
-            logger.error(f"Error checking test mode: {e}")
+        except Exception:
+            logger.exception("Error checking test mode")
+            # Un-poison the session: without this rollback a failed query here
+            # (e.g. a lock-wait timeout) left the transaction invalid, so EVERY
+            # subsequent query in this send raised PendingRollbackError and the
+            # email vanished without even a failed email_history row.
+            try:
+                await self.db.rollback()
+            except Exception:
+                logger.exception("Rollback after test-mode check failure also failed")
             return False, {}
 
     def _transform_recipients_for_test(
@@ -255,8 +282,8 @@ class EmailService:
             )
             self.db.add(audit_log)
             await self.db.commit()
-        except Exception as e:
-            logger.error(f"Failed to log test mode interception: {e}")
+        except Exception:
+            logger.exception("Failed to log test mode interception")
 
     async def send_email(
         self,
@@ -399,11 +426,25 @@ class EmailService:
         except Exception as e:
             status = EmailStatus.failed
             error_message = str(e)
-            logger.error("Failed to send email to %s: %s", primary_recipient, e)
+            logger.exception("Failed to send email to %s", primary_recipient)
             # Re-raise the exception so callers can handle it
             raise
 
         finally:
+            # Business metric: count every send attempt so the Scholarship
+            # System Overview dashboard's email panel reflects real traffic
+            # (issue #159). Category comes from caller-supplied metadata; we
+            # fall back to "uncategorized" so the counter is never skipped.
+            category_value = metadata.get("email_category")
+            if hasattr(category_value, "value"):
+                category_label = category_value.value
+            else:
+                category_label = category_value or "uncategorized"
+            email_sent_total.labels(
+                category=str(category_label),
+                status=(status.value if isinstance(status, EmailStatus) else str(status)),
+            ).inc()
+
             # Log email history if database session provided
             if db:
                 try:
@@ -469,8 +510,28 @@ class EmailService:
                 await audit_db.commit()
                 logger.debug(f"Email history logged for {recipient_email}")
 
-            except Exception as e:
-                logger.error("Failed to log email history: %s", e)
+            except IntegrityError:
+                # The referenced application/scholarship row can disappear
+                # between the send and this audit write (e.g. a delayed
+                # background send racing an application delete) — the FK
+                # violation must not erase the audit trail. Retry once with
+                # the references stripped.
+                await audit_db.rollback()
+                logger.warning(
+                    "Email history FK reference vanished for %s; retrying without application/scholarship refs",
+                    recipient_email,
+                )
+                try:
+                    history.application_id = None
+                    history.scholarship_type_id = None
+                    audit_db.add(history)
+                    await audit_db.commit()
+                except Exception:
+                    logger.exception("Failed to log email history (retry without refs)")
+                    await audit_db.rollback()
+
+            except Exception:
+                logger.exception("Failed to log email history")
                 await audit_db.rollback()
                 # Don't re-raise - audit logging failure shouldn't break email sending
 
@@ -608,8 +669,8 @@ class EmailService:
                 f"Sent React Email template '{template_name}' to {to if isinstance(to, str) else ', '.join(to)} (using fallback template loader)"
             )
 
-        except FileNotFoundError as e:
-            logger.error(f"React Email template not found: {template_name}. Error: {e}")
+        except FileNotFoundError:
+            logger.exception(f"React Email template not found: {template_name}. Error")
             logger.warning("Falling back to plain text email")
 
             # Fallback: send plain text email with minimal formatting
@@ -633,8 +694,8 @@ class EmailService:
                 **metadata,
             )
 
-        except Exception as e:
-            logger.error(f"Error sending React Email template '{template_name}': {e}")
+        except Exception:
+            logger.exception(f"Error sending React Email template '{template_name}'")
             raise
 
     async def schedule_email(

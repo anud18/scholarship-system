@@ -112,17 +112,17 @@ async def get_all_configurations(
         return {"success": True, "message": "Configurations retrieved successfully", "data": result}
 
     except SQLAlchemyError as e:
-        logger.error(f"Database error retrieving configurations: {str(e)}")
+        logger.exception("Database error retrieving configurations")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve configurations due to a database error.",
-        )
+        ) from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving configurations: {str(e)}")
+        logger.exception("Unexpected error retrieving configurations")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve configurations due to an unexpected error.",
-        )
+        ) from e
 
 
 @router.post("/configurations")
@@ -181,19 +181,19 @@ async def create_configuration(
         return {"success": True, "message": f"Configuration '{config.key}' created successfully", "data": response_data}
 
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except SQLAlchemyError as e:
-        logger.error(f"Database error creating configuration: {str(e)}")
+        logger.exception("Database error creating configuration")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create configuration due to a database error.",
-        )
+        ) from e
     except Exception as e:
-        logger.error(f"Unexpected error creating configuration: {str(e)}")
+        logger.exception("Unexpected error creating configuration")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create configuration due to an unexpected error.",
-        )
+        ) from e
 
 
 @router.put("/configurations/bulk")
@@ -278,17 +278,17 @@ async def bulk_update_configurations(
     except HTTPException:
         raise
     except SQLAlchemyError as e:
-        logger.error(f"Database error in bulk configuration update: {str(e)}")
+        logger.exception("Database error in bulk configuration update")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update configurations due to a database error.",
-        )
+        ) from e
     except Exception as e:
-        logger.error(f"Unexpected error in bulk configuration update: {str(e)}")
+        logger.exception("Unexpected error in bulk configuration update")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update configurations due to an unexpected error.",
-        )
+        ) from e
 
 
 @router.post("/configurations/validate")
@@ -332,11 +332,11 @@ async def validate_configuration(
         return {"success": True, "message": "Validation completed", "data": result}
 
     except Exception as e:
-        logger.error(f"Unexpected error validating configuration: {str(e)}")
+        logger.exception("Unexpected error validating configuration")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to validate configuration due to an unexpected error.",
-        )
+        ) from e
 
 
 @router.delete("/configurations/{key}")
@@ -358,16 +358,16 @@ async def delete_configuration(
         return {"success": True, "message": f"Configuration '{key}' deleted successfully", "data": key}
 
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except SQLAlchemyError as e:
-        logger.error(f"Database error deleting configuration: {str(e)}")
+        logger.exception("Database error deleting configuration")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete configuration due to a database error.",
-        )
+        ) from e
     except Exception as e:
-        logger.error(f"Unexpected error deleting configuration: {str(e)}")
+        logger.exception("Unexpected error deleting configuration")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete configuration due to an unexpected error.",
-        )
+        ) from e

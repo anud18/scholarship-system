@@ -37,6 +37,7 @@ class RosterSchedulerService:
         # 設定Redis作為Job Store
         # Parse REDIS_URL: redis://:password@host:port/db
         from urllib.parse import urlparse
+
         parsed = urlparse(settings.redis_url)
         redis_password = parsed.password if parsed.password else None
         redis_host = parsed.hostname if parsed.hostname else "redis"
@@ -101,8 +102,8 @@ class RosterSchedulerService:
 
                 logger.info("Loaded %s active schedules", len(schedules))
 
-        except Exception as e:
-            logger.error(f"Failed to load active schedules: {e}")
+        except Exception:
+            logger.exception("Failed to load active schedules")
 
     async def _add_schedule_job(self, schedule_data: Dict):
         """添加排程作業"""
@@ -139,8 +140,8 @@ class RosterSchedulerService:
 
             logger.info(f"Added schedule job: {job_id} with cron: {cron_expression}")
 
-        except Exception as e:
-            logger.error(f"Failed to add schedule job: {e}")
+        except Exception:
+            logger.exception("Failed to add schedule job")
 
     def _parse_cron_expression(self, cron_expr: str) -> Dict[str, Any]:
         """解析Cron表達式為APScheduler參數"""
@@ -183,15 +184,15 @@ class RosterSchedulerService:
 
         except Exception as e:
             error_message = str(e)
-            logger.error(f"Roster generation failed for schedule {schedule_id}: {e}")
+            logger.exception(f"Roster generation failed for schedule {schedule_id}")
 
         finally:
             # 更新排程執行結果
             try:
                 async with get_db_session() as db:
                     await self._update_schedule_execution_result(db, schedule_id, success, error_message)
-            except Exception as e:
-                logger.error(f"Failed to update schedule execution result: {e}")
+            except Exception:
+                logger.exception("Failed to update schedule execution result")
 
     async def _update_schedule_execution_start(self, db, schedule_id: int):
         """更新排程開始執行"""
@@ -360,8 +361,8 @@ class RosterSchedulerService:
 
             return True
 
-        except Exception as e:
-            logger.error(f"Failed to add schedule: {e}")
+        except Exception:
+            logger.exception("Failed to add schedule")
             return False
 
     async def remove_schedule(self, schedule_id: int) -> bool:
@@ -375,8 +376,8 @@ class RosterSchedulerService:
 
             return True
 
-        except Exception as e:
-            logger.error(f"Failed to remove schedule: {e}")
+        except Exception:
+            logger.exception("Failed to remove schedule")
             return False
 
     async def pause_schedule(self, schedule_id: int) -> bool:
@@ -390,8 +391,8 @@ class RosterSchedulerService:
 
             return True
 
-        except Exception as e:
-            logger.error(f"Failed to pause schedule: {e}")
+        except Exception:
+            logger.exception("Failed to pause schedule")
             return False
 
     async def resume_schedule(self, schedule_id: int) -> bool:
@@ -405,8 +406,8 @@ class RosterSchedulerService:
 
             return True
 
-        except Exception as e:
-            logger.error(f"Failed to resume schedule: {e}")
+        except Exception:
+            logger.exception("Failed to resume schedule")
             return False
 
     def get_schedule_status(self, schedule_id: int) -> Optional[Dict]:
@@ -425,8 +426,8 @@ class RosterSchedulerService:
 
             return None
 
-        except Exception as e:
-            logger.error(f"Failed to get schedule status: {e}")
+        except Exception:
+            logger.exception("Failed to get schedule status")
             return None
 
     def list_all_jobs(self) -> List[Dict]:
@@ -445,8 +446,8 @@ class RosterSchedulerService:
                 )
             return jobs
 
-        except Exception as e:
-            logger.error(f"Failed to list jobs: {e}")
+        except Exception:
+            logger.exception("Failed to list jobs")
             return []
 
     def _job_executed_listener(self, event):
@@ -455,7 +456,11 @@ class RosterSchedulerService:
 
     def _job_error_listener(self, event):
         """作業執行錯誤監聽器"""
-        logger.error(f"Job {event.job_id} failed: {event.exception}")
+        logger.error(
+            "Job %s failed",
+            event.job_id,
+            exc_info=event.exception,
+        )
 
     def _job_missed_listener(self, event):
         """作業錯過執行監聽器"""
@@ -488,8 +493,8 @@ async def cleanup_expired_batch_data():
                 logger.info(f"Cleaned up expired data from {count} batch imports")
             else:
                 logger.debug("No expired batch import data to clean up")
-    except Exception as e:
-        logger.error(f"Failed to cleanup expired batch data: {e}")
+    except Exception:
+        logger.exception("Failed to cleanup expired batch data")
 
 
 async def init_scheduler():
@@ -508,8 +513,8 @@ async def init_scheduler():
             name="Batch Import Data Cleanup",
         )
         logger.info("Added batch import cleanup job (runs daily at 2 AM)")
-    except Exception as e:
-        logger.error(f"Failed to add batch import cleanup job: {e}")
+    except Exception:
+        logger.exception("Failed to add batch import cleanup job")
 
     # Add deadline checker job (runs at 9 AM daily)
     try:
@@ -525,8 +530,8 @@ async def init_scheduler():
             name="Deadline Checker",
         )
         logger.info("Added deadline checker job (runs daily at 9 AM)")
-    except Exception as e:
-        logger.error(f"Failed to add deadline checker job: {e}")
+    except Exception:
+        logger.exception("Failed to add deadline checker job")
 
     # Add email processor job with configurable interval
     # Note: The job itself has startup delay protection (see email_processor.py)
@@ -545,9 +550,11 @@ async def init_scheduler():
                     logger.info(f"Email processor interval configured to {interval_seconds} seconds")
                 else:
                     logger.info(f"Using default email processor interval: {interval_seconds} seconds")
-        except Exception as e:
+        except Exception:
             logger.warning(
-                f"Failed to read email processor interval from settings, using default {interval_seconds}s: {e}"
+                "Failed to read email processor interval from settings, using default %ss",
+                interval_seconds,
+                exc_info=True,
             )
 
         roster_scheduler.scheduler.add_job(
@@ -559,8 +566,8 @@ async def init_scheduler():
             name="Email Processor",
         )
         logger.info(f"Added email processor job (runs every {interval_seconds} seconds with startup protection)")
-    except Exception as e:
-        logger.error(f"Failed to add email processor job: {e}")
+    except Exception:
+        logger.exception("Failed to add email processor job")
 
 
 async def shutdown_scheduler():

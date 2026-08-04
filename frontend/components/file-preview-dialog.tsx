@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Eye, FileText } from "lucide-react";
 import { Locale } from "@/lib/validators";
+import { getTranslation } from "@/lib/i18n";
+import { triggerFileDownload } from "@/lib/utils/download";
 
 interface FilePreviewDialogProps {
   isOpen: boolean;
@@ -32,11 +34,22 @@ export function FilePreviewDialog({
   locale,
 }: FilePreviewDialogProps) {
   const [isLoading, setIsLoading] = useState(true);
+  const t = (k: string) => getTranslation(locale, k);
 
-  // Reset loading state when dialog opens or file changes
+  // Reset loading state when dialog opens or file changes.
+  //
+  // The skeleton overlay is gated on `isLoading`, and `isLoading` is otherwise
+  // only cleared by the iframe's onLoad/onError. That is reliable for images
+  // (<img> fires onLoad), but Chrome's built-in PDF viewer frequently NEVER
+  // fires the iframe load event — which left the skeleton covering an
+  // opacity-0 iframe forever, so a PDF preview showed a permanent "loading…"
+  // even though the proxy returned the file (HTTP 200). Fall back to clearing
+  // the loading state on a short timer so the preview always becomes visible.
   useEffect(() => {
     if (isOpen && file) {
       setIsLoading(true);
+      const fallback = setTimeout(() => setIsLoading(false), 1500);
+      return () => clearTimeout(fallback);
     }
   }, [isOpen, file?.url]);
 
@@ -55,16 +68,7 @@ export function FilePreviewDialog({
     if (!file) return;
 
     // 如果有專門的下載URL，使用它；否則使用預覽URL
-    const downloadUrl = file.downloadUrl || file.url;
-
-    // 創建一個隱藏的 a 標籤來下載文件
-    const link = document.createElement("a");
-    link.href = downloadUrl;
-    link.download = file.filename;
-    link.target = "_blank";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    triggerFileDownload(file.downloadUrl || file.url, file.filename);
   };
 
   if (!file) return null;
@@ -73,9 +77,7 @@ export function FilePreviewDialog({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
         <DialogHeader>
-          <DialogTitle>
-            {locale === "zh" ? "文件預覽" : "File Preview"}
-          </DialogTitle>
+          <DialogTitle>{t("dialogs.preview.title")}</DialogTitle>
           <DialogDescription>{file.filename}</DialogDescription>
         </DialogHeader>
 
@@ -98,7 +100,7 @@ export function FilePreviewDialog({
                       <Skeleton className="h-6 w-[92%]" />
                     </div>
                     <p className="text-sm text-muted-foreground text-center pt-4">
-                      {locale === "zh" ? "載入中..." : "Loading..."}
+                      {t("dialogs.preview.loading")}
                     </p>
                   </div>
                 </div>
@@ -136,13 +138,11 @@ export function FilePreviewDialog({
               <FileText className="h-16 w-16 text-muted-foreground mb-4" />
               <p className="text-lg font-medium mb-2">{file.filename}</p>
               <p className="text-sm text-muted-foreground mb-4">
-                {locale === "zh"
-                  ? "此文件類型無法預覽"
-                  : "This file type cannot be previewed"}
+                {t("dialogs.preview.cannot_preview")}
               </p>
               <Button onClick={handleOpenInNewWindow} variant="outline">
                 <Eye className="h-4 w-4 mr-2" />
-                {locale === "zh" ? "在新視窗開啟" : "Open in New Window"}
+                {t("dialogs.preview.open_in_new_window")}
               </Button>
             </div>
           )}
@@ -151,15 +151,15 @@ export function FilePreviewDialog({
             <div className="flex gap-2">
               <Button variant="outline" onClick={handleOpenInNewWindow}>
                 <Eye className="h-4 w-4 mr-2" />
-                {locale === "zh" ? "在新視窗開啟" : "Open in New Window"}
+                {t("dialogs.preview.open_in_new_window")}
               </Button>
               <Button variant="outline" onClick={handleDownload}>
                 <FileText className="h-4 w-4 mr-2" />
-                {locale === "zh" ? "下載" : "Download"}
+                {t("dialogs.preview.download")}
               </Button>
             </div>
             <Button variant="outline" onClick={onClose}>
-              {locale === "zh" ? "關閉" : "Close"}
+              {t("dialogs.preview.close")}
             </Button>
           </div>
         </div>

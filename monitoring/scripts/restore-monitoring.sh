@@ -317,15 +317,6 @@ if [ -z "$TEST_MODE" ]; then
         ((ERRORS++))
     fi
 
-    # Check AlertManager
-    print_info "Checking AlertManager..."
-    if curl -sf http://localhost:9093/-/healthy > /dev/null 2>&1; then
-        print_success "AlertManager is healthy"
-    else
-        print_error "AlertManager health check failed"
-        ((ERRORS++))
-    fi
-
     echo ""
     if [ "$ERRORS" -eq 0 ]; then
         print_success "All services are healthy!"

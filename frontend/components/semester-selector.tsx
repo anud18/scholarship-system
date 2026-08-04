@@ -1,3 +1,4 @@
+import { logger } from "@/lib/utils/logger";
 /**
  * 學期選擇器組件 - 提供學年學期的 dropdown 選擇功能
  */
@@ -36,7 +37,22 @@ interface CombinationOption {
   label_en: string;
   is_current: boolean;
   application_count?: number;
+  cycle?: "semester" | "yearly";
 }
+
+// Internal state shape — never read externally, only set as a side-effect of
+// the period-loading branches. Tracks either the cycle-aware payload from
+// scholarship-configurations or the raw values from reference-data.
+type CurrentInfoState =
+  | {
+      current_period?: string | null;
+      cycle?: "semester" | "yearly";
+    }
+  | {
+      current_academic_year?: number;
+      current_semester?: string;
+    }
+  | null;
 
 interface SemesterSelectorProps {
   /** 選擇模式：separate（分別選擇學年和學期）、combined（組合選擇）、auto（根據獎學金制度自動選擇） */
@@ -96,7 +112,8 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
   const [academicYears, setAcademicYears] = useState<AcademicYearOption[]>([]);
   const [semesters, setSemesters] = useState<SemesterOption[]>([]);
   const [combinations, setCombinations] = useState<CombinationOption[]>([]);
-  const [currentInfo, setCurrentInfo] = useState<any>(null);
+  const [currentInfo, setCurrentInfo] = useState<CurrentInfoState>(null);
+  void currentInfo;
 
   // 載入根據獎學金制度的適當資料
   const loadScholarshipBasedData = async () => {
@@ -107,17 +124,13 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
 
       if (activePeriodsOnly) {
         // 獲取有實際申請資料的學期
-        const url = `/api/v1/reference-data/active-academic-periods`;
-        const response = await fetch(url);
-        if (!response.ok)
-          throw new Error("Failed to fetch active academic periods");
-
-        const data = await response.json();
-        setCombinations(data.active_periods || []);
+        const response = await apiClient.referenceData.getActiveAcademicPeriods();
+        const activeData = response.data as { active_periods?: CombinationOption[]; current_period?: string } | undefined;
+        setCombinations(activeData?.active_periods || []);
         setDetectedCycle("semester");
         setActualMode("combined");
         setCurrentInfo({
-          current_period: data.current_period,
+          current_period: activeData?.current_period,
           cycle: "semester",
         });
       } else {
@@ -134,7 +147,7 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
           const currentSemester = currentMonth >= 8 ? "first" : "second";
 
           // 轉換 API 回傳的期間格式為組件需要的格式
-          const configuredPeriods = result.data.map((period: string) => {
+          const configuredPeriods: CombinationOption[] = result.data.map((period: string) => {
             if (period.includes("-")) {
               // 學期制：格式如 "114-1", "114-2"
               const [year, sem] = period.split("-");
@@ -150,7 +163,7 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
                 label: `${academicYear}學年${semesterLabel}`,
                 label_en: `Academic Year ${academicYear + 1911}-${academicYear + 1912} ${sem === "1" ? "First" : "Second"} Semester`,
                 is_current: isCurrent,
-                cycle: "semester",
+                cycle: "semester" as const,
               };
             } else {
               // 學年制：格式如 "114"
@@ -164,7 +177,7 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
                 label: `${academicYear}學年`,
                 label_en: `Academic Year ${academicYear + 1911}-${academicYear + 1912}`,
                 is_current: isCurrent,
-                cycle: "yearly",
+                cycle: "yearly" as const,
               };
             }
           });
@@ -173,10 +186,10 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
 
           // 根據配置的期間類型決定顯示模式
           const hasSemesterPeriods = configuredPeriods.some(
-            (p: any) => p.cycle === "semester"
+            (p: CombinationOption) => p.cycle === "semester"
           );
           const hasYearlyPeriods = configuredPeriods.some(
-            (p: any) => p.cycle === "yearly"
+            (p: CombinationOption) => p.cycle === "yearly"
           );
 
           if (hasYearlyPeriods && !hasSemesterPeriods) {
@@ -189,7 +202,7 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
 
           setCurrentInfo({
             current_period:
-              configuredPeriods.find((p: any) => p.is_current)?.value || null,
+              configuredPeriods.find((p: CombinationOption) => p.is_current)?.value || null,
             cycle:
               hasYearlyPeriods && !hasSemesterPeriods ? "yearly" : "semester",
           });
@@ -201,7 +214,7 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
         }
       }
     } catch (error) {
-      console.error("Error loading scholarship period data:", error);
+      logger.error("Error loading scholarship period data", { error: error });
       // 發生錯誤時顯示空列表
       setCombinations([]);
       setDetectedCycle("semester");
@@ -215,21 +228,17 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
   const loadBasicData = async () => {
     try {
       setLoading(true);
-      const response = await fetch(
-        `/api/v1/reference-data/semesters`
-      );
-      if (!response.ok) throw new Error("Failed to fetch semester data");
-
-      const data = await response.json();
-      setAcademicYears(data.academic_years || []);
-      setSemesters(data.semesters || []);
+      const response = await apiClient.referenceData.getSemesters();
+      const semesterData = response.data as { academic_years?: AcademicYearOption[]; semesters?: SemesterOption[]; current_academic_year?: number; current_semester?: string } | undefined;
+      setAcademicYears(semesterData?.academic_years || []);
+      setSemesters(semesterData?.semesters || []);
       setCurrentInfo({
-        current_academic_year: data.current_academic_year,
-        current_semester: data.current_semester,
+        current_academic_year: semesterData?.current_academic_year,
+        current_semester: semesterData?.current_semester,
       });
       setActualMode("separate");
     } catch (error) {
-      console.error("Error loading semester data:", error);
+      logger.error("Error loading semester data", { error: error });
     } finally {
       setLoading(false);
     }
@@ -294,14 +303,14 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
 
         setCombinations(combinationOptions);
       } else {
-        console.error(
+        logger.error(
           "Failed to fetch available combinations:",
           response.message
         );
         setCombinations([]);
       }
     } catch (error) {
-      console.error("Error loading combination data:", error);
+      logger.error("Error loading combination data", { error: error });
       setCombinations([]);
     } finally {
       setLoading(false);

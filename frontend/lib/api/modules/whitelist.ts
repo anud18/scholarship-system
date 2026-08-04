@@ -50,7 +50,7 @@ export function createWhitelistApi() {
         params: {
           path: { id: configurationId },
           ...(params && { query: params }),
-        } as any,
+        } as never,
       });
       return toApiResponse<WhitelistResponse[]>(response);
     },
@@ -75,7 +75,7 @@ export function createWhitelistApi() {
     > => {
       const response = await typedClient.raw.POST('/api/v1/scholarship-configurations/{id}/whitelist/batch', {
         params: { path: { id: configurationId } },
-        body: request as any, // OpenAPI schema bug: shows Record<string, never>[] instead of proper student type
+        body: request as never, // OpenAPI schema bug: shows Record<string, never>[] instead of proper student type
       });
       return toApiResponse<{
         success_count: number;

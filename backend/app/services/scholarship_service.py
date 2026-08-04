@@ -14,7 +14,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 # Student model removed - student data now fetched from external API
-from app.core.config import DEV_SCHOLARSHIP_SETTINGS, settings
 
 # Import comprehensive scholarship system models
 from app.models.application import Application, ApplicationStatus, ReviewStatus
@@ -39,21 +38,9 @@ class ScholarshipService:
             else:
                 logger.warning(f"Unexpected GPA type: {type(gpa)}, value: {gpa}")
                 return Decimal("0.0")
-        except Exception as e:
-            logger.error(f"Error converting GPA '{gpa}' to Decimal: {e}")
+        except Exception:
+            logger.exception(f"Error converting GPA '{gpa}' to Decimal")
             return Decimal("0.0")
-
-    def _is_dev_mode(self) -> bool:
-        """Check if running in development mode"""
-        return settings.debug or settings.environment == "development"
-
-    def _should_bypass_application_period(self) -> bool:
-        """Check if should bypass application period in dev mode"""
-        return self._is_dev_mode() and DEV_SCHOLARSHIP_SETTINGS.get("ALWAYS_OPEN_APPLICATION", False)
-
-    def _should_bypass_whitelist(self) -> bool:
-        """Check if should bypass whitelist in dev mode"""
-        return self._is_dev_mode() and DEV_SCHOLARSHIP_SETTINGS.get("BYPASS_WHITELIST", False)
 
     async def get_eligible_scholarships(
         self, student_data: Dict[str, Any], user_id: Optional[int] = None
@@ -79,9 +66,12 @@ class ScholarshipService:
         }
 
         for config in active_configs:
-            # First filter by application period - only show scholarships within their application period
-            if not self._should_bypass_application_period() and not config.is_application_period:
-                continue
+            # NOTE: We intentionally do NOT filter by application period here.
+            # active_configs already contains only *effective* (生效) configs, and
+            # effective scholarships must remain visible to students after the
+            # application deadline (as view-only). The current period status is
+            # surfaced via the `is_application_period` flag below; the apply/submit
+            # flow enforces the deadline separately (check_student_eligibility).
 
             # Determine which student API type is required for this configuration
             required_api_type = await eligibility_service.determine_required_student_api_type(config)
@@ -121,7 +111,7 @@ class ScholarshipService:
                                 }
                                 student_data_cache["student_term"][cache_key] = current_student_data
                         except Exception as e:
-                            logger.warning(f"Student term API unavailable, continuing with basic data: {e}")
+                            logger.warning("Student term API unavailable, continuing with basic data", exc_info=True)
                             # Mark term data as API error (system issue)
                             current_student_data = {
                                 **student_data,
@@ -149,14 +139,16 @@ class ScholarshipService:
                 eligibility_details,
             ) = await eligibility_service.get_detailed_eligibility_check(current_student_data, config, user_id)
 
-            # Always get application status if user_id is provided, regardless of eligibility
-            application_status = {}
-            if user_id:
-                application_status = await eligibility_service.get_application_status(user_id, config)
-
             if is_eligible:
                 # Build scholarship response with configuration data
                 scholarship_type = config.scholarship_type
+
+                # Whether the student already has a submitted-and-beyond
+                # application for this configuration → hides it from the apply
+                # flow (see spec). Computed only for eligible configs.
+                already_submitted = False
+                if user_id:
+                    already_submitted = await eligibility_service.has_blocking_application(user_id, config)
 
                 # Filter sub_type_list based on student eligibility
                 (
@@ -202,6 +194,8 @@ class ScholarshipService:
                     "college_review_end": config.college_review_end,
                     "requires_professor_recommendation": config.requires_professor_recommendation,
                     "requires_college_review": config.requires_college_review,
+                    "renewal_requires_professor_review": config.renewal_requires_professor_review,
+                    "renewal_requires_college_review": config.renewal_requires_college_review,
                     "requires_interview": getattr(config, "requires_interview", False),
                     "requires_research_proposal": getattr(config, "requires_research_proposal", False),
                     # Eligibility info
@@ -209,6 +203,8 @@ class ScholarshipService:
                     "whitelist_student_ids": config.whitelist_student_ids or {},
                     # Terms document
                     "terms_document_url": scholarship_type.terms_document_url,
+                    "application_document_note": scholarship_type.application_document_note,
+                    "application_document_note_en": scholarship_type.application_document_note_en,
                     # System data
                     "created_at": scholarship_type.created_at,
                     "config_version": config.version,
@@ -229,12 +225,12 @@ class ScholarshipService:
                         "passed": eligibility_details.get("passed", []),
                         "warnings": eligibility_details.get("warnings", []),
                         "errors": eligibility_details.get("errors", []),
-                        # Add application status information
-                        "application_status": application_status.get("application_status"),
-                        "can_apply": application_status.get("can_apply", True),
-                        "status_display": application_status.get("status_display", "可申請"),
-                        "has_application": application_status.get("has_application", False),
-                        "application_id": application_status.get("application_id"),
+                        # Hide already-submitted scholarships from the apply flow
+                        "already_submitted": already_submitted,
+                        # Whether the scholarship is currently accepting applications.
+                        # False for effective-but-closed (生效但已截止) scholarships, which
+                        # are shown read-only and cannot be applied to.
+                        "is_application_period": eligibility_details.get("is_application_period", True),
                     }
                 )
 
@@ -594,7 +590,7 @@ class ScholarshipApplicationService:
     def _validate_application_documents(self, application: "Application") -> Tuple[bool, str]:
         """Validate that all required documents are uploaded"""
 
-        required_docs = application.scholarship_type.required_documents or []
+        required_docs = application.scholarship_type_ref.required_documents or []
         uploaded_docs = [f.document_type for f in application.files if f.document_type]
 
         missing_docs = []

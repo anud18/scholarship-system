@@ -29,3 +29,7 @@ next-env.d.ts
 
 # react-email exports
 /public/email-templates
+
+# pdf.js worker — copied from node_modules by `npm run copy-pdf-worker`
+# (postinstall/predev/prebuild). Regenerated; do not commit.
+/public/pdf.worker.min.mjs

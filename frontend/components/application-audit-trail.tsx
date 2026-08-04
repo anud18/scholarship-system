@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { logger } from "@/lib/utils/logger";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -44,7 +45,7 @@ export function ApplicationAuditTrail({
       }
     } catch (err) {
       setError("Error loading audit trail");
-      console.error("Failed to fetch audit trail:", err);
+      logger.error("Failed to fetch audit trail", { err: err });
     } finally {
       setIsLoading(false);
     }

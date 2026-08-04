@@ -180,15 +180,6 @@ class User(Base):
 
         return False
 
-    def get_accessible_student_ids(self, permission: str = "view_applications") -> list[int]:
-        """Get list of student IDs this professor can access"""
-        if not self.is_professor():
-            return []
-
-        return [
-            rel.student_id for rel in self.professor_relationships if rel.is_active and rel.has_permission(permission)
-        ]
-
     def is_advisor_of(self, student_id: int) -> bool:
         """Check if this professor is an advisor of the specified student"""
         if not self.is_professor():

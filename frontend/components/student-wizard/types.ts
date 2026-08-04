@@ -16,7 +16,6 @@ export interface WizardState {
   steps: WizardStep[];
   agreedToTerms: boolean;
   studentDataConfirmed: boolean;
-  personalInfoCompleted: boolean;
 }
 
 export interface WizardContextType extends WizardState {
@@ -26,6 +25,5 @@ export interface WizardContextType extends WizardState {
   markStepCompleted: (stepId: string) => void;
   setAgreedToTerms: (agreed: boolean) => void;
   setStudentDataConfirmed: (confirmed: boolean) => void;
-  setPersonalInfoCompleted: (completed: boolean) => void;
   canProceedToNext: () => boolean;
 }

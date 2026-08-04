@@ -38,6 +38,12 @@ type ScheduledEmailParams = {
 };
 
 type PaginatedEmailResponse = {
+  // intentionally `any[]` — same paginated response wraps several distinct
+  // row shapes (EmailHistoryItem, ScheduledEmailItem, audit-log row, …) that
+  // are declared per-consumer. Narrowing here breaks `setEmailHistory(items)`
+  // / `setScheduledEmails(items)` / `setAuditLogs(items)` at every caller.
+  // See PR #674 commit-history for the reverted attempt.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   items: any[];
   total: number;
   skip: number;
@@ -69,8 +75,13 @@ type TestModeAuditLog = {
   event_type: string;
   timestamp: string;
   user_id: number | null;
-  config_before: any;
-  config_after: any;
+  // Test-mode audit captures the test-mode config snapshot before and after
+  // a toggle / mutation. The shape is the live TestModeStatus dict plus
+  // historical fields (redirect_count, etc.), which is what
+  // email-test-mode-panel renders. Narrow to dictionary access; consumers
+  // already type the field as `Record<string, unknown> | null`.
+  config_before: Record<string, unknown> | null;
+  config_after: Record<string, unknown> | null;
   original_recipient: string | null;
   actual_recipient: string | null;
   email_subject: string | null;
@@ -84,6 +95,51 @@ type SimpleTestEmailParams = {
   body: string;
 };
 
+
+/**
+ * React Email template (file-based, mirrors react-email-template-viewer.tsx).
+ */
+export interface ReactEmailTemplate {
+  name: string;
+  display_name: string;
+  description: string;
+  category: string;
+  file_path: string;
+  variables: Array<{
+    name: string;
+    description: string;
+    type: string;
+    default_value?: string;
+  }>;
+  last_modified: string;
+  file_size: number;
+}
+
+/**
+ * Source code payload returned by getReactEmailTemplateSource.
+ */
+export interface ReactEmailTemplateSource {
+  source: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Database-backed email template (text-template-editor consumer).
+ */
+export interface EmailTemplate {
+  id: number;
+  template_key: string;
+  template_name: string;
+  subject_template: string;
+  body_template: string;
+  category: string;
+  variables: string[];
+  is_active: boolean;
+  description?: string;
+}
+
+export type EmailTemplateUpdatePayload = Partial<Omit<EmailTemplate, "id">>;
+
 export function createEmailManagementApi() {
   return {
     /**
@@ -94,7 +150,7 @@ export function createEmailManagementApi() {
       params?: EmailHistoryParams
     ): Promise<ApiResponse<PaginatedEmailResponse>> => {
       const response = await typedClient.raw.GET('/api/v1/email-management/history', {
-        params: { query: params as any },
+        params: { query: params as never },
       });
       return toApiResponse<PaginatedEmailResponse>(response);
     },
@@ -107,7 +163,7 @@ export function createEmailManagementApi() {
       params?: ScheduledEmailParams
     ): Promise<ApiResponse<PaginatedEmailResponse>> => {
       const response = await typedClient.raw.GET('/api/v1/email-management/scheduled', {
-        params: { query: params as any },
+        params: { query: params as never },
       });
       return toApiResponse<PaginatedEmailResponse>(response);
     },
@@ -118,7 +174,7 @@ export function createEmailManagementApi() {
      */
     getDueScheduledEmails: async (
       limit?: number
-    ): Promise<ApiResponse<any[]>> => {
+    ): Promise<ApiResponse<unknown[]>> => {
       const response = await typedClient.raw.GET('/api/v1/email-management/scheduled/due', {
         params: { query: { limit } },
       });
@@ -132,7 +188,7 @@ export function createEmailManagementApi() {
     approveScheduledEmail: async (
       emailId: number,
       approvalNotes?: string
-    ): Promise<ApiResponse<any>> => {
+    ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.PATCH('/api/v1/email-management/scheduled/{email_id}/approve', {
         params: { path: { email_id: emailId } },
         body: {
@@ -148,7 +204,7 @@ export function createEmailManagementApi() {
      */
     cancelScheduledEmail: async (
       emailId: number
-    ): Promise<ApiResponse<any>> => {
+    ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.PATCH('/api/v1/email-management/scheduled/{email_id}/cancel', {
         params: { path: { email_id: emailId } },
       });
@@ -162,7 +218,7 @@ export function createEmailManagementApi() {
     updateScheduledEmail: async (
       emailId: number,
       data: { subject: string; body: string }
-    ): Promise<ApiResponse<any>> => {
+    ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.PATCH('/api/v1/email-management/scheduled/{email_id}', {
         params: { path: { email_id: emailId } },
         body: data,
@@ -292,7 +348,7 @@ export function createEmailManagementApi() {
      * Get all React Email templates
      * NOTE: Using base client until OpenAPI schema is regenerated
      */
-    getReactEmailTemplates: async (): Promise<ApiResponse<any[]>> => {
+    getReactEmailTemplates: async (): Promise<ApiResponse<ReactEmailTemplate[]>> => {
       const { ApiClient } = await import('../client');
       const client = new ApiClient();
       return client.request('/email-management/react-email-templates', {
@@ -304,7 +360,7 @@ export function createEmailManagementApi() {
      * Get specific React Email template
      * NOTE: Using base client until OpenAPI schema is regenerated
      */
-    getReactEmailTemplate: async (templateName: string): Promise<ApiResponse<any>> => {
+    getReactEmailTemplate: async (templateName: string): Promise<ApiResponse<ReactEmailTemplate>> => {
       const { ApiClient } = await import('../client');
       const client = new ApiClient();
       return client.request(`/email-management/react-email-templates/${templateName}`, {
@@ -316,7 +372,7 @@ export function createEmailManagementApi() {
      * Get React Email template source code
      * NOTE: Using base client until OpenAPI schema is regenerated
      */
-    getReactEmailTemplateSource: async (templateName: string): Promise<ApiResponse<any>> => {
+    getReactEmailTemplateSource: async (templateName: string): Promise<ApiResponse<ReactEmailTemplateSource>> => {
       const { ApiClient } = await import('../client');
       const client = new ApiClient();
       return client.request(`/email-management/react-email-templates/${templateName}/source`, {
@@ -328,7 +384,7 @@ export function createEmailManagementApi() {
      * Get all email templates (database templates)
      * NOTE: Using base client until OpenAPI schema is regenerated
      */
-    getEmailTemplates: async (): Promise<ApiResponse<any[]>> => {
+    getEmailTemplates: async (): Promise<ApiResponse<EmailTemplate[]>> => {
       const { ApiClient } = await import('../client');
       const client = new ApiClient();
       return client.request('/email-management/templates', {
@@ -340,7 +396,7 @@ export function createEmailManagementApi() {
      * Update email template (database template)
      * NOTE: Using base client until OpenAPI schema is regenerated
      */
-    updateEmailTemplate: async (templateId: number, data: any): Promise<ApiResponse<any>> => {
+    updateEmailTemplate: async (templateId: number, data: EmailTemplateUpdatePayload): Promise<ApiResponse<EmailTemplate>> => {
       const { ApiClient } = await import('../client');
       const client = new ApiClient();
       return client.request(`/email-management/templates/${templateId}`, {

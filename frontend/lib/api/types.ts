@@ -43,6 +43,8 @@ export interface User {
   status?: "在學" | "畢業" | "在職" | "退休";
   dept_code?: string;
   dept_name?: string;
+  college_code?: string;
+  college_name?: string;
   comment?: string;
   last_login_at?: string;
   created_at: string;
@@ -50,7 +52,7 @@ export interface User {
   raw_data?: {
     chinese_name?: string;
     english_name?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   // Backward compatibility fields
   username?: string; // Maps to nycu_id
@@ -107,6 +109,7 @@ export type ApplicationStatus =
   | "returned"
   | "withdrawn"
   | "cancelled"
+  | "cancelled_by_challenge"
   | "pending"
   | "completed"
   | "deleted";
@@ -121,7 +124,20 @@ export interface Application {
   scholarship_type: string;
   scholarship_type_zh?: string;
   status: ApplicationStatus;
+  /** Workflow position (ReviewStage). Load-bearing for the student progress
+   *  timeline: the final step keys off it, since an application that passes
+   *  review but misses the quota cut keeps its original `status` and only
+   *  advances `review_stage` to `quota_distributed`. */
+  review_stage?: string;
   is_renewal?: boolean;
+  /** 續領年份 (民國年，如 113)；批次匯入指定或承接自前一申請 */
+  renewal_year?: number | null;
+  /** 承接的前一份核可申請 ID（續領申請填） */
+  previous_application_id?: number | null;
+  /** 挑戰的目標續領申請 ID（挑戰申請填） */
+  challenges_application_id?: number | null;
+  /** 因哪份挑戰申請而被取消（被取代之續領申請填） */
+  cancelled_due_to_application_id?: number | null;
   personal_statement?: string;
   gpa_requirement_met: boolean;
   submitted_at?: string;
@@ -130,8 +146,23 @@ export interface Application {
   created_at: string;
   updated_at: string;
   is_recommended?: boolean;
+  /** Whether this scholarship requires a professor recommendation step
+   *  (top-level flag from the college review listing; distinct from the
+   *  nested scholarship_configuration.requires_professor_recommendation). */
+  requires_professor_recommendation?: boolean;
+  /** Whether this scholarship requires a college review step (top-level flag
+   *  surfaced on application list/detail responses). */
+  requires_college_review?: boolean;
+  /** Admin toggle「開放學院查看分發結果」— once opened, the student timeline's
+   *  final 已核定(請洽院辦) step is checked for every application that already
+   *  has a distribution outcome (approved, or review_stage ≥ quota_distributed
+   *  for the passed-review-but-unfunded case). */
+  allow_college_view_distribution?: boolean;
   professor_review_completed?: boolean;
   college_review_completed?: boolean;
+  /** 教授端佇列專用：檢視的教授是否已對本申請留下審核紀錄。
+   *  非教授端點回傳 undefined。 */
+  has_professor_reviewed?: boolean;
   form_data?: Record<string, any>;
   submitted_form_data?: Record<string, any>;
   meta_data?: Record<string, any>;
@@ -144,6 +175,12 @@ export interface Application {
   status_zh?: string;
   student_name?: string;
   student_no?: string;
+  /** 郵局帳號 (from the student's UserProfile.account_number, not submitted_form_data) */
+  postal_account?: string | null;
+  /** 指導教授資訊 (from the student's UserProfile, not submitted_form_data) */
+  advisor_name?: string | null;
+  advisor_email?: string | null;
+  advisor_nycu_id?: string | null;
   student_termcount?: number;
   gpa?: number;
   department?: string;
@@ -152,6 +189,8 @@ export interface Application {
   dept_ranking_percent?: number;
   days_waiting?: number;
   scholarship_subtype_list?: string[];
+  /** 本申請的代表性 sub_type（單一字串；若為續領則承襲自前一申請） */
+  sub_scholarship_type?: string | null;
   sub_type_labels?: Record<string, { zh: string; en: string }>;
   agree_terms?: boolean;
   academy_code?: string;
@@ -176,6 +215,17 @@ export interface Application {
   };
   academic_year?: number;
   semester?: string | null;
+  professor_review_items?: Array<{
+    sub_type_code: string;
+    recommendation: string;
+    comments?: string;
+  }>;
+  redistribution_info?: {
+    auto_redistributed: boolean;
+    rankings_processed: number;
+    successful_count: number;
+    total_allocated: number;
+  };
 }
 
 /**
@@ -196,6 +246,13 @@ export interface ScholarshipType {
   application_end_date?: string;
   sub_type_selection_mode?: "single" | "multiple" | "hierarchical";
   terms_document_url?: string;
+  application_document_note?: string;
+  application_document_note_en?: string;
+  already_submitted?: boolean;
+  // Whether the scholarship is currently accepting applications. When false the
+  // scholarship is still effective (生效) but its application window has closed,
+  // so it is shown read-only and cannot be applied to.
+  is_application_period?: boolean;
   whitelist_enabled?: boolean;
   eligible_sub_types?: Array<{
     value: string | null;
@@ -203,6 +260,22 @@ export interface ScholarshipType {
     label_en: string;
     is_default: boolean;
   }>;
+  all_sub_type_list?: string[];
+  subtype_eligibility?: {
+    [subTypeKey: string]: {
+      eligible: boolean;
+      failed_rules: Array<{
+        rule_name: string;
+        message?: string | null;
+        tag?: string | null;
+      }>;
+      warning_rules: Array<{
+        rule_name: string;
+        message?: string | null;
+        tag?: string | null;
+      }>;
+    };
+  };
   passed?: Array<{
     rule_id: number;
     rule_name: string;
@@ -214,7 +287,7 @@ export interface ScholarshipType {
     priority: number;
     is_warning: boolean;
     is_hard_rule: boolean;
-    status?: 'data_unavailable' | 'passed' | 'failed';
+    status?: "data_unavailable" | "passed" | "failed";
     system_message?: string;
   }>;
   warnings?: Array<{
@@ -228,7 +301,7 @@ export interface ScholarshipType {
     priority: number;
     is_warning: boolean;
     is_hard_rule: boolean;
-    status?: 'data_unavailable' | 'passed' | 'failed';
+    status?: "data_unavailable" | "passed" | "failed";
     system_message?: string;
   }>;
   errors?: Array<{
@@ -242,7 +315,7 @@ export interface ScholarshipType {
     priority: number;
     is_warning: boolean;
     is_hard_rule: boolean;
-    status?: 'data_unavailable' | 'passed' | 'failed';
+    status?: "data_unavailable" | "passed" | "failed";
     system_message?: string;
   }>;
   created_at?: string;
@@ -251,15 +324,6 @@ export interface ScholarshipType {
 /**
  * Whitelist student info
  */
-export interface WhitelistStudentInfo {
-  student_id: number | null;
-  nycu_id: string;
-  name: string | null;
-  sub_type: string;
-  note?: string | null;
-  is_registered?: boolean;
-}
-
 /**
  * Whitelist response
  */
@@ -268,7 +332,6 @@ export interface WhitelistResponse {
   students: WhitelistStudentInfo[];
   total: number;
 }
-
 
 // ============================================
 // Additional types for backward compatibility
@@ -295,15 +358,19 @@ export interface ScholarshipConfiguration {
   has_college_quota?: boolean;
   quota_management_mode?: string;
   total_quota?: number;
-  quotas?: Record<string, any>;
+  quotas?: Record<string, Record<string, number>>;
+  project_numbers?: Record<string, string>;
+  shared_quota_sources?: { source_config_code: string; sub_types: string[] }[];
   whitelist_student_ids?: Record<string, number[]>;
   hasWhitelist?: boolean;
   renewal_application_start_date?: string;
   renewal_application_end_date?: string;
   application_start_date?: string;
   application_end_date?: string;
+  renewal_requires_professor_review: boolean;
   renewal_professor_review_start?: string;
   renewal_professor_review_end?: string;
+  renewal_requires_college_review: boolean;
   renewal_college_review_start?: string;
   renewal_college_review_end?: string;
   requires_professor_recommendation: boolean;
@@ -314,6 +381,8 @@ export interface ScholarshipConfiguration {
   college_review_end?: string;
   review_deadline?: string;
   is_active: boolean;
+  allow_supplementary_import?: boolean;
+  allow_college_view_distribution?: boolean;
   effective_start_date?: string;
   effective_end_date?: string;
   version: string;
@@ -386,15 +455,37 @@ export interface ApplicationCreate {
   };
   agree_terms?: boolean;
   is_renewal?: boolean; // 是否為續領申請
-  [key: string]: any; // 允許動態欄位
+  sub_type_preferences?: string[];
+  [key: string]: unknown; // 允許動態欄位
 }
 
+// Backend `GET /api/v1/admin/dashboard/stats` returns both the canonical
+// snake_case fields and a set of camelCase aliases for the legacy
+// admin-management-interface UI. Until that UI is migrated off the alias
+// shape, the canonical type exposes both. `storageUsed` is optional because
+// the backend does not currently compute it.
+//
+// Both `apiClient.admin.getDashboardStats()` and the legacy alias
+// `apiClient.admin.getSystemStats()` resolve to this same shape.
+//
+// Closes #642 (DashboardStats / SystemStats type drift).
 export interface DashboardStats {
+  // Canonical snake_case fields
   total_applications: number;
   pending_review: number;
   approved: number;
   rejected: number;
   avg_processing_time: string;
+  // Legacy camelCase aliases also returned by the same endpoint
+  totalUsers: number;
+  activeApplications: number;
+  completedReviews: number;
+  systemUptime: string;
+  avgResponseTime: string;
+  pendingReviews: number;
+  totalScholarships: number;
+  // Optional — not currently populated by backend; UI renders empty if absent.
+  storageUsed?: string;
 }
 
 export interface RecipientOption {
@@ -422,31 +513,6 @@ export interface SystemSetting {
 }
 
 // === System Configuration Management Types === //
-export interface SystemConfiguration {
-  id: number;
-  key: string;
-  value: string;
-  category:
-    | "FEATURES"
-    | "SECURITY"
-    | "EMAIL"
-    | "DATABASE"
-    | "API_KEYS"
-    | "FILE_STORAGE"
-    | "NOTIFICATION"
-    | "OCR"
-    | "INTEGRATIONS";
-  data_type: "string" | "integer" | "float" | "boolean" | "json";
-  is_sensitive: boolean;
-  is_readonly: boolean;
-  description?: string;
-  validation_regex?: string;
-  default_value?: string;
-  last_modified_by?: number;
-  created_at: string;
-  updated_at?: string;
-}
-
 export interface SystemConfiguration {
   id: number;
   key: string;
@@ -549,34 +615,6 @@ export interface BankVerificationResult {
   processed_at: string;
 }
 
-export interface BankVerificationResult {
-  application_id: number;
-  verification_status: "verified" | "failed" | "partial" | "no_document";
-  verification_details: {
-    account_number?: {
-      form_value: string;
-      ocr_value: string;
-      similarity: number;
-      match: boolean;
-    };
-    account_holder?: {
-      form_value: string;
-      ocr_value: string;
-      similarity: number;
-      match: boolean;
-    };
-    branch_name?: {
-      form_value: string;
-      ocr_value: string;
-      similarity: number;
-      match: boolean;
-    };
-  };
-  overall_confidence: number;
-  recommendations: string[];
-  processed_at: string;
-}
-
 export interface BankVerificationBatchResult {
   total_applications: number;
   processed_count: number;
@@ -587,37 +625,6 @@ export interface BankVerificationBatchResult {
 }
 
 // === Professor-Student Relationship Types === //
-export interface ProfessorStudentRelationship {
-  id: number;
-  professor_id: number;
-  student_id: number;
-  relationship_type:
-    | "advisor"
-    | "supervisor"
-    | "committee_member"
-    | "co_advisor";
-  status: "active" | "inactive" | "pending" | "terminated";
-  start_date: string;
-  end_date?: string;
-  notes?: string;
-  created_at: string;
-  updated_at: string;
-  professor?: {
-    id: number;
-    name: string;
-    nycu_id?: string;
-    email?: string;
-    department?: string;
-  };
-  student?: {
-    id: number;
-    name: string;
-    student_no?: string;
-    email?: string;
-    department?: string;
-  };
-}
-
 export interface ProfessorStudentRelationship {
   id: number;
   professor_id: number;
@@ -749,37 +756,7 @@ export interface UserListResponse {
   raw_data?: {
     chinese_name?: string;
     english_name?: string;
-    [key: string]: any;
-  };
-  // 向後相容性欄位
-  username?: string;
-  full_name?: string;
-  chinese_name?: string;
-  english_name?: string;
-  is_active?: boolean;
-  is_verified?: boolean;
-  student_no?: string;
-}
-
-export interface UserListResponse {
-  id: number;
-  nycu_id: string;
-  email: string;
-  name: string;
-  user_type?: string;
-  status?: string;
-  dept_code?: string;
-  dept_name?: string;
-  college_code?: string; // 系統內學院管理權限
-  role: string;
-  comment?: string;
-  created_at: string;
-  updated_at?: string;
-  last_login_at?: string;
-  raw_data?: {
-    chinese_name?: string;
-    english_name?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   // 向後相容性欄位
   username?: string;
@@ -808,7 +785,7 @@ export interface UserResponse {
   raw_data?: {
     chinese_name?: string;
     english_name?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   // 向後相容性欄位
   username?: string;
@@ -839,7 +816,7 @@ export interface UserCreate {
   raw_data?: {
     chinese_name?: string;
     english_name?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   // 向後相容性欄位
   username?: string;
@@ -863,7 +840,7 @@ export interface UserUpdate {
   raw_data?: {
     chinese_name?: string;
     english_name?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   // 向後相容性欄位
   username?: string;
@@ -905,37 +882,8 @@ export interface ApplicationField {
   help_text_en?: string;
   validation_rules?: Record<string, any>;
   conditional_rules?: Record<string, any>;
-  created_at: string;
-  updated_at: string;
-  created_by?: number;
-  updated_by?: number;
-  // Fixed field properties
-  is_fixed?: boolean;
-  prefill_value?: string;
-  existing_file_url?: string;
-}
-
-export interface ApplicationField {
-  id: number;
-  scholarship_type: string;
-  field_name: string;
-  field_label: string;
-  field_label_en?: string;
-  field_type: string;
-  is_required: boolean;
-  placeholder?: string;
-  placeholder_en?: string;
-  max_length?: number;
-  min_value?: number;
-  max_value?: number;
-  step_value?: number;
-  field_options?: Array<{ value: string; label: string; label_en?: string }>;
-  display_order: number;
-  is_active: boolean;
-  help_text?: string;
-  help_text_en?: string;
-  validation_rules?: Record<string, any>;
-  conditional_rules?: Record<string, any>;
+  include_in_college_export?: boolean;
+  export_column_label?: string | null;
   created_at: string;
   updated_at: string;
   created_by?: number;
@@ -966,6 +914,8 @@ export interface ApplicationFieldCreate {
   help_text_en?: string;
   validation_rules?: Record<string, any>;
   conditional_rules?: Record<string, any>;
+  include_in_college_export?: boolean;
+  export_column_label?: string | null;
 }
 
 export interface ApplicationFieldUpdate {
@@ -986,6 +936,8 @@ export interface ApplicationFieldUpdate {
   help_text_en?: string;
   validation_rules?: Record<string, any>;
   conditional_rules?: Record<string, any>;
+  include_in_college_export?: boolean;
+  export_column_label?: string | null;
 }
 
 export interface ApplicationDocument {
@@ -996,6 +948,8 @@ export interface ApplicationDocument {
   description?: string;
   description_en?: string;
   is_required: boolean;
+  display_in_list: boolean;
+  requires_upload: boolean;
   accepted_file_types: string[];
   max_file_size: string;
   max_file_count: number;
@@ -1031,6 +985,9 @@ export interface HistoricalApplication {
   student_id?: string;
   student_email?: string;
   student_department?: string;
+  // #68: nationality + identity from the SIS student_data snapshot
+  student_nationality?: string;
+  student_identity?: number;
 
   // Scholarship information
   scholarship_name?: string;
@@ -1053,6 +1010,21 @@ export interface HistoricalApplication {
   // Review information
   professor_name?: string;
   reviewer_name?: string;
+
+  // Revocation / suspension context (#975 / G13)
+  revoked_at?: string | null;
+  revoked_by?: number | null;
+  revoke_reason?: string | null;
+  suspended_at?: string | null;
+  suspended_by?: number | null;
+  suspend_reason?: string | null;
+
+  // Soft-deletion context (#974 / G12: deleted applications stay visible in
+  // history, flagged so the UI badges them)
+  deleted_at?: string | null;
+  deleted_by_id?: number | null;
+  deletion_reason?: string | null;
+  is_deleted?: boolean;
 }
 
 export interface HistoricalApplicationFilters {
@@ -1072,6 +1044,8 @@ export interface ApplicationDocumentCreate {
   description?: string;
   description_en?: string;
   is_required?: boolean;
+  display_in_list?: boolean;
+  requires_upload?: boolean;
   accepted_file_types?: string[];
   max_file_size?: string;
   max_file_count?: number;
@@ -1088,6 +1062,8 @@ export interface ApplicationDocumentUpdate {
   description?: string;
   description_en?: string;
   is_required?: boolean;
+  display_in_list?: boolean;
+  requires_upload?: boolean;
   accepted_file_types?: string[];
   max_file_size?: string;
   max_file_count?: number;
@@ -1108,6 +1084,8 @@ export interface ScholarshipFormConfig {
   hasWhitelist?: boolean;
   whitelist_student_ids?: Record<string, number[]>;
   terms_document_url?: string;
+  application_document_note?: string;
+  application_document_note_en?: string;
 }
 
 export interface FormConfigSaveRequest {
@@ -1137,6 +1115,8 @@ export interface FormConfigSaveRequest {
     description?: string;
     description_en?: string;
     is_required?: boolean;
+    display_in_list?: boolean;
+    requires_upload?: boolean;
     accepted_file_types?: string[];
     max_file_size?: string;
     max_file_count?: number;
@@ -1146,6 +1126,8 @@ export interface FormConfigSaveRequest {
     upload_instructions_en?: string;
     validation_rules?: Record<string, any>;
   }>;
+  application_document_note?: string;
+  application_document_note_en?: string;
 }
 
 export interface ScholarshipStats {
@@ -1179,28 +1161,10 @@ export interface Workflow {
   updated_at: string;
 }
 
-export interface Workflow {
-  id: string;
-  name: string;
-  version: string;
-  status: "active" | "draft" | "inactive";
-  lastModified: string;
-  steps: number;
-  description?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface SystemStats {
-  totalUsers: number;
-  activeApplications: number;
-  completedReviews: number;
-  systemUptime: string;
-  avgResponseTime: string;
-  storageUsed: string;
-  pendingReviews: number;
-  totalScholarships: number;
-}
+// Legacy alias. Both DashboardStats and SystemStats describe the same
+// `GET /api/v1/admin/dashboard/stats` response (see issue #642). New code
+// should use DashboardStats directly.
+export type SystemStats = DashboardStats;
 
 export interface ScholarshipPermission {
   id: number;
@@ -1209,8 +1173,14 @@ export interface ScholarshipPermission {
   scholarship_name: string;
   scholarship_name_en?: string;
   comment?: string;
-  created_at: string;
-  updated_at: string;
+  // Optional quota-management gate emitted by
+  // /admin/scholarship-permissions/me; admin shell uses it to decide
+  // whether to surface the quota tab.
+  can_manage_quota?: boolean;
+  // Optional because callers (e.g., admin user-edit modal) construct temporary
+  // permission objects in-memory before the server assigns timestamps.
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface ScholarshipPermissionCreate {
@@ -1255,13 +1225,17 @@ export interface ScholarshipConfigurationFormData {
   quota_management_mode?: string;
   total_quota?: number;
   quotas?: Record<string, any> | string;
+  project_numbers?: Record<string, string> | string;
+  shared_quota_sources?: { source_config_code: string; sub_types: string[] }[] | string;
   whitelist_student_ids?: Record<string, number[]> | string;
   renewal_application_start_date?: string;
   renewal_application_end_date?: string;
   application_start_date?: string;
   application_end_date?: string;
+  renewal_requires_professor_review?: boolean;
   renewal_professor_review_start?: string;
   renewal_professor_review_end?: string;
+  renewal_requires_college_review?: boolean;
   renewal_college_review_start?: string;
   renewal_college_review_end?: string;
   requires_professor_recommendation?: boolean;
@@ -1278,38 +1252,6 @@ export interface ScholarshipConfigurationFormData {
 }
 
 // User Profile interfaces
-export interface UserProfile {
-  id: number;
-  user_id: number;
-  account_number?: string;
-  account_holder_name?: string;
-  advisor_name?: string;
-  advisor_name_en?: string;
-  advisor_email?: string;
-  advisor_phone?: string;
-  advisor_department?: string;
-  advisor_title?: string;
-  preferred_email?: string;
-  phone_number?: string;
-  mobile_number?: string;
-  current_address?: string;
-  permanent_address?: string;
-  postal_code?: string;
-  emergency_contact_name?: string;
-  emergency_contact_relationship?: string;
-  emergency_contact_phone?: string;
-  preferred_language: string;
-  bio?: string;
-  interests?: string;
-  social_links?: Record<string, string>;
-  profile_photo_url?: string;
-  has_complete_bank_info: boolean;
-  has_advisor_info: boolean;
-  profile_completion_percentage: number;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface UserProfile {
   id: number;
   user_id: number;
