@@ -12,7 +12,8 @@ Pinned behavior:
 - Pattern length > MAX_PATTERN_LENGTH (200) → RegexValidationError
 - Each of the 6 DANGEROUS_PATTERNS triggers rejection
 - Invalid syntax → RegexValidationError (wraps re.error)
-- validate_and_sanitize_pattern returns identical content via JSON round-trip
+- validate_and_sanitize_pattern rebuilds equal content from the char allowlist
+  and rejects characters outside it (control chars, emoji, non-CJK scripts)
 - safe_regex_match / safe_regex_search validate first, then run
 - Both safe_* return Optional[re.Match]
 """
@@ -111,13 +112,13 @@ class TestValidateRegexPattern:
 
 class TestValidateAndSanitizePattern:
     def test_returns_identical_content(self):
-        """JSON round-trip yields a string with the SAME content."""
+        """Allowlist rebuild yields a string with the SAME content."""
         original = r"^\d{3}-\d{4}$"
         sanitized = validate_and_sanitize_pattern(original)
         assert sanitized == original
 
     def test_returns_string_type(self):
-        """Output type must be str (not bytes, not other JSON primitive)."""
+        """Output type must be str (not bytes)."""
         result = validate_and_sanitize_pattern("abc")
         assert isinstance(result, str)
 
@@ -128,12 +129,49 @@ class TestValidateAndSanitizePattern:
         assert sanitized == original
 
     def test_returns_new_object(self):
-        """JSON round-trip creates a NEW string object (taint-flow break for CodeQL)."""
+        """The rebuild assembles a NEW string from allowlisted constants."""
         original = "test_pattern_unique_xyz"
         sanitized = validate_and_sanitize_pattern(original)
         # CPython may intern short strings — pick an unguessable long-enough one
         # and assert content equivalence; identity is best-effort.
         assert sanitized == original
+
+    def test_full_ascii_metacharacter_coverage(self):
+        """Every printable-ASCII regex metacharacter passes through unchanged."""
+        original = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}$|(?:#~`'\"&%!<>=,;: /){1}?"
+        assert validate_and_sanitize_pattern(original) == original
+
+    def test_allows_chinese_alternation_pattern(self):
+        """EmployeeStatus-style Chinese literals (在職/退休…) must stay usable."""
+        original = r"^(在職|退休|在學|畢業)$"
+        assert validate_and_sanitize_pattern(original) == original
+
+    def test_allows_fullwidth_punctuation(self):
+        """Fullwidth forms (FF00–FFEF) and CJK punctuation (3000–303F) allowed."""
+        original = "^(是:|否。)$"
+        assert validate_and_sanitize_pattern(original) == original
+
+    def test_rejects_emoji(self):
+        """Characters outside the allowlist are rejected, not silently dropped."""
+        with pytest.raises(RegexValidationError, match="disallowed character"):
+            validate_and_sanitize_pattern("^🎉$")
+
+    def test_rejects_control_characters(self):
+        """Raw control chars (NUL, newline) rejected — use \\n escapes instead."""
+        with pytest.raises(RegexValidationError, match="disallowed character"):
+            validate_and_sanitize_pattern("^a\x00b$")
+        with pytest.raises(RegexValidationError, match="disallowed character"):
+            validate_and_sanitize_pattern("^a\nb$")
+
+    def test_rejects_non_cjk_scripts(self):
+        """Scripts outside ASCII+CJK (e.g., Cyrillic homoglyphs) are rejected."""
+        with pytest.raises(RegexValidationError, match="disallowed character"):
+            validate_and_sanitize_pattern("^аbc$")  # Cyrillic 'а' (U+0430)
+
+    def test_validate_regex_pattern_surfaces_charset_rejection(self):
+        """The full validator propagates the allowlist error un-wrapped."""
+        with pytest.raises(RegexValidationError, match="disallowed character"):
+            validate_regex_pattern("^🎉$")
 
 
 # ─── safe_regex_match ───────────────────────────────────────────────

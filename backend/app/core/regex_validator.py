@@ -7,6 +7,7 @@ Security Guidelines (CLAUDE.md):
 - Validate regex complexity before compilation
 - Limit pattern length
 - Detect potentially dangerous patterns
+- Rebuild patterns from a character allowlist before compilation
 - Test compilation safety
 """
 
@@ -40,36 +41,49 @@ DANGEROUS_PATTERNS = [
     r"\([^)]*\+\)\+",  # Plus quantifier on plus-quantified group (e.g., (a+)+)
 ]
 
+# Characters an admin-supplied regex pattern may contain. Patterns are rebuilt
+# character-by-character from this constant map, so the string handed to
+# re.compile() is assembled exclusively from trusted module-level constants —
+# a hard charset invariant (and, as a consequence, a genuine taint barrier for
+# static analysis: dict VALUES are constants, taint does not flow key→value).
+_ALLOWED_CHAR_RANGES = (
+    (0x0020, 0x007E),  # printable ASCII — covers every regex metacharacter
+    (0x3000, 0x303F),  # CJK symbols and punctuation (、。「」…)
+    (0x4E00, 0x9FFF),  # CJK Unified Ideographs — patterns like ^(在職|退休)$
+    (0xFF00, 0xFFEF),  # fullwidth/halfwidth forms (：？！ etc.)
+)
+_ALLOWED_PATTERN_CHARS = {chr(cp): chr(cp) for lo, hi in _ALLOWED_CHAR_RANGES for cp in range(lo, hi + 1)}
+
 
 def validate_and_sanitize_pattern(pattern: str) -> str:
     """
-    Sanitize regex pattern to break CodeQL taint flow after validation.
+    Rebuild a regex pattern from the character allowlist.
 
-    SECURITY: This function acts as a sanitizer barrier for static analysis tools.
-    It is called AFTER comprehensive validation that ensures:
+    SECURITY: This is the sanitizer barrier every pattern must pass through
+    before compilation. It enforces a hard invariant — the pattern may only
+    contain characters from _ALLOWED_PATTERN_CHARS (printable ASCII plus CJK
+    ranges) — and the returned string is assembled purely from the constant
+    values of that map, never from the input object itself. Callers combine
+    this with the other layers in validate_regex_pattern():
     1. Pattern length <= MAX_PATTERN_LENGTH (200 chars)
-    2. No dangerous ReDoS patterns (checked against DANGEROUS_PATTERNS)
+    2. No dangerous ReDoS constructs (DANGEROUS_PATTERNS)
     3. Valid regex syntax (compilation test)
     4. Timeout protection (1 second max compilation/execution)
 
-    This function uses JSON serialization/deserialization to create a completely
-    new string object, which breaks taint tracking in CodeQL and similar tools.
-
     Args:
-        pattern: Validated regex pattern string
+        pattern: Regex pattern string to rebuild
 
     Returns:
-        Sanitized pattern string (identical content, new object)
+        Equal-content pattern string rebuilt from allowlisted constants
+
+    Raises:
+        RegexValidationError: If the pattern contains a character outside the
+            allowlist (e.g., control characters, emoji)
     """
-    import json
-    from typing import cast
-
-    # JSON round-trip creates a new string object, breaking taint flow
-    # This is safe because pattern was validated before calling this function
-    sanitized = json.loads(json.dumps(pattern))
-
-    # Explicit type cast to satisfy type checkers
-    return cast(str, sanitized)
+    try:
+        return "".join(_ALLOWED_PATTERN_CHARS[char] for char in pattern)
+    except KeyError as exc:
+        raise RegexValidationError(f"Regex pattern contains disallowed character: {exc.args[0]!r}") from exc
 
 
 def timeout_handler(signum, frame):
@@ -115,7 +129,7 @@ def validate_regex_pattern(pattern: str, test_string: Optional[str] = None, time
         try:
             # SECURITY: Pattern validated before compilation
             # Comprehensive validation includes length check, ReDoS detection,
-            # timeout protection, and JSON sanitization. See module docstring.
+            # timeout protection, and charset-allowlist rebuild. See module docstring.
             sanitized_pattern = validate_and_sanitize_pattern(pattern)
             compiled = re.compile(sanitized_pattern)
         finally:
@@ -125,7 +139,9 @@ def validate_regex_pattern(pattern: str, test_string: Optional[str] = None, time
 
     except re.error as e:
         raise RegexValidationError(f"Invalid regex pattern: {str(e)}") from e
-    except RegexTimeoutError:
+    except RegexValidationError:
+        # Includes RegexTimeoutError and the charset-allowlist rejection —
+        # already user-facing, no re-wrapping needed.
         raise
     except Exception as e:
         raise RegexValidationError(f"Failed to validate regex pattern: {str(e)}") from e

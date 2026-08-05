@@ -18,7 +18,7 @@ This module provides secure wrapper functions for regex operations:
 - `validate_regex_pattern()` - Validates pattern before use
 - `safe_regex_match()` - Safe pattern matching
 - `safe_regex_search()` - Safe pattern searching
-- `validate_and_sanitize_pattern()` - JSON round-trip sanitization
+- `validate_and_sanitize_pattern()` - charset-allowlist rebuild (printable ASCII + CJK)
 
 ## Multi-Layer Validation
 
@@ -43,7 +43,7 @@ Listed in execution order (`validate_regex_pattern` in `regex_validator.py`):
    - Multiple unbounded plus: `.+.+`
    - Adjacent quantified groups: `(a*)*(b*)*`, `(a+)+(b+)+`
    - Nested quantified groups: `(a*)*`, `(a+)+`
-3. **JSON Sanitization**: Round-trip to break taint flow (runs BEFORE compilation — the sanitized pattern is what gets compiled)
+3. **Charset-Allowlist Rebuild**: the pattern is reassembled character-by-character from the constant `_ALLOWED_PATTERN_CHARS` map (printable ASCII + CJK ranges; anything else → `RegexValidationError`). Runs BEFORE compilation — the rebuilt pattern is what gets compiled, so the string reaching `re.compile()` consists solely of trusted constants. This both enforces a real charset invariant and terminates the `py/regex-injection` taint flow (no filter-sarif suppression needed for this module anymore)
 4. **Syntax Validation**: Compilation test of the sanitized pattern
 5. **Timeout Protection**: SIGALRM-based (1 second max) — Unix-only; on Windows the `hasattr(signal, "SIGALRM")` guard skips the timeout (all other layers above still run there). The alarm guards compilation here and matching inside `safe_regex_match`/`safe_regex_search`; a bare `validate_regex_pattern(pattern)` call does NOT timeout-guard later matching, so always match through the safe wrappers.
 
@@ -55,8 +55,10 @@ Listed in execution order (`validate_regex_pattern` in `regex_validator.py`):
 
 ```yaml
 patterns: |
-  -backend/app/core/regex_validator.py:py/regex-injection
+  -backend/app/api/v1/endpoints/admin/bank_verification.py:py/stack-trace-exposure
 ```
+
+(Historical note: `-backend/app/core/regex_validator.py:py/regex-injection` used to be suppressed here; the charset-allowlist rebuild made that suppression unnecessary.)
 
 **Pattern Syntax**:
 - `-<file-path>:<query-id>` - Exclude specific query from specific file

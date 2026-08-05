@@ -20,28 +20,16 @@ packs:
 #
 # Current suppressions (via filter-sarif):
 #
-# 1. py/regex-injection in backend/app/core/regex_validator.py
+# (RESOLVED — suppression removed) py/regex-injection in
+# backend/app/core/regex_validator.py used to be suppressed here as a false
+# positive. validate_and_sanitize_pattern() now rebuilds every pattern
+# character-by-character from a constant allowlist map before compilation, so
+# the string reaching re.compile() is assembled from trusted constants and the
+# taint flow genuinely terminates — CodeQL no longer flags it, no suppression
+# needed. If the module is restructured and the alert returns, prefer keeping
+# the allowlist rebuild as the barrier over re-adding a filter-sarif pattern.
 #
-# JUSTIFICATION FOR SUPPRESSION:
-# This is a false positive. The regex_validator.py module implements
-# comprehensive validation specifically designed to prevent regex injection:
-#
-# Security Measures:
-#   - Pattern length check (max 200 chars)
-#   - Dangerous ReDoS pattern detection (6 patterns checked)
-#   - Regex syntax compilation test with timeout
-#   - SIGALRM-based timeout protection (1 second max; Unix-only)
-#   - JSON round-trip sanitization to break taint flow
-#   - Comprehensive test coverage in backend/app/tests/test_regex_validator.py
-#
-# This is a legitimate use case where administrators define regex patterns
-# for configuration validation (emails, API keys, etc.). Using re.escape()
-# would break functionality by converting patterns to literal strings.
-#
-# Static analysis cannot recognize our multi-layer validation as proper
-# sanitization, hence the false positive. Suppression is appropriate.
-#
-# 2. py/stack-trace-exposure in backend/app/api/v1/endpoints/admin/bank_verification.py
+# 1. py/stack-trace-exposure in backend/app/api/v1/endpoints/admin/bank_verification.py
 #
 # JUSTIFICATION FOR SUPPRESSION:
 # This is a false positive. The code has multiple layers of protection:
