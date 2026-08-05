@@ -9,8 +9,14 @@
 `.github/workflows/`：
 
 - prod repo **還沒有**的檔案 → 自動安裝（首次 mirror 即完成 CI/CD bootstrap）
-- prod repo **已有**的檔案 → 一律不覆寫（prod 端客製優先）；若範本與 prod 版本
-  不同，mirror log 會以 notice 提示，由人工決定是否移植
+- prod repo 已有、且內容與**某個歷史版範本逐字節相同**的檔案（= 從未被 prod
+  端客製，只是舊版範本）→ **自動更新**到現行範本，讓範本修正（如 #1282 的
+  permissions 區塊）能經由 mirror 送達 prod。release notes 會列出
+  「Workflows updated from templates」清單;若 prod 端剛刻意 rollback 某個
+  workflow、暫時不想被升回來，dispatch mirror 時勾選 `freeze_workflows`
+- prod repo 已有、但**比對不到任何歷史版範本**的檔案（= prod 端有客製,
+  如 `auto-tag-on-merge.yml`）→ 一律不覆寫;mirror log 會以 notice 提示,
+  由人工決定是否移植
 
 > 📦 **只帶必要的可執行 CI/CD（.yml workflows）過去。** prod repo 資安掃描嚴格，
 > 因此本目錄的設定指南（`SECRETS-SETUP-GUIDE.md` 等含大量 example secret 值與
