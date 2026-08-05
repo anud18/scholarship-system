@@ -25,6 +25,10 @@ on:
           - full-check
         default: 'validate'
 
+# Least privilege: the only token consumer in this workflow is actions/checkout.
+permissions:
+  contents: read
+
 jobs:
   setup-environment:
     name: ${{ github.event.inputs.action == 'validate' && 'Validate Environment' || github.event.inputs.action == 'setup' && 'Setup Environment' || 'Full Check & Setup' }}
