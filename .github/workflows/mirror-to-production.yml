@@ -189,6 +189,63 @@ jobs:
 
           echo "::endgroup::"
 
+      - name: Remove files deleted in main
+        run: |
+          echo "::group::Removing files deleted in main"
+
+          # The merge above runs with --allow-unrelated-histories: the
+          # production branch shares no ancestor with main, so a file that
+          # exists only on the production side is silently kept. Files deleted
+          # in development (e.g. frontend/package-lock.json after the bun
+          # migration) therefore survive in production forever and keep feeding
+          # Dependabot alerts from stale manifests. Reconcile by removing every
+          # tracked file that no longer exists in origin/main. Production-only
+          # workflows removed here are re-installed from the production repo by
+          # the "Preserve production workflows" / template steps below.
+          # NUL-delimited listings: -z disables C-quoting entirely, so paths
+          # containing non-ASCII, quotes, backslashes or spaces compare
+          # byte-for-byte and reach git rm as real paths.
+          git ls-files -z > /tmp/production-tracked-files-raw.z
+          git ls-tree -r -z --name-only origin/main > /tmp/main-tracked-files-raw.z
+
+          # Refuse to reconcile against an empty main listing — an empty file
+          # here would classify EVERY production file as stale and wipe the tree.
+          if [ ! -s /tmp/main-tracked-files-raw.z ]; then
+            echo "::error::origin/main file listing is empty; refusing to reconcile deletions"
+            exit 1
+          fi
+
+          LC_ALL=C sort -z /tmp/production-tracked-files-raw.z > /tmp/production-tracked-files.z
+          LC_ALL=C sort -z /tmp/main-tracked-files-raw.z > /tmp/main-tracked-files.z
+          LC_ALL=C comm -z -23 /tmp/production-tracked-files.z /tmp/main-tracked-files.z > /tmp/stale-files.z
+
+          # Newline-delimited copy for logs and release notes (display only —
+          # git rm consumes the NUL-delimited list).
+          tr '\0' '\n' < /tmp/stale-files.z > /tmp/stale-files.txt
+
+          if [ -s /tmp/stale-files.z ]; then
+            STALE_COUNT=$(wc -l < /tmp/stale-files.txt)
+            echo "::notice::Removing ${STALE_COUNT} stale file(s) deleted in main:"
+            cat /tmp/stale-files.txt
+            # :(literal) disables pathspec globbing so a path containing
+            # * ? [ ] cannot over-delete unrelated files.
+            sed -z 's/^/:(literal)/' /tmp/stale-files.z | xargs -0 git rm -f -q --
+
+            git commit -m "chore: remove files deleted in main
+
+            The unrelated-history merge cannot propagate deletions, so files
+            removed from the development repository are reconciled explicitly.
+
+            Removed files: ${STALE_COUNT}
+            Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+            "
+            echo "::notice::✅ Removed ${STALE_COUNT} stale file(s)"
+          else
+            echo "::notice::No stale files to remove"
+          fi
+
+          echo "::endgroup::"
+
       - name: Stage production workflow templates
         # The mirror strips .github/workflows AND production-workflows-examples
         # from the tree, but this workflow is the ONLY channel into the private
@@ -629,7 +686,7 @@ jobs:
           echo "\`\`\`" >> /tmp/release-notes.md
 
           # Add excluded/removed development files information
-          cat >> /tmp/release-notes.md <<REMOVED_FILES_EOF
+          cat >> /tmp/release-notes.md <<'REMOVED_FILES_EOF'
 
           ## 🚫 Excluded Development Files
 
@@ -638,6 +695,20 @@ jobs:
 
           ### Directories Removed
           ${{ env.REMOVED_DIRS }}
+
+          ### Stale Files Removed (deleted in development)
+          REMOVED_FILES_EOF
+
+          # Append the reconciled stale-file list from disk rather than
+          # interpolating it into the heredoc: file names must never be
+          # shell-expanded (they could contain $ or backticks).
+          if [ -s /tmp/stale-files.txt ]; then
+            sed 's/^/- /' /tmp/stale-files.txt >> /tmp/release-notes.md
+          else
+            echo "- None" >> /tmp/release-notes.md
+          fi
+
+          cat >> /tmp/release-notes.md <<'REMOVED_FILES_EOF'
 
           ### Files Excluded from Sync (Not Deleted)
           - All test directories: `frontend/__tests__/`, `frontend/*/__tests__/`, `backend/app/tests/`
