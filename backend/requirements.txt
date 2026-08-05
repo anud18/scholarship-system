@@ -15,7 +15,7 @@ greenlet>=3.0,<4  # Required by SQLAlchemy sync engine (used by health check + A
 PyJWT[crypto]==2.13.0  # Security update: patched CVEs PYSEC-2026-175/176/177/178/179
 passlib[bcrypt]==1.7.4
 bcrypt==4.2.1  # Updated for Python 3.13 compatibility
-cryptography==49.0.0  # Security: GHSA-537c-gmf6-5ccf (<48.0.1); >=49 required by fastapi-mail 1.6.5
+cryptography==49.0.0  # PINNED BY CEILING: fastapi-mail 1.6.5 requires >=49,<50. GHSA-g6cj-pr64-35w5 (PKCS#7 EnvelopedData decrypt oracle, >=44,<50) is unreachable here (app uses only AESGCM/Fernet/PyJWT) — bump to >=50.0.0 once fastapi-mail lifts its cap
 python-decouple==3.8
 
 # Data validation and serialization
