@@ -46,6 +46,11 @@ concurrency:
   group: production-deploy
   cancel-in-progress: false
 
+# Least privilege: nothing in this workflow writes via GITHUB_TOKEN. Jobs that
+# pull images from ghcr.io elevate to packages: read individually below.
+permissions:
+  contents: read
+
 env:
   REGISTRY: ghcr.io
 
@@ -141,6 +146,8 @@ jobs:
     name: Resolve Upstream Images
     runs-on: ubuntu-latest
     needs: validate-secrets
+    permissions:
+      packages: read # ghcr.io login + docker manifest inspect (GITHUB_TOKEN fallback when GH_PAT is unset)
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -200,6 +207,11 @@ jobs:
     # runners cannot reach it. Register with: [self-hosted, linux].
     runs-on: [self-hosted, linux]
     needs: [validate-secrets, resolve-images]
+    # Job-level permissions REPLACE the workflow-level block, so contents: read
+    # must be restated alongside the packages elevation.
+    permissions:
+      contents: read # actions/checkout
+      packages: read # docker/login-action + docker pull (GITHUB_TOKEN fallback when GH_PAT is unset)
     environment:
       name: production
       url: ${{ vars.PRODUCTION_URL }}

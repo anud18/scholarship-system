@@ -125,7 +125,7 @@ dependencies = [
     "PyJWT[crypto]==2.13.0",
     "passlib[bcrypt]==1.7.4",
     "bcrypt==4.2.1",
-    "cryptography==49.0.0",
+    "cryptography==50.0.0",
     "python-decouple==3.8",
     
     # Data validation and serialization
@@ -149,7 +149,7 @@ dependencies = [
     "croniter==1.4.1",
     
     # Email services
-    "fastapi-mail==1.6.5",
+    "aiosmtplib==5.1.2",
     "jinja2==3.1.6",
     
     # File processing and OCR
