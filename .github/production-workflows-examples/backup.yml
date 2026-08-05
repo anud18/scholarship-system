@@ -53,6 +53,10 @@ env:
   # Must match the server major version or pg_dump refuses to run.
   PG_IMAGE: postgres:15-alpine
 
+# Least privilege: no step in this workflow uses GITHUB_TOKEN at all (backups
+# stay on the AP VM disk for IT collection) — grant the token zero scopes.
+permissions: {}
+
 jobs:
   backup-database:
     name: Backup PostgreSQL Database
