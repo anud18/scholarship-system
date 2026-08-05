@@ -46,6 +46,9 @@ This workflow automatically mirrors the development repository to a separate pri
    - **Expiration**: 90 days (recommended) or based on your security policy
    - **Select scopes**:
      - ✅ **`repo`** (Full control of private repositories)
+     - ✅ **`workflow`** (Update GitHub Action workflows — required: the mirror
+       installs and auto-updates `.github/workflows/**` in the production repo,
+       and GitHub rejects such pushes from a PAT without this scope)
 
 4. Click **"Generate token"**
 
@@ -343,7 +346,7 @@ git log --oneline -5
 
 ### 1. Token Security
 
-- ✅ Use tokens with **minimum required permissions** (`repo` scope only)
+- ✅ Use tokens with **minimum required permissions** (`repo` + `workflow` scopes — the mirror pushes `.github/workflows/**`)
 - ✅ Set **expiration dates** on tokens
 - ✅ **Rotate tokens regularly** (every 90 days recommended)
 - ✅ **Delete tokens** when no longer needed
