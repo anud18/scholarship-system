@@ -365,7 +365,7 @@ class NotificationService:
                 self._websocket_connections[user_id].remove(ws)
 
     async def _send_email_notification(self, notification: Notification):
-        """Send notification via email"""
+        """Send notification via email through EmailService (test-mode + history aware)"""
         from app.core.config import settings
 
         # Check required SMTP configuration (host and from address)
@@ -382,46 +382,37 @@ class NotificationService:
             return
 
         try:
-            from fastapi_mail import ConnectionConfig, FastMail, MessageSchema
+            from app.db.session import AsyncSessionLocal
+            from app.models.email_management import EmailCategory
+            from app.services.email_service import EmailService
 
-            # Configure email connection
-            conf = ConnectionConfig(
-                MAIL_USERNAME=settings.smtp_user,
-                MAIL_PASSWORD=settings.smtp_password,
-                MAIL_FROM=settings.email_from,
-                MAIL_FROM_NAME=settings.email_from_name,
-                MAIL_PORT=settings.smtp_port,
-                MAIL_SERVER=settings.smtp_host,
-                MAIL_STARTTLS=settings.smtp_use_tls,
-                MAIL_SSL_TLS=False,
-                USE_CREDENTIALS=True,
-                VALIDATE_CERTS=True,
-            )
+            html_content = f"""
+            <html>
+            <body>
+                <h2>{notification.title or 'Notification'}</h2>
+                <p>{notification.message}</p>
 
-            # Create email message
-            message = MessageSchema(
-                subject=notification.title or "NYCU Scholarship System Notification",
-                recipients=[notification.user.email],
-                body=f"""
-                <html>
-                <body>
-                    <h2>{notification.title or 'Notification'}</h2>
-                    <p>{notification.message}</p>
+                <hr>
+                <p style="color: gray; font-size: 12px;">
+                    This is an automated message from NYCU Scholarship System.<br>
+                    Please do not reply to this email.
+                </p>
+            </body>
+            </html>
+            """
 
-                    <hr>
-                    <p style="color: gray; font-size: 12px;">
-                        This is an automated message from NYCU Scholarship System.<br>
-                        Please do not reply to this email.
-                    </p>
-                </body>
-                </html>
-                """,
-                subtype="html",
-            )
-
-            # Send email
-            fm = FastMail(conf)
-            await fm.send_message(message)
+            # Dedicated session: EmailService commits/rolls back its session in
+            # its test-mode handling, which must never touch the notification
+            # flow's transaction.
+            async with AsyncSessionLocal() as email_db:
+                email_service = EmailService(email_db)
+                await email_service.send_email(
+                    to=notification.user.email,
+                    subject=notification.title or "NYCU Scholarship System Notification",
+                    html_content=html_content,
+                    db=email_db,
+                    email_category=EmailCategory.system,
+                )
 
             logger.info(f"Email notification sent to {notification.user.email} for notification {notification.id}")
 
