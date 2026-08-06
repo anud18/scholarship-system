@@ -1,0 +1,1667 @@
+{
+	"@programName": "ZAP",
+	"@version": "2.17.0",
+	"@generated": "Thu, 6 Aug 2026 02:24:53",
+	"created": "2026-08-06T02:24:53.463430384Z",
+	"insights":[
+		{
+			"level": "Low",
+			"reason": "Warning",
+			"site": "",
+			"key": "insight.log.error",
+			"description": "ZAP errors logged - see the zap.log file for details",
+			"statistic": "1"
+		},
+		{
+			"level": "Low",
+			"reason": "Warning",
+			"site": "",
+			"key": "insight.log.warn",
+			"description": "ZAP warnings logged - see the zap.log file for details",
+			"statistic": "26"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:3000",
+			"key": "insight.code.1xx",
+			"description": "Percentage of responses with status code 1xx",
+			"statistic": "1"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:3000",
+			"key": "insight.code.2xx",
+			"description": "Percentage of responses with status code 2xx",
+			"statistic": "98"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:3000",
+			"key": "insight.code.4xx",
+			"description": "Percentage of responses with status code 4xx",
+			"statistic": "1"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:3000",
+			"key": "insight.endpoint.ctype.application/javascript",
+			"description": "Percentage of endpoints with content type application/javascript",
+			"statistic": "63"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:3000",
+			"key": "insight.endpoint.ctype.application/json",
+			"description": "Percentage of endpoints with content type application/json",
+			"statistic": "22"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:3000",
+			"key": "insight.endpoint.ctype.font/woff2",
+			"description": "Percentage of endpoints with content type font/woff2",
+			"statistic": "1"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:3000",
+			"key": "insight.endpoint.ctype.image/svg+xml",
+			"description": "Percentage of endpoints with content type image/svg+xml",
+			"statistic": "2"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:3000",
+			"key": "insight.endpoint.ctype.text/css",
+			"description": "Percentage of endpoints with content type text/css",
+			"statistic": "2"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:3000",
+			"key": "insight.endpoint.ctype.text/html",
+			"description": "Percentage of endpoints with content type text/html",
+			"statistic": "3"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:3000",
+			"key": "insight.endpoint.ctype.text/plain",
+			"description": "Percentage of endpoints with content type text/plain",
+			"statistic": "1"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:3000",
+			"key": "insight.endpoint.ctype.text/x-component",
+			"description": "Percentage of endpoints with content type text/x-component",
+			"statistic": "1"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:3000",
+			"key": "insight.endpoint.method.GET",
+			"description": "Percentage of endpoints with method GET",
+			"statistic": "96"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:3000",
+			"key": "insight.endpoint.method.POST",
+			"description": "Percentage of endpoints with method POST",
+			"statistic": "3"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:3000",
+			"key": "insight.endpoint.total",
+			"description": "Count of total endpoints",
+			"statistic": "76"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:3000",
+			"key": "insight.response.slow",
+			"description": "Percentage of slow responses",
+			"statistic": "26"
+		}
+	],
+	"site":[ 
+		{
+			"@name": "http://localhost:3000",
+			"@host": "localhost",
+			"@port": "3000",
+			"@ssl": "false",
+			"alerts": [ 
+				{
+					"pluginid": "10055",
+					"alertRef": "10055-4",
+					"alert": "CSP: Wildcard Directive",
+					"name": "CSP: Wildcard Directive",
+					"riskcode": "2",
+					"confidence": "3",
+					"riskdesc": "Medium (High)",
+					"desc": "<p>Content Security Policy (CSP) is an added layer of security that helps to detect and mitigate certain types of attacks. Including (but not limited to) Cross Site Scripting (XSS), and data injection attacks. These attacks are used for everything from data theft to site defacement or distribution of malware. CSP provides a set of standard HTTP headers that allow website owners to declare approved sources of content that browsers should be allowed to load on that page \u2014 covered types are JavaScript, CSS, HTML frames, fonts, images and embeddable objects such as Java applets, ActiveX, audio and video files.</p>",
+					"instances":[ 
+						{
+							"id": "28",
+							"uri": "http://localhost:3000",
+							"nodeName": "http:\/\/localhost:3000",
+							"method": "GET",
+							"param": "content-security-policy",
+							"attack": "",
+							"evidence": "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-src 'self' blob:; font-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+							"otherinfo": "The following directives either allow wildcard sources (or ancestors), are not defined, or are overly broadly defined:\nconnect-src"
+						},
+						{
+							"id": "1",
+							"uri": "http://localhost:3000/sitemap.xml",
+							"nodeName": "http:\/\/localhost:3000\/sitemap.xml",
+							"method": "GET",
+							"param": "content-security-policy",
+							"attack": "",
+							"evidence": "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-src 'self' blob:; font-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+							"otherinfo": "The following directives either allow wildcard sources (or ancestors), are not defined, or are overly broadly defined:\nconnect-src"
+						}
+					],
+					"count": "2",
+					"systemic": false,
+					"solution": "<p>Ensure that your web server, application server, load balancer, etc. is properly configured to set the Content-Security-Policy header.</p>",
+					"otherinfo": "<p>The following directives either allow wildcard sources (or ancestors), are not defined, or are overly broadly defined:</p><p>connect-src</p>",
+					"reference": "<p>https://www.w3.org/TR/CSP/</p><p>https://caniuse.com/#search=content+security+policy</p><p>https://content-security-policy.com/</p><p>https://github.com/HtmlUnit/htmlunit-csp</p><p>https://web.dev/articles/csp#resource-options</p>",
+					"cweid": "693",
+					"wascid": "15",
+					"sourceid": "24"
+				},
+				{
+					"pluginid": "10055",
+					"alertRef": "10055-10",
+					"alert": "CSP: script-src unsafe-eval",
+					"name": "CSP: script-src unsafe-eval",
+					"riskcode": "2",
+					"confidence": "3",
+					"riskdesc": "Medium (High)",
+					"desc": "<p>Content Security Policy (CSP) is an added layer of security that helps to detect and mitigate certain types of attacks. Including (but not limited to) Cross Site Scripting (XSS), and data injection attacks. These attacks are used for everything from data theft to site defacement or distribution of malware. CSP provides a set of standard HTTP headers that allow website owners to declare approved sources of content that browsers should be allowed to load on that page \u2014 covered types are JavaScript, CSS, HTML frames, fonts, images and embeddable objects such as Java applets, ActiveX, audio and video files.</p>",
+					"instances":[ 
+						{
+							"id": "31",
+							"uri": "http://localhost:3000",
+							"nodeName": "http:\/\/localhost:3000",
+							"method": "GET",
+							"param": "content-security-policy",
+							"attack": "",
+							"evidence": "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-src 'self' blob:; font-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+							"otherinfo": "script-src includes unsafe-eval."
+						},
+						{
+							"id": "5",
+							"uri": "http://localhost:3000/robots.txt",
+							"nodeName": "http:\/\/localhost:3000\/robots.txt",
+							"method": "GET",
+							"param": "content-security-policy",
+							"attack": "",
+							"evidence": "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-src 'self' blob:; font-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+							"otherinfo": "script-src includes unsafe-eval."
+						},
+						{
+							"id": "7",
+							"uri": "http://localhost:3000/sitemap.xml",
+							"nodeName": "http:\/\/localhost:3000\/sitemap.xml",
+							"method": "GET",
+							"param": "content-security-policy",
+							"attack": "",
+							"evidence": "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-src 'self' blob:; font-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+							"otherinfo": "script-src includes unsafe-eval."
+						}
+					],
+					"count": "3",
+					"systemic": false,
+					"solution": "<p>Ensure that your web server, application server, load balancer, etc. is properly configured to set the Content-Security-Policy header.</p>",
+					"otherinfo": "<p>script-src includes unsafe-eval.</p>",
+					"reference": "<p>https://www.w3.org/TR/CSP/</p><p>https://caniuse.com/#search=content+security+policy</p><p>https://content-security-policy.com/</p><p>https://github.com/HtmlUnit/htmlunit-csp</p><p>https://web.dev/articles/csp#resource-options</p>",
+					"cweid": "693",
+					"wascid": "15",
+					"sourceid": "24"
+				},
+				{
+					"pluginid": "10055",
+					"alertRef": "10055-5",
+					"alert": "CSP: script-src unsafe-inline",
+					"name": "CSP: script-src unsafe-inline",
+					"riskcode": "2",
+					"confidence": "3",
+					"riskdesc": "Medium (High)",
+					"desc": "<p>Content Security Policy (CSP) is an added layer of security that helps to detect and mitigate certain types of attacks. Including (but not limited to) Cross Site Scripting (XSS), and data injection attacks. These attacks are used for everything from data theft to site defacement or distribution of malware. CSP provides a set of standard HTTP headers that allow website owners to declare approved sources of content that browsers should be allowed to load on that page \u2014 covered types are JavaScript, CSS, HTML frames, fonts, images and embeddable objects such as Java applets, ActiveX, audio and video files.</p>",
+					"instances":[ 
+						{
+							"id": "29",
+							"uri": "http://localhost:3000",
+							"nodeName": "http:\/\/localhost:3000",
+							"method": "GET",
+							"param": "content-security-policy",
+							"attack": "",
+							"evidence": "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-src 'self' blob:; font-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+							"otherinfo": "script-src includes unsafe-inline."
+						},
+						{
+							"id": "2",
+							"uri": "http://localhost:3000/robots.txt",
+							"nodeName": "http:\/\/localhost:3000\/robots.txt",
+							"method": "GET",
+							"param": "content-security-policy",
+							"attack": "",
+							"evidence": "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-src 'self' blob:; font-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+							"otherinfo": "script-src includes unsafe-inline."
+						},
+						{
+							"id": "4",
+							"uri": "http://localhost:3000/sitemap.xml",
+							"nodeName": "http:\/\/localhost:3000\/sitemap.xml",
+							"method": "GET",
+							"param": "content-security-policy",
+							"attack": "",
+							"evidence": "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-src 'self' blob:; font-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+							"otherinfo": "script-src includes unsafe-inline."
+						}
+					],
+					"count": "3",
+					"systemic": false,
+					"solution": "<p>Ensure that your web server, application server, load balancer, etc. is properly configured to set the Content-Security-Policy header.</p>",
+					"otherinfo": "<p>script-src includes unsafe-inline.</p>",
+					"reference": "<p>https://www.w3.org/TR/CSP/</p><p>https://caniuse.com/#search=content+security+policy</p><p>https://content-security-policy.com/</p><p>https://github.com/HtmlUnit/htmlunit-csp</p><p>https://web.dev/articles/csp#resource-options</p>",
+					"cweid": "693",
+					"wascid": "15",
+					"sourceid": "24"
+				},
+				{
+					"pluginid": "10055",
+					"alertRef": "10055-6",
+					"alert": "CSP: style-src unsafe-inline",
+					"name": "CSP: style-src unsafe-inline",
+					"riskcode": "2",
+					"confidence": "3",
+					"riskdesc": "Medium (High)",
+					"desc": "<p>Content Security Policy (CSP) is an added layer of security that helps to detect and mitigate certain types of attacks. Including (but not limited to) Cross Site Scripting (XSS), and data injection attacks. These attacks are used for everything from data theft to site defacement or distribution of malware. CSP provides a set of standard HTTP headers that allow website owners to declare approved sources of content that browsers should be allowed to load on that page \u2014 covered types are JavaScript, CSS, HTML frames, fonts, images and embeddable objects such as Java applets, ActiveX, audio and video files.</p>",
+					"instances":[ 
+						{
+							"id": "30",
+							"uri": "http://localhost:3000",
+							"nodeName": "http:\/\/localhost:3000",
+							"method": "GET",
+							"param": "content-security-policy",
+							"attack": "",
+							"evidence": "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-src 'self' blob:; font-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+							"otherinfo": "style-src includes unsafe-inline."
+						},
+						{
+							"id": "3",
+							"uri": "http://localhost:3000/robots.txt",
+							"nodeName": "http:\/\/localhost:3000\/robots.txt",
+							"method": "GET",
+							"param": "content-security-policy",
+							"attack": "",
+							"evidence": "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-src 'self' blob:; font-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+							"otherinfo": "style-src includes unsafe-inline."
+						},
+						{
+							"id": "6",
+							"uri": "http://localhost:3000/sitemap.xml",
+							"nodeName": "http:\/\/localhost:3000\/sitemap.xml",
+							"method": "GET",
+							"param": "content-security-policy",
+							"attack": "",
+							"evidence": "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-src 'self' blob:; font-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+							"otherinfo": "style-src includes unsafe-inline."
+						}
+					],
+					"count": "3",
+					"systemic": false,
+					"solution": "<p>Ensure that your web server, application server, load balancer, etc. is properly configured to set the Content-Security-Policy header.</p>",
+					"otherinfo": "<p>style-src includes unsafe-inline.</p>",
+					"reference": "<p>https://www.w3.org/TR/CSP/</p><p>https://caniuse.com/#search=content+security+policy</p><p>https://content-security-policy.com/</p><p>https://github.com/HtmlUnit/htmlunit-csp</p><p>https://web.dev/articles/csp#resource-options</p>",
+					"cweid": "693",
+					"wascid": "15",
+					"sourceid": "24"
+				},
+				{
+					"pluginid": "90004",
+					"alertRef": "90004-2",
+					"alert": "Cross-Origin-Embedder-Policy Header Missing or Invalid",
+					"name": "Cross-Origin-Embedder-Policy Header Missing or Invalid",
+					"riskcode": "1",
+					"confidence": "2",
+					"riskdesc": "Low (Medium)",
+					"desc": "<p>Cross-Origin-Embedder-Policy header is a response header that prevents a document from loading any cross-origin resources that don't explicitly grant the document permission (using CORP or CORS).</p>",
+					"instances":[ 
+						{
+							"id": "64",
+							"uri": "http://localhost:3000",
+							"nodeName": "http:\/\/localhost:3000",
+							"method": "GET",
+							"param": "Cross-Origin-Embedder-Policy",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						}
+					],
+					"count": "1",
+					"systemic": false,
+					"solution": "<p>Ensure that the application/web server sets the Cross-Origin-Embedder-Policy header appropriately, and that it sets the Cross-Origin-Embedder-Policy header to 'require-corp' for documents.</p><p>If possible, ensure that the end user uses a standards-compliant and modern web browser that supports the Cross-Origin-Embedder-Policy header (https://caniuse.com/mdn-http_headers_cross-origin-embedder-policy).</p>",
+					"otherinfo": "",
+					"reference": "<p>https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cross-Origin-Embedder-Policy</p>",
+					"cweid": "693",
+					"wascid": "14",
+					"sourceid": "24"
+				},
+				{
+					"pluginid": "90004",
+					"alertRef": "90004-3",
+					"alert": "Cross-Origin-Opener-Policy Header Missing or Invalid",
+					"name": "Cross-Origin-Opener-Policy Header Missing or Invalid",
+					"riskcode": "1",
+					"confidence": "2",
+					"riskdesc": "Low (Medium)",
+					"desc": "<p>Cross-Origin-Opener-Policy header is a response header that allows a site to control if others included documents share the same browsing context. Sharing the same browsing context with untrusted documents might lead to data leak.</p>",
+					"instances":[ 
+						{
+							"id": "66",
+							"uri": "http://localhost:3000",
+							"nodeName": "http:\/\/localhost:3000",
+							"method": "GET",
+							"param": "Cross-Origin-Opener-Policy",
+							"attack": "",
+							"evidence": "same-origin-allow-popups",
+							"otherinfo": ""
+						}
+					],
+					"count": "1",
+					"systemic": false,
+					"solution": "<p>Ensure that the application/web server sets the Cross-Origin-Opener-Policy header appropriately, and that it sets the Cross-Origin-Opener-Policy header to 'same-origin' for documents.</p><p>'same-origin-allow-popups' is considered as less secured and should be avoided.</p><p>If possible, ensure that the end user uses a standards-compliant and modern web browser that supports the Cross-Origin-Opener-Policy header (https://caniuse.com/mdn-http_headers_cross-origin-opener-policy).</p>",
+					"otherinfo": "",
+					"reference": "<p>https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cross-Origin-Opener-Policy</p>",
+					"cweid": "693",
+					"wascid": "14",
+					"sourceid": "1"
+				},
+				{
+					"pluginid": "90004",
+					"alertRef": "90004-1",
+					"alert": "Cross-Origin-Resource-Policy Header Missing or Invalid",
+					"name": "Cross-Origin-Resource-Policy Header Missing or Invalid",
+					"riskcode": "1",
+					"confidence": "2",
+					"riskdesc": "Low (Medium)",
+					"desc": "<p>Cross-Origin-Resource-Policy header is an opt-in header designed to counter side-channels attacks like Spectre. Resource should be specifically set as shareable amongst different origins.</p>",
+					"instances":[ 
+						{
+							"id": "24",
+							"uri": "http://localhost:3000/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_57d40746._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/[turbopack]_browser_dev_hmr-client_hmr-client_ts_57d40746._.js",
+							"method": "GET",
+							"param": "Cross-Origin-Resource-Policy",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "51",
+							"uri": "http://localhost:3000/_next/static/chunks/_a0ff3932._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/_a0ff3932._.js",
+							"method": "GET",
+							"param": "Cross-Origin-Resource-Policy",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "59",
+							"uri": "http://localhost:3000/_next/static/chunks/_e084681a._.css",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/_e084681a._.css",
+							"method": "GET",
+							"param": "Cross-Origin-Resource-Policy",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "17",
+							"uri": "http://localhost:3000/icon.svg",
+							"nodeName": "http:\/\/localhost:3000\/icon.svg",
+							"method": "GET",
+							"param": "Cross-Origin-Resource-Policy",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "47",
+							"uri": "http://localhost:3000/nycu-favicon.svg",
+							"nodeName": "http:\/\/localhost:3000\/nycu-favicon.svg",
+							"method": "GET",
+							"param": "Cross-Origin-Resource-Policy",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						}
+					],
+					"count": "5",
+					"systemic": true,
+					"solution": "<p>Ensure that the application/web server sets the Cross-Origin-Resource-Policy header appropriately, and that it sets the Cross-Origin-Resource-Policy header to 'same-origin' for all web pages.</p><p>'same-site' is considered as less secured and should be avoided.</p><p>If resources must be shared, set the header to 'cross-origin'.</p><p>If possible, ensure that the end user uses a standards-compliant and modern web browser that supports the Cross-Origin-Resource-Policy header (https://caniuse.com/mdn-http_headers_cross-origin-resource-policy).</p>",
+					"otherinfo": "",
+					"reference": "<p>https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cross-Origin-Embedder-Policy</p>",
+					"cweid": "693",
+					"wascid": "14",
+					"sourceid": "31"
+				},
+				{
+					"pluginid": "10110",
+					"alertRef": "10110",
+					"alert": "Dangerous JS Functions",
+					"name": "Dangerous JS Functions",
+					"riskcode": "1",
+					"confidence": "1",
+					"riskdesc": "Low (Low)",
+					"desc": "<p>A dangerous JS function seems to be in use that would leave the site vulnerable.</p>",
+					"instances":[ 
+						{
+							"id": "95",
+							"uri": "http://localhost:3000/_next/static/chunks/turbopack-_cdba956c._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/turbopack-_cdba956c._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "eval(",
+							"otherinfo": ""
+						}
+					],
+					"count": "1",
+					"systemic": false,
+					"solution": "<p>See the references for security advice on the use of these functions.</p>",
+					"otherinfo": "",
+					"reference": "<p>https://v17.angular.io/guide/security</p>",
+					"cweid": "749",
+					"wascid": "-1",
+					"sourceid": "39"
+				},
+				{
+					"pluginid": "110009",
+					"alertRef": "110009",
+					"alert": "Full Path Disclosure",
+					"name": "Full Path Disclosure",
+					"riskcode": "1",
+					"confidence": "1",
+					"riskdesc": "Low (Low)",
+					"desc": "<p>The full path of files which might be sensitive has been exposed to the client.</p>",
+					"instances":[ 
+						{
+							"id": "53",
+							"uri": "http://localhost:3000/robots.txt",
+							"nodeName": "http:\/\/localhost:3000\/robots.txt",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "/lib/",
+							"otherinfo": ""
+						},
+						{
+							"id": "56",
+							"uri": "http://localhost:3000/sitemap.xml",
+							"nodeName": "http:\/\/localhost:3000\/sitemap.xml",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "/lib/",
+							"otherinfo": ""
+						}
+					],
+					"count": "2",
+					"systemic": false,
+					"solution": "<p>Disable directory browsing in your web server. Refer to the web server documentation.</p>",
+					"otherinfo": "",
+					"reference": "<p>https://owasp.org/www-community/attacks/Full_Path_Disclosure</p>",
+					"cweid": "209",
+					"wascid": "13",
+					"sourceid": "9"
+				},
+				{
+					"pluginid": "10063",
+					"alertRef": "10063-1",
+					"alert": "Permissions Policy Header Not Set",
+					"name": "Permissions Policy Header Not Set",
+					"riskcode": "1",
+					"confidence": "2",
+					"riskdesc": "Low (Medium)",
+					"desc": "<p>Permissions Policy Header is an added layer of security that helps to restrict from unauthorized access or usage of browser/client features by web resources. This policy ensures the user privacy by limiting or specifying the features of the browsers can be used by the web resources. Permissions Policy provides a set of standard HTTP headers that allow website owners to limit which features of browsers can be used by the page such as camera, microphone, location, full screen etc.</p>",
+					"instances":[ 
+						{
+							"id": "23",
+							"uri": "http://localhost:3000/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_57d40746._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/[turbopack]_browser_dev_hmr-client_hmr-client_ts_57d40746._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "80",
+							"uri": "http://localhost:3000/_next/static/chunks/_8bb8c147._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/_8bb8c147._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "50",
+							"uri": "http://localhost:3000/_next/static/chunks/_a0ff3932._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/_a0ff3932._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "73",
+							"uri": "http://localhost:3000/_next/static/chunks/app_layout_tsx_0a548d63._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/app_layout_tsx_0a548d63._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "69",
+							"uri": "http://localhost:3000/_next/static/chunks/node_modules_%40swc_helpers_cjs_b3dc30d6._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/node_modules_@swc_helpers_cjs_b3dc30d6._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						}
+					],
+					"count": "5",
+					"systemic": true,
+					"solution": "<p>Ensure that your web server, application server, load balancer, etc. is configured to set the Permissions-Policy header.</p>",
+					"otherinfo": "",
+					"reference": "<p>https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Permissions-Policy</p><p>https://developer.chrome.com/blog/feature-policy/</p><p>https://scotthelme.co.uk/a-new-security-header-feature-policy/</p><p>https://w3c.github.io/webappsec-feature-policy/</p><p>https://www.smashingmagazine.com/2018/12/feature-policy/</p>",
+					"cweid": "693",
+					"wascid": "15",
+					"sourceid": "31"
+				},
+				{
+					"pluginid": "2",
+					"alertRef": "2",
+					"alert": "Private IP Disclosure",
+					"name": "Private IP Disclosure",
+					"riskcode": "1",
+					"confidence": "2",
+					"riskdesc": "Low (Medium)",
+					"desc": "<p>A private IP (such as 10.x.x.x, 172.x.x.x, 192.168.x.x) or an Amazon EC2 private hostname (for example, ip-10-0-56-78) has been found in the HTTP response body. This information might be helpful for further attacks targeting internal systems.</p>",
+					"instances":[ 
+						{
+							"id": "36",
+							"uri": "http://localhost:3000",
+							"nodeName": "http:\/\/localhost:3000",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "172.30.0.1",
+							"otherinfo": "172.30.0.1\n"
+						},
+						{
+							"id": "138",
+							"uri": "http://localhost:3000/",
+							"nodeName": "http:\/\/localhost:3000\/",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "172.30.0.1",
+							"otherinfo": "172.30.0.1\n"
+						},
+						{
+							"id": "15",
+							"uri": "http://localhost:3000/robots.txt",
+							"nodeName": "http:\/\/localhost:3000\/robots.txt",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "172.30.0.1",
+							"otherinfo": "172.30.0.1\n"
+						},
+						{
+							"id": "25",
+							"uri": "http://localhost:3000/sitemap.xml",
+							"nodeName": "http:\/\/localhost:3000\/sitemap.xml",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "172.30.0.1",
+							"otherinfo": "172.30.0.1\n"
+						}
+					],
+					"count": "4",
+					"systemic": false,
+					"solution": "<p>Remove the private IP address from the HTTP response body. For comments, use JSP/ASP/PHP comment instead of HTML/JavaScript comment which can be seen by client browsers.</p>",
+					"otherinfo": "<p>172.30.0.1</p><p></p>",
+					"reference": "<p>https://datatracker.ietf.org/doc/html/rfc1918</p>",
+					"cweid": "497",
+					"wascid": "13",
+					"sourceid": "24"
+				},
+				{
+					"pluginid": "10096",
+					"alertRef": "10096",
+					"alert": "Timestamp Disclosure - Unix",
+					"name": "Timestamp Disclosure - Unix",
+					"riskcode": "1",
+					"confidence": "1",
+					"riskdesc": "Low (Low)",
+					"desc": "<p>A timestamp was disclosed by the application/web server. - Unix</p>",
+					"instances":[ 
+						{
+							"id": "137",
+							"uri": "http://localhost:3000/_next/static/chunks/node_modules_84eac506._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/node_modules_84eac506._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "1866099640",
+							"otherinfo": "1866099640, which evaluates to: 2029-02-18 09:00:40."
+						},
+						{
+							"id": "136",
+							"uri": "http://localhost:3000/_next/static/chunks/node_modules_%40floating-ui_1b6e7b6d._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/node_modules_@floating-ui_1b6e7b6d._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "1719601643",
+							"otherinfo": "1719601643, which evaluates to: 2024-06-28 19:07:23."
+						}
+					],
+					"count": "2",
+					"systemic": false,
+					"solution": "<p>Manually confirm that the timestamp data is not sensitive, and that the data cannot be aggregated to disclose exploitable patterns.</p>",
+					"otherinfo": "<p>1866099640, which evaluates to: 2029-02-18 09:00:40.</p>",
+					"reference": "<p>https://cwe.mitre.org/data/definitions/200.html</p>",
+					"cweid": "497",
+					"wascid": "13",
+					"sourceid": "106"
+				},
+				{
+					"pluginid": "10021",
+					"alertRef": "10021",
+					"alert": "X-Content-Type-Options Header Missing",
+					"name": "X-Content-Type-Options Header Missing",
+					"riskcode": "1",
+					"confidence": "2",
+					"riskdesc": "Low (Medium)",
+					"desc": "<p>The Anti-MIME-Sniffing header X-Content-Type-Options was not set to 'nosniff'. This allows older versions of Internet Explorer and Chrome to perform MIME-sniffing on the response body, potentially causing the response body to be interpreted and displayed as a content type other than the declared content type. Current (early 2014) and legacy versions of Firefox will use the declared content type (if one is set), rather than performing MIME-sniffing.</p>",
+					"instances":[ 
+						{
+							"id": "9",
+							"uri": "http://localhost:3000/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_57d40746._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/[turbopack]_browser_dev_hmr-client_hmr-client_ts_57d40746._.js",
+							"method": "GET",
+							"param": "x-content-type-options",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": "This issue still applies to error type pages (401, 403, 500, etc.) as those pages are often still affected by injection issues, in which case there is still concern for browsers sniffing pages away from their actual content type.\nAt \"High\" threshold this scan rule will not alert on client or server error responses."
+						},
+						{
+							"id": "40",
+							"uri": "http://localhost:3000/_next/static/chunks/_e084681a._.css",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/_e084681a._.css",
+							"method": "GET",
+							"param": "x-content-type-options",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": "This issue still applies to error type pages (401, 403, 500, etc.) as those pages are often still affected by injection issues, in which case there is still concern for browsers sniffing pages away from their actual content type.\nAt \"High\" threshold this scan rule will not alert on client or server error responses."
+						},
+						{
+							"id": "41",
+							"uri": "http://localhost:3000/_next/static/chunks/node_modules_%40swc_helpers_cjs_b3dc30d6._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/node_modules_@swc_helpers_cjs_b3dc30d6._.js",
+							"method": "GET",
+							"param": "x-content-type-options",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": "This issue still applies to error type pages (401, 403, 500, etc.) as those pages are often still affected by injection issues, in which case there is still concern for browsers sniffing pages away from their actual content type.\nAt \"High\" threshold this scan rule will not alert on client or server error responses."
+						},
+						{
+							"id": "8",
+							"uri": "http://localhost:3000/icon.svg",
+							"nodeName": "http:\/\/localhost:3000\/icon.svg",
+							"method": "GET",
+							"param": "x-content-type-options",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": "This issue still applies to error type pages (401, 403, 500, etc.) as those pages are often still affected by injection issues, in which case there is still concern for browsers sniffing pages away from their actual content type.\nAt \"High\" threshold this scan rule will not alert on client or server error responses."
+						},
+						{
+							"id": "10",
+							"uri": "http://localhost:3000/nycu-favicon.svg",
+							"nodeName": "http:\/\/localhost:3000\/nycu-favicon.svg",
+							"method": "GET",
+							"param": "x-content-type-options",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": "This issue still applies to error type pages (401, 403, 500, etc.) as those pages are often still affected by injection issues, in which case there is still concern for browsers sniffing pages away from their actual content type.\nAt \"High\" threshold this scan rule will not alert on client or server error responses."
+						}
+					],
+					"count": "5",
+					"systemic": true,
+					"solution": "<p>Ensure that the application/web server sets the Content-Type header appropriately, and that it sets the X-Content-Type-Options header to 'nosniff' for all web pages.</p><p>If possible, ensure that the end user uses a standards-compliant and modern web browser that does not perform MIME-sniffing at all, or that can be directed by the web application/web server to not perform MIME-sniffing.</p>",
+					"otherinfo": "<p>This issue still applies to error type pages (401, 403, 500, etc.) as those pages are often still affected by injection issues, in which case there is still concern for browsers sniffing pages away from their actual content type.</p><p>At \"High\" threshold this scan rule will not alert on client or server error responses.</p>",
+					"reference": "<p>https://learn.microsoft.com/en-us/previous-versions/windows/internet-explorer/ie-developer/compatibility/gg622941(v=vs.85)</p><p>https://owasp.org/www-community/Security_Headers</p>",
+					"cweid": "693",
+					"wascid": "15",
+					"sourceid": "31"
+				},
+				{
+					"pluginid": "10094",
+					"alertRef": "10094-3",
+					"alert": "Base64 Disclosure",
+					"name": "Base64 Disclosure",
+					"riskcode": "0",
+					"confidence": "2",
+					"riskdesc": "Informational (Medium)",
+					"desc": "<p>Base64 encoded data was disclosed by the application/web server. Note: in the interests of performance not all base64 strings in the response were analyzed individually, the entire response should be looked at by the analyst/security team/developer(s).</p>",
+					"instances":[ 
+						{
+							"id": "60",
+							"uri": "http://localhost:3000",
+							"nodeName": "http:\/\/localhost:3000",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "/_next/static/chunks/node_modules_react-pdf_dist_esm_Page_b26c4e20",
+							"otherinfo": "\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uCD6Bbs\uFFFD!\uFFFDy,\uFFFDz\\x001d{\uFFFD\uFFFDv\uFFFD^\uFFFD\uFFFD\uFFFDi\uFFFD~\uFFFD\uFFFD\uFFFDv+-\uFFFD\uFFFD&\uFFFD\uFFFD\uFFFD{\uFFFD\uFFFD\uFFFD\uFFFD\\x001e\uFFFD"
+						},
+						{
+							"id": "82",
+							"uri": "http://localhost:3000/_next/static/chunks/_0978a61d._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/_0978a61d._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "static/chunks/components_admin_dashboard_DashboardPanel_tsx_da0ed8e6",
+							"otherinfo": "\uFFFD\u05AD\uFFFD\uFFFD\u0706\uFFFD\uFFFD\uFFFD(\uFFFD\uFFFD'z{l\uFFFD\uFFFDf\uFFFD\uFFFDj\uFFFD[\uFFFD\uFFFD\uFFFD\uFFFD6\uFFFD\uFFFD\uFFFD\\x001a\uFFFD\uFFFD\u069D\uFFFD\uFFFD\uFFFDu\uFFFD\\x001ew\u01FA"
+						},
+						{
+							"id": "114",
+							"uri": "http://localhost:3000/_next/static/chunks/components_ScholarshipWorkflowMermaid_tsx_16cfab4a._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/components_ScholarshipWorkflowMermaid_tsx_16cfab4a._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "components_ScholarshipWorkflowMermaid_tsx_16cfab4a",
+							"otherinfo": "r\uFFFD\uFFFD\uFFFDw\uFFFD\uFFFD\uFFFD\uFFFDr\\x001a%j\uFFFD!\uFFFD\uFFFD\uFFFD\uFFFDG\uFFFD\\x0003\\x001e\uFFFDf\uFFFDw\uFFFDl\uFFFD\uFFFDzq\uFFFD\uFFFD\uFFFD"
+						},
+						{
+							"id": "135",
+							"uri": "http://localhost:3000/_next/static/chunks/components_batch-import-panel_tsx_19db43a9._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/components_batch-import-panel_tsx_19db43a9._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "_uploadedBatch_validation_summary1",
+							"otherinfo": "\uFFFD\uFFFDe\uFFFD\uFFFD^t\\x0016\uFFFDr\\x001f\uFFFDjX\uFFFDj\u0628\uFFFD\uFFFD.\uFFFDf\uFFFD\uFFFD"
+						},
+						{
+							"id": "126",
+							"uri": "http://localhost:3000/_next/static/chunks/components_student-wizard_bbbe0c5b._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/components_student-wizard_bbbe0c5b._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "export__default__as__Building2",
+							"otherinfo": "{\\x001ah\uFFFD\uFFFD\uFFFDu\uFFFD\u06BA[\uFFFD\uFFFD?\uFFFD\\x001b\uFFFD\uFFFD\u0627\uFFFD"
+						},
+						{
+							"id": "125",
+							"uri": "http://localhost:3000/_next/static/chunks/node_modules_0749d7b1._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/node_modules_0749d7b1._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "/node_modules/zod/v3/helpers/parseUtil",
+							"otherinfo": "\uFFFDz\\x001d{\uFFFD\uFFFDv\uFFFD^\uFFFD\uFFFD\uFFFDw\uFFFD\uFFFD\uFFFD\\x0017\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD-\uFFFD"
+						},
+						{
+							"id": "109",
+							"uri": "http://localhost:3000/_next/static/chunks/node_modules_next_dist_b0daae9a._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/node_modules_next_dist_b0daae9a._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "com/facebook/create-react-app/blob/7b1a32be6ec9f99a6c9a3c66813f3ac09c4736b9/packages/react-dev-utils/formatWebpackMessages",
+							"otherinfo": "r\uFFFD\uFFFD}\uFFFD\\x001en\uFFFD$\uFFFD\uFFFD\uFFFDj\u05FE\uFFFD\u6737\u6A67\uFFFD\u587F\uFFFDoV\uFFFD\u0677\uFFFDy\uFFFD_\uFFFD\u05BAs\u05B7s\uFFFD\uFFFD\uFFFDw\uFFFDi\uFFFD=s\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD$j\\x0007\uFFFD\uFFFD\uFFFD\uFFFDr\u07DDz\uFFFD\uFFFD\uFFFD)l\uFFFD\uFFFD+\uFFFD\uFFFDVy\uFFFDZrC\\x001e\uFFFD\u01A0z"
+						},
+						{
+							"id": "134",
+							"uri": "http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_cf1d9188._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/node_modules_next_dist_client_cf1d9188._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "com/webpack/webpack/blob/3aa6b6bc3a64/lib/hmr/HotModuleReplacement",
+							"otherinfo": "r\uFFFD\uFFFD\uFFFD\uFFFD\uFFFDi\uFFFD?\uFFFD\uFFFD\uFFFDi\uFFFD?nZ\\x001b\uFFFDv\uFFFD\u9F9Bsv\uFFFD\uFFFD\uFFFDbo\uFFFDf\uFFFD\uFFFD\uFFFD\uFFFD\\x001d\uFFFDW\uFFFDz\uFFFDZq\u979E"
+						},
+						{
+							"id": "92",
+							"uri": "http://localhost:3000/_next/static/chunks/turbopack-_cdba956c._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/turbopack-_cdba956c._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "com/webpack/webpack/blob/6be4065ade1e252c1d8dcba4af0f43e32af1bdc1/lib/runtime/AsyncModuleRuntimeModule",
+							"otherinfo": "r\uFFFD\uFFFD\uFFFD\uFFFD\uFFFDi\uFFFD?\uFFFD\uFFFD\uFFFDi\uFFFD?nZ\\x001b\uFFFD\uFFFD\uFFFD\uFFFDN\uFFFDi\u05F5{nvsW|u\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFDf\uFFFD\u0577\\\uFFFD\uFFFDbo\uFFFD\uFFFD\u0626{\uFFFD,\uFFFDw\\x000c\uFFFD\u06E5y\\x001b\uFFFD\uFFFD)\uFFFD2\uFFFDn\uFFFD"
+						},
+						{
+							"id": "52",
+							"uri": "http://localhost:3000/robots.txt",
+							"nodeName": "http:\/\/localhost:3000\/robots.txt",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "5D_browser_dev_hmr-client_hmr-client_ts_57d40746",
+							"otherinfo": "\uFFFD?\u06EE\uFFFD,z\uFFFD\uFFFDz\uFFFD\u16BF\uFFFD\uFFFD'\uFFFD\uFFFD\uFFFDf\uFFFD\uFFFD%\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD?\uFFFDx\u04FE:"
+						},
+						{
+							"id": "55",
+							"uri": "http://localhost:3000/sitemap.xml",
+							"nodeName": "http:\/\/localhost:3000\/sitemap.xml",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "5D_browser_dev_hmr-client_hmr-client_ts_57d40746",
+							"otherinfo": "\uFFFD?\u06EE\uFFFD,z\uFFFD\uFFFDz\uFFFD\u16BF\uFFFD\uFFFD'\uFFFD\uFFFD\uFFFDf\uFFFD\uFFFD%\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD?\uFFFDx\u04FE:"
+						}
+					],
+					"count": "11",
+					"systemic": false,
+					"solution": "<p>Manually confirm that the Base64 data does not leak sensitive information, and that the data cannot be aggregated/used to exploit other vulnerabilities.</p>",
+					"otherinfo": "<p>\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uCD6Bbs\uFFFD!\uFFFDy,\uFFFDz\\x001d{\uFFFD\uFFFDv\uFFFD^\uFFFD\uFFFD\uFFFDi\uFFFD~\uFFFD\uFFFD\uFFFDv+-\uFFFD\uFFFD&\uFFFD\uFFFD\uFFFD{\uFFFD\uFFFD\uFFFD\uFFFD\\x001e\uFFFD</p>",
+					"reference": "<p>https://projects.webappsec.org/w/page/13246936/Information%20Leakage</p>",
+					"cweid": "319",
+					"wascid": "13",
+					"sourceid": "24"
+				},
+				{
+					"pluginid": "10027",
+					"alertRef": "10027",
+					"alert": "Information Disclosure - Suspicious Comments",
+					"name": "Information Disclosure - Suspicious Comments",
+					"riskcode": "0",
+					"confidence": "2",
+					"riskdesc": "Informational (Medium)",
+					"desc": "<p>The response appears to contain suspicious comments which may help an attacker.</p>",
+					"instances":[ 
+						{
+							"id": "118",
+							"uri": "http://localhost:3000/_next/static/chunks/_6592d88f._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/_6592d88f._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": " {\n   *     body: { username, password }\n   *   ",
+							"otherinfo": "The following pattern was used: \\bUSERNAME\\b and was detected 3 times, the first in likely comment: \"/**\n   * Get the raw typed client for direct API calls\n   *\n   * Usage:\n   *   const response = await typedClient.raw.GET('/auth\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "117",
+							"uri": "http://localhost:3000/_next/static/chunks/_6592d88f._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/_6592d88f._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "/**\n   * Log debug messages (developme",
+							"otherinfo": "The following pattern was used: \\bDEBUG\\b and was detected 2 times, the first in likely comment: \"/**\n   * Log debug messages (development only)\n   */\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "119",
+							"uri": "http://localhost:3000/_next/static/chunks/_6592d88f._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/_6592d88f._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "// Handle query parameters",
+							"otherinfo": "The following pattern was used: \\bQUERY\\b and was detected 61 times, the first in likely comment: \"// Handle query parameters\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "123",
+							"uri": "http://localhost:3000/_next/static/chunks/_6592d88f._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/_6592d88f._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "// TODO: Update OpenAPI sch",
+							"otherinfo": "The following pattern was used: \\bTODO\\b and was detected in likely comment: \"// TODO: Update OpenAPI schema for registration endpoint \u2014 until then,\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "121",
+							"uri": "http://localhost:3000/_next/static/chunks/_6592d88f._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/_6592d88f._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": ";\n *   logger.info('User logged in', { userI",
+							"otherinfo": "The following pattern was used: \\bUSER\\b and was detected 29 times, the first in likely comment: \"/**\n * Centralized logging utility with environment-aware behavior\n *\n * SECURITY: In production, logs generic messages only to \", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "122",
+							"uri": "http://localhost:3000/_next/static/chunks/_6592d88f._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/_6592d88f._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "content-type header from a fetch Response, t",
+							"otherinfo": "The following pattern was used: \\bFROM\\b and was detected 76 times, the first in likely comment: \"/**\n   * Extract the content-type header from a fetch Response, tolerating test\n   * mocks that pass a plain-object `headers` ma\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "124",
+							"uri": "http://localhost:3000/_next/static/chunks/_6592d88f._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/_6592d88f._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "d / session restore where the token only live",
+							"otherinfo": "The following pattern was used: \\bWHERE\\b and was detected 2 times, the first in likely comment: \"/**\n * Resolve the auth token for direct `fetch()` downloads.\n *\n * The typed client keeps an in-memory copy, but that can be em\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "116",
+							"uri": "http://localhost:3000/_next/static/chunks/_6592d88f._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/_6592d88f._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "er CRUD operations (admin)\n * - User statisti",
+							"otherinfo": "The following pattern was used: \\bADMIN\\b and was detected 46 times, the first in likely comment: \"/**\n * Users API Module (OpenAPI-typed)\n *\n * Handles user-related operations including:\n * - Profile management\n * - Student in\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "120",
+							"uri": "http://localhost:3000/_next/static/chunks/_6592d88f._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/_6592d88f._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "g primitive:\n *     Select, DropdownMenu, Dial",
+							"otherinfo": "The following pattern was used: \\bSELECT\\b and was detected in likely comment: \"/**\n * Client-side plumbing for the per-request CSP nonce. Issue #1273.\n *\n * With production `style-src` nonce-gated (no 'unsaf\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "115",
+							"uri": "http://localhost:3000/_next/static/chunks/_6592d88f._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/_6592d88f._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "hose allocation was later revoked or suspende",
+							"otherinfo": "The following pattern was used: \\bLATER\\b and was detected in likely comment: \"/**\n     * \u53D6\u5F97\u9020\u518A\u4E2D\u5DF2\u64A4\u92B7/\u505C\u767C\u7684\u5B78\u751F\u6E05\u55AE\n     * Lists students still embedded in a locked roster whose allocation was later revoked or suspen\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "112",
+							"uri": "http://localhost:3000/_next/static/chunks/components_enhanced-student-portal_tsx_ac266d54._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/components_enhanced-student-portal_tsx_ac266d54._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "// Debug authentication stat",
+							"otherinfo": "The following pattern was used: \\bDEBUG\\b and was detected 5 times, the first in likely comment: \"// Debug authentication status\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "113",
+							"uri": "http://localhost:3000/_next/static/chunks/components_enhanced-student-portal_tsx_ac266d54._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/components_enhanced-student-portal_tsx_ac266d54._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "editing application from the applications li",
+							"otherinfo": "The following pattern was used: \\bFROM\\b and was detected 3 times, the first in likely comment: \"// Get the editing application from the applications list\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "94",
+							"uri": "http://localhost:3000/_next/static/chunks/components_user-permission-management_tsx_eb418631._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/components_user-permission-management_tsx_eb418631._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "// User management states",
+							"otherinfo": "The following pattern was used: \\bUSER\\b and was detected 3 times, the first in likely comment: \"// User management states\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "93",
+							"uri": "http://localhost:3000/_next/static/chunks/components_user-permission-management_tsx_eb418631._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/components_user-permission-management_tsx_eb418631._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "ons for non-college/admin roles",
+							"otherinfo": "The following pattern was used: \\bADMIN\\b and was detected in likely comment: \"// Remove all permissions for non-college/admin roles\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "104",
+							"uri": "http://localhost:3000/_next/static/chunks/node_modules_next_dist_b0daae9a._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/node_modules_next_dist_b0daae9a._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": " find the pathname, query and hash and return",
+							"otherinfo": "The following pattern was used: \\bQUERY\\b and was detected in likely comment: \"/**\n * Given a path this function will find the pathname, query and hash and return\n * them. This is useful to parse full paths \", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "107",
+							"uri": "http://localhost:3000/_next/static/chunks/node_modules_next_dist_b0daae9a._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/node_modules_next_dist_b0daae9a._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "// TODO: We should hoist th",
+							"otherinfo": "The following pattern was used: \\bTODO\\b and was detected 10 times, the first in likely comment: \"// TODO: We should hoist the search params out of the FlightRouterState\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "105",
+							"uri": "http://localhost:3000/_next/static/chunks/node_modules_next_dist_b0daae9a._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/node_modules_next_dist_b0daae9a._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "// from user code generated by W",
+							"otherinfo": "The following pattern was used: \\bUSER\\b and was detected 4 times, the first in likely comment: \"// from user code generated by Webpack. For more information see\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "108",
+							"uri": "http://localhost:3000/_next/static/chunks/node_modules_next_dist_b0daae9a._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/node_modules_next_dist_b0daae9a._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "// where rust does not have ",
+							"otherinfo": "The following pattern was used: \\bWHERE\\b and was detected 6 times, the first in likely comment: \"// where rust does not have easy way to repreesnt js's 53-bit float number type for the matching\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "106",
+							"uri": "http://localhost:3000/_next/static/chunks/node_modules_next_dist_b0daae9a._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/node_modules_next_dist_b0daae9a._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "ntime expose Object from vm, being that kind",
+							"otherinfo": "The following pattern was used: \\bFROM\\b and was detected 19 times, the first in likely comment: \"/**\n   * this used to be previously:\n   *\n   * `return prototype === null || prototype === Object.prototype`\n   *\n   * but Edge \", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "103",
+							"uri": "http://localhost:3000/_next/static/chunks/node_modules_next_dist_b0daae9a._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/node_modules_next_dist_b0daae9a._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "to report this as a bug in Next.js.",
+							"otherinfo": "The following pattern was used: \\bBUG\\b and was detected in likely comment: \"// user to report this as a bug in Next.js.\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "130",
+							"uri": "http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_cf1d9188._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/node_modules_next_dist_client_cf1d9188._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": " if that's what the user passed in, hence th",
+							"otherinfo": "The following pattern was used: \\bUSER\\b and was detected 3 times, the first in likely comment: \"/**\n   * Note that we intentionally do not use `url.searchParams.set` here:\n   *\n   * const url = new URL('https://example.com/s\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "133",
+							"uri": "http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_cf1d9188._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/node_modules_next_dist_client_cf1d9188._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "// (where these errors can oc",
+							"otherinfo": "The following pattern was used: \\bWHERE\\b and was detected 14 times, the first in likely comment: \"// (where these errors can occur), we will get the correct pathname.\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "132",
+							"uri": "http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_cf1d9188._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/node_modules_next_dist_client_cf1d9188._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "// TODO: Dispatch error eve",
+							"otherinfo": "The following pattern was used: \\bTODO\\b and was detected 62 times, the first in likely comment: \"// TODO: Dispatch error event\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "129",
+							"uri": "http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_cf1d9188._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/node_modules_next_dist_client_cf1d9188._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "// `__nextppronly` query is present. This is",
+							"otherinfo": "The following pattern was used: \\bQUERY\\b and was detected 5 times, the first in likely comment: \"// `__nextppronly` query is present. This is only enabled when the\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "131",
+							"uri": "http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_cf1d9188._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/node_modules_next_dist_client_cf1d9188._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "gURL=set-attributes-from-props.js.map",
+							"otherinfo": "The following pattern was used: \\bFROM\\b and was detected 76 times, the first in likely comment: \"//# sourceMappingURL=set-attributes-from-props.js.map\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "128",
+							"uri": "http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_cf1d9188._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/node_modules_next_dist_client_cf1d9188._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "it didn't, due to a bug or race condition, ",
+							"otherinfo": "The following pattern was used: \\bBUG\\b and was detected 2 times, the first in likely comment: \"// If for some reasons it didn't, due to a bug or race condition, then on\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "127",
+							"uri": "http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_cf1d9188._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/node_modules_next_dist_client_cf1d9188._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "ra prefetch request later, since we already h",
+							"otherinfo": "The following pattern was used: \\bLATER\\b and was detected 3 times, the first in likely comment: \"// prefetch cache so that we can skip an extra prefetch request later, since we already have the data.\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "101",
+							"uri": "http://localhost:3000/_next/static/chunks/node_modules_next_dist_compiled_5150ccfd._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/node_modules_next_dist_compiled_5150ccfd._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "// TODO: rename these field",
+							"otherinfo": "The following pattern was used: \\bTODO\\b and was detected 3 times, the first in likely comment: \"// TODO: rename these fields to something more meaningful.\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "100",
+							"uri": "http://localhost:3000/_next/static/chunks/node_modules_next_dist_compiled_5150ccfd._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/node_modules_next_dist_compiled_5150ccfd._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "ogic is copy-pasted from similar logic in th",
+							"otherinfo": "The following pattern was used: \\bFROM\\b and was detected 4 times, the first in likely comment: \"// This logic is copy-pasted from similar logic in the DevTools backend.\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "84",
+							"uri": "http://localhost:3000/_next/static/chunks/turbopack-_cdba956c._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/turbopack-_cdba956c._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": " a Refresh Boundary later.",
+							"otherinfo": "The following pattern was used: \\bLATER\\b and was detected in likely comment: \"// still a Refresh Boundary later.\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "89",
+							"uri": "http://localhost:3000/_next/static/chunks/turbopack-_cdba956c._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/turbopack-_cdba956c._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "// TODO(luke.sandberg): we ",
+							"otherinfo": "The following pattern was used: \\bTODO\\b and was detected 12 times, the first in likely comment: \"// TODO(luke.sandberg): we could support raw values here, but would need a discriminator beyond 'not a function'\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "90",
+							"uri": "http://localhost:3000/_next/static/chunks/turbopack-_cdba956c._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/turbopack-_cdba956c._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "ative to the origin where a chunk can be fetc",
+							"otherinfo": "The following pattern was used: \\bWHERE\\b and was detected 2 times, the first in likely comment: \"/**\n * Returns the URL relative to the origin where a chunk can be fetched from.\n */\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "87",
+							"uri": "http://localhost:3000/_next/static/chunks/turbopack-_cdba956c._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/turbopack-_cdba956c._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "consistent from the user's perspective.",
+							"otherinfo": "The following pattern was used: \\bUSER\\b and was detected in likely comment: \"// the HTML somewhat consistent from the user's perspective.\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "88",
+							"uri": "http://localhost:3000/_next/static/chunks/turbopack-_cdba956c._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/turbopack-_cdba956c._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "ead of accessing it from the module object t",
+							"otherinfo": "The following pattern was used: \\bFROM\\b and was detected 20 times, the first in likely comment: \"// We need to store this here instead of accessing it from the module object to:\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "86",
+							"uri": "http://localhost:3000/_next/static/chunks/turbopack-_cdba956c._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/turbopack-_cdba956c._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "onally followed by ?query or #fragment.\n */",
+							"otherinfo": "The following pattern was used: \\bQUERY\\b and was detected 3 times, the first in likely comment: \"/**\n * Checks if a given path/URL ends with .js, optionally followed by ?query or #fragment.\n */\", see evidence field for the suspicious comment/snippet."
+						},
+						{
+							"id": "85",
+							"uri": "http://localhost:3000/_next/static/chunks/turbopack-_cdba956c._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/turbopack-_cdba956c._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "stylesheet: https://bugs.webkit.org/show_bug",
+							"otherinfo": "The following pattern was used: \\bBUGS\\b and was detected in likely comment: \"// pointing to the same URL as the stylesheet: https://bugs.webkit.org/show_bug.cgi?id=187726\", see evidence field for the suspicious comment/snippet."
+						}
+					],
+					"count": "36",
+					"systemic": false,
+					"solution": "<p>Remove all comments that return information that may help an attacker and fix any underlying problems they refer to.</p>",
+					"otherinfo": "<p>The following pattern was used: \\bUSERNAME\\b and was detected 3 times, the first in likely comment: \"/**</p><p>   * Get the raw typed client for direct API calls</p><p>   *</p><p>   * Usage:</p><p>   *   const response = await typedClient.raw.GET('/auth\", see evidence field for the suspicious comment/snippet.</p>",
+					"reference": "",
+					"cweid": "615",
+					"wascid": "13",
+					"sourceid": "49"
+				},
+				{
+					"pluginid": "10109",
+					"alertRef": "10109",
+					"alert": "Modern Web Application",
+					"name": "Modern Web Application",
+					"riskcode": "0",
+					"confidence": "2",
+					"riskdesc": "Informational (Medium)",
+					"desc": "<p>The application appears to be a modern web application. If you need to explore it automatically then the Client Spider may well be more effective than the standard one.</p>",
+					"instances":[ 
+						{
+							"id": "38",
+							"uri": "http://localhost:3000",
+							"nodeName": "http:\/\/localhost:3000",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "<script src=\"/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js\" async=\"\"></script>",
+							"otherinfo": "No links have been found while there are scripts, which is an indication that this is a modern web application."
+						},
+						{
+							"id": "139",
+							"uri": "http://localhost:3000/",
+							"nodeName": "http:\/\/localhost:3000\/",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "<script src=\"/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js\" async=\"\"></script>",
+							"otherinfo": "No links have been found while there are scripts, which is an indication that this is a modern web application."
+						},
+						{
+							"id": "27",
+							"uri": "http://localhost:3000/robots.txt",
+							"nodeName": "http:\/\/localhost:3000\/robots.txt",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "<script src=\"/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js\" async=\"\"></script>",
+							"otherinfo": "No links have been found while there are scripts, which is an indication that this is a modern web application."
+						},
+						{
+							"id": "26",
+							"uri": "http://localhost:3000/sitemap.xml",
+							"nodeName": "http:\/\/localhost:3000\/sitemap.xml",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "<script src=\"/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js\" async=\"\"></script>",
+							"otherinfo": "No links have been found while there are scripts, which is an indication that this is a modern web application."
+						}
+					],
+					"count": "4",
+					"systemic": false,
+					"solution": "<p>This is an informational alert and so no changes are required.</p>",
+					"otherinfo": "<p>No links have been found while there are scripts, which is an indication that this is a modern web application.</p>",
+					"reference": "",
+					"cweid": "-1",
+					"wascid": "-1",
+					"sourceid": "24"
+				},
+				{
+					"pluginid": "10049",
+					"alertRef": "10049-1",
+					"alert": "Non-Storable Content",
+					"name": "Non-Storable Content",
+					"riskcode": "0",
+					"confidence": "2",
+					"riskdesc": "Informational (Medium)",
+					"desc": "<p>The response contents are not storable by caching components such as proxy servers. If the response does not contain sensitive, personal or user-specific information, it may benefit from being stored and cached, to improve performance.</p>",
+					"instances":[ 
+						{
+							"id": "22",
+							"uri": "http://localhost:3000/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_57d40746._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/[turbopack]_browser_dev_hmr-client_hmr-client_ts_57d40746._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "no-store",
+							"otherinfo": ""
+						},
+						{
+							"id": "49",
+							"uri": "http://localhost:3000/_next/static/chunks/_a0ff3932._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/_a0ff3932._.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "no-store",
+							"otherinfo": ""
+						},
+						{
+							"id": "58",
+							"uri": "http://localhost:3000/_next/static/chunks/_e084681a._.css",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/_e084681a._.css",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "no-store",
+							"otherinfo": ""
+						},
+						{
+							"id": "54",
+							"uri": "http://localhost:3000/robots.txt",
+							"nodeName": "http:\/\/localhost:3000\/robots.txt",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "no-store",
+							"otherinfo": ""
+						},
+						{
+							"id": "57",
+							"uri": "http://localhost:3000/sitemap.xml",
+							"nodeName": "http:\/\/localhost:3000\/sitemap.xml",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "no-store",
+							"otherinfo": ""
+						}
+					],
+					"count": "5",
+					"systemic": true,
+					"solution": "<p>The content may be marked as storable by ensuring that the following conditions are satisfied:</p><p>The request method must be understood by the cache and defined as being cacheable (\"GET\", \"HEAD\", and \"POST\" are currently defined as cacheable)</p><p>The response status code must be understood by the cache (one of the 1XX, 2XX, 3XX, 4XX, or 5XX response classes are generally understood)</p><p>The \"no-store\" cache directive must not appear in the request or response header fields</p><p>For caching by \"shared\" caches such as \"proxy\" caches, the \"private\" response directive must not appear in the response</p><p>For caching by \"shared\" caches such as \"proxy\" caches, the \"Authorization\" header field must not appear in the request, unless the response explicitly allows it (using one of the \"must-revalidate\", \"public\", or \"s-maxage\" Cache-Control response directives)</p><p>In addition to the conditions above, at least one of the following conditions must also be satisfied by the response:</p><p>It must contain an \"Expires\" header field</p><p>It must contain a \"max-age\" response directive</p><p>For \"shared\" caches such as \"proxy\" caches, it must contain a \"s-maxage\" response directive</p><p>It must contain a \"Cache Control Extension\" that allows it to be cached</p><p>It must have a status code that is defined as cacheable by default (200, 203, 204, 206, 300, 301, 404, 405, 410, 414, 501).</p>",
+					"otherinfo": "",
+					"reference": "<p>https://datatracker.ietf.org/doc/html/rfc7234</p><p>https://datatracker.ietf.org/doc/html/rfc7231</p><p>https://www.w3.org/Protocols/rfc2616/rfc2616-sec13.html</p>",
+					"cweid": "524",
+					"wascid": "13",
+					"sourceid": "31"
+				},
+				{
+					"pluginid": "90005",
+					"alertRef": "90005-3",
+					"alert": "Sec-Fetch-Dest Header is Missing",
+					"name": "Sec-Fetch-Dest Header is Missing",
+					"riskcode": "0",
+					"confidence": "3",
+					"riskdesc": "Informational (High)",
+					"desc": "<p>Specifies how and where the data would be used. For instance, if the value is audio, then the requested resource must be audio data and not any other type of resource.</p>",
+					"instances":[ 
+						{
+							"id": "20",
+							"uri": "http://localhost:3000/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_57d40746._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/[turbopack]_browser_dev_hmr-client_hmr-client_ts_57d40746._.js",
+							"method": "GET",
+							"param": "Sec-Fetch-Dest",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "13",
+							"uri": "http://localhost:3000/icon.svg",
+							"nodeName": "http:\/\/localhost:3000\/icon.svg",
+							"method": "GET",
+							"param": "Sec-Fetch-Dest",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "44",
+							"uri": "http://localhost:3000/nycu-favicon.svg",
+							"nodeName": "http:\/\/localhost:3000\/nycu-favicon.svg",
+							"method": "GET",
+							"param": "Sec-Fetch-Dest",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						}
+					],
+					"count": "3",
+					"systemic": false,
+					"solution": "<p>Ensure that Sec-Fetch-Dest header is included in request headers.</p>",
+					"otherinfo": "",
+					"reference": "<p>https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Sec-Fetch-Dest</p>",
+					"cweid": "352",
+					"wascid": "9",
+					"sourceid": "31"
+				},
+				{
+					"pluginid": "90005",
+					"alertRef": "90005-2",
+					"alert": "Sec-Fetch-Mode Header is Missing",
+					"name": "Sec-Fetch-Mode Header is Missing",
+					"riskcode": "0",
+					"confidence": "3",
+					"riskdesc": "Informational (High)",
+					"desc": "<p>Allows to differentiate between requests for navigating between HTML pages and requests for loading resources like images, audio etc.</p>",
+					"instances":[ 
+						{
+							"id": "19",
+							"uri": "http://localhost:3000/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_57d40746._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/[turbopack]_browser_dev_hmr-client_hmr-client_ts_57d40746._.js",
+							"method": "GET",
+							"param": "Sec-Fetch-Mode",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "12",
+							"uri": "http://localhost:3000/icon.svg",
+							"nodeName": "http:\/\/localhost:3000\/icon.svg",
+							"method": "GET",
+							"param": "Sec-Fetch-Mode",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "43",
+							"uri": "http://localhost:3000/nycu-favicon.svg",
+							"nodeName": "http:\/\/localhost:3000\/nycu-favicon.svg",
+							"method": "GET",
+							"param": "Sec-Fetch-Mode",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						}
+					],
+					"count": "3",
+					"systemic": false,
+					"solution": "<p>Ensure that Sec-Fetch-Mode header is included in request headers.</p>",
+					"otherinfo": "",
+					"reference": "<p>https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Sec-Fetch-Mode</p>",
+					"cweid": "352",
+					"wascid": "9",
+					"sourceid": "31"
+				},
+				{
+					"pluginid": "90005",
+					"alertRef": "90005-1",
+					"alert": "Sec-Fetch-Site Header is Missing",
+					"name": "Sec-Fetch-Site Header is Missing",
+					"riskcode": "0",
+					"confidence": "3",
+					"riskdesc": "Informational (High)",
+					"desc": "<p>Specifies the relationship between request initiator's origin and target's origin.</p>",
+					"instances":[ 
+						{
+							"id": "18",
+							"uri": "http://localhost:3000/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_57d40746._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/[turbopack]_browser_dev_hmr-client_hmr-client_ts_57d40746._.js",
+							"method": "GET",
+							"param": "Sec-Fetch-Site",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "11",
+							"uri": "http://localhost:3000/icon.svg",
+							"nodeName": "http:\/\/localhost:3000\/icon.svg",
+							"method": "GET",
+							"param": "Sec-Fetch-Site",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "42",
+							"uri": "http://localhost:3000/nycu-favicon.svg",
+							"nodeName": "http:\/\/localhost:3000\/nycu-favicon.svg",
+							"method": "GET",
+							"param": "Sec-Fetch-Site",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						}
+					],
+					"count": "3",
+					"systemic": false,
+					"solution": "<p>Ensure that Sec-Fetch-Site header is included in request headers.</p>",
+					"otherinfo": "",
+					"reference": "<p>https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Sec-Fetch-Site</p>",
+					"cweid": "352",
+					"wascid": "9",
+					"sourceid": "31"
+				},
+				{
+					"pluginid": "90005",
+					"alertRef": "90005-4",
+					"alert": "Sec-Fetch-User Header is Missing",
+					"name": "Sec-Fetch-User Header is Missing",
+					"riskcode": "0",
+					"confidence": "3",
+					"riskdesc": "Informational (High)",
+					"desc": "<p>Specifies if a navigation request was initiated by a user.</p>",
+					"instances":[ 
+						{
+							"id": "21",
+							"uri": "http://localhost:3000/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_57d40746._.js",
+							"nodeName": "http:\/\/localhost:3000\/_next\/static\/chunks\/[turbopack]_browser_dev_hmr-client_hmr-client_ts_57d40746._.js",
+							"method": "GET",
+							"param": "Sec-Fetch-User",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "14",
+							"uri": "http://localhost:3000/icon.svg",
+							"nodeName": "http:\/\/localhost:3000\/icon.svg",
+							"method": "GET",
+							"param": "Sec-Fetch-User",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "45",
+							"uri": "http://localhost:3000/nycu-favicon.svg",
+							"nodeName": "http:\/\/localhost:3000\/nycu-favicon.svg",
+							"method": "GET",
+							"param": "Sec-Fetch-User",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						}
+					],
+					"count": "3",
+					"systemic": false,
+					"solution": "<p>Ensure that Sec-Fetch-User header is included in user initiated requests.</p>",
+					"otherinfo": "",
+					"reference": "<p>https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Sec-Fetch-User</p>",
+					"cweid": "352",
+					"wascid": "9",
+					"sourceid": "31"
+				},
+				{
+					"pluginid": "10049",
+					"alertRef": "10049-2",
+					"alert": "Storable but Non-Cacheable Content",
+					"name": "Storable but Non-Cacheable Content",
+					"riskcode": "0",
+					"confidence": "2",
+					"riskdesc": "Informational (Medium)",
+					"desc": "<p>The response contents are storable by caching components such as proxy servers, but will not be retrieved directly from the cache, without validating the request upstream, in response to similar requests from other users.</p>",
+					"instances":[ 
+						{
+							"id": "16",
+							"uri": "http://localhost:3000/icon.svg",
+							"nodeName": "http:\/\/localhost:3000\/icon.svg",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "max-age=0",
+							"otherinfo": ""
+						},
+						{
+							"id": "46",
+							"uri": "http://localhost:3000/nycu-favicon.svg",
+							"nodeName": "http:\/\/localhost:3000\/nycu-favicon.svg",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "max-age=0",
+							"otherinfo": ""
+						}
+					],
+					"count": "2",
+					"systemic": false,
+					"solution": "",
+					"otherinfo": "",
+					"reference": "<p>https://datatracker.ietf.org/doc/html/rfc7234</p><p>https://datatracker.ietf.org/doc/html/rfc7231</p><p>https://www.w3.org/Protocols/rfc2616/rfc2616-sec13.html</p>",
+					"cweid": "524",
+					"wascid": "13",
+					"sourceid": "30"
+				}
+			]
+		}
+	],
+	"sequences":[
+	]
+
+}
