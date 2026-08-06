@@ -214,8 +214,8 @@ du -sh /var/lib/docker/volumes/monitoring_loki_data/_data
 
 **Diagnosis**:
 ```bash
-# Test Prometheus datasource
-curl -u admin:password http://localhost:3000/api/datasources | jq
+# Test Prometheus datasource (export GRAFANA_ADMIN_USER / GRAFANA_ADMIN_PASSWORD first)
+curl -u "$GRAFANA_ADMIN_USER:$GRAFANA_ADMIN_PASSWORD" http://localhost:3000/api/datasources | jq
 
 # Test Prometheus from Grafana container
 docker exec monitoring_grafana curl http://prometheus:9090/api/v1/query?query=up
@@ -280,7 +280,7 @@ du -sh /var/lib/docker/volumes/monitoring_*
 **Diagnosis**:
 ```bash
 # Check if alert rules are loaded in Grafana
-curl -s -u admin:$GRAFANA_ADMIN_PASSWORD \
+curl -s -u "$GRAFANA_ADMIN_USER:$GRAFANA_ADMIN_PASSWORD" \
   http://localhost:3000/api/v1/provisioning/alert-rules | jq '.[].title'
 
 # Check Grafana logs for provisioning errors

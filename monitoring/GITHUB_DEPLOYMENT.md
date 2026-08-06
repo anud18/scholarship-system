@@ -86,7 +86,7 @@ Configure these in GitHub repository settings → Secrets and variables → Acti
 |-------------|-------------|---------|
 | `STAGING_DB_HOST` | Staging database VM hostname or IP | `10.0.2.5` or `staging-db.example.com` |
 | `STAGING_DB_USER` | SSH username for staging DB-VM | `ubuntu` |
-| `STAGING_DB_SSH_KEY` | Private SSH key for staging DB-VM | `-----BEGIN RSA PRIVATE KEY-----...` |
+| `STAGING_DB_SSH_KEY` | Private SSH key for staging DB-VM | Paste the full contents of the key file (never commit it to the repository) |
 
 **Note**: The workflow is configured to use SSH port **8822** for DB-VM connections (not the default port 22).
 

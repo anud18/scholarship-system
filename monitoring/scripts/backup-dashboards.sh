@@ -120,7 +120,7 @@ cd $OUTPUT_DIR
 for json_file in */*.json; do
     curl -X POST \\
       -H "Content-Type: application/json" \\
-      -u admin:password \\
+      -u "\$GRAFANA_ADMIN_USER:\$GRAFANA_ADMIN_PASSWORD" \\
       -d @"\$json_file" \\
       http://localhost:3000/api/dashboards/db
 done
@@ -130,7 +130,7 @@ done
 \`\`\`bash
 curl -X POST \\
   -H "Content-Type: application/json" \\
-  -u admin:password \\
+  -u "\$GRAFANA_ADMIN_USER:\$GRAFANA_ADMIN_PASSWORD" \\
   -d @datasources.json \\
   http://localhost:3000/api/datasources
 \`\`\`
