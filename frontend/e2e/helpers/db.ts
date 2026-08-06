@@ -1,10 +1,21 @@
 import { Pool } from "pg";
 
-export const pool = new Pool({
-  connectionString:
-    process.env.E2E_DATABASE_URL ??
-    "postgresql://scholarship_user:scholarship_pass@localhost:5432/scholarship_db",
-});
+// Deliberately no hardcoded fallback URL: a missing E2E_DATABASE_URL must fail
+// loudly instead of silently pointing the suite at the wrong database.
+function e2eDatabaseUrl(): string {
+  const url = process.env.E2E_DATABASE_URL;
+  if (!url) {
+    throw new Error(
+      "E2E_DATABASE_URL is not set. Export the Postgres URL of the stack under test, e.g.\n" +
+        "  E2E_DATABASE_URL=postgresql://<user>:<password>@localhost:5432/scholarship_db\n" +
+        "using the credentials of the postgres service in docker-compose.dev.yml " +
+        "(the staging-e2e CI lane sets this to the throwaway replica automatically).",
+    );
+  }
+  return url;
+}
+
+export const pool = new Pool({ connectionString: e2eDatabaseUrl() });
 
 export async function closePool(): Promise<void> {
   await pool.end();

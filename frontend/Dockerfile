@@ -1,7 +1,10 @@
 FROM oven/bun:1-alpine AS base
 
 # Install Node.js for running Next.js (Bun for deps, Node for runtime)
-RUN apk add --no-cache nodejs
+# Security: Pin exact package version and configure trusted repositories to prevent dependency confusion attacks
+RUN echo "https://dl-cdn.alpinelinux.org/alpine/v3.22/main" > /etc/apk/repositories && \
+    echo "https://dl-cdn.alpinelinux.org/alpine/v3.22/community" >> /etc/apk/repositories && \
+    apk add --no-cache nodejs=22.23.2-r0
 
 # Install dependencies only when needed
 FROM base AS deps

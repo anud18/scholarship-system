@@ -21,7 +21,8 @@
  * brief's sanctioned reliable path).
  *
  * The pool (helpers/db.ts) MUST target the throwaway clone — run with
- *   E2E_DATABASE_URL=postgresql://scholarship_user:scholarship_pass@localhost:5432/scholarship_e2e
+ *   E2E_DATABASE_URL=postgresql://<user>:<password>@localhost:5432/scholarship_e2e
+ * (fill in the postgres credentials from docker-compose.dev.yml)
  */
 import { test, expect } from "@playwright/test";
 import fs from "node:fs";
