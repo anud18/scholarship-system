@@ -9,7 +9,7 @@ Handles bank account verification operations including:
 import logging
 from typing import Any, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -534,7 +534,11 @@ async def get_verification_task_status(
 
 @router.get("/bank-verification/tasks")
 async def list_verification_tasks(
-    status: Optional[str] = None,
+    # NOT named `status`: that shadowed the `fastapi.status` module inside this
+    # function, so every `status.HTTP_*` lookup below raised AttributeError and
+    # returned 500 — including the 400 meant to reject a bad filter value.
+    # `alias` keeps the query-string name `?status=` unchanged for callers.
+    status_value: Optional[str] = Query(None, alias="status"),
     limit: int = 50,
     offset: int = 0,
     current_user: User = Depends(require_admin),
@@ -550,13 +554,13 @@ async def list_verification_tasks(
 
         # Parse status filter
         status_filter = None
-        if status:
+        if status_value:
             try:
-                status_filter = BankVerificationTaskStatus(status)
+                status_filter = BankVerificationTaskStatus(status_value)
             except ValueError as exc:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"無效的狀態值: {status}",
+                    detail=f"無效的狀態值: {status_value}",
                 ) from exc
 
         tasks = await task_service.list_tasks(

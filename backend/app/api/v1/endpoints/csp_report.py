@@ -9,7 +9,7 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import Response
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -76,8 +76,11 @@ async def report_csp_violation(request: Request):
             extra={"violation_data": violation_data},
         )
 
-        # Return 204 No Content (standard for CSP reports)
-        return JSONResponse(content="", status_code=status.HTTP_204_NO_CONTENT)
+        # Return 204 No Content (standard for CSP reports).
+        # Must be a bare Response: a 204 carries no body, but JSONResponse
+        # serialises even "" to two bytes, which tripped Starlette's
+        # "Response content longer than Content-Length" RuntimeError -> 500.
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     except Exception:
         # logger.exception preserves the traceback so 5xx-style failures from
@@ -87,7 +90,7 @@ async def report_csp_violation(request: Request):
             extra={"ip": client_ip, "user_agent": user_agent},
         )
         # Still return 204 to prevent browser errors
-        return JSONResponse(content="", status_code=status.HTTP_204_NO_CONTENT)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/csp-report")

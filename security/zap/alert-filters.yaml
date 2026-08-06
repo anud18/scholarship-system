@@ -1,0 +1,105 @@
+# ZAP alert filters — verified false positives
+#
+# Drop this into an Automation Framework plan as an `alertFilter` job (see
+# active-scan-plan.yaml) so a scan does not keep re-raising findings that were
+# already investigated and refuted.
+#
+# RULES FOR THIS FILE
+#   1. Nothing goes in here without a written reproduction proving it is a false
+#      positive. "Looks wrong" is not a reason; "here is the request and the
+#      response showing why ZAP is mistaken" is.
+#   2. Scope every entry with `url` where possible. A blanket rule-id suppression
+#      hides real instances of the same class elsewhere.
+#   3. Re-check on every major dependency or endpoint change — a filter that was
+#      correct against one implementation can mask a real bug in the next.
+#   4. `newRisk: "False Positive"` keeps the finding visible in the report,
+#      re-labelled. It is NOT deleted. Auditors can still see it and disagree.
+#   5. The `alertFilter` job must run BEFORE the scanning jobs. Filters apply as
+#      alerts are raised, not retroactively, and ZAP reports no error when they
+#      arrive too late — the findings simply appear at full risk as if the
+#      filters were never configured. After changing this file, re-run and
+#      confirm the risk really flipped; do not assume it worked.
+#
+# Evidence for every entry below: docs/security/zap-active-2026-08-06/README.md §3
+# Verified against `main` @ e79d8f33 on 2026-08-06.
+#
+# PREFER SCOPE OVER SUPPRESSION. Two findings that used to be listed here —
+# Path Traversal (rule 6) and SQL Injection (rule 40018) — are no longer
+# filtered at all. Both only ever fired on `/auth/dev-profiles/*`, which is
+# hard-gated behind `enable_mock_sso` and returns 404 in production. The scan
+# plan now excludes that surface instead, so those rules stay armed: if either
+# ever fires on a real endpoint it is reported at full risk. A rule-level
+# filter would have hidden that.
+#
+# WATCH OUT: fixing 500s can surface NEW false positives. Several ZAP rules
+# (boolean-based SQL injection especially) work by diffing responses. While
+# every malformed request returned an identical 500, those rules had nothing to
+# compare and stayed silent. Once responses became informative 4xx/2xx, rule
+# 40018 fired on a stateful POST whose responses vary for reasons unrelated to
+# the payload. It was refuted three ways — identical bodies for '1'='1' vs
+# '1'='2', no delay from pg_sleep(5) payloads, and no raw SQL in the code path
+# (SQLAlchemy parameterises) — but expect this pattern after any error-handling
+# change, and re-verify rather than assuming a new alert is a real regression.
+
+alertFilters:
+  # ---------------------------------------------------------------------------
+  # 90020 — Remote OS Command Injection (reported High)
+  # ---------------------------------------------------------------------------
+  # ZAP sends the PowerShell payload `get-help` and concludes success when the
+  # response contains "Get-Help". The scanner had, earlier in the same run,
+  # POSTed to /auth/dev-profiles/get-help/quick-setup, which creates a dev user
+  # literally named "Prof. Get-Help". The search endpoint then echoes that
+  # stored name back. ZAP is matching data it created itself.
+  #
+  #   GET /api/v1/admin/professors?search=get-help
+  #   {"data":[{"name":"Prof. Get-Help","nycu_id":"dev_get-help_professor"}]}
+  #
+  # No shell is invoked anywhere on this path. Additionally the dev-profiles
+  # endpoints are hard-gated behind enable_mock_sso and 404 in production.
+  # NOTE the leading space in `evidence`: ZAP records it as " Get-Help" and the
+  # match is literal. Without it the filter silently matches nothing.
+  - ruleId: 90020
+    newRisk: "False Positive"
+    context: api
+    evidence: " Get-Help"
+    reason: >-
+      Scanner-generated data echoed back by a search endpoint. The "Get-Help"
+      string is a dev profile the scan itself created via
+      /auth/dev-profiles/{id}/quick-setup. No command execution occurs.
+
+  # ---------------------------------------------------------------------------
+  # 30002 — Format String Error (reported Medium)
+  # ---------------------------------------------------------------------------
+  # Inferred from response differences after sending %n/%s/%x payloads, with an
+  # empty evidence field. Those differences are the 500s tracked separately as
+  # IntegrityError/DBAPIError, now mapped to 4xx.
+  #
+  # CPython has no C-style varargs format-string vulnerability class: there is
+  # no printf family reading a caller-supplied format off the stack.
+  - ruleId: 30002
+    newRisk: "False Positive"
+    context: api
+    reason: >-
+      Not applicable to CPython — no printf-family varargs parsing. Alert was
+      inferred from response deltas caused by unrelated DB errors, with no
+      supporting evidence string.
+
+  # ---------------------------------------------------------------------------
+  # 40014 — Cross Site Scripting (Persistent in JSON Response)
+  # ---------------------------------------------------------------------------
+  # The payload is returned inside an application/json document, which browsers
+  # do not parse as HTML, and the frontend renders everything through React's
+  # escaping. Not reflected into any HTML context.
+  #
+  #   GET /api/v1/users?search=<script>alert(1)</script>
+  #   content-type: application/json
+  #
+  # NOTE: this filter is scoped to the JSON API only. If any endpoint ever
+  # returns text/html, this must be revisited — that is a real XSS surface.
+  - ruleId: 40014
+    newRisk: "False Positive"
+    context: api
+    reason: >-
+      Payload echoed inside application/json, never an HTML context. Browsers
+      do not script-parse JSON responses and the frontend escapes via React.
+      Revisit if any API endpoint starts returning text/html.

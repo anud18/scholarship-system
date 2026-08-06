@@ -769,7 +769,13 @@ async def get_quota_overview(
                         Application.scholarship_type_id == stype.id,
                         Application.config_code == config.config_code,
                         Application.sub_type == sub_type_code,
-                        Application.status.in_([ApplicationStatus.approved, ApplicationStatus.FUNDED]),
+                        # ApplicationStatus has no `funded` member — the old
+                        # `ApplicationStatus.FUNDED` here raised AttributeError
+                        # (uppercase is the TypeScript spelling; Python members
+                        # are lowercase, CLAUDE.md §4), so this query 500'd
+                        # whenever it ran. `approved` is the status that
+                        # consumes quota.
+                        Application.status.in_([ApplicationStatus.approved]),
                     )
                 )
                 used_quota_result = await db.execute(quota_query)

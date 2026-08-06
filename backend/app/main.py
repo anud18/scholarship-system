@@ -14,12 +14,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
+from sqlalchemy.orm.exc import StaleDataError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 # Import routers
 from app.api.v1.api import api_router
 from app.core.config import settings
 from app.core.database_health import check_database_health
+from app.core.db_error_mapping import map_db_exception, map_db_exception_chain
+from app.core.exception_chain import iter_cause_chain
 from app.core.exceptions import ScholarshipException, scholarship_exception_handler
 from app.core.security import require_admin
 from app.models.user import User
@@ -184,14 +187,58 @@ async def add_trace_id_middleware(request: Request, call_next):
 app.add_exception_handler(ScholarshipException, scholarship_exception_handler)
 
 
+def _unwrap_client_http_error(exc: BaseException):
+    """Find a deliberate 4xx buried in `exc`'s cause chain.
+
+    Two shapes of the same mistake, both common here:
+      * a `try` that raises HTTPException(404) with an `except Exception` that
+        does not re-raise HTTPException first (6 sites), and
+      * a service raising a domain error (NotFoundError, ConflictError, …)
+        into an endpoint whose blanket handler only re-raises HTTPException,
+        so the domain error's status is lost.
+
+    Both use `raise ... from exc`, so the intended status is still reachable.
+    Recovering it here covers every site at once, including future ones —
+    "scholarship configuration not found" is a 404, not a server fault.
+
+    Only 4xx is recovered: a nested 5xx (FileStorageError, OCRError, …) is a
+    genuine server fault and must stay a 500.
+    """
+    for cause in iter_cause_chain(exc, include_self=False):
+        if isinstance(cause, StarletteHTTPException) and 400 <= cause.status_code < 500:
+            return cause.status_code, cause.detail
+        if isinstance(cause, ScholarshipException) and 400 <= cause.status_code < 500:
+            return cause.status_code, cause.message
+    return None
+
+
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     """Handle HTTP exceptions"""
+    status_code = exc.status_code
+    message = exc.detail
+
+    if status_code == 500:
+        # An endpoint raised a deliberate 4xx inside its `try`, and its own
+        # `except Exception` swallowed it and re-raised as 500. The intended
+        # status is still in the cause chain, and it is the honest answer —
+        # "no active configuration found" is a 404, not a server fault.
+        client_error = _unwrap_client_http_error(exc)
+        if client_error is not None:
+            status_code, message = client_error
+        else:
+            # Otherwise: if the preserved cause turns out to be the database
+            # rejecting caller input, answer 4xx. The server is fine, the
+            # request was not. See db_error_mapping.py.
+            mapped = map_db_exception_chain(exc)
+            if mapped is not None:
+                status_code, message = mapped
+
     return JSONResponse(
-        status_code=exc.status_code,
+        status_code=status_code,
         content={
             "success": False,
-            "message": exc.detail,
+            "message": message,
             "trace_id": getattr(request.state, "trace_id", None),
         },
     )
@@ -284,6 +331,33 @@ async def general_exception_handler(request: Request, exc: Exception):  # pylint
             content={
                 "success": False,
                 "message": "Service temporarily unavailable - database connection issue",
+                "trace_id": trace_id,
+            },
+        )
+
+    # A row the caller asked us to update vanished (or was changed) underneath
+    # the flush. That is a concurrency conflict, not a server fault.
+    if isinstance(exc, StaleDataError):
+        return JSONResponse(
+            status_code=409,
+            content={
+                "success": False,
+                "message": "資料已被其他操作變更，請重新載入後再試",
+                "trace_id": trace_id,
+            },
+        )
+
+    # The database rejected the caller's input (bad enum literal, over-long
+    # string, NUL byte, constraint violation). Answer 4xx instead of 500 — see
+    # app/core/db_error_mapping.py for why this matches on SQLSTATE.
+    db_mapped = map_db_exception(exc)
+    if db_mapped is not None:
+        status_code, message = db_mapped
+        return JSONResponse(
+            status_code=status_code,
+            content={
+                "success": False,
+                "message": message,
                 "trace_id": trace_id,
             },
         )

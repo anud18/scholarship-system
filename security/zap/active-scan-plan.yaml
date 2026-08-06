@@ -1,0 +1,149 @@
+# ZAP Automation Framework plan — authenticated active scan of the backend API.
+#
+# Run it:
+#   export ZAP_BEARER_TOKEN=...        # admin JWT, see security/zap/README.md
+#   envsubst < security/zap/active-scan-plan.yaml > /tmp/zapwrk/plan.yaml
+#   docker run --network host -v /tmp/zapwrk:/zap/wrk/:rw \
+#     ghcr.io/zaproxy/zaproxy:stable zap.sh -cmd -port 8999 -autorun /zap/wrk/plan.yaml
+#
+# NEVER point this at the shared dev database. It sends destructive payloads
+# (POST/PUT/DELETE with attack strings). Stand up a throwaway clone first —
+# security/zap/README.md has the full recipe.
+#
+# Two settings that are load-bearing and easy to get wrong:
+#   * -port 8999   : ZAP's proxy defaults to 8080, which the mock student API
+#                    already holds. Without this ZAP exits 0 after failing to
+#                    bind, which looks exactly like a successful scan.
+#   * openapi job  : the URL tree comes from the spec, not a spider. Unauthenticated
+#                    crawling reaches 3 URLs; the spec supplies 416. Skipping this
+#                    produces a clean report that tested almost nothing.
+
+env:
+  contexts:
+    - name: api
+      urls:
+        - http://localhost:8100
+      includePaths:
+        - "http://localhost:8100/api/v1/.*"
+        - "http://localhost:8100/health"
+        - "http://localhost:8100/metrics"
+        - "http://localhost:8100/debug/.*"
+        - "http://localhost:8100/"
+      excludePaths:
+        # Logging out mid-scan would invalidate the session for every
+        # subsequent request.
+        - "http://localhost:8100/api/v1/auth/logout.*"
+
+        # Dev-only surface. These are hard-gated behind `enable_mock_sso`,
+        # which docker-compose.prod.yml and docker-compose.staging.yml both set
+        # to false, and config.py refuses to boot a production environment with
+        # it enabled. They return 404 in production, so any finding here
+        # describes an attack surface that does not exist there.
+        #
+        # Scoping them out is deliberately preferred over suppressing the rules
+        # they trip: a rule-level filter would hide the same class of finding on
+        # real endpoints too. Excluding non-existent surface does not.
+        #
+        # These endpoints generated every Path Traversal instance, the SQL
+        # Injection alert, and the data behind the OS-command false positive.
+        # All were verified non-exploitable (docs/security/), but they are noise
+        # against production risk either way.
+        - "http://localhost:8100/api/v1/auth/dev-profiles.*"
+        - "http://localhost:8100/api/v1/auth/mock-sso.*"
+        - "http://localhost:8100/api/v1/auth/login.*"
+  parameters:
+    failOnError: false
+    failOnWarning: false
+    progressToStdout: true
+
+jobs:
+  - type: passiveScan-config
+    parameters:
+      maxAlertsPerRule: 20
+      enableTags: false
+
+  # Inject the admin bearer token on every request. ZAP's session-management
+  # options can re-authenticate, but this API mints tokens with a configurable
+  # lifetime, so a single long-lived token is simpler and avoids a login storm.
+  - type: replacer
+    parameters:
+      deleteAllRules: true
+    rules:
+      - description: inject-admin-bearer
+        enabled: true
+        matchType: req_header
+        matchString: Authorization
+        matchRegex: false
+        replacementString: "Bearer ${ZAP_BEARER_TOKEN}"
+
+  - type: openapi
+    parameters:
+      apiFile: /zap/wrk/openapi.json
+      targetUrl: http://localhost:8100
+      context: api
+
+  # MUST come before the scanning jobs. Filters are applied as alerts are
+  # raised, not retroactively — placing this after activeScan installs them
+  # too late and every filtered finding still appears at full risk, with no
+  # error to tell you the suppression did nothing.
+  #
+  # Entries and their evidence live in security/zap/alert-filters.yaml. Read
+  # the rules at the top of that file before adding anything here.
+  - type: alertFilter
+    alertFilters:
+      # Evidence string is matched literally and ZAP records it with a leading
+      # space. Scoping by evidence rather than blanket-suppressing rule 90020
+      # keeps a genuine command-injection finding (whose evidence would be real
+      # command output) visible.
+      - ruleId: 90020
+        newRisk: "False Positive"
+        context: api
+        evidence: " Get-Help"
+      - ruleId: 30002
+        newRisk: "False Positive"
+        context: api
+      - ruleId: 40014
+        newRisk: "False Positive"
+        context: api
+      # NOTE: no filter for rule 6 (Path Traversal) or 40018 (SQL Injection).
+      # Both only ever fired on the dev-only endpoints now excluded above.
+      # Deliberately left unfiltered so that if either ever fires on a
+      # production-reachable endpoint, it is reported at full risk.
+
+  - type: activeScan
+    parameters:
+      context: api
+      maxScanDurationInMins: 120
+      maxRuleDurationInMins: 10
+      threadPerHost: 5
+    policyDefinition:
+      defaultStrength: medium
+      defaultThreshold: medium
+
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 10
+
+  - type: outputSummary
+    parameters:
+      format: Long
+      summaryFile: /zap/wrk/summary.json
+
+  - type: report
+    parameters:
+      template: traditional-html
+      reportDir: /zap/wrk/
+      reportFile: zap-active-api-report.html
+      reportTitle: ZAP Authenticated Active Scan Report - Backend API
+  - type: report
+    parameters:
+      template: traditional-json
+      reportDir: /zap/wrk/
+      reportFile: zap-active-api-report.json
+      reportTitle: ZAP Authenticated Active Scan Report - Backend API
+  - type: report
+    parameters:
+      template: traditional-md
+      reportDir: /zap/wrk/
+      reportFile: zap-active-api-report.md
+      reportTitle: ZAP Authenticated Active Scan Report - Backend API
