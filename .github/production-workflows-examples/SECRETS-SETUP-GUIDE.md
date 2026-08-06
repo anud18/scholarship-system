@@ -88,7 +88,7 @@ These secrets enable automated Docker image transfer from AP VM to DB VM (offlin
 | Secret Name | Description | Example Value | Required |
 |-------------|-------------|---------------|----------|
 | `DB_VM_USER` | SSH username for DB VM | `ubuntu`, `scholar`, or `debian` | ✅ Yes |
-| `DB_VM_SSH_KEY` | SSH private key for DB VM access | `-----BEGIN OPENSSH PRIVATE KEY-----\n...` | ✅ Yes |
+| `DB_VM_SSH_KEY` | SSH private key for DB VM access | Full contents of the dedicated deploy key file (see "SSH Key Format" below) | ✅ Yes |
 | `DB_VM_SSH_PORT` | SSH port number | `8822`, `22`, or `2222` | ✅ Yes |
 
 **Purpose:**
@@ -150,16 +150,11 @@ rm ~/.ssh/db_vm_deploy
 
 **SSH Key Format:**
 
-The `DB_VM_SSH_KEY` value should be the **full private key** including headers:
-
-```
------BEGIN OPENSSH PRIVATE KEY-----
-b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
-...
-(multiple lines)
-...
------END OPENSSH PRIVATE KEY-----
-```
+The `DB_VM_SSH_KEY` value should be the **full private key file contents**: the
+`BEGIN OPENSSH PRIVATE KEY` header line, every base64 line between, and the
+`END OPENSSH PRIVATE KEY` footer line — paste the file verbatim, do not
+reformat or strip newlines. (No sample key is shown here so that scanners and
+greps never mistake documentation for a committed credential.)
 
 **Important Notes:**
 - ⚠️ Use a **dedicated key** for automation (not your personal SSH key)
