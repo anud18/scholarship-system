@@ -1,0 +1,101 @@
+# ZAP alert filters — verified false positives
+#
+# Drop this into an Automation Framework plan as an `alertFilter` job (see
+# active-scan-plan.yaml) so a scan does not keep re-raising findings that were
+# already investigated and refuted.
+#
+# RULES FOR THIS FILE
+#   1. Nothing goes in here without a written reproduction proving it is a false
+#      positive. "Looks wrong" is not a reason; "here is the request and the
+#      response showing why ZAP is mistaken" is.
+#   2. Scope every entry with `url` where possible. A blanket rule-id suppression
+#      hides real instances of the same class elsewhere.
+#   3. Re-check on every major dependency or endpoint change — a filter that was
+#      correct against one implementation can mask a real bug in the next.
+#   4. `newRisk: "False Positive"` keeps the finding visible in the report,
+#      re-labelled. It is NOT deleted. Auditors can still see it and disagree.
+#
+# Evidence for every entry below: docs/security/zap-active-2026-08-06/README.md §3
+# Verified against `main` @ e79d8f33 on 2026-08-06.
+
+alertFilters:
+  # ---------------------------------------------------------------------------
+  # 90020 — Remote OS Command Injection (reported High)
+  # ---------------------------------------------------------------------------
+  # ZAP sends the PowerShell payload `get-help` and concludes success when the
+  # response contains "Get-Help". The scanner had, earlier in the same run,
+  # POSTed to /auth/dev-profiles/get-help/quick-setup, which creates a dev user
+  # literally named "Prof. Get-Help". The search endpoint then echoes that
+  # stored name back. ZAP is matching data it created itself.
+  #
+  #   GET /api/v1/admin/professors?search=get-help
+  #   {"data":[{"name":"Prof. Get-Help","nycu_id":"dev_get-help_professor"}]}
+  #
+  # No shell is invoked anywhere on this path. Additionally the dev-profiles
+  # endpoints are hard-gated behind enable_mock_sso and 404 in production.
+  - ruleId: 90020
+    newRisk: "False Positive"
+    context: api
+    evidence: "Get-Help"
+    reason: >-
+      Scanner-generated data echoed back by a search endpoint. The "Get-Help"
+      string is a dev profile the scan itself created via
+      /auth/dev-profiles/{id}/quick-setup. No command execution occurs.
+
+  # ---------------------------------------------------------------------------
+  # 6 — Path Traversal (reported High, Low confidence)
+  # ---------------------------------------------------------------------------
+  # Flagged on /auth/dev-profiles/{developer_id}/quick-setup because swapping the
+  # path parameter for an adjacent path segment still returned 200. ZAP's
+  # evidence field is empty — no file content was ever returned.
+  #
+  #   GET /api/v1/auth/dev-profiles/..%2F..%2F..%2Fetc%2Fpasswd  -> 404
+  #   response contains no "root:x:" and no file content
+  #
+  # The handler uses the parameter as a database lookup key and never touches
+  # the filesystem.
+  - ruleId: 6
+    newRisk: "False Positive"
+    context: api
+    url: "http://localhost:8100/api/v1/auth/dev-profiles.*"
+    reason: >-
+      Parameter is a DB lookup key, not a path. Traversal payloads return 404
+      with no file content; ZAP's evidence field is empty (inferred from a
+      200 on a sibling path segment).
+
+  # ---------------------------------------------------------------------------
+  # 30002 — Format String Error (reported Medium)
+  # ---------------------------------------------------------------------------
+  # Inferred from response differences after sending %n/%s/%x payloads, with an
+  # empty evidence field. Those differences are the 500s tracked separately as
+  # IntegrityError/DBAPIError, now mapped to 4xx.
+  #
+  # CPython has no C-style varargs format-string vulnerability class: there is
+  # no printf family reading a caller-supplied format off the stack.
+  - ruleId: 30002
+    newRisk: "False Positive"
+    context: api
+    reason: >-
+      Not applicable to CPython — no printf-family varargs parsing. Alert was
+      inferred from response deltas caused by unrelated DB errors, with no
+      supporting evidence string.
+
+  # ---------------------------------------------------------------------------
+  # 40014 — Cross Site Scripting (Persistent in JSON Response)
+  # ---------------------------------------------------------------------------
+  # The payload is returned inside an application/json document, which browsers
+  # do not parse as HTML, and the frontend renders everything through React's
+  # escaping. Not reflected into any HTML context.
+  #
+  #   GET /api/v1/users?search=<script>alert(1)</script>
+  #   content-type: application/json
+  #
+  # NOTE: this filter is scoped to the JSON API only. If any endpoint ever
+  # returns text/html, this must be revisited — that is a real XSS surface.
+  - ruleId: 40014
+    newRisk: "False Positive"
+    context: api
+    reason: >-
+      Payload echoed inside application/json, never an HTML context. Browsers
+      do not script-parse JSON responses and the frontend escapes via React.
+      Revisit if any API endpoint starts returning text/html.

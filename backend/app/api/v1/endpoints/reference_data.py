@@ -417,7 +417,11 @@ async def get_scholarship_periods(
     taiwan_year = current_year - 1911
     current_semester = Semester.first.value if current_month >= 8 else Semester.second.value
 
-    # Get scholarship info if specified
+    # Get scholarship info if specified.
+    # `scholarship` must be initialised here, not only inside the branch below:
+    # it is read unconditionally further down, so calling this endpoint with
+    # neither scholarship_id nor scholarship_code raised UnboundLocalError -> 500.
+    scholarship = None
     scholarship_cycle = None
     scholarship_name = None
 

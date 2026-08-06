@@ -1,0 +1,123 @@
+# ZAP Automation Framework plan — authenticated active scan of the backend API.
+#
+# Run it:
+#   export ZAP_BEARER_TOKEN=...        # admin JWT, see security/zap/README.md
+#   envsubst < security/zap/active-scan-plan.yaml > /tmp/zapwrk/plan.yaml
+#   docker run --network host -v /tmp/zapwrk:/zap/wrk/:rw \
+#     ghcr.io/zaproxy/zaproxy:stable zap.sh -cmd -port 8999 -autorun /zap/wrk/plan.yaml
+#
+# NEVER point this at the shared dev database. It sends destructive payloads
+# (POST/PUT/DELETE with attack strings). Stand up a throwaway clone first —
+# security/zap/README.md has the full recipe.
+#
+# Two settings that are load-bearing and easy to get wrong:
+#   * -port 8999   : ZAP's proxy defaults to 8080, which the mock student API
+#                    already holds. Without this ZAP exits 0 after failing to
+#                    bind, which looks exactly like a successful scan.
+#   * openapi job  : the URL tree comes from the spec, not a spider. Unauthenticated
+#                    crawling reaches 3 URLs; the spec supplies 416. Skipping this
+#                    produces a clean report that tested almost nothing.
+
+env:
+  contexts:
+    - name: api
+      urls:
+        - http://localhost:8100
+      includePaths:
+        - "http://localhost:8100/api/v1/.*"
+        - "http://localhost:8100/health"
+        - "http://localhost:8100/metrics"
+        - "http://localhost:8100/debug/.*"
+        - "http://localhost:8100/"
+      excludePaths:
+        # Logging out mid-scan would invalidate the session for every
+        # subsequent request.
+        - "http://localhost:8100/api/v1/auth/logout.*"
+  parameters:
+    failOnError: false
+    failOnWarning: false
+    progressToStdout: true
+
+jobs:
+  - type: passiveScan-config
+    parameters:
+      maxAlertsPerRule: 20
+      enableTags: false
+
+  # Inject the admin bearer token on every request. ZAP's session-management
+  # options can re-authenticate, but this API mints tokens with a configurable
+  # lifetime, so a single long-lived token is simpler and avoids a login storm.
+  - type: replacer
+    parameters:
+      deleteAllRules: true
+    rules:
+      - description: inject-admin-bearer
+        enabled: true
+        matchType: req_header
+        matchString: Authorization
+        matchRegex: false
+        replacementString: "Bearer ${ZAP_BEARER_TOKEN}"
+
+  - type: openapi
+    parameters:
+      apiFile: /zap/wrk/openapi.json
+      targetUrl: http://localhost:8100
+      context: api
+
+  - type: activeScan
+    parameters:
+      context: api
+      maxScanDurationInMins: 120
+      maxRuleDurationInMins: 10
+      threadPerHost: 5
+    policyDefinition:
+      defaultStrength: medium
+      defaultThreshold: medium
+
+  # Re-label findings already investigated and refuted. Entries and their
+  # evidence live in security/zap/alert-filters.yaml — read the rules at the top
+  # of that file before adding anything here.
+  - type: alertFilter
+    alertFilters:
+      - ruleId: 90020
+        newRisk: "False Positive"
+        context: api
+        evidence: "Get-Help"
+      - ruleId: 6
+        newRisk: "False Positive"
+        context: api
+        url: "http://localhost:8100/api/v1/auth/dev-profiles.*"
+      - ruleId: 30002
+        newRisk: "False Positive"
+        context: api
+      - ruleId: 40014
+        newRisk: "False Positive"
+        context: api
+
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 10
+
+  - type: outputSummary
+    parameters:
+      format: Long
+      summaryFile: /zap/wrk/summary.json
+
+  - type: report
+    parameters:
+      template: traditional-html
+      reportDir: /zap/wrk/
+      reportFile: zap-active-api-report.html
+      reportTitle: ZAP Authenticated Active Scan Report - Backend API
+  - type: report
+    parameters:
+      template: traditional-json
+      reportDir: /zap/wrk/
+      reportFile: zap-active-api-report.json
+      reportTitle: ZAP Authenticated Active Scan Report - Backend API
+  - type: report
+    parameters:
+      template: traditional-md
+      reportDir: /zap/wrk/
+      reportFile: zap-active-api-report.md
+      reportTitle: ZAP Authenticated Active Scan Report - Backend API

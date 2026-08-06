@@ -234,6 +234,11 @@ async def createSystemAnnouncement(
         )
         raise HTTPException(status_code=403, detail="需要管理員權限")
 
+    # Captured before the try: the error path rolls the session back, which
+    # expires `current_user`, and reading an attribute off an expired instance
+    # afterwards raises MissingGreenlet instead of logging the real failure.
+    actor_user_id = current_user.id
+
     try:
         notification_service = NotificationService(db)
 
@@ -295,7 +300,9 @@ async def createSystemAnnouncement(
 
     except Exception as e:
         await db.rollback()
-        logger.exception("Failed to create system announcement by user_id=%s", current_user.id)
+        # `actor_user_id` was captured before the rollback: reading
+        # current_user.id here would raise MissingGreenlet (see below).
+        logger.exception("Failed to create system announcement by user_id=%s", actor_user_id)
         raise HTTPException(status_code=500, detail="創建系統公告失敗") from e
 
 
@@ -315,6 +322,11 @@ async def createTestNotifications(current_user: User = Depends(get_current_user)
             },
         )
         raise HTTPException(status_code=403, detail="需要管理員權限")
+
+    # Captured before the try: the error path rolls the session back, which
+    # expires `current_user`, and reading an attribute off an expired instance
+    # afterwards raises MissingGreenlet instead of logging the real failure.
+    actor_user_id = current_user.id
 
     try:
         notification_service = NotificationService(db)
@@ -382,5 +394,5 @@ async def createTestNotifications(current_user: User = Depends(get_current_user)
 
     except Exception as e:
         await db.rollback()
-        logger.exception("Failed to create test notifications by user_id=%s", current_user.id)
+        logger.exception("Failed to create test notifications by user_id=%s", actor_user_id)
         raise HTTPException(status_code=500, detail="創建測試通知失敗") from e

@@ -14,12 +14,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
+from sqlalchemy.orm.exc import StaleDataError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 # Import routers
 from app.api.v1.api import api_router
 from app.core.config import settings
 from app.core.database_health import check_database_health
+from app.core.db_error_mapping import map_db_exception
 from app.core.exceptions import ScholarshipException, scholarship_exception_handler
 from app.core.security import require_admin
 from app.models.user import User
@@ -284,6 +286,33 @@ async def general_exception_handler(request: Request, exc: Exception):  # pylint
             content={
                 "success": False,
                 "message": "Service temporarily unavailable - database connection issue",
+                "trace_id": trace_id,
+            },
+        )
+
+    # A row the caller asked us to update vanished (or was changed) underneath
+    # the flush. That is a concurrency conflict, not a server fault.
+    if isinstance(exc, StaleDataError):
+        return JSONResponse(
+            status_code=409,
+            content={
+                "success": False,
+                "message": "資料已被其他操作變更，請重新載入後再試",
+                "trace_id": trace_id,
+            },
+        )
+
+    # The database rejected the caller's input (bad enum literal, over-long
+    # string, NUL byte, constraint violation). Answer 4xx instead of 500 — see
+    # app/core/db_error_mapping.py for why this matches on SQLSTATE.
+    db_mapped = map_db_exception(exc)
+    if db_mapped is not None:
+        status_code, message = db_mapped
+        return JSONResponse(
+            status_code=status_code,
+            content={
+                "success": False,
+                "message": message,
                 "trace_id": trace_id,
             },
         )
