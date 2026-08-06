@@ -6,7 +6,7 @@ ZAP active scan turned into an HTTP 500. See docs/security/zap-active-2026-08-06
 
 import pytest
 
-from app.core.db_error_mapping import map_db_exception
+from app.core.db_error_mapping import map_db_exception, map_db_exception_chain
 
 
 class _FakeDriverError(Exception):
@@ -87,6 +87,65 @@ def test_unrelated_exception_returns_none():
 
 def test_missing_sqlstate_returns_none():
     assert map_db_exception(_FakeWrapper(Exception("no code attribute"))) is None
+
+
+def test_chain_follows_explicit_cause():
+    """The 161 `raise HTTPException(500) from exc` sites must be reclassified."""
+    driver = _FakeDriverError("23505")
+    wrapper = _FakeWrapper(driver)
+    try:
+        try:
+            raise wrapper
+        except _FakeWrapper as exc:
+            raise RuntimeError("endpoint wrapped it") from exc
+    except RuntimeError as outer:
+        result = map_db_exception_chain(outer)
+
+    assert result is not None
+    assert result[0] == 409
+
+
+def test_chain_follows_implicit_context():
+    driver = _FakeDriverError("22P02")
+    try:
+        try:
+            raise driver
+        except _FakeDriverError:
+            raise RuntimeError("raised while handling")  # noqa: B904 - deliberate
+    except RuntimeError as outer:
+        result = map_db_exception_chain(outer)
+
+    assert result is not None
+    assert result[0] == 400
+
+
+def test_chain_stops_on_unrelated_exception():
+    try:
+        try:
+            raise ValueError("business rule violated")
+        except ValueError as exc:
+            raise RuntimeError("wrapped") from exc
+    except RuntimeError as outer:
+        assert map_db_exception_chain(outer) is None
+
+
+def test_chain_survives_a_self_referential_context():
+    """A cycle must terminate rather than hang."""
+    a = RuntimeError("a")
+    b = RuntimeError("b")
+    a.__context__ = b
+    b.__context__ = a
+    assert map_db_exception_chain(a) is None
+
+
+def test_chain_gives_up_past_the_depth_cap():
+    deepest = _FakeWrapper(_FakeDriverError("23505"))
+    current = deepest
+    for _ in range(20):
+        wrapper = RuntimeError("layer")
+        wrapper.__cause__ = current
+        current = wrapper
+    assert map_db_exception_chain(current) is None
 
 
 def test_message_does_not_leak_driver_text():

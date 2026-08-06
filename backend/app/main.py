@@ -21,7 +21,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.api.v1.api import api_router
 from app.core.config import settings
 from app.core.database_health import check_database_health
-from app.core.db_error_mapping import map_db_exception
+from app.core.db_error_mapping import map_db_exception, map_db_exception_chain
 from app.core.exceptions import ScholarshipException, scholarship_exception_handler
 from app.core.security import require_admin
 from app.models.user import User
@@ -189,11 +189,23 @@ app.add_exception_handler(ScholarshipException, scholarship_exception_handler)
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     """Handle HTTP exceptions"""
+    status_code = exc.status_code
+    message = exc.detail
+
+    # Many endpoints catch broadly and re-raise as HTTPException(500) `from exc`.
+    # When the preserved cause turns out to be the database rejecting caller
+    # input, the honest answer is 4xx: the server is fine, the request was not.
+    # Doing it here covers every such site at once — see db_error_mapping.py.
+    if status_code == 500:
+        mapped = map_db_exception_chain(exc)
+        if mapped is not None:
+            status_code, message = mapped
+
     return JSONResponse(
-        status_code=exc.status_code,
+        status_code=status_code,
         content={
             "success": False,
-            "message": exc.detail,
+            "message": message,
             "trace_id": getattr(request.state, "trace_id", None),
         },
     )

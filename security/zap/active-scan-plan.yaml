@@ -64,25 +64,23 @@ jobs:
       targetUrl: http://localhost:8100
       context: api
 
-  - type: activeScan
-    parameters:
-      context: api
-      maxScanDurationInMins: 120
-      maxRuleDurationInMins: 10
-      threadPerHost: 5
-    policyDefinition:
-      defaultStrength: medium
-      defaultThreshold: medium
-
-  # Re-label findings already investigated and refuted. Entries and their
-  # evidence live in security/zap/alert-filters.yaml — read the rules at the top
-  # of that file before adding anything here.
+  # MUST come before the scanning jobs. Filters are applied as alerts are
+  # raised, not retroactively — placing this after activeScan installs them
+  # too late and every filtered finding still appears at full risk, with no
+  # error to tell you the suppression did nothing.
+  #
+  # Entries and their evidence live in security/zap/alert-filters.yaml. Read
+  # the rules at the top of that file before adding anything here.
   - type: alertFilter
     alertFilters:
+      # Evidence string is matched literally and ZAP records it with a leading
+      # space. Scoping by evidence rather than blanket-suppressing rule 90020
+      # keeps a genuine command-injection finding (whose evidence would be real
+      # command output) visible.
       - ruleId: 90020
         newRisk: "False Positive"
         context: api
-        evidence: "Get-Help"
+        evidence: " Get-Help"
       - ruleId: 6
         newRisk: "False Positive"
         context: api
@@ -93,6 +91,16 @@ jobs:
       - ruleId: 40014
         newRisk: "False Positive"
         context: api
+
+  - type: activeScan
+    parameters:
+      context: api
+      maxScanDurationInMins: 120
+      maxRuleDurationInMins: 10
+      threadPerHost: 5
+    policyDefinition:
+      defaultStrength: medium
+      defaultThreshold: medium
 
   - type: passiveScan-wait
     parameters:

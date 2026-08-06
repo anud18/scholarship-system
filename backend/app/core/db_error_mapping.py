@@ -65,3 +65,39 @@ def map_db_exception(exc: BaseException) -> Optional[tuple[int, str]]:
     if not sqlstate:
         return None
     return _SQLSTATE_CLASS_MAP.get(sqlstate[:2])
+
+
+# Walking further than this is pointless and risks pathological chains.
+_MAX_CAUSE_DEPTH = 10
+
+
+def map_db_exception_chain(exc: BaseException) -> Optional[tuple[int, str]]:
+    """Like `map_db_exception`, but follows the `__cause__`/`__context__` chain.
+
+    161 endpoints in this codebase catch broadly and re-raise as
+    `HTTPException(status_code=500, ...) from exc`. The HTTPException itself
+    carries no SQLSTATE, so `map_db_exception` alone sees nothing — but every
+    one of those sites uses `from exc`, so the original driver error is still
+    reachable via `__cause__`. Following the chain lets a single handler
+    reclassify all of them instead of editing 161 call sites.
+
+    Cycle-guarded by identity: `__context__` chains can loop when an exception
+    is raised while handling itself.
+    """
+    seen: set[int] = set()
+    current: Optional[BaseException] = exc
+
+    for _ in range(_MAX_CAUSE_DEPTH):
+        if current is None or id(current) in seen:
+            return None
+        seen.add(id(current))
+
+        mapped = map_db_exception(current)
+        if mapped is not None:
+            return mapped
+
+        # __cause__ is the explicit `raise ... from exc`; __context__ is the
+        # implicit "raised while handling" link. Prefer the explicit one.
+        current = current.__cause__ or current.__context__
+
+    return None

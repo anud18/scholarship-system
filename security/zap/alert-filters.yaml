@@ -14,6 +14,11 @@
 #      correct against one implementation can mask a real bug in the next.
 #   4. `newRisk: "False Positive"` keeps the finding visible in the report,
 #      re-labelled. It is NOT deleted. Auditors can still see it and disagree.
+#   5. The `alertFilter` job must run BEFORE the scanning jobs. Filters apply as
+#      alerts are raised, not retroactively, and ZAP reports no error when they
+#      arrive too late — the findings simply appear at full risk as if the
+#      filters were never configured. After changing this file, re-run and
+#      confirm the risk really flipped; do not assume it worked.
 #
 # Evidence for every entry below: docs/security/zap-active-2026-08-06/README.md §3
 # Verified against `main` @ e79d8f33 on 2026-08-06.
@@ -33,10 +38,12 @@ alertFilters:
   #
   # No shell is invoked anywhere on this path. Additionally the dev-profiles
   # endpoints are hard-gated behind enable_mock_sso and 404 in production.
+  # NOTE the leading space in `evidence`: ZAP records it as " Get-Help" and the
+  # match is literal. Without it the filter silently matches nothing.
   - ruleId: 90020
     newRisk: "False Positive"
     context: api
-    evidence: "Get-Help"
+    evidence: " Get-Help"
     reason: >-
       Scanner-generated data echoed back by a search endpoint. The "Get-Help"
       string is a dev profile the scan itself created via
