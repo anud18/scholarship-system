@@ -409,9 +409,10 @@ jobs:
           git rm -rf frontend/lib/api/__tests__/ 2>/dev/null || true
           git rm -rf frontend/lib/utils/__tests__/ 2>/dev/null || true
           git rm -rf backend/app/tests/ 2>/dev/null || true
+          git rm -rf frontend/e2e/ 2>/dev/null || true
 
           if git diff --cached --quiet --name-only | grep -q "__tests__\|/tests/"; then
-            REMOVED_DIRS="${REMOVED_DIRS}- Test directories (__tests__/, tests/)\n"
+            REMOVED_DIRS="${REMOVED_DIRS}- Test directories (__tests__/, tests/, e2e/)\n"
           fi
 
           # Remove test files
@@ -428,11 +429,20 @@ jobs:
           git rm -f frontend/jest.config.js 2>/dev/null || true
           git rm -f frontend/jest.config.standalone.js 2>/dev/null || true
           git rm -f frontend/tsconfig.test.json 2>/dev/null || true
+          git rm -f frontend/playwright.config.ts 2>/dev/null || true
           git rm -f backend/pytest.ini 2>/dev/null || true
           git rm -f backend/.coverage 2>/dev/null || true
 
           if git diff --cached --quiet --name-only | grep -q "jest.config\|pytest.ini\|\.coverage"; then
             REMOVED_DIRS="${REMOVED_DIRS}- Test configuration files\n"
+          fi
+
+          # Remove dev-only environment bootstrap script (writes local-dev .env
+          # files; useless in production, and its dev DB/S3 defaults trip
+          # credential scanners run against the production repo)
+          echo "::notice::Removing dev-only scripts"
+          if git rm -f scripts/write_dev_env.sh 2>/dev/null; then
+            REMOVED_DIRS="${REMOVED_DIRS}- scripts/write_dev_env.sh (dev-only .env bootstrap)\n"
           fi
 
           # Remove all markdown documentation files
