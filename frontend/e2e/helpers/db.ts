@@ -6,10 +6,10 @@ function e2eDatabaseUrl(): string {
   const url = process.env.E2E_DATABASE_URL;
   if (!url) {
     throw new Error(
-      "E2E_DATABASE_URL is not set. Export the Postgres URL of the stack under test, e.g.\n" +
-        "  E2E_DATABASE_URL=postgresql://<user>:<password>@localhost:5432/scholarship_db\n" +
-        "using the credentials of the postgres service in docker-compose.dev.yml " +
-        "(the staging-e2e CI lane sets this to the throwaway replica automatically).",
+      "E2E_DATABASE_URL is not set. Export the Postgres URL of the stack under test:\n" +
+        "  E2E_DATABASE_URL=postgresql://<user>:<password>@<host>:<port>/<database>\n" +
+        "For the local dev stack use the postgres credentials from docker-compose.dev.yml " +
+        "(CI lanes set this automatically).",
     );
   }
   return url;

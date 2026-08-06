@@ -652,7 +652,14 @@ jobs:
       - name: Run @smoke specs
         if: env.READY == '1'
         working-directory: ./frontend
-        run: bunx playwright test --grep=@smoke
+        run: |
+          # helpers/db.ts requires E2E_DATABASE_URL (no fallback); credentials
+          # come from the docker-compose.dev.yml stack this job just started.
+          db_user=$(sed -n 's/^[[:space:]]*POSTGRES_USER:[[:space:]]*//p' ../docker-compose.dev.yml | head -n 1)
+          db_pass=$(sed -n 's/^[[:space:]]*POSTGRES_PASSWORD:[[:space:]]*//p' ../docker-compose.dev.yml | head -n 1)
+          db_name=$(sed -n 's/^[[:space:]]*POSTGRES_DB:[[:space:]]*//p' ../docker-compose.dev.yml | head -n 1)
+          export E2E_DATABASE_URL="postgresql://${db_user}:${db_pass}@localhost:5432/${db_name}"
+          bunx playwright test --grep=@smoke
         env:
           PLAYWRIGHT_BASE_URL: http://localhost:3000
 

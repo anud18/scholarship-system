@@ -11,7 +11,9 @@
 
 set -euo pipefail
 
-COMPOSE_FILE="docker-compose.dev.yml"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+COMPOSE_FILE="$REPO_ROOT/docker-compose.dev.yml"
 
 # First `KEY: value` occurrence in docker-compose.dev.yml.
 compose_value() {
@@ -32,7 +34,7 @@ case "${1:-}" in
     S3_ACCESS_KEY="$(compose_value RUSTFS_ACCESS_KEY)"
     S3_SECRET_KEY="$(compose_value RUSTFS_SECRET_KEY)"
 
-    cat > backend/.env <<EOF
+    cat > "$REPO_ROOT/backend/.env" <<EOF
 # Local-dev defaults written by scripts/write_dev_env.sh.
 # DB / MinIO values are read from docker-compose.dev.yml.
 # Replace each value with your own for staging/prod, e.g.:
@@ -71,7 +73,7 @@ EOF
     ;;
 
   frontend)
-    cat > frontend/.env.local <<'EOF'
+    cat > "$REPO_ROOT/frontend/.env.local" <<'EOF'
 # Local-dev defaults written by scripts/write_dev_env.sh.
 
 NEXT_PUBLIC_API_URL=http://localhost:8000

@@ -9,6 +9,9 @@ Bring up the dev stack first:
   docker compose -f docker-compose.dev.yml up -d
   until curl -fsS http://localhost:8000/health >/dev/null; do sleep 2; done
   until curl -fsS http://localhost:3000          >/dev/null; do sleep 2; done
+
+Then export the e2e database URL (postgres credentials from docker-compose.dev.yml):
+  export E2E_DATABASE_URL=postgresql://<user>:<password>@localhost:5432/scholarship_db
 `;
 
 async function ping(url: string, label: string): Promise<void> {
