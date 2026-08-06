@@ -1,0 +1,659 @@
+{
+	"@programName": "ZAP",
+	"@version": "2.17.0",
+	"@generated": "Thu, 6 Aug 2026 03:36:10",
+	"created": "2026-08-06T03:36:10.664138486Z",
+	"site":[ 
+		{
+			"@name": "http://localhost:8100",
+			"@host": "localhost",
+			"@port": "8100",
+			"@ssl": "false",
+			"alerts": [ 
+				{
+					"pluginid": "6",
+					"alertRef": "6-5",
+					"alert": "Path Traversal",
+					"name": "Path Traversal",
+					"riskcode": "3",
+					"confidence": "1",
+					"riskdesc": "High (Low)",
+					"desc": "<p>The Path Traversal attack technique allows an attacker access to files, directories, and commands that potentially reside outside the web document root directory. An attacker may manipulate a URL in such a way that the web site will execute or reveal the contents of arbitrary files anywhere on the web server. Any device that exposes an HTTP-based interface is potentially vulnerable to Path Traversal.</p><p></p><p>Most web sites restrict user access to a specific portion of the file-system, typically called the \"web document root\" or \"CGI root\" directory. These directories contain the files intended for user access and the executable necessary to drive web application functionality. To access files or execute commands anywhere on the file-system, Path Traversal attacks will utilize the ability of special-characters sequences.</p><p></p><p>The most basic Path Traversal attack uses the \"../\" special-character sequence to alter the resource location requested in the URL. Although most popular web servers will prevent this technique from escaping the web document root, alternate encodings of the \"../\" sequence may help bypass the security filters. These method variations include valid and invalid Unicode-encoding (\"..%u2216\" or \"..%c0%af\") of the forward slash character, backslash characters (\"..\\\") on Windows-based servers, URL encoded characters \"%2e%2e%2f\"), and double URL encoding (\"..%255c\") of the backslash character.</p><p></p><p>Even if the web server properly restricts Path Traversal attempts in the URL path, a web application itself may still be vulnerable due to improper handling of user-supplied input. This is a common problem of web applications that use template mechanisms or load static text from files. In variations of the attack, the original URL parameter value is substituted with the file name of one of the web application's dynamic scripts. Consequently, the results can reveal source code because the file is interpreted as text instead of an executable script. These techniques often employ additional special characters such as the dot (\".\") to reveal the listing of the current working directory, or \"%00\" NULL characters in order to bypass rudimentary file extension checks.</p>",
+					"instances":[ 
+						{
+							"id": "35",
+							"uri": "http://localhost:8100/api/v1/auth/dev-profiles/quick-setup/quick-setup",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/auth\/dev-profiles\/quick-setup\/quick-setup",
+							"method": "POST",
+							"param": "\u00ABdeveloper_id\u00BB",
+							"attack": "quick-setup",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "36",
+							"uri": "http://localhost:8100/api/v1/auth/dev-profiles/staff-suite/staff-suite",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/auth\/dev-profiles\/staff-suite\/staff-suite",
+							"method": "POST",
+							"param": "\u00ABdeveloper_id\u00BB",
+							"attack": "staff-suite",
+							"evidence": "",
+							"otherinfo": ""
+						}
+					],
+					"count": "2",
+					"systemic": false,
+					"solution": "<p>Assume all input is malicious. Use an \"accept known good\" input validation strategy, i.e., use an allow list of acceptable inputs that strictly conform to specifications. Reject any input that does not strictly conform to specifications, or transform it into something that does. Do not rely exclusively on looking for malicious or malformed inputs (i.e., do not rely on a deny list). However, deny lists can be useful for detecting potential attacks or determining which inputs are so malformed that they should be rejected outright.</p><p></p><p>When performing input validation, consider all potentially relevant properties, including length, type of input, the full range of acceptable values, missing or extra inputs, syntax, consistency across related fields, and conformance to business rules. As an example of business rule logic, \"boat\" may be syntactically valid because it only contains alphanumeric characters, but it is not valid if you are expecting colors such as \"red\" or \"blue.\"</p><p></p><p>For filenames, use stringent allow lists that limit the character set to be used. If feasible, only allow a single \".\" character in the filename to avoid weaknesses, and exclude directory separators such as \"/\". Use an allow list of allowable file extensions.</p><p></p><p>Warning: if you attempt to cleanse your data, then do so that the end result is not in the form that can be dangerous. A sanitizing mechanism can remove characters such as '.' and ';' which may be required for some exploits. An attacker can try to fool the sanitizing mechanism into \"cleaning\" data into a dangerous form. Suppose the attacker injects a '.' inside a filename (e.g. \"sensi.tiveFile\") and the sanitizing mechanism removes the character resulting in the valid filename, \"sensitiveFile\". If the input data are now assumed to be safe, then the file may be compromised. </p><p></p><p>Inputs should be decoded and canonicalized to the application's current internal representation before being validated. Make sure that your application does not decode the same input twice. Such errors could be used to bypass allow list schemes by introducing dangerous inputs after they have been checked.</p><p></p><p>Use a built-in path canonicalization function (such as realpath() in C) that produces the canonical version of the pathname, which effectively removes \"..\" sequences and symbolic links.</p><p></p><p>Run your code using the lowest privileges that are required to accomplish the necessary tasks. If possible, create isolated accounts with limited privileges that are only used for a single task. That way, a successful attack will not immediately give the attacker access to the rest of the software or its environment. For example, database applications rarely need to run as the database administrator, especially in day-to-day operations.</p><p></p><p>When the set of acceptable objects, such as filenames or URLs, is limited or known, create a mapping from a set of fixed input values (such as numeric IDs) to the actual filenames or URLs, and reject all other inputs.</p><p></p><p>Run your code in a \"jail\" or similar sandbox environment that enforces strict boundaries between the process and the operating system. This may effectively restrict which files can be accessed in a particular directory or which commands can be executed by your software.</p><p></p><p>OS-level examples include the Unix chroot jail, AppArmor, and SELinux. In general, managed code may provide some protection. For example, java.io.FilePermission in the Java SecurityManager allows you to specify restrictions on file operations.</p><p></p><p>This may not be a feasible solution, and it only limits the impact to the operating system; the rest of your application may still be subject to compromise.</p><p></p>",
+					"otherinfo": "",
+					"reference": "<p>https://owasp.org/www-community/attacks/Path_Traversal</p><p>https://cwe.mitre.org/data/definitions/22.html</p>",
+					"cweid": "22",
+					"wascid": "33",
+					"sourceid": "728"
+				},
+				{
+					"pluginid": "90020",
+					"alertRef": "90020",
+					"alert": "Remote OS Command Injection",
+					"name": "Remote OS Command Injection",
+					"riskcode": "3",
+					"confidence": "2",
+					"riskdesc": "High (Medium)",
+					"desc": "<p>Attack technique used for unauthorized execution of operating system commands. This attack is possible when an application accepts untrusted input to build operating system commands in an insecure manner involving improper data sanitization, and/or improper calling of external programs.</p>",
+					"instances":[ 
+						{
+							"id": "51",
+							"uri": "http://localhost:8100/api/v1/admin/professors?search=get-help",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/admin\/professors (search)",
+							"method": "GET",
+							"param": "search",
+							"attack": "get-help",
+							"evidence": " Get-Help",
+							"otherinfo": "The scan rule was able to retrieve the content of a file or command by sending [get-help] to the operating system running this application."
+						},
+						{
+							"id": "52",
+							"uri": "http://localhost:8100/api/v1/auth/dev-profiles/get-help",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/auth\/dev-profiles\/get-help",
+							"method": "GET",
+							"param": "\u00ABdeveloper_id\u00BB",
+							"attack": "get-help",
+							"evidence": " Get-Help",
+							"otherinfo": "The scan rule was able to retrieve the content of a file or command by sending [get-help] to the operating system running this application."
+						},
+						{
+							"id": "53",
+							"uri": "http://localhost:8100/api/v1/users?page=1&size=20&role=&roles=&search=get-help&include_permissions=false",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/users (include_permissions,page,role,roles,search,size)",
+							"method": "GET",
+							"param": "search",
+							"attack": "get-help",
+							"evidence": " Get-Help",
+							"otherinfo": "The scan rule was able to retrieve the content of a file or command by sending [get-help] to the operating system running this application."
+						},
+						{
+							"id": "49",
+							"uri": "http://localhost:8100/api/v1/auth/dev-profiles/get-help/quick-setup",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/auth\/dev-profiles\/get-help\/quick-setup",
+							"method": "POST",
+							"param": "\u00ABdeveloper_id\u00BB",
+							"attack": "get-help",
+							"evidence": " Get-Help",
+							"otherinfo": "The scan rule was able to retrieve the content of a file or command by sending [get-help] to the operating system running this application."
+						},
+						{
+							"id": "50",
+							"uri": "http://localhost:8100/api/v1/auth/dev-profiles/get-help/staff-suite",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/auth\/dev-profiles\/get-help\/staff-suite",
+							"method": "POST",
+							"param": "\u00ABdeveloper_id\u00BB",
+							"attack": "get-help",
+							"evidence": " Get-Help",
+							"otherinfo": "The scan rule was able to retrieve the content of a file or command by sending [get-help] to the operating system running this application."
+						}
+					],
+					"count": "5",
+					"systemic": false,
+					"solution": "<p>If at all possible, use library calls rather than external processes to recreate the desired functionality.</p><p></p><p>Run your code in a \"jail\" or similar sandbox environment that enforces strict boundaries between the process and the operating system. This may effectively restrict which files can be accessed in a particular directory or which commands can be executed by your software.</p><p></p><p>OS-level examples include the Unix chroot jail, AppArmor, and SELinux. In general, managed code may provide some protection. For example, java.io.FilePermission in the Java SecurityManager allows you to specify restrictions on file operations.</p><p>This may not be a feasible solution, and it only limits the impact to the operating system; the rest of your application may still be subject to compromise.</p><p></p><p>For any data that will be used to generate a command to be executed, keep as much of that data out of external control as possible. For example, in web applications, this may require storing the command locally in the session's state instead of sending it out to the client in a hidden form field.</p><p></p><p>Use a vetted library or framework that does not allow this weakness to occur or provides constructs that make this weakness easier to avoid.</p><p></p><p>For example, consider using the ESAPI Encoding control or a similar tool, library, or framework. These will help the programmer encode outputs in a manner less prone to error.</p><p></p><p>If you need to use dynamically-generated query strings or commands in spite of the risk, properly quote arguments and escape any special characters within those arguments. The most conservative approach is to escape or filter all characters that do not pass an extremely strict allow list (such as everything that is not alphanumeric or white space). If some special characters are still needed, such as white space, wrap each argument in quotes after the escaping/filtering step. Be careful of argument injection.</p><p></p><p>If the program to be executed allows arguments to be specified within an input file or from standard input, then consider using that mode to pass arguments instead of the command line.</p><p></p><p>If available, use structured mechanisms that automatically enforce the separation between data and code. These mechanisms may be able to provide the relevant quoting, encoding, and validation automatically, instead of relying on the developer to provide this capability at every point where output is generated.</p><p></p><p>Some languages offer multiple functions that can be used to invoke commands. Where possible, identify any function that invokes a command shell using a single string, and replace it with a function that requires individual arguments. These functions typically perform appropriate quoting and filtering of arguments. For example, in C, the system() function accepts a string that contains the entire command to be executed, whereas execl(), execve(), and others require an array of strings, one for each argument. In Windows, CreateProcess() only accepts one command at a time. In Perl, if system() is provided with an array of arguments, then it will quote each of the arguments.</p><p></p><p>Assume all input is malicious. Use an \"accept known good\" input validation strategy, i.e., use an allow list of acceptable inputs that strictly conform to specifications. Reject any input that does not strictly conform to specifications, or transform it into something that does. Do not rely exclusively on looking for malicious or malformed inputs (i.e., do not rely on a deny list). However, deny lists can be useful for detecting potential attacks or determining which inputs are so malformed that they should be rejected outright.</p><p></p><p>When performing input validation, consider all potentially relevant properties, including length, type of input, the full range of acceptable values, missing or extra inputs, syntax, consistency across related fields, and conformance to business rules. As an example of business rule logic, \"boat\" may be syntactically valid because it only contains alphanumeric characters, but it is not valid if you are expecting colors such as \"red\" or \"blue.\"</p><p></p><p>When constructing OS command strings, use stringent allow lists that limit the character set based on the expected value of the parameter in the request. This will indirectly limit the scope of an attack, but this technique is less important than proper output encoding and escaping.</p><p></p><p>Note that proper output encoding, escaping, and quoting is the most effective solution for preventing OS command injection, although input validation may provide some defense-in-depth. This is because it effectively limits what will appear in output. Input validation will not always prevent OS command injection, especially if you are required to support free-form text fields that could contain arbitrary characters. For example, when invoking a mail program, you might need to allow the subject field to contain otherwise-dangerous inputs like \";\" and \">\" characters, which would need to be escaped or otherwise handled. In this case, stripping the character might reduce the risk of OS command injection, but it would produce incorrect behavior because the subject field would not be recorded as the user intended. This might seem to be a minor inconvenience, but it could be more important when the program relies on well-structured subject lines in order to pass messages to other components.</p><p></p><p>Even if you make a mistake in your validation (such as forgetting one out of 100 input fields), appropriate encoding is still likely to protect you from injection-based attacks. As long as it is not done in isolation, input validation is still a useful technique, since it may significantly reduce your attack surface, allow you to detect some attacks, and provide other security benefits that proper encoding does not address.</p>",
+					"otherinfo": "<p>The scan rule was able to retrieve the content of a file or command by sending [get-help] to the operating system running this application.</p>",
+					"reference": "<p>https://cwe.mitre.org/data/definitions/78.html</p><p>https://owasp.org/www-community/attacks/Command_Injection</p>",
+					"cweid": "78",
+					"wascid": "31",
+					"sourceid": "860"
+				},
+				{
+					"pluginid": "30002",
+					"alertRef": "30002",
+					"alert": "Format String Error",
+					"name": "Format String Error",
+					"riskcode": "2",
+					"confidence": "2",
+					"riskdesc": "Medium (Medium)",
+					"desc": "<p>A Format String error occurs when the submitted data of an input string is evaluated as a command by the application.</p>",
+					"instances":[ 
+						{
+							"id": "56",
+							"uri": "http://localhost:8100/api/v1/application-fields/fields",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/application-fields\/fields ()({scholarship_type,field_name,field_label,field_label_en,field_type,is_required,placeholder,placeholder_en,max_length,min_value,max_value,step_value,field_options:[{}],display_order,is_active,help_text,help_text_en,validation_rules:{},conditional_rules:{},include_in_college_export,export_column_label})",
+							"method": "POST",
+							"param": "field_name",
+							"attack": "ZAP %1!s%2!s%3!s%4!s%5!s%6!s%7!s%8!s%9!s%10!s%11!s%12!s%13!s%14!s%15!s%16!s%17!s%18!s%19!s%20!s%21!n%22!n%23!n%24!n%25!n%26!n%27!n%28!n%29!n%30!n%31!n%32!n%33!n%34!n%35!n%36!n%37!n%38!n%39!n%40!n\n",
+							"evidence": "",
+							"otherinfo": "Potential Format String Error. The script closed the connection on a Microsoft format string error."
+						},
+						{
+							"id": "55",
+							"uri": "http://localhost:8100/api/v1/application-fields/fields",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/application-fields\/fields ()({scholarship_type,field_name,field_label,field_label_en,field_type,is_required,placeholder,placeholder_en,max_length,min_value,max_value,step_value,field_options:[{}],display_order,is_active,help_text,help_text_en,validation_rules:{},conditional_rules:{},include_in_college_export,export_column_label})",
+							"method": "POST",
+							"param": "scholarship_type",
+							"attack": "ZAP%x%x%x%x%x%x%x%x%x%x\n",
+							"evidence": "",
+							"otherinfo": "Potential Format String Error. The script closed the connection on a /%s and /%x."
+						},
+						{
+							"id": "58",
+							"uri": "http://localhost:8100/api/v1/auth/dev-profiles/ZAP%25n%25s%25n%25s%25n%25s%25n%25s%25n%25s%25n%25s%25n%25s%25n%25s%25n%25s%25n%25s%25n%25s%25n%25s%25n%25s%25n%25s%25n%25s%25n%25s%25n%25s%25n%25s%25n%25s%25n%25s%0A/quick-setup",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/auth\/dev-profiles\/ZAP%n%s%n%s%n%s%n%s%n%s%n%s%n%s%n%s%n%s%n%s%n%s%n%s%n%s%n%s%n%s%n%s%n%s%n%s%n%s%n%s\n\/quick-setup",
+							"method": "POST",
+							"param": "\u00ABdeveloper_id\u00BB",
+							"attack": "ZAP%n%s%n%s%n%s%n%s%n%s%n%s%n%s%n%s%n%s%n%s%n%s%n%s%n%s%n%s%n%s%n%s%n%s%n%s%n%s%n%s\n",
+							"evidence": "",
+							"otherinfo": "Potential Format String Error. The script closed the connection on a /%s."
+						},
+						{
+							"id": "59",
+							"uri": "http://localhost:8100/api/v1/auth/dev-profiles/ZAP%25x%25x%25x%25x%25x%25x%25x%25x%25x%25x%0A/staff-suite",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/auth\/dev-profiles\/ZAP%x%x%x%x%x%x%x%x%x%x\n\/staff-suite",
+							"method": "POST",
+							"param": "\u00ABdeveloper_id\u00BB",
+							"attack": "ZAP%x%x%x%x%x%x%x%x%x%x\n",
+							"evidence": "",
+							"otherinfo": "Potential Format String Error. The script closed the connection on a /%s and /%x."
+						},
+						{
+							"id": "60",
+							"uri": "http://localhost:8100/api/v1/auth/dev-profiles/ZAP%25x%25x%25x%25x%25x%25x%25x%25x%25x%25x%0A/student-suite",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/auth\/dev-profiles\/ZAP%x%x%x%x%x%x%x%x%x%x\n\/student-suite",
+							"method": "POST",
+							"param": "\u00ABdeveloper_id\u00BB",
+							"attack": "ZAP%x%x%x%x%x%x%x%x%x%x\n",
+							"evidence": "",
+							"otherinfo": "Potential Format String Error. The script closed the connection on a /%s and /%x."
+						},
+						{
+							"id": "57",
+							"uri": "http://localhost:8100/api/v1/auth/dev-profiles/developer_id/create-custom",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/auth\/dev-profiles\/developer_id\/create-custom ()({full_name,chinese_name,english_name,role,email_domain,custom_attributes:{John Doe}})",
+							"method": "POST",
+							"param": "full_name",
+							"attack": "ZAP %1!s%2!s%3!s%4!s%5!s%6!s%7!s%8!s%9!s%10!s%11!s%12!s%13!s%14!s%15!s%16!s%17!s%18!s%19!s%20!s%21!n%22!n%23!n%24!n%25!n%26!n%27!n%28!n%29!n%30!n%31!n%32!n%33!n%34!n%35!n%36!n%37!n%38!n%39!n%40!n\n",
+							"evidence": "",
+							"otherinfo": "Potential Format String Error. The script closed the connection on a Microsoft format string error."
+						},
+						{
+							"id": "54",
+							"uri": "http://localhost:8100/api/v1/admin/system-setting",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/admin\/system-setting ()({key,value})",
+							"method": "PUT",
+							"param": "key",
+							"attack": "ZAP %1!s%2!s%3!s%4!s%5!s%6!s%7!s%8!s%9!s%10!s%11!s%12!s%13!s%14!s%15!s%16!s%17!s%18!s%19!s%20!s%21!n%22!n%23!n%24!n%25!n%26!n%27!n%28!n%29!n%30!n%31!n%32!n%33!n%34!n%35!n%36!n%37!n%38!n%39!n%40!n\n",
+							"evidence": "",
+							"otherinfo": "Potential Format String Error. The script closed the connection on a Microsoft format string error."
+						}
+					],
+					"count": "7",
+					"systemic": false,
+					"solution": "<p>Rewrite the background program using proper deletion of bad character strings. This will require a recompile of the background executable.</p>",
+					"otherinfo": "<p>Potential Format String Error. The script closed the connection on a Microsoft format string error.</p>",
+					"reference": "<p>https://owasp.org/www-community/attacks/Format_string_attack</p>",
+					"cweid": "134",
+					"wascid": "6",
+					"sourceid": "865"
+				},
+				{
+					"pluginid": "90022",
+					"alertRef": "90022",
+					"alert": "Application Error Disclosure",
+					"name": "Application Error Disclosure",
+					"riskcode": "1",
+					"confidence": "2",
+					"riskdesc": "Low (Medium)",
+					"desc": "<p>This page contains an error/warning message that may disclose sensitive information like the location of the file that produced the unhandled exception. This information can be used to launch further attacks against the web application. The alert could be a false positive if the error message is found inside a documentation page.</p>",
+					"instances":[ 
+						{
+							"id": "31",
+							"uri": "http://localhost:8100/api/v1/manual-distribution/quota-status?scholarship_type_id=10&academic_year=10&semester=semester",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/manual-distribution\/quota-status (academic_year,scholarship_type_id,semester)",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "HTTP/1.1 500 Internal Server Error",
+							"otherinfo": ""
+						},
+						{
+							"id": "33",
+							"uri": "http://localhost:8100/api/v1/manual-distribution/allocate",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/manual-distribution\/allocate ()({scholarship_type_id,academic_year,semester,allocations:[{ranking_item_id,sub_type_code,allocation_config_id}]})",
+							"method": "POST",
+							"param": "",
+							"attack": "",
+							"evidence": "HTTP/1.1 500 Internal Server Error",
+							"otherinfo": ""
+						},
+						{
+							"id": "26",
+							"uri": "http://localhost:8100/api/v1/notifications/admin/create-test-notifications",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/notifications\/admin\/create-test-notifications",
+							"method": "POST",
+							"param": "",
+							"attack": "",
+							"evidence": "HTTP/1.1 500 Internal Server Error",
+							"otherinfo": ""
+						},
+						{
+							"id": "30",
+							"uri": "http://localhost:8100/api/v1/payment-rosters/10/dry-run",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/payment-rosters\/10\/dry-run ()({scholarship_configuration_id,period_label,roster_cycle,academic_year,student_verification_enabled,ranking_id,auto_export_excel,force_regenerate})",
+							"method": "POST",
+							"param": "",
+							"attack": "",
+							"evidence": "HTTP/1.1 500 Internal Server Error",
+							"otherinfo": ""
+						},
+						{
+							"id": "28",
+							"uri": "http://localhost:8100/api/v1/scholarship-configurations/matrix-quota",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/scholarship-configurations\/matrix-quota ()({sub_type,college,new_quota,academic_year})",
+							"method": "PUT",
+							"param": "",
+							"attack": "",
+							"evidence": "HTTP/1.1 500 Internal Server Error",
+							"otherinfo": ""
+						}
+					],
+					"count": "5",
+					"systemic": false,
+					"solution": "<p>Review the source code of this page. Implement custom error pages. Consider implementing a mechanism to provide a unique error reference/identifier to the client (browser) while logging the details on the server side and not exposing them to the user.</p>",
+					"otherinfo": "",
+					"reference": "",
+					"cweid": "550",
+					"wascid": "13",
+					"sourceid": "555"
+				},
+				{
+					"pluginid": "40014",
+					"alertRef": "40014-2",
+					"alert": "Cross Site Scripting Weakness (Persistent in JSON Response)",
+					"name": "Cross Site Scripting Weakness (Persistent in JSON Response)",
+					"riskcode": "1",
+					"confidence": "1",
+					"riskdesc": "Low (Low)",
+					"desc": "<p>A XSS attack was found in a JSON response, this might leave content consumers vulnerable to attack if they don't appropriately handle the data (response).</p>",
+					"instances":[ 
+						{
+							"id": "39",
+							"uri": "http://localhost:8100/api/v1/admin/announcements",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/admin\/announcements",
+							"method": "GET",
+							"param": "message",
+							"attack": "<script>alert(1);</script>",
+							"evidence": "",
+							"otherinfo": "Raised with LOW confidence as the Content-Type is not HTML."
+						},
+						{
+							"id": "40",
+							"uri": "http://localhost:8100/api/v1/admin/announcements",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/admin\/announcements",
+							"method": "GET",
+							"param": "message_en",
+							"attack": "<script>alert(1);</script>",
+							"evidence": "",
+							"otherinfo": "Raised with LOW confidence as the Content-Type is not HTML."
+						},
+						{
+							"id": "37",
+							"uri": "http://localhost:8100/api/v1/admin/announcements",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/admin\/announcements",
+							"method": "GET",
+							"param": "title",
+							"attack": "<script>alert(1);</script>",
+							"evidence": "",
+							"otherinfo": "Raised with LOW confidence as the Content-Type is not HTML."
+						},
+						{
+							"id": "38",
+							"uri": "http://localhost:8100/api/v1/admin/announcements",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/admin\/announcements",
+							"method": "GET",
+							"param": "title_en",
+							"attack": "<script>alert(1);</script>",
+							"evidence": "",
+							"otherinfo": "Raised with LOW confidence as the Content-Type is not HTML."
+						},
+						{
+							"id": "41",
+							"uri": "http://localhost:8100/api/v1/admin/announcements?page=1&size=20&notification_type=&priority=",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/admin\/announcements (notification_type,page,priority,size)",
+							"method": "GET",
+							"param": "action_url",
+							"attack": "<script>alert(1);</script>",
+							"evidence": "",
+							"otherinfo": "Raised with LOW confidence as the Content-Type is not HTML."
+						},
+						{
+							"id": "46",
+							"uri": "http://localhost:8100/api/v1/admin/announcements?page=1&size=20&notification_type=&priority=",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/admin\/announcements (notification_type,page,priority,size)",
+							"method": "GET",
+							"param": "message",
+							"attack": "<script>alert(1);</script>",
+							"evidence": "",
+							"otherinfo": "Raised with LOW confidence as the Content-Type is not HTML."
+						},
+						{
+							"id": "47",
+							"uri": "http://localhost:8100/api/v1/admin/announcements?page=1&size=20&notification_type=&priority=",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/admin\/announcements (notification_type,page,priority,size)",
+							"method": "GET",
+							"param": "message_en",
+							"attack": "<script>alert(1);</script>",
+							"evidence": "",
+							"otherinfo": "Raised with LOW confidence as the Content-Type is not HTML."
+						},
+						{
+							"id": "44",
+							"uri": "http://localhost:8100/api/v1/admin/announcements?page=1&size=20&notification_type=&priority=",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/admin\/announcements (notification_type,page,priority,size)",
+							"method": "GET",
+							"param": "title",
+							"attack": "<script>alert(1);</script>",
+							"evidence": "",
+							"otherinfo": "Raised with LOW confidence as the Content-Type is not HTML."
+						},
+						{
+							"id": "45",
+							"uri": "http://localhost:8100/api/v1/admin/announcements?page=1&size=20&notification_type=&priority=",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/admin\/announcements (notification_type,page,priority,size)",
+							"method": "GET",
+							"param": "title_en",
+							"attack": "<script>alert(1);</script>",
+							"evidence": "",
+							"otherinfo": "Raised with LOW confidence as the Content-Type is not HTML."
+						},
+						{
+							"id": "43",
+							"uri": "http://localhost:8100/api/v1/footer-links",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/footer-links",
+							"method": "GET",
+							"param": "title_en",
+							"attack": "<script>alert(1);</script>",
+							"evidence": "",
+							"otherinfo": "Raised with LOW confidence as the Content-Type is not HTML."
+						},
+						{
+							"id": "42",
+							"uri": "http://localhost:8100/api/v1/footer-links",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/footer-links",
+							"method": "GET",
+							"param": "title_zh",
+							"attack": "<script>alert(1);</script>",
+							"evidence": "",
+							"otherinfo": "Raised with LOW confidence as the Content-Type is not HTML."
+						}
+					],
+					"count": "11",
+					"systemic": false,
+					"solution": "<p>Phase: Architecture and Design</p><p>Use a vetted library or framework that does not allow this weakness to occur or provides constructs that make this weakness easier to avoid.</p><p>Examples of libraries and frameworks that make it easier to generate properly encoded output include Microsoft's Anti-XSS library, the OWASP ESAPI Encoding module, and Apache Wicket.</p><p></p><p>Phases: Implementation; Architecture and Design</p><p>Understand the context in which your data will be used and the encoding that will be expected. This is especially important when transmitting data between different components, or when generating outputs that can contain multiple encodings at the same time, such as web pages or multi-part mail messages. Study all expected communication protocols and data representations to determine the required encoding strategies.</p><p>For any data that will be output to another web page, especially any data that was received from external inputs, use the appropriate encoding on all non-alphanumeric characters.</p><p>Consult the XSS Prevention Cheat Sheet for more details on the types of encoding and escaping that are needed.</p><p></p><p>Phase: Architecture and Design</p><p>For any security checks that are performed on the client side, ensure that these checks are duplicated on the server side, in order to avoid CWE-602. Attackers can bypass the client-side checks by modifying values after the checks have been performed, or by changing the client to remove the client-side checks entirely. Then, these modified values would be submitted to the server.</p><p></p><p>If available, use structured mechanisms that automatically enforce the separation between data and code. These mechanisms may be able to provide the relevant quoting, encoding, and validation automatically, instead of relying on the developer to provide this capability at every point where output is generated.</p><p></p><p>Phase: Implementation</p><p>For every web page that is generated, use and specify a character encoding such as ISO-8859-1 or UTF-8. When an encoding is not specified, the web browser may choose a different encoding by guessing which encoding is actually being used by the web page. This can cause the web browser to treat certain sequences as special, opening up the client to subtle XSS attacks. See CWE-116 for more mitigations related to encoding/escaping.</p><p></p><p>To help mitigate XSS attacks against the user's session cookie, set the session cookie to be HttpOnly. In browsers that support the HttpOnly feature (such as more recent versions of Internet Explorer and Firefox), this attribute can prevent the user's session cookie from being accessible to malicious client-side scripts that use document.cookie. This is not a complete solution, since HttpOnly is not supported by all browsers. More importantly, XMLHTTPRequest and other powerful browser technologies provide read access to HTTP headers, including the Set-Cookie header in which the HttpOnly flag is set.</p><p></p><p>Assume all input is malicious. Use an \"accept known good\" input validation strategy, i.e., use an allow list of acceptable inputs that strictly conform to specifications. Reject any input that does not strictly conform to specifications, or transform it into something that does. Do not rely exclusively on looking for malicious or malformed inputs (i.e., do not rely on a deny list). However, deny lists can be useful for detecting potential attacks or determining which inputs are so malformed that they should be rejected outright.</p><p></p><p>When performing input validation, consider all potentially relevant properties, including length, type of input, the full range of acceptable values, missing or extra inputs, syntax, consistency across related fields, and conformance to business rules. As an example of business rule logic, \"boat\" may be syntactically valid because it only contains alphanumeric characters, but it is not valid if you are expecting colors such as \"red\" or \"blue.\"</p><p></p><p>Ensure that you perform input validation at well-defined interfaces within the application. This will help protect the application even if a component is reused or moved elsewhere.</p><p>\t</p>",
+					"otherinfo": "<p>Raised with LOW confidence as the Content-Type is not HTML.</p>",
+					"reference": "<p>https://owasp.org/www-community/attacks/xss/</p><p>https://cwe.mitre.org/data/definitions/79.html</p>",
+					"cweid": "79",
+					"wascid": "8",
+					"sourceid": "848"
+				},
+				{
+					"pluginid": "10023",
+					"alertRef": "10023",
+					"alert": "Information Disclosure - Debug Error Messages",
+					"name": "Information Disclosure - Debug Error Messages",
+					"riskcode": "1",
+					"confidence": "2",
+					"riskdesc": "Low (Medium)",
+					"desc": "<p>The response appeared to contain common error messages returned by platforms such as ASP.NET, and Web-servers such as IIS and Apache. You can configure the list of common debug messages.</p>",
+					"instances":[ 
+						{
+							"id": "32",
+							"uri": "http://localhost:8100/api/v1/manual-distribution/quota-status?scholarship_type_id=10&academic_year=10&semester=semester",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/manual-distribution\/quota-status (academic_year,scholarship_type_id,semester)",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "Internal server error",
+							"otherinfo": ""
+						},
+						{
+							"id": "34",
+							"uri": "http://localhost:8100/api/v1/manual-distribution/allocate",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/manual-distribution\/allocate ()({scholarship_type_id,academic_year,semester,allocations:[{ranking_item_id,sub_type_code,allocation_config_id}]})",
+							"method": "POST",
+							"param": "",
+							"attack": "",
+							"evidence": "Internal server error",
+							"otherinfo": ""
+						},
+						{
+							"id": "27",
+							"uri": "http://localhost:8100/api/v1/notifications/admin/create-test-notifications",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/notifications\/admin\/create-test-notifications",
+							"method": "POST",
+							"param": "",
+							"attack": "",
+							"evidence": "Internal server error",
+							"otherinfo": ""
+						}
+					],
+					"count": "3",
+					"systemic": false,
+					"solution": "<p>Disable debugging messages before pushing to production.</p>",
+					"otherinfo": "",
+					"reference": "",
+					"cweid": "1295",
+					"wascid": "13",
+					"sourceid": "555"
+				},
+				{
+					"pluginid": "10021",
+					"alertRef": "10021",
+					"alert": "X-Content-Type-Options Header Missing",
+					"name": "X-Content-Type-Options Header Missing",
+					"riskcode": "1",
+					"confidence": "2",
+					"riskdesc": "Low (Medium)",
+					"desc": "<p>The Anti-MIME-Sniffing header X-Content-Type-Options was not set to 'nosniff'. This allows older versions of Internet Explorer and Chrome to perform MIME-sniffing on the response body, potentially causing the response body to be interpreted and displayed as a content type other than the declared content type. Current (early 2014) and legacy versions of Firefox will use the declared content type (if one is set), rather than performing MIME-sniffing.</p>",
+					"instances":[ 
+						{
+							"id": "2",
+							"uri": "http://localhost:8100/",
+							"nodeName": "http:\/\/localhost:8100\/",
+							"method": "GET",
+							"param": "x-content-type-options",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": "This issue still applies to error type pages (401, 403, 500, etc.) as those pages are often still affected by injection issues, in which case there is still concern for browsers sniffing pages away from their actual content type.\nAt \"High\" threshold this scan rule will not alert on client or server error responses."
+						},
+						{
+							"id": "0",
+							"uri": "http://localhost:8100/api/v1/auth/me",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/auth\/me",
+							"method": "GET",
+							"param": "x-content-type-options",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": "This issue still applies to error type pages (401, 403, 500, etc.) as those pages are often still affected by injection issues, in which case there is still concern for browsers sniffing pages away from their actual content type.\nAt \"High\" threshold this scan rule will not alert on client or server error responses."
+						},
+						{
+							"id": "4",
+							"uri": "http://localhost:8100/debug/pool-status",
+							"nodeName": "http:\/\/localhost:8100\/debug\/pool-status",
+							"method": "GET",
+							"param": "x-content-type-options",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": "This issue still applies to error type pages (401, 403, 500, etc.) as those pages are often still affected by injection issues, in which case there is still concern for browsers sniffing pages away from their actual content type.\nAt \"High\" threshold this scan rule will not alert on client or server error responses."
+						},
+						{
+							"id": "3",
+							"uri": "http://localhost:8100/health",
+							"nodeName": "http:\/\/localhost:8100\/health",
+							"method": "GET",
+							"param": "x-content-type-options",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": "This issue still applies to error type pages (401, 403, 500, etc.) as those pages are often still affected by injection issues, in which case there is still concern for browsers sniffing pages away from their actual content type.\nAt \"High\" threshold this scan rule will not alert on client or server error responses."
+						},
+						{
+							"id": "1",
+							"uri": "http://localhost:8100/api/v1/auth/refresh",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/auth\/refresh",
+							"method": "POST",
+							"param": "x-content-type-options",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": "This issue still applies to error type pages (401, 403, 500, etc.) as those pages are often still affected by injection issues, in which case there is still concern for browsers sniffing pages away from their actual content type.\nAt \"High\" threshold this scan rule will not alert on client or server error responses."
+						}
+					],
+					"count": "5",
+					"systemic": true,
+					"solution": "<p>Ensure that the application/web server sets the Content-Type header appropriately, and that it sets the X-Content-Type-Options header to 'nosniff' for all web pages.</p><p>If possible, ensure that the end user uses a standards-compliant and modern web browser that does not perform MIME-sniffing at all, or that can be directed by the web application/web server to not perform MIME-sniffing.</p>",
+					"otherinfo": "<p>This issue still applies to error type pages (401, 403, 500, etc.) as those pages are often still affected by injection issues, in which case there is still concern for browsers sniffing pages away from their actual content type.</p><p>At \"High\" threshold this scan rule will not alert on client or server error responses.</p>",
+					"reference": "<p>https://learn.microsoft.com/en-us/previous-versions/windows/internet-explorer/ie-developer/compatibility/gg622941(v=vs.85)</p><p>https://owasp.org/www-community/Security_Headers</p>",
+					"cweid": "693",
+					"wascid": "15",
+					"sourceid": "5"
+				},
+				{
+					"pluginid": "10024",
+					"alertRef": "10024",
+					"alert": "Information Disclosure - Sensitive Information in URL",
+					"name": "Information Disclosure - Sensitive Information in URL",
+					"riskcode": "0",
+					"confidence": "2",
+					"riskdesc": "Informational (Medium)",
+					"desc": "<p>The request appeared to contain sensitive information leaked in the URL. This can violate PCI and most organizational compliance policies. You can configure the list of strings for this check to add or remove values specific to your environment.</p>",
+					"instances":[ 
+						{
+							"id": "23",
+							"uri": "http://localhost:8100/api/v1/admin/audit-logs?page=1&size=50&resource_type=&resource_id=&action=&user_id=&date_from=&date_to=&search=ZAP",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/admin\/audit-logs (action,date_from,date_to,page,resource_id,resource_type,search,size,user_id)",
+							"method": "GET",
+							"param": "user_id",
+							"attack": "",
+							"evidence": "user_id",
+							"otherinfo": "The URL contains potentially sensitive information. The following string was found via the pattern: user\nuser_id"
+						},
+						{
+							"id": "22",
+							"uri": "http://localhost:8100/api/v1/admin/scholarship-permissions?user_id=",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/admin\/scholarship-permissions (user_id)",
+							"method": "GET",
+							"param": "user_id",
+							"attack": "",
+							"evidence": "user_id",
+							"otherinfo": "The URL contains potentially sensitive information. The following string was found via the pattern: user\nuser_id"
+						},
+						{
+							"id": "25",
+							"uri": "http://localhost:8100/api/v1/files/applications/10/files/10?token=",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/files\/applications\/10\/files\/10 (token)",
+							"method": "GET",
+							"param": "token",
+							"attack": "",
+							"evidence": "token",
+							"otherinfo": "The URL contains potentially sensitive information. The following string was found via the pattern: token\ntoken"
+						},
+						{
+							"id": "24",
+							"uri": "http://localhost:8100/api/v1/files/applications/10/files/10/download?token=",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/files\/applications\/10\/files\/10\/download (token)",
+							"method": "GET",
+							"param": "token",
+							"attack": "",
+							"evidence": "token",
+							"otherinfo": "The URL contains potentially sensitive information. The following string was found via the pattern: token\ntoken"
+						},
+						{
+							"id": "29",
+							"uri": "http://localhost:8100/api/v1/user-profiles/files/bank_documents/filename?token=",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/user-profiles\/files\/bank_documents\/filename (token)",
+							"method": "GET",
+							"param": "token",
+							"attack": "",
+							"evidence": "token",
+							"otherinfo": "The URL contains potentially sensitive information. The following string was found via the pattern: token\ntoken"
+						}
+					],
+					"count": "5",
+					"systemic": false,
+					"solution": "<p>Do not pass sensitive information in URIs.</p>",
+					"otherinfo": "<p>The URL contains potentially sensitive information. The following string was found via the pattern: user</p><p>user_id</p>",
+					"reference": "",
+					"cweid": "598",
+					"wascid": "13",
+					"sourceid": "192"
+				},
+				{
+					"pluginid": "10104",
+					"alertRef": "10104",
+					"alert": "User Agent Fuzzer",
+					"name": "User Agent Fuzzer",
+					"riskcode": "0",
+					"confidence": "2",
+					"riskdesc": "Informational (Medium)",
+					"desc": "<p>Check for differences in response based on fuzzed User Agent (eg. mobile sites, access as a Search Engine Crawler). Compares the response statuscode and the hashcode of the response body with the original response.</p>",
+					"instances":[ 
+						{
+							"id": "63",
+							"uri": "http://localhost:8100/api/v1/admin/announcements/10",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/admin\/announcements\/10",
+							"method": "DELETE",
+							"param": "Header User-Agent",
+							"attack": "Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.1)",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "62",
+							"uri": "http://localhost:8100/api/v1/admin/announcements/10",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/admin\/announcements\/10 ()({\"title\":\"John Doe\",\"title_en\":\"John Doe\",\"message\":Zaproxy alias impedit expedita quisquam pariatur exercitationem. Nemo rerum eveniet dolores rem quia dignissimos.,\"message_en\":\"John Doe\",\"notification_type\":\"John Doe\",\"priority\":\"John Doe\",\"action_url\":\"John Doe\",\"expires_at\":\"1970-01-01T00:00:00.001Z\",\"metadata\":{},\"is_dismissed\":true})",
+							"method": "PUT",
+							"param": "Header User-Agent",
+							"attack": "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0)",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "61",
+							"uri": "http://localhost:8100/api/v1/admin/announcements/10",
+							"nodeName": "http:\/\/localhost:8100\/api\/v1\/admin\/announcements\/10 ()({\"title\":\"John Doe\",\"title_en\":\"John Doe\",\"message\":Zaproxy alias impedit expedita quisquam pariatur exercitationem. Nemo rerum eveniet dolores rem quia dignissimos.,\"message_en\":\"John Doe\",\"notification_type\":\"John Doe\",\"priority\":\"John Doe\",\"action_url\":\"John Doe\",\"expires_at\":\"1970-01-01T00:00:00.001Z\",\"metadata\":{},\"is_dismissed\":true})",
+							"method": "PUT",
+							"param": "Header User-Agent",
+							"attack": "Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.1)",
+							"evidence": "",
+							"otherinfo": ""
+						}
+					],
+					"count": "3",
+					"systemic": true,
+					"solution": "",
+					"otherinfo": "",
+					"reference": "<p>https://owasp.org/wstg</p>",
+					"cweid": "0",
+					"wascid": "0",
+					"sourceid": "872"
+				}
+			]
+		}
+	],
+	"sequences":[
+	]
+
+}

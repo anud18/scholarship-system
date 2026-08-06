@@ -1,0 +1,79 @@
+env:
+  contexts:
+    - name: api
+      urls:
+        - http://localhost:8100
+      includePaths:
+        - "http://localhost:8100/api/v1/.*"
+        - "http://localhost:8100/health"
+        - "http://localhost:8100/metrics"
+        - "http://localhost:8100/debug/.*"
+        - "http://localhost:8100/"
+      excludePaths:
+        - "http://localhost:8100/api/v1/auth/logout.*"
+  parameters:
+    failOnError: false
+    failOnWarning: false
+    progressToStdout: true
+
+jobs:
+  - type: passiveScan-config
+    parameters:
+      maxAlertsPerRule: 20
+      enableTags: false
+
+  - type: replacer
+    parameters:
+      deleteAllRules: true
+    rules:
+      - description: inject-admin-bearer
+        enabled: true
+        matchType: req_header
+        matchString: Authorization
+        matchRegex: false
+        replacementString: "Bearer <ADMIN_JWT_REDACTED>"
+
+  - type: openapi
+    parameters:
+      apiFile: /zap/wrk/openapi.json
+      targetUrl: http://localhost:8100
+      context: api
+
+  - type: activeScan
+    parameters:
+      context: api
+      maxScanDurationInMins: 120
+      maxRuleDurationInMins: 10
+      threadPerHost: 5
+    policyDefinition:
+      defaultStrength: medium
+      defaultThreshold: medium
+
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 10
+
+  - type: outputSummary
+    parameters:
+      format: Long
+      summaryFile: /zap/wrk/summary.json
+
+  - type: report
+    parameters:
+      template: traditional-html
+      reportDir: /zap/wrk/
+      reportFile: zap-active-api-report.html
+      reportTitle: ZAP Authenticated Active Scan Report - Backend API
+      reportDescription: "main @ 4325315a, authenticated (admin) active scan against cloned DB"
+  - type: report
+    parameters:
+      template: traditional-json
+      reportDir: /zap/wrk/
+      reportFile: zap-active-api-report.json
+      reportTitle: ZAP Authenticated Active Scan Report - Backend API
+  - type: report
+    parameters:
+      template: traditional-md
+      reportDir: /zap/wrk/
+      reportFile: zap-active-api-report.md
+      reportTitle: ZAP Authenticated Active Scan Report - Backend API
