@@ -335,9 +335,10 @@ Create `monitoring/config/grafana/provisioning/dashboards/system/cpu-simple.json
 ### Export Single Dashboard
 
 ```bash
-# Via API
+# Via API (export GRAFANA_ADMIN_USER / GRAFANA_ADMIN_PASSWORD first —
+# the same values provisioned via the GitHub secrets, see GITHUB_DEPLOYMENT.md)
 DASHBOARD_UID="scholarship-overview"
-curl -X GET "http://admin:admin@localhost:3000/api/dashboards/uid/$DASHBOARD_UID" | \
+curl -X GET -u "$GRAFANA_ADMIN_USER:$GRAFANA_ADMIN_PASSWORD" "http://localhost:3000/api/dashboards/uid/$DASHBOARD_UID" | \
   jq '.dashboard' > backup-$DASHBOARD_UID.json
 ```
 
@@ -358,8 +359,8 @@ cd monitoring/scripts
 ### Restore from Backup
 
 ```bash
-# Via API
-curl -X POST "http://admin:admin@localhost:3000/api/dashboards/db" \
+# Via API (export GRAFANA_ADMIN_USER / GRAFANA_ADMIN_PASSWORD first)
+curl -X POST -u "$GRAFANA_ADMIN_USER:$GRAFANA_ADMIN_PASSWORD" "http://localhost:3000/api/dashboards/db" \
   -H "Content-Type: application/json" \
   -d @backup-scholarship-overview.json
 ```
