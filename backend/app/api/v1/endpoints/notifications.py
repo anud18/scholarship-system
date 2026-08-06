@@ -363,7 +363,10 @@ async def createTestNotifications(current_user: User = Depends(get_current_user)
             message="2024春季獎學金申請將於本月底截止，請尚未提交申請的同學把握時間完成申請程序。",
             message_en="The 2024 Spring Scholarship application deadline is at the end of this month. Students who have not yet submitted their applications should complete the process soon.",
             notification_type=NotificationType.reminder.value,
-            priority=NotificationPriority.URGENT.value,
+            # Lowercase member name: Python enums in this codebase mirror the
+            # database values exactly (see .claude/CLAUDE.md §4). `URGENT` does
+            # not exist, so this raised AttributeError -> 500 on every call.
+            priority=NotificationPriority.urgent.value,
             action_url="/scholarships",
         )
         created_notifications.append(urgent_notification.id)

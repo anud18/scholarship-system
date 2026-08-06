@@ -239,9 +239,13 @@ class TestAdminEndpoints:
         )
 
         # Assert
-        # May get 500 if scholarship doesn't allow professor review
-        # This test validates the endpoint works, not the business logic
-        assert response.status_code in [200, 500]
+        # 422 if this scholarship doesn't allow professor review: the service
+        # raises ValidationError, and the endpoint's blanket `except Exception`
+        # re-raises it as HTTPException(500) `from e`. The global handler now
+        # recovers the intended 422 from the cause chain instead of reporting a
+        # server fault for a business-rule violation.
+        # This test validates the endpoint works, not the business logic.
+        assert response.status_code in [200, 422]
 
     @pytest.mark.asyncio
     async def test_assign_professor_application_not_found(self, admin_client):
