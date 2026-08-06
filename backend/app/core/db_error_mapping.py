@@ -28,6 +28,8 @@ from __future__ import annotations
 
 from typing import Optional
 
+from app.core.exception_chain import iter_cause_chain
+
 # SQLSTATE class → (HTTP status, user-facing message).
 # Messages are deliberately generic: they must not echo the driver's text back
 # to the caller, which can contain column names, SQL fragments or the offending
@@ -67,10 +69,6 @@ def map_db_exception(exc: BaseException) -> Optional[tuple[int, str]]:
     return _SQLSTATE_CLASS_MAP.get(sqlstate[:2])
 
 
-# Walking further than this is pointless and risks pathological chains.
-_MAX_CAUSE_DEPTH = 10
-
-
 def map_db_exception_chain(exc: BaseException) -> Optional[tuple[int, str]]:
     """Like `map_db_exception`, but follows the `__cause__`/`__context__` chain.
 
@@ -80,24 +78,9 @@ def map_db_exception_chain(exc: BaseException) -> Optional[tuple[int, str]]:
     one of those sites uses `from exc`, so the original driver error is still
     reachable via `__cause__`. Following the chain lets a single handler
     reclassify all of them instead of editing 161 call sites.
-
-    Cycle-guarded by identity: `__context__` chains can loop when an exception
-    is raised while handling itself.
     """
-    seen: set[int] = set()
-    current: Optional[BaseException] = exc
-
-    for _ in range(_MAX_CAUSE_DEPTH):
-        if current is None or id(current) in seen:
-            return None
-        seen.add(id(current))
-
+    for current in iter_cause_chain(exc):
         mapped = map_db_exception(current)
         if mapped is not None:
             return mapped
-
-        # __cause__ is the explicit `raise ... from exc`; __context__ is the
-        # implicit "raised while handling" link. Prefer the explicit one.
-        current = current.__cause__ or current.__context__
-
     return None

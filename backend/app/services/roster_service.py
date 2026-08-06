@@ -18,6 +18,7 @@ from app.core.exceptions import (
     RosterGenerationError,
     RosterLockedError,
     RosterNotFoundError,
+    ScholarshipException,
 )
 from app.core.metrics import payment_rosters_total
 from app.core.pii_crypto import redact_dict_pii
@@ -1411,7 +1412,11 @@ class RosterService:
             )
 
             if not scholarship_config:
-                raise ValueError(f"找不到獎學金配置: ID {scholarship_configuration_id}")
+                # NotFoundError, not ValueError: the caller asked for an id that
+                # does not exist, which is a 404. Raised as a plain ValueError it
+                # was caught by the blanket handler at the end of this method,
+                # re-wrapped as "預演失敗" and reported as 500.
+                raise NotFoundError("獎學金配置", f"ID {scholarship_configuration_id}")
 
             # 2. 檢查重複造冊
             existing_roster = self.check_roster_exists(scholarship_configuration_id, period_label)
@@ -1538,6 +1543,11 @@ class RosterService:
 
             return result
 
+        except ScholarshipException:
+            # Domain errors already carry the right status (404/409/422) and are
+            # handled by scholarship_exception_handler. Re-wrapping them as a
+            # generic failure below would turn a 404 into a 500.
+            raise
         except Exception as e:
             logger.exception("Dry run failed")
             raise ValueError("預演失敗") from e

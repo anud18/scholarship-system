@@ -33,6 +33,24 @@ env:
         # Logging out mid-scan would invalidate the session for every
         # subsequent request.
         - "http://localhost:8100/api/v1/auth/logout.*"
+
+        # Dev-only surface. These are hard-gated behind `enable_mock_sso`,
+        # which docker-compose.prod.yml and docker-compose.staging.yml both set
+        # to false, and config.py refuses to boot a production environment with
+        # it enabled. They return 404 in production, so any finding here
+        # describes an attack surface that does not exist there.
+        #
+        # Scoping them out is deliberately preferred over suppressing the rules
+        # they trip: a rule-level filter would hide the same class of finding on
+        # real endpoints too. Excluding non-existent surface does not.
+        #
+        # These endpoints generated every Path Traversal instance, the SQL
+        # Injection alert, and the data behind the OS-command false positive.
+        # All were verified non-exploitable (docs/security/), but they are noise
+        # against production risk either way.
+        - "http://localhost:8100/api/v1/auth/dev-profiles.*"
+        - "http://localhost:8100/api/v1/auth/mock-sso.*"
+        - "http://localhost:8100/api/v1/auth/login.*"
   parameters:
     failOnError: false
     failOnWarning: false
@@ -81,16 +99,16 @@ jobs:
         newRisk: "False Positive"
         context: api
         evidence: " Get-Help"
-      - ruleId: 6
-        newRisk: "False Positive"
-        context: api
-        url: "http://localhost:8100/api/v1/auth/dev-profiles.*"
       - ruleId: 30002
         newRisk: "False Positive"
         context: api
       - ruleId: 40014
         newRisk: "False Positive"
         context: api
+      # NOTE: no filter for rule 6 (Path Traversal) or 40018 (SQL Injection).
+      # Both only ever fired on the dev-only endpoints now excluded above.
+      # Deliberately left unfiltered so that if either ever fires on a
+      # production-reachable endpoint, it is reported at full risk.
 
   - type: activeScan
     parameters:

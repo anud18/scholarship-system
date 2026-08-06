@@ -22,6 +22,24 @@
 #
 # Evidence for every entry below: docs/security/zap-active-2026-08-06/README.md §3
 # Verified against `main` @ e79d8f33 on 2026-08-06.
+#
+# PREFER SCOPE OVER SUPPRESSION. Two findings that used to be listed here —
+# Path Traversal (rule 6) and SQL Injection (rule 40018) — are no longer
+# filtered at all. Both only ever fired on `/auth/dev-profiles/*`, which is
+# hard-gated behind `enable_mock_sso` and returns 404 in production. The scan
+# plan now excludes that surface instead, so those rules stay armed: if either
+# ever fires on a real endpoint it is reported at full risk. A rule-level
+# filter would have hidden that.
+#
+# WATCH OUT: fixing 500s can surface NEW false positives. Several ZAP rules
+# (boolean-based SQL injection especially) work by diffing responses. While
+# every malformed request returned an identical 500, those rules had nothing to
+# compare and stayed silent. Once responses became informative 4xx/2xx, rule
+# 40018 fired on a stateful POST whose responses vary for reasons unrelated to
+# the payload. It was refuted three ways — identical bodies for '1'='1' vs
+# '1'='2', no delay from pg_sleep(5) payloads, and no raw SQL in the code path
+# (SQLAlchemy parameterises) — but expect this pattern after any error-handling
+# change, and re-verify rather than assuming a new alert is a real regression.
 
 alertFilters:
   # ---------------------------------------------------------------------------
@@ -48,27 +66,6 @@ alertFilters:
       Scanner-generated data echoed back by a search endpoint. The "Get-Help"
       string is a dev profile the scan itself created via
       /auth/dev-profiles/{id}/quick-setup. No command execution occurs.
-
-  # ---------------------------------------------------------------------------
-  # 6 — Path Traversal (reported High, Low confidence)
-  # ---------------------------------------------------------------------------
-  # Flagged on /auth/dev-profiles/{developer_id}/quick-setup because swapping the
-  # path parameter for an adjacent path segment still returned 200. ZAP's
-  # evidence field is empty — no file content was ever returned.
-  #
-  #   GET /api/v1/auth/dev-profiles/..%2F..%2F..%2Fetc%2Fpasswd  -> 404
-  #   response contains no "root:x:" and no file content
-  #
-  # The handler uses the parameter as a database lookup key and never touches
-  # the filesystem.
-  - ruleId: 6
-    newRisk: "False Positive"
-    context: api
-    url: "http://localhost:8100/api/v1/auth/dev-profiles.*"
-    reason: >-
-      Parameter is a DB lookup key, not a path. Traversal payloads return 404
-      with no file content; ZAP's evidence field is empty (inferred from a
-      200 on a sibling path segment).
 
   # ---------------------------------------------------------------------------
   # 30002 — Format String Error (reported Medium)

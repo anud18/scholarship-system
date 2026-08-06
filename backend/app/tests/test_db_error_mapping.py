@@ -160,3 +160,19 @@ def test_message_does_not_leak_driver_text():
     _, message = result
     assert "uq_secret_col" not in message
     assert "duplicate key" not in message.lower()
+
+
+def test_iter_cause_chain_is_shared_and_cycle_safe():
+    """The chain walker is shared by the DB mapping and the HTTP unwrap."""
+    from app.core.exception_chain import iter_cause_chain
+
+    a = RuntimeError("a")
+    b = RuntimeError("b")
+    a.__context__ = b
+    b.__context__ = a
+    assert len(list(iter_cause_chain(a))) == 2
+
+    outer = RuntimeError("outer")
+    inner = RuntimeError("inner")
+    outer.__cause__ = inner
+    assert list(iter_cause_chain(outer, include_self=False)) == [inner]
