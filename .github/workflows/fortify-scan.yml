@@ -9,9 +9,19 @@
 # do that, so `sourceanalyzer -b <id> -scan` fails with
 # "Unable to load build session with ID" and no .fpr is produced.
 #
-# We therefore run the scan inline here, translating backend/**/*.py directly.
-# The reusable workflow takes no inputs, so this cannot be fixed from the caller
-# side; if fortifyscan gains a working Python path we can switch back.
+# We therefore run the scan inline here. The reusable workflow takes no inputs,
+# so this cannot be fixed from the caller side; if fortifyscan gains a working
+# Python path we can switch back.
+#
+# Rulepacks are not selectable by flag -- Fortify loads them based on which
+# languages actually end up in the build session. We translate Python, JS/TS
+# and the config/content files into one session so the Core/Extended Python,
+# JavaScript, Configuration and Content rulepacks all engage.
+#
+# SQL is deliberately left out: Fortify's SQL front end only supports T-SQL and
+# PL/SQL, and this project is PostgreSQL, so the .sql files would only produce
+# parse noise. backend/db_*_backup.sql are generated dumps rather than source
+# anyway, and the data dump should not be shipped inside a scan artifact.
 #
 # Requires the self-hosted Windows Fortify runner (sourceanalyzer and
 # BIRTReportGenerator on PATH).
@@ -36,35 +46,65 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Run Fortify SCA scan (python)
+      - name: Run Fortify SCA scan
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
 
           $PROJECT_NAME = "${{ github.event.repository.name }}"
-          $BUILD_ID = "${PROJECT_NAME}_python_build"
+          $BUILD_ID = "${PROJECT_NAME}_build"
 
           if ("${{ github.event_name }}" -eq "pull_request") {
-              $SUFFIX = "python_PR_${{ github.event.number }}"
+              $SUFFIX = "PR_${{ github.event.number }}"
           } else {
-              $SUFFIX = "python_main"
+              $SUFFIX = "main"
           }
 
           $FPR_NAME = "${PROJECT_NAME}_${SUFFIX}.fpr"
           $DEV_WORKBOOK_PDF = "${PROJECT_NAME}_${SUFFIX}_DeveloperWorkbook_BIRT.pdf"
           $OWASP_2021_PDF = "${PROJECT_NAME}_${SUFFIX}_OWASP_Top10_2021_BIRT.pdf"
 
+          function Invoke-Translation {
+              param([string]$Label, [string[]]$ScaArgs)
+
+              Write-Host "::group::Translate $Label"
+              sourceanalyzer -b $BUILD_ID @ScaArgs
+              $code = $LASTEXITCODE
+              Write-Host "::endgroup::"
+              if ($code -ne 0) {
+                  Write-Error "$Label translation failed (exit $code)."
+                  exit 1
+              }
+          }
+
           sourceanalyzer -b $BUILD_ID -clean
 
-          # Translation. Source-based scan: no dependency install, which keeps
-          # the runner clean and is enough for Fortify's Python front end.
-          sourceanalyzer -b $BUILD_ID -python-version 3 `
-            -exclude "backend/alembic/versions/**/*.py" `
-            "backend/**/*.py"
-          if ($LASTEXITCODE -ne 0) {
-              Write-Error "Fortify translation failed (exit $LASTEXITCODE)."
-              exit 1
-          }
+          # Source-based scans throughout: no dependency install, which keeps
+          # the runner clean. Cross-package dataflow traces are shallower than a
+          # build-integrated scan, but the front ends parse the sources fine.
+          Invoke-Translation "python" @(
+              "-python-version", "3",
+              "-exclude", "backend/alembic/versions/**/*.py",
+              "backend/**/*.py"
+          )
+
+          # node_modules/.next are not committed, but a dirty runner workspace
+          # would otherwise pull tens of thousands of files into the session.
+          Invoke-Translation "javascript" @(
+              "-exclude", "**/node_modules/**/*",
+              "-exclude", "frontend/.next/**/*",
+              "-exclude", "frontend/coverage/**/*",
+              "frontend/**/*.js", "frontend/**/*.jsx",
+              "frontend/**/*.ts", "frontend/**/*.tsx"
+          )
+
+          Invoke-Translation "configuration/content" @(
+              "-exclude", "**/node_modules/**/*",
+              "-exclude", "frontend/.next/**/*",
+              "-exclude", "**/package-lock.json",
+              "**/*.yml", "**/*.yaml", "**/*.json",
+              "**/*.html", "nginx/**/*.conf"
+          )
 
           # Fail loudly instead of letting -scan die on an empty build session.
           $translated = sourceanalyzer -b $BUILD_ID -show-files
@@ -97,7 +137,7 @@ jobs:
       - name: Upload Fortify results
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ github.event.repository.name }}-python-${{ github.event_name }}-birt-reports
+          name: ${{ github.event.repository.name }}-${{ github.event_name }}-birt-reports
           path: |
             ${{ env.FPR_NAME }}
             ${{ env.DEV_WORKBOOK_PDF }}
