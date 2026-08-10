@@ -1,0 +1,267 @@
+name: "Security Report (ZAP + CodeQL)"
+
+# Produce the security report for a given version and publish it ON THIS
+# WORKFLOW RUN — artifacts to download plus a consolidated summary rendered on
+# the run page. Nothing is posted to a PR or an issue from here.
+#
+# Why this exists next to mirror-to-production.yml:
+#   The mirror generates the same two reports as a side effect of shipping, and
+#   comments them onto the production PR. That only helps if you happen to be
+#   releasing. This workflow lets you produce the report for ANY commit or tag,
+#   on demand or automatically when a release is published, and read it in one
+#   place without hunting through a release pipeline.
+#
+# It composes the two reusable workflows rather than re-implementing them, so
+# there is exactly one ZAP scan definition and one SARIF parser in the repo.
+# Reusable workflows execute as jobs of THIS run, so their artifacts land on
+# this run's page directly.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Commit SHA / branch / tag to report on (default: this branch)"
+        required: false
+        type: string
+      label:
+        description: "Version label for the report header, e.g. v1.2.3 (default: short SHA)"
+        required: false
+        type: string
+      reports:
+        description: "Which reports to generate"
+        required: false
+        type: choice
+        options:
+          - both
+          - zap-only
+          - codeql-only
+        default: both
+      spider_minutes:
+        description: "Minutes ZAP spends crawling each target"
+        required: false
+        type: string
+        default: "5"
+
+  release:
+    # Every published release gets a report without anyone remembering to ask.
+    types: [published]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+# Two of these at once would fight over the runner's :3000/:8000/:3100 ports
+# and produce two half-scanned reports. Queue them instead.
+concurrency:
+  group: security-report-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    name: Resolve target
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      ref: ${{ steps.target.outputs.ref }}
+      sha: ${{ steps.target.outputs.sha }}
+      label: ${{ steps.target.outputs.label }}
+      run_zap: ${{ steps.target.outputs.run_zap }}
+      run_codeql: ${{ steps.target.outputs.run_codeql }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          # A release event should report on the tag, not on the default branch.
+          ref: ${{ inputs.ref || github.event.release.tag_name || github.ref }}
+          fetch-depth: 0
+
+      - name: Determine ref, sha and label
+        id: target
+        env:
+          INPUT_REF: ${{ inputs.ref }}
+          INPUT_LABEL: ${{ inputs.label }}
+          INPUT_REPORTS: ${{ inputs.reports }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+
+          REF="${INPUT_REF:-${RELEASE_TAG:-${GITHUB_REF_NAME}}}"
+          SHA=$(git rev-parse HEAD)
+          SHORT_SHA=$(echo "$SHA" | cut -c1-8)
+
+          # Priority: explicit label > release tag > short sha.
+          LABEL="${INPUT_LABEL:-${RELEASE_TAG:-$SHORT_SHA}}"
+
+          # `reports` only exists on workflow_dispatch; a release run does both.
+          case "${INPUT_REPORTS:-both}" in
+            zap-only)    RUN_ZAP=true;  RUN_CODEQL=false ;;
+            codeql-only) RUN_ZAP=false; RUN_CODEQL=true  ;;
+            *)           RUN_ZAP=true;  RUN_CODEQL=true  ;;
+          esac
+
+          {
+            echo "ref=$REF"
+            echo "sha=$SHA"
+            echo "label=$LABEL"
+            echo "run_zap=$RUN_ZAP"
+            echo "run_codeql=$RUN_CODEQL"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "::notice::Reporting on $LABEL ($SHA)"
+
+  zap:
+    name: ZAP baseline
+    needs: resolve
+    if: needs.resolve.outputs.run_zap == 'true'
+    uses: ./.github/workflows/zap-report.yml
+    with:
+      ref: ${{ needs.resolve.outputs.sha }}
+      label: ${{ needs.resolve.outputs.label }}
+      spider_minutes: ${{ inputs.spider_minutes || '5' }}
+    permissions:
+      contents: read
+
+  codeql:
+    name: CodeQL PDF
+    needs: resolve
+    if: needs.resolve.outputs.run_codeql == 'true'
+    uses: ./.github/workflows/sarif-to-pdf.yml
+    with:
+      sha: ${{ needs.resolve.outputs.sha }}
+      label: ${{ needs.resolve.outputs.label }}
+    permissions:
+      actions: read
+      contents: read
+
+  publish:
+    name: Publish report to this run
+    runs-on: ubuntu-latest
+    needs: [resolve, zap, codeql]
+    # always(): a scan that failed or was skipped must still be stated on the
+    # run page. A missing section would read as "clean".
+    if: always() && needs.resolve.result == 'success'
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - name: Download generated reports
+        uses: actions/download-artifact@v6
+        with:
+          # Both reusable workflows upload onto this same run, so their
+          # artifacts are already here — collect them into one directory to
+          # re-publish as a single bundle.
+          pattern: "*-security-report-*"
+          path: bundle
+          merge-multiple: false
+        continue-on-error: true
+
+      - name: Render run summary
+        env:
+          LABEL: ${{ needs.resolve.outputs.label }}
+          SHA: ${{ needs.resolve.outputs.sha }}
+          REF: ${{ needs.resolve.outputs.ref }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          ZAP_RESULT: ${{ needs.zap.result }}
+          ZAP_HIGH: ${{ needs.zap.outputs.high }}
+          ZAP_MEDIUM: ${{ needs.zap.outputs.medium }}
+          ZAP_LOW: ${{ needs.zap.outputs.low }}
+          ZAP_ARTIFACT: ${{ needs.zap.outputs.artifact }}
+
+          CODEQL_RESULT: ${{ needs.codeql.result }}
+          CODEQL_TOTAL: ${{ needs.codeql.outputs.total }}
+          CODEQL_CRITICAL: ${{ needs.codeql.outputs.critical }}
+          CODEQL_HIGH: ${{ needs.codeql.outputs.high }}
+          CODEQL_MEDIUM: ${{ needs.codeql.outputs.medium }}
+          CODEQL_ARTIFACT: ${{ needs.codeql.outputs.artifact }}
+          CODEQL_SHA_MATCHED: ${{ needs.codeql.outputs.sha_matched }}
+          CODEQL_RESOLVED_SHA: ${{ needs.codeql.outputs.resolved_sha }}
+        run: |
+          set -euo pipefail
+
+          status_cell() {  # $1 result
+            case "$1" in
+              success) echo "✅ 已產出" ;;
+              skipped) echo "⏭️ 未選擇" ;;
+              "")      echo "⏭️ 未執行" ;;
+              *)       echo "❌ 失敗（\`$1\`）" ;;
+            esac
+          }
+
+          {
+            echo "# 🔐 資安報告 — ${LABEL}"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| 版本 | \`${LABEL}\` |"
+            echo "| 受測 commit | \`${SHA}\` |"
+            echo "| 來源 ref | \`${REF}\` |"
+            echo "| 產生時間 | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |"
+            echo ""
+
+            echo "## 結果"
+            echo ""
+            echo "| 報告 | 狀態 | Critical | High | Medium | Low |"
+            echo "|---|---|---:|---:|---:|---:|"
+            echo "| OWASP ZAP (baseline) | $(status_cell "${ZAP_RESULT}") | – | ${ZAP_HIGH:-–} | ${ZAP_MEDIUM:-–} | ${ZAP_LOW:-–} |"
+            echo "| CodeQL | $(status_cell "${CODEQL_RESULT}") | ${CODEQL_CRITICAL:-–} | ${CODEQL_HIGH:-–} | ${CODEQL_MEDIUM:-–} | – |"
+            echo ""
+
+            if [ "${CODEQL_RESULT}" = "success" ]; then
+              echo "CodeQL findings 合計：**${CODEQL_TOTAL:-?}**"
+              echo ""
+            fi
+
+            if [ "${CODEQL_RESULT}" = "success" ] && [ "${CODEQL_SHA_MATCHED}" != "true" ]; then
+              echo "> ⚠️ **CodeQL 報告並非此 commit**：找不到 \`${SHA}\` 的成功 CodeQL run，"
+              echo "> 報告內容對應的是 \`${CODEQL_RESOLVED_SHA}\`。請勿直接當作本版本的佐證。"
+              echo ""
+            fi
+
+            if [ "${ZAP_RESULT}" != "success" ] && [ "${ZAP_RESULT}" != "skipped" ] && [ -n "${ZAP_RESULT}" ]; then
+              echo "> ❌ **ZAP 掃描失敗**，本次沒有 ZAP 報告。請查看 \`ZAP baseline\` job 的 log。"
+              echo ""
+            fi
+            if [ "${CODEQL_RESULT}" != "success" ] && [ "${CODEQL_RESULT}" != "skipped" ] && [ -n "${CODEQL_RESULT}" ]; then
+              echo "> ❌ **CodeQL 報告產生失敗**。請查看 \`CodeQL PDF\` job 的 log。"
+              echo ""
+            fi
+
+            echo "## 下載"
+            echo ""
+            echo "報告在**本次 workflow run 頁面下方的 Artifacts 區**（保留 90 天）："
+            echo ""
+            if [ "${ZAP_RESULT}" = "success" ]; then
+              echo "- \`${ZAP_ARTIFACT}\` — ZAP：PDF（繳交用）／HTML／JSON／MD"
+            fi
+            if [ "${CODEQL_RESULT}" = "success" ]; then
+              echo "- \`${CODEQL_ARTIFACT}\` — CodeQL：PDF"
+            fi
+            # Wording stays accurate when only one of the two ran.
+            echo "- \`security-report-${LABEL}\` — 以上已產出的報告打包在一起，一次下載"
+            echo ""
+            echo "[前往本次 run](${RUN_URL})"
+            echo ""
+
+            echo "## 判讀須知"
+            echo ""
+            echo "ZAP 為 **baseline（被動）** 掃描：**不送攻擊 payload、未認證**，"
+            echo "因此**不涵蓋** SQL Injection／XSS／指令注入，也不涵蓋登入後的管理、學院、教授功能。"
+            echo ""
+            echo "> **「0 findings」代表「被動掃描未發現」，不等於「已完整測試且安全」。**"
+            echo ""
+            echo "完整限制章節寫在 ZAP PDF 內。需要認證後的主動掃描（會送真實攻擊 payload，"
+            echo "必須在可拋棄的測試資料庫上執行）時，見 \`security/zap/\`。"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Bundle reports as a single artifact
+        # Convenience only: the individual artifacts above are the source of
+        # truth. Skipped when neither scan produced anything.
+        if: needs.zap.result == 'success' || needs.codeql.result == 'success'
+        uses: actions/upload-artifact@v6
+        with:
+          name: security-report-${{ needs.resolve.outputs.label }}
+          path: bundle
+          retention-days: 90
+          if-no-files-found: warn
