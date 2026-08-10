@@ -1,0 +1,12 @@
+name: Fortify Scan
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  fortify:
+    uses: NYCUITSC/fortifyscan/.github/workflows/fortify-multi-language-scan.yml@main
