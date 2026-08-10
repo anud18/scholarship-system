@@ -47,13 +47,23 @@ warning: here-document at line 10 delimited by end-of-file (wanted `FOOTER_EOF')
 | `bootstrap-ap-runner.sh` 🅾️ | **兩台空 VM 的步驟 0** — 把 bare AP VM 變成可跑 action 的 self-hosted runner | 在 AP VM 手動執行一次 | **必要(前置)** |
 | `setting-env.yml` | 在 AP VM 裝 Docker、SSH 到 DB VM 裝 Docker+傳 image、建部署目錄 | runner 就緒後手動觸發 | **必要** |
 | `auto-tag-on-merge.yml` ⭐ | 自動建立 Git tag 和 Release | PR merge 到 main | **必要** |
-| `deploy.yml` | 部署應用程式到 production | Push to main / 手動觸發 | **必要** |
+| `deploy.yml` | **兩階段部署編排**：先 test AP VM、通過後才 production AP VM，兩階段各需一位 reviewer 核准 | Push to main / 手動觸發 | **必要** |
+| `deploy-stack.yml` | `deploy.yml` 兩個階段共用的 reusable workflow（實際的部署腳本本體） | 由 `deploy.yml` 呼叫，不單獨觸發 | **必要**（與 deploy.yml 成對） |
 | `health-check.yml` | 監控應用程式健康狀態 | 每 15 分鐘 / 手動觸發 | 選用 |
 | `backup.yml` | 備份資料庫和檔案 | 每日 2AM UTC / 手動觸發 | 選用 |
 
 ### 🅾️ 步驟 0：bare VM 的 bootstrap（雞生蛋問題）
 
-所有 workflow 都 `runs-on: [self-hosted, linux]`。**空的 AP VM 上沒有 runner,任何 action 都跑不了** —— 必須先手動把 runner 裝起來。`bootstrap-ap-runner.sh` 就是這一步:裝 Docker + 把 GitHub Actions runner 註冊成 systemd service。
+所有 workflow 都跑在 self-hosted runner 上,而且是**兩台** AP VM:test 與 production。兩台都會註冊成 `[self-hosted, linux]`,因此**必須**再加上 stage label 才分得開:
+
+| VM | labels | 由誰使用 |
+|----|--------|----------|
+| test AP VM | `[self-hosted, linux, test]` | `deploy.yml` 的 test 階段、`setting-env.yml`(stage=test) |
+| production AP VM | `[self-hosted, linux, production]` | `deploy.yml` 的 production 階段、`backup.yml`、`health-check.yml`、`setting-env.yml`(stage=production) |
+
+**沒有 stage label 的 runner 收不到任何 job**(workflow 指定的是三個 label 的組合);label 貼錯則會把 production 的部署跑到 test VM 上。
+
+**空的 AP VM 上沒有 runner,任何 action 都跑不了** —— 必須先手動把 runner 裝起來。`bootstrap-ap-runner.sh` 就是這一步:裝 Docker + 把 GitHub Actions runner 註冊成 systemd service。**每台 VM 各跑一次,`--stage` 帶對應的值**。
 
 > 此 `.sh` **只存在於 dev repo 的本目錄**(mirror 只帶可執行的 `.yml` 過去,且空 VM 本來也收不到)。操作者直接從這裡複製到 AP VM 執行。
 
@@ -63,7 +73,10 @@ gh api -X POST repos/<OWNER>/<PROD_REPO>/actions/runners/registration-token --jq
 
 # 2) 把本目錄的 bootstrap-ap-runner.sh 複製到 AP VM,然後:
 chmod +x bootstrap-ap-runner.sh
-./bootstrap-ap-runner.sh --repo-url https://github.com/<OWNER>/<PROD_REPO> --token <TOKEN>
+# test AP VM:
+./bootstrap-ap-runner.sh --repo-url https://github.com/<OWNER>/<PROD_REPO> --token <TOKEN> --stage test
+# production AP VM(另外再取一次 token):
+./bootstrap-ap-runner.sh --repo-url https://github.com/<OWNER>/<PROD_REPO> --token <TOKEN> --stage production
 ```
 
 腳本特性:`set -euo pipefail` + ERR trap(失敗會印出**確切失敗行號與指令**)、全程輸出同時寫入 `/tmp/bootstrap-ap-runner-*.log`、可重複執行(idempotent)。跑完 AP VM 就能跑 action;DB VM **不需要** runner(`setting-env.yml` 透過 SSH 操作它)。
@@ -133,8 +146,13 @@ cd scholarship-production
 mkdir -p .github/workflows
 
 # Copy optional workflows
+# deploy.yml 與 deploy-stack.yml 必須成對複製 —— deploy.yml 用
+# `uses: ./.github/workflows/deploy-stack.yml` 呼叫後者，少一個就無法解析。
 cp /path/to/development-repo/.github/production-workflows-examples/deploy.yml \
    .github/workflows/deploy.yml
+
+cp /path/to/development-repo/.github/production-workflows-examples/deploy-stack.yml \
+   .github/workflows/deploy-stack.yml
 
 cp /path/to/development-repo/.github/production-workflows-examples/health-check.yml \
    .github/workflows/health-check.yml
@@ -148,16 +166,38 @@ cp /path/to/development-repo/.github/production-workflows-examples/backup.yml \
 在 production repository 設定以下 secrets（Settings → Secrets and variables → Actions）：
 
 > 沒有任何 workflow 使用 SSH。deploy.yml / backup.yml / health-check.yml 都跑在
-> production AP VM 上的 self-hosted runner（labels `[self-hosted, linux]`），
+> AP VM 上的 self-hosted runner（labels `[self-hosted, linux, <stage>]`），
 > 直接操作本機 docker 與 DB VM 的 5432 埠。GitHub-hosted runner 連不到校內 VM。
+>
+> ⚠️ **test 與 production 用的是不同的 env variable / secret**。作法是把值放進
+> GitHub **Environments**（`test` 與 `production`），而不是全部放在 repository 層。
+> Repository 層的 secret 是 **production 的值**（backup.yml / health-check.yml 這類
+> 排程 workflow 沒有 `environment:`，仍從這裡取值）；`test` environment 則把每一個
+> 值覆寫成測試環境的。**沒有被 test environment 覆寫的 secret 會自動 fallback 到
+> repository 層 = production 的值**，所以 `test` environment 必須把下表的 secret
+> 全部各自設一份。deploy-stack.yml 的 "Assert stage identity" 步驟就是用來擋這個
+> 漏設的（詳見 SECRETS-SETUP-GUIDE.md § Environments）。
 
 #### Repository Variables（Settings → Variables → Actions）
 
 | Variable | 必填 | 說明 |
 |----------|------|------|
-| `IMAGE_OWNER` | ✅ | 發布映像檔的 GHCR namespace，也就是**開發 repo 的 owner**（例：`anud18`）。production repo 不建置映像檔，只取用開發流程已經發布、staging 驗過的那一份。 |
-| `PRODUCTION_URL` | ✅ | 例：`https://ss.aa.nycu.edu.tw` |
-| `ENV_FILE` | — | AP VM 上既有 `.env` 的絕對路徑（安裝手冊 5.1，例：`/home/<user>/.env`）。**設了就用它**，GitHub 完全不存這些值。留空則由 deploy.yml 依下方 secrets 產生 `~/scholarship-production/.env`（權限 600）。 |
+| `IMAGE_OWNER` | ✅ | 發布映像檔的 GHCR namespace，也就是**開發 repo 的 owner**（例：`anud18`）。production repo 不建置映像檔，只取用開發流程已經發布、staging 驗過的那一份。兩個 stage 共用。 |
+
+#### Environment Variables（Settings → Environments → `test` / `production` → Variables）
+
+以下每一項都要在 **兩個 environment 各設一份**（值不同）：
+
+| Variable | 必填 | `test` 範例 | `production` 範例 |
+|----------|------|-------------|-------------------|
+| `DEPLOY_STAGE` | ✅ | `test` | `production` | 
+| `EXPECT_DOMAIN` | test 必填 | `ss-test.aa.nycu.edu.tw` | `ss.aa.nycu.edu.tw` |
+| `EXPECT_DB_HOST` | test 必填 | test DB VM 的位址 | production DB VM 的位址 |
+| `DEPLOY_URL` | ✅ | `https://ss-test.aa.nycu.edu.tw` | `https://ss.aa.nycu.edu.tw` |
+| `SSL_CERT_DIR` | — | 該台 VM 上憑證目錄的絕對路徑 | 同左 |
+| `ENV_FILE` | — | 該台 VM 上既有 `.env` 的絕對路徑（安裝手冊 5.1）。**設了就用它**，GitHub 完全不存這些值。留空則由 deploy-stack.yml 依下方 secrets 產生 `~/scholarship-<stage>/.env`（權限 600）。 | 同左 |
+
+`DEPLOY_STAGE` / `EXPECT_DOMAIN` / `EXPECT_DB_HOST` 是防呆用的：deploy 一開始就會比對「這個 environment 宣告自己是哪個 stage」與「secret 解析出來的 DOMAIN / DB_HOST」，對不上就直接失敗，避免 test 部署因為漏設 secret 而打到 production 的資料庫。
 | `SSL_CERT_DIR` | — | TLS 憑證資料夾的絕對路徑（例：`/home/<user>/ssl`）。留空則用 repo `nginx/ssl/prod`。兩種 `ENV_FILE` 模式下都以這個變數優先。資料夾內需有 `fullchain.pem`、`privkey.pem`、`chain.pem`。 |
 
 #### 部署相關 (deploy.yml)
@@ -253,8 +293,8 @@ CUTOFF_DATE=$(date -d '90 days ago' +%Y%m%d)  # 改為 90 天
 ### Self-hosted Runner
 
 部署與維運 workflow 都跑在 AP VM 上的 self-hosted runner，不使用 SSH 金鑰。
-安裝方式見安裝手冊第 6 節；註冊時 labels 需包含 `self-hosted` 與 `linux`，
-並以 service 方式常駐：
+安裝方式見安裝手冊第 6 節；註冊時 labels 需包含 `self-hosted`、`linux`，
+**以及該台 VM 的 stage label（`test` 或 `production`）**，並以 service 方式常駐：
 
 ```bash
 sudo ./svc.sh install
@@ -299,12 +339,16 @@ runner 使用者需要 passwordless sudo（deploy.yml 與 backup.yml 都會用�
 
 ### Deploy Workflow
 
-- [ ] Docker Hub 憑證已設定
-- [ ] SSH key 已添加到 production server
-- [ ] Server 有足夠的磁碟空間
-- [ ] Docker Compose 檔案正確配置
-- [ ] 測試 SSH 連線成功
-- [ ] 煙霧測試 URL 正確
+- [ ] `deploy.yml` 與 `deploy-stack.yml` 都已複製到 prod repo
+- [ ] test AP VM 的 runner labels 含 `test`；production AP VM 含 `production`
+- [ ] GitHub Environments `test` 與 `production` 都已建立
+- [ ] 兩個 environment 都設了 **Required reviewers（1 人）**
+- [ ] `test` environment 已把所有 secret 各設一份（沒設的會 fallback 到 production 的值）
+- [ ] 兩個 environment 的 `DEPLOY_STAGE` / `EXPECT_DOMAIN` / `EXPECT_DB_HOST` 已設定
+- [ ] `SECRET_KEY`、`PII_ENCRYPTION_KEYS` 兩邊不同
+- [ ] Repository variable `IMAGE_OWNER` 已設定
+- [ ] 兩台 VM 都有 TLS 憑證（`fullchain.pem` / `privkey.pem` / `chain.pem`）
+- [ ] 兩台 VM 都有足夠的磁碟空間，且 runner 使用者有 passwordless sudo
 
 ### Health Check Workflow
 
@@ -326,15 +370,19 @@ runner 使用者需要 passwordless sudo（deploy.yml 與 backup.yml 都會用�
 ### 手動測試部署
 
 ```bash
-# In production repo
-gh workflow run deploy.yml
+# In production repo；建議帶明確 tag，兩個 stage 才會部署到同一份 image
+gh workflow run deploy.yml -f tag=v1.2.3
 
-# Monitor progress
+# Monitor progress（會先停在 test 階段等核准）
 gh run watch
 
 # Check logs
 gh run view --log
 ```
+
+run 會停兩次：先是 `test` 環境的 "Review deployments"，reviewer 按下
+**Approve and deploy** 後才跑 test AP VM；test 全綠後再停一次等 `production`
+的核准。任一階段被拒絕（Reject），後面的階段就不會執行。
 
 ### 測試健康檢查
 

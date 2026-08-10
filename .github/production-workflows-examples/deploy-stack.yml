@@ -1,0 +1,651 @@
+# Reusable deployment stage — the body of the two-stage promotion pipeline.
+# Copy this file to the PRIVATE production repository at
+# .github/workflows/deploy-stack.yml (deploy.yml calls it twice).
+#
+# ONE definition, TWO stages. deploy.yml promotes the same GHCR image first to
+# the TEST AP VM and then, only if that succeeded, to the PRODUCTION AP VM:
+#
+#     resolve-images ──▶ deploy (stage: test)       ──▶ deploy (stage: production)
+#                        runner [self-hosted,linux,test]  runner [self-hosted,linux,production]
+#                        environment: test                environment: production
+#                        ▲ 1 reviewer must approve        ▲ 1 reviewer must approve
+#
+# The stage is selected entirely by inputs, so the two runs are bit-identical
+# in behaviour and differ ONLY in (a) which runner they land on and (b) which
+# GitHub Environment supplies the secrets/variables. That is the point: the
+# test stage is a rehearsal of the production stage, not a different script.
+#
+# WHY GitHub Environments carry the config
+# ----------------------------------------
+# `environment:` does three things at once here, and all three are required:
+#   1. Required reviewers  → the manual approval gate (configured in repo
+#      Settings → Environments, NOT in YAML — see SECRETS-SETUP-GUIDE.md).
+#   2. Environment secrets → the TEST stage resolves the TEST database, portal,
+#      SMTP relay and PII keys; the PRODUCTION stage resolves the real ones.
+#   3. Environment variables → per-stage URL, ENV_FILE, SSL_CERT_DIR.
+#
+# ⚠️  INHERITANCE TRAP: a secret that the `test` environment does NOT define
+# falls back to the REPOSITORY-level secret — i.e. to the PRODUCTION value.
+# A test deploy could then quietly write to the production database. The
+# "Assert stage identity" step below is the guard: each environment must
+# declare DEPLOY_STAGE, EXPECT_DOMAIN and EXPECT_DB_HOST, and the resolved
+# secrets are checked against them before anything is touched.
+
+name: Deploy stack (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      stage:
+        description: 'test | production — selects the GitHub Environment and the guard set'
+        required: true
+        type: string
+      runner_labels:
+        description: 'JSON array of runner labels, e.g. ''["self-hosted","linux","test"]'''
+        required: true
+        type: string
+      tag:
+        description: 'Upstream image tag to deploy (already verified by resolve-images)'
+        required: true
+        type: string
+      deploy_dir:
+        description: 'Deploy directory on the AP VM. Defaults to ~/scholarship-<stage>.'
+        required: false
+        type: string
+        default: ''
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  deploy:
+    name: Deploy to ${{ inputs.stage }}
+    # Labels are resolved from the caller so ONE definition can target both VMs.
+    # Both VMs answer to [self-hosted, linux]; the stage label is what makes the
+    # targeting deterministic. Never drop it — without it a job would land on
+    # whichever of the two runners happened to be idle.
+    runs-on: ${{ fromJSON(inputs.runner_labels) }}
+    # The approval gate. GitHub blocks the job here, before the runner is even
+    # picked up, until a required reviewer approves the run.
+    environment:
+      name: ${{ inputs.stage }}
+      url: ${{ vars.DEPLOY_URL }}
+    # Job-level permissions REPLACE the workflow-level block, so contents: read
+    # must be restated alongside the packages elevation.
+    permissions:
+      contents: read # actions/checkout
+      packages: read # docker/login-action + docker pull (GITHUB_TOKEN fallback when GH_PAT is unset)
+
+    # DELIBERATELY MINIMAL. Everything compose interpolates comes from an env
+    # file (see "Resolve environment file"), NOT from the job environment:
+    # compose gives shell variables precedence over --env-file, so exporting
+    # the same keys here would silently shadow an operator-managed .env — and
+    # an unset GitHub secret exports as an EMPTY string, which shadows the
+    # file's value with "" rather than falling back to it.
+    #
+    # Only workflow-authoritative values live here. Both are always non-empty
+    # (IMAGE_OWNER is validated in resolve-images), so overriding is intended:
+    # the workflow decides which image was pulled and therefore which runs.
+    env:
+      TAG: ${{ inputs.tag }}
+      IMAGE_OWNER: ${{ vars.IMAGE_OWNER }}
+      STAGE: ${{ inputs.stage }}
+
+    steps:
+      # ── Gate 0: is this environment really the environment we think it is? ──
+      # Runs FIRST, before checkout, before any container is touched. Catches
+      # the inheritance trap described in the header: an environment that was
+      # never created, or created without its own secrets, resolves to the
+      # repository-level (production) values and would otherwise deploy the
+      # test stage straight onto production infrastructure.
+      - name: Assert stage identity
+        env:
+          DEPLOY_STAGE: ${{ vars.DEPLOY_STAGE }}
+          EXPECT_DOMAIN: ${{ vars.EXPECT_DOMAIN }}
+          EXPECT_DB_HOST: ${{ vars.EXPECT_DB_HOST }}
+          ENV_FILE_VAR: ${{ vars.ENV_FILE }}
+          DOMAIN: ${{ secrets.DOMAIN }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+        run: |
+          fail=0
+          err() { echo "::error::$1"; fail=1; }
+
+          if [ "${DEPLOY_STAGE}" != "${STAGE}" ]; then
+            err "Environment '${STAGE}' declares DEPLOY_STAGE='${DEPLOY_STAGE}' (expected '${STAGE}')."
+            echo "::error::Create the '${STAGE}' environment (Settings → Environments) and set the"
+            echo "::error::variable DEPLOY_STAGE=${STAGE}. Without it, this job would silently run"
+            echo "::error::against repository-level (production) secrets."
+          fi
+
+          # EXPECT_* are mandatory for test (that is the stage that can do
+          # damage by inheriting) and advisory for production.
+          if [ -z "${EXPECT_DOMAIN}" ] || [ -z "${EXPECT_DB_HOST}" ]; then
+            if [ "${STAGE}" = "test" ]; then
+              err "The 'test' environment must define EXPECT_DOMAIN and EXPECT_DB_HOST."
+              echo "::error::They pin which host this stage is allowed to touch, so an"
+              echo "::error::un-overridden secret cannot point the test deploy at production."
+            else
+              echo "::warning::EXPECT_DOMAIN / EXPECT_DB_HOST not set for '${STAGE}' — skipping the target check."
+            fi
+          elif [ -n "${ENV_FILE_VAR}" ]; then
+            # ENV_FILE mode: the values live on the VM, and secrets.DOMAIN /
+            # secrets.DB_HOST are legitimately unset. The same comparison is
+            # made against the file itself in "Resolve environment file".
+            echo "::notice::ENV_FILE mode — target check deferred to the resolved env file."
+          else
+            [ "${DOMAIN}" = "${EXPECT_DOMAIN}" ] || \
+              err "DOMAIN resolved to '${DOMAIN}' but the '${STAGE}' environment expects '${EXPECT_DOMAIN}'."
+            [ "${DB_HOST}" = "${EXPECT_DB_HOST}" ] || \
+              err "DB_HOST resolved to a host other than the one '${STAGE}' expects (EXPECT_DB_HOST)."
+          fi
+
+          if [ "$fail" -ne 0 ]; then
+            echo "::error::Refusing to deploy — see SECRETS-SETUP-GUIDE.md § Environments."
+            exit 1
+          fi
+          echo "✅ Stage identity confirmed: ${STAGE} → ${DOMAIN:-${EXPECT_DOMAIN:-(from env file)}}"
+
+      # ── Gate 1: fail fast on misconfigured secrets BEFORE touching anything ─
+      # Closes go-live blockers P3/P4/P7/P8: config.py ships staging/dev defaults
+      # (portal.test auth, localhost student API, "(測試)" mail sender), so a
+      # missing secret would not crash — it would silently run against the wrong
+      # infrastructure. The backend boot guard (#936) is the second line of
+      # defense; this is the first.
+      #
+      # The presence/shape checks apply to BOTH stages. The "must not look like
+      # staging" checks apply to the production stage only — on the test stage
+      # those values are *supposed* to be the test ones.
+      - name: Validate secrets
+        # Only meaningful when the stack is configured from GitHub Secrets.
+        # With ENV_FILE set, the values live on the AP VM and are validated
+        # there by the "Resolve environment file" step instead.
+        if: vars.ENV_FILE == ''
+        env:
+          DOMAIN: ${{ secrets.DOMAIN }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
+          MINIO_HOST: ${{ secrets.MINIO_HOST }}
+          MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
+          MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+          PII_ENCRYPTION_KEYS: ${{ secrets.PII_ENCRYPTION_KEYS }}
+          PORTAL_JWT_SERVER_URL: ${{ secrets.PORTAL_JWT_SERVER_URL }}
+          STUDENT_API_BASE_URL: ${{ secrets.STUDENT_API_BASE_URL }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_FROM_NAME: ${{ secrets.EMAIL_FROM_NAME }}
+          SUPER_ADMIN_NYCU_ID: ${{ secrets.SUPER_ADMIN_NYCU_ID }}
+        run: |
+          fail=0
+          err() { echo "::error::$1"; fail=1; }
+
+          [ -n "$DOMAIN" ] || err "DOMAIN is not set"
+          [ -n "$DB_HOST" ] || err "DB_HOST is not set"
+          [ -n "$DB_PASSWORD" ] || err "DB_PASSWORD is not set"
+          [ -n "$REDIS_PASSWORD" ] || err "REDIS_PASSWORD is not set"
+          [ -n "$MINIO_HOST" ] || err "MINIO_HOST is not set"
+          [ -n "$MINIO_ACCESS_KEY" ] || err "MINIO_ACCESS_KEY is not set"
+          [ -n "$MINIO_SECRET_KEY" ] || err "MINIO_SECRET_KEY is not set"
+          [ -n "$SUPER_ADMIN_NYCU_ID" ] || err "SUPER_ADMIN_NYCU_ID is not set (no one could elevate to super_admin)"
+          [ -n "$SMTP_HOST" ] || err "SMTP_HOST is not set (would default to the staging relay)"
+
+          # Every stage gets its own key — a shared SECRET_KEY would let a token
+          # minted on test authenticate against production.
+          [ "${#SECRET_KEY}" -ge 32 ] || err "SECRET_KEY must be >= 32 chars (and MUST differ per stage)"
+
+          # P4: PII keys — missing keys hard-fail the encrypt migration / first
+          # PII read; malformed JSON fails at boot. Catch both here.
+          if [ -z "$PII_ENCRYPTION_KEYS" ]; then
+            err "PII_ENCRYPTION_KEYS is not set. Generate a key per docs/architecture/pii-encryption.md then set '{\"v1\":\"<KEY>\"}'"
+          elif ! echo "$PII_ENCRYPTION_KEYS" | python3 -c 'import json,sys; json.load(sys.stdin)' 2>/dev/null; then
+            err "PII_ENCRYPTION_KEYS is not valid JSON"
+          fi
+
+          case "$PORTAL_JWT_SERVER_URL" in
+            "") err "PORTAL_JWT_SERVER_URL is not set (config.py would default to portal.test)" ;;
+            https://*) : ;;
+            *) err "PORTAL_JWT_SERVER_URL must be https://" ;;
+          esac
+          [ -n "$STUDENT_API_BASE_URL" ] || err "STUDENT_API_BASE_URL is not set (would default to the localhost mock; verification fails SILENTLY)"
+          [ -n "$EMAIL_FROM" ] || err "EMAIL_FROM is not set"
+          [ -n "$EMAIL_FROM_NAME" ] || err "EMAIL_FROM_NAME is not set"
+
+          if [ "${STAGE}" = "production" ]; then
+            # P3: production must never authenticate against the staging portal.
+            case "$PORTAL_JWT_SERVER_URL" in
+              *portal.test*) err "PORTAL_JWT_SERVER_URL points at portal.test (staging) — set the production Portal endpoint" ;;
+            esac
+            # P8: student API must be the real campus API (no longer uses HMAC auth).
+            case "$STUDENT_API_BASE_URL" in
+              *localhost*|*127.0.0.1*|*mock*) err "STUDENT_API_BASE_URL looks like a mock/localhost endpoint: $STUDENT_API_BASE_URL" ;;
+            esac
+            # P7: real applicants must not receive '(測試)' mail from ss-test.
+            case "$EMAIL_FROM" in *ss-test*) err "EMAIL_FROM still uses the staging address: $EMAIL_FROM" ;; esac
+            case "$EMAIL_FROM_NAME" in *測試*) err "EMAIL_FROM_NAME still contains 測試: $EMAIL_FROM_NAME" ;; esac
+          else
+            # Mirror image of the production guards: on test, a value that looks
+            # like the real thing means an environment secret was not overridden.
+            case "$EMAIL_FROM" in
+              *ss-test*|*test*) : ;;
+              *) echo "::warning::EMAIL_FROM ('$EMAIL_FROM') carries no test marker — real applicants could be mailed from the test stack." ;;
+            esac
+          fi
+
+          [ "$fail" -eq 0 ] || exit 1
+          echo "✅ All ${STAGE} secrets validated"
+
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Resolve deploy directory
+        env:
+          DEPLOY_DIR_INPUT: ${{ inputs.deploy_dir }}
+        run: |
+          DIR="${DEPLOY_DIR_INPUT}"
+          [ -n "$DIR" ] || DIR="$HOME/scholarship-${STAGE}"
+          mkdir -p "$DIR"
+          echo "DEPLOY_DIR=${DIR}" >> "$GITHUB_ENV"
+          echo "Deploy directory: ${DIR}"
+
+      # Authenticate against the UPSTREAM namespace. GITHUB_TOKEN is scoped to
+      # this repository and cannot read another owner's packages, so a PAT with
+      # read:packages is required whenever those packages are private.
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Pull images
+        run: |
+          docker pull ${{ env.REGISTRY }}/${IMAGE_OWNER}/scholarship-system-backend:${TAG}
+          docker pull ${{ env.REGISTRY }}/${IMAGE_OWNER}/scholarship-system-frontend:${TAG}
+
+      - name: Prepare deployment files
+        run: |
+          mkdir -p "${DEPLOY_DIR}/logs/nginx"
+          cp docker-compose.prod.yml "${DEPLOY_DIR}/docker-compose.yml"
+          # Merge (not replace): a certificate directory placed under
+          # <deploy dir>/nginx/ssl/prod by the operator must survive, since the
+          # repo ships nginx configs but no keys.
+          if [ -d nginx ]; then cp -r nginx "${DEPLOY_DIR}/"; fi
+          # Everything below is copied as the runner user and therefore owned by
+          # it, so a plain rm is enough to replace it. sudo -n is only a fallback
+          # for hosts that ran an earlier, broken version of this workflow and
+          # were left with root-owned leftovers; -n so a VM WITHOUT passwordless
+          # sudo fails immediately with the message below instead of blocking on
+          # a password prompt no one can answer.
+          replace_dir() {
+            rm -rf "${DEPLOY_DIR}/$1" 2>/dev/null && return 0
+            sudo -n rm -rf "${DEPLOY_DIR}/$1" 2>/dev/null && return 0
+            echo "::error::Cannot replace ${DEPLOY_DIR}/$1 — it is owned by root"
+            echo "::error::from an earlier deploy and this runner has no passwordless sudo."
+            echo "::error::Clear it once on the VM: sudo rm -rf ${DEPLOY_DIR}/$1"
+            return 1
+          }
+          if [ -d monitoring ]; then
+            replace_dir monitoring
+            cp -r monitoring "${DEPLOY_DIR}/"
+          fi
+          # scripts/logrotate.conf is bind-mounted as the logrotate service's
+          # config. This copy was missing, so Docker materialised the mount
+          # source as a root-owned DIRECTORY and logrotate rotated nothing
+          # ("Handling 0 logs", exit 0) while the container stayed Up — the
+          # nginx access log grew unbounded with no signal anything was wrong.
+          # No chown here: logrotate ignores configs it does not own, so the
+          # container makes its own root-owned copy (docker-compose.prod.yml).
+          if [ -d scripts ]; then
+            replace_dir scripts
+            cp -r scripts "${DEPLOY_DIR}/"
+          fi
+
+      # Two supported ways to configure the stack, chosen by the ENV_FILE
+      # environment variable (set it per GitHub Environment, so test and
+      # production can use different modes and different paths):
+      #
+      #   ENV_FILE set   — an operator-managed .env already on the VM
+      #                    (install manual section 5.1: `touch ~/.env`). Nothing
+      #                    is written; GitHub never holds these values.
+      #   ENV_FILE unset — generated here from the environment's secrets into
+      #                    the deploy directory, mode 600. This is the default.
+      #
+      # Either way compose is invoked with --env-file, so there is exactly one
+      # source of truth for interpolation.
+      - name: Resolve environment file
+        env:
+          ENV_FILE_VAR: ${{ vars.ENV_FILE }}
+          SSL_CERT_DIR_VAR: ${{ vars.SSL_CERT_DIR }}
+          EXPECT_DOMAIN: ${{ vars.EXPECT_DOMAIN }}
+          EXPECT_DB_HOST: ${{ vars.EXPECT_DB_HOST }}
+          DOMAIN: ${{ secrets.DOMAIN }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
+          MINIO_HOST: ${{ secrets.MINIO_HOST }}
+          MINIO_PORT: ${{ secrets.MINIO_PORT }}
+          MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
+          MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+          # Secret name stays MINIO_BUCKET_NAME; compose interpolates
+          # ${MINIO_BUCKET} — the env name config.py actually binds.
+          MINIO_BUCKET_NAME: ${{ secrets.MINIO_BUCKET_NAME }}
+          MINIO_SECURE: ${{ secrets.MINIO_SECURE }}
+          PII_ENCRYPTION_KEYS: ${{ secrets.PII_ENCRYPTION_KEYS }}
+          PII_ENCRYPTION_ACTIVE_VERSION: ${{ secrets.PII_ENCRYPTION_ACTIVE_VERSION }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_FROM_NAME: ${{ secrets.EMAIL_FROM_NAME }}
+          PORTAL_JWT_SERVER_URL: ${{ secrets.PORTAL_JWT_SERVER_URL }}
+          STUDENT_API_BASE_URL: ${{ secrets.STUDENT_API_BASE_URL }}
+          SUPER_ADMIN_NYCU_ID: ${{ secrets.SUPER_ADMIN_NYCU_ID }}
+          NEXT_PUBLIC_NYCU_PORTAL_URL: ${{ secrets.NEXT_PUBLIC_NYCU_PORTAL_URL }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "${ENV_FILE_VAR}" ]; then
+            ENV_FILE="${ENV_FILE_VAR}"
+            echo "Using operator-managed env file: ${ENV_FILE}"
+            [ -f "${ENV_FILE}" ] || {
+              echo "::error::ENV_FILE points at ${ENV_FILE}, which does not exist on this runner."
+              echo "::error::Create it (see install manual section 5.1) or clear the ENV_FILE variable"
+              echo "::error::on the '${STAGE}' environment to fall back to generating it from secrets."
+              exit 1
+            }
+            [ -r "${ENV_FILE}" ] || { echo "::error::${ENV_FILE} is not readable by the runner user."; exit 1; }
+
+            # Fail now on anything compose cannot default, instead of booting a
+            # backend that silently falls back to config.py's dev values.
+            missing=""
+            for k in DOMAIN SECRET_KEY DB_HOST DB_PORT DB_USER DB_PASSWORD DB_NAME \
+                     REDIS_PASSWORD MINIO_HOST MINIO_ACCESS_KEY MINIO_SECRET_KEY \
+                     PII_ENCRYPTION_KEYS SMTP_HOST EMAIL_FROM EMAIL_FROM_NAME \
+                     PORTAL_JWT_SERVER_URL STUDENT_API_BASE_URL SUPER_ADMIN_NYCU_ID \
+                     NEXT_PUBLIC_NYCU_PORTAL_URL CORS_ORIGINS; do
+              grep -qE "^[[:space:]]*${k}=" "${ENV_FILE}" || missing="${missing} ${k}"
+            done
+            [ -z "${missing}" ] || { echo "::error::${ENV_FILE} is missing required keys:${missing}"; exit 1; }
+
+            # Same guards the "Validate secrets" step applies to GitHub Secrets.
+            # They live here too because in ENV_FILE mode that step has nothing
+            # to inspect — config.py ships staging defaults, so a wrong value
+            # would not crash, it would quietly run against the wrong backend.
+            v() { sed -n "s/^[[:space:]]*$1=//p" "${ENV_FILE}" | tail -1; }
+            fail=0
+            err() { echo "::error::$1"; fail=1; }
+
+            SK="$(v SECRET_KEY)"
+            [ "${#SK}" -ge 32 ] || err "SECRET_KEY must be >= 32 chars (and MUST differ per stage)"
+
+            printf '%s' "$(v PII_ENCRYPTION_KEYS)" | python3 -c 'import json,sys; json.load(sys.stdin)' >/dev/null 2>&1 \
+              || err "PII_ENCRYPTION_KEYS is not valid JSON"
+
+            case "$(v PORTAL_JWT_SERVER_URL)" in
+              https://*) : ;;
+              *) err "PORTAL_JWT_SERVER_URL must be https://" ;;
+            esac
+
+            # The env file is the source of truth in this mode, so re-check the
+            # stage target against it too — an operator .env copied from the
+            # production VM to the test VM is exactly the mistake to catch.
+            if [ -n "${EXPECT_DOMAIN}" ] && [ "$(v DOMAIN)" != "${EXPECT_DOMAIN}" ]; then
+              err "${ENV_FILE} sets DOMAIN=$(v DOMAIN) but the '${STAGE}' environment expects ${EXPECT_DOMAIN}"
+            fi
+            if [ -n "${EXPECT_DB_HOST}" ] && [ "$(v DB_HOST)" != "${EXPECT_DB_HOST}" ]; then
+              err "${ENV_FILE} points DB_HOST at a host other than the one '${STAGE}' expects (EXPECT_DB_HOST)"
+            fi
+
+            if [ "${STAGE}" = "production" ]; then
+              case "$(v PORTAL_JWT_SERVER_URL)" in
+                *portal.test*) err "PORTAL_JWT_SERVER_URL points at portal.test (staging)" ;;
+              esac
+              case "$(v STUDENT_API_BASE_URL)" in
+                *localhost*|*127.0.0.1*|*mock*) err "STUDENT_API_BASE_URL looks like a mock/localhost endpoint" ;;
+              esac
+              case "$(v EMAIL_FROM)" in *ss-test*) err "EMAIL_FROM still uses the staging address" ;; esac
+              case "$(v EMAIL_FROM_NAME)" in *測試*) err "EMAIL_FROM_NAME still contains 測試" ;; esac
+            fi
+
+            [ "$fail" -eq 0 ] || exit 1
+            echo "✅ All required keys present and validated"
+          else
+            ENV_FILE="${DEPLOY_DIR}/.env"
+            echo "Generating ${ENV_FILE} from the '${STAGE}' environment's secrets"
+            umask 077
+            {
+              echo "# Generated by deploy-stack.yml (stage: ${STAGE}) — do not edit; changes are overwritten."
+              echo "DOMAIN=${DOMAIN}"
+              echo "SECRET_KEY=${SECRET_KEY}"
+              echo "CORS_ORIGINS=${CORS_ORIGINS}"
+              echo "DB_HOST=${DB_HOST}"
+              echo "DB_PORT=${DB_PORT}"
+              echo "DB_USER=${DB_USER}"
+              echo "DB_PASSWORD=${DB_PASSWORD}"
+              echo "DB_NAME=${DB_NAME}"
+              echo "REDIS_PASSWORD=${REDIS_PASSWORD}"
+              echo "MINIO_HOST=${MINIO_HOST}"
+              echo "MINIO_PORT=${MINIO_PORT}"
+              echo "MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}"
+              echo "MINIO_SECRET_KEY=${MINIO_SECRET_KEY}"
+              echo "MINIO_BUCKET=${MINIO_BUCKET_NAME}"
+              echo "MINIO_SECURE=${MINIO_SECURE}"
+              echo "PII_ENCRYPTION_KEYS=${PII_ENCRYPTION_KEYS}"
+              echo "PII_ENCRYPTION_ACTIVE_VERSION=${PII_ENCRYPTION_ACTIVE_VERSION}"
+              echo "SMTP_HOST=${SMTP_HOST}"
+              echo "SMTP_PORT=${SMTP_PORT}"
+              echo "SMTP_USER=${SMTP_USER}"
+              echo "SMTP_PASSWORD=${SMTP_PASSWORD}"
+              echo "EMAIL_FROM=${EMAIL_FROM}"
+              echo "EMAIL_FROM_NAME=${EMAIL_FROM_NAME}"
+              echo "PORTAL_SSO_ENABLED=true"
+              echo "PORTAL_JWT_SERVER_URL=${PORTAL_JWT_SERVER_URL}"
+              echo "PORTAL_TEST_MODE=false"
+              echo "STUDENT_API_ENABLED=true"
+              echo "STUDENT_API_BASE_URL=${STUDENT_API_BASE_URL}"
+              echo "SUPER_ADMIN_NYCU_ID=${SUPER_ADMIN_NYCU_ID}"
+              echo "NEXT_PUBLIC_NYCU_PORTAL_URL=${NEXT_PUBLIC_NYCU_PORTAL_URL}"
+              [ -n "${SSL_CERT_DIR_VAR}" ] && echo "SSL_CERT_DIR=${SSL_CERT_DIR_VAR}"
+            } > "${ENV_FILE}"
+            chmod 600 "${ENV_FILE}"
+            echo "✅ Wrote $(grep -c '=' "${ENV_FILE}") entries (mode 600)"
+          fi
+
+          echo "ENV_FILE=${ENV_FILE}" >> "$GITHUB_ENV"
+
+          # Read back the values later steps need. Taking DOMAIN from the
+          # resolved file (rather than from secrets) keeps both modes identical.
+          envget() { sed -n "s/^[[:space:]]*$1=//p" "${ENV_FILE}" | tail -1; }
+          echo "DOMAIN=$(envget DOMAIN)" >> "$GITHUB_ENV"
+
+          # Certificate location precedence: the SSL_CERT_DIR environment
+          # variable wins in BOTH modes (it describes where the operator put
+          # the certificate on this host, not a secret), then the env file,
+          # then compose's ./nginx/ssl/prod default.
+          CERT_DIR="${SSL_CERT_DIR_VAR:-$(envget SSL_CERT_DIR)}"
+          echo "CERT_DIR=${CERT_DIR}" >> "$GITHUB_ENV"
+          # Export to compose ONLY when non-empty: an exported empty string
+          # would shadow the env file's value instead of deferring to it.
+          if [ -n "${CERT_DIR}" ]; then
+            echo "SSL_CERT_DIR=${CERT_DIR}" >> "$GITHUB_ENV"
+            echo "Certificate directory (SSL_CERT_DIR): ${CERT_DIR}"
+          else
+            echo "Certificate directory: compose default (./nginx/ssl/prod)"
+          fi
+
+      - name: Verify TLS certificates are present
+        run: |
+          cd "${DEPLOY_DIR}"
+          CERT_DIR="${CERT_DIR:-./nginx/ssl/prod}"
+          echo "Certificate directory: $CERT_DIR"
+          missing=0
+          # nginx.prod.conf references all three; a missing file puts nginx in
+          # a crash loop and the deploy would only fail later, at `nginx -t`,
+          # with a far less obvious message.
+          for f in fullchain.pem privkey.pem chain.pem; do
+            if [ -f "${CERT_DIR}/${f}" ]; then
+              echo "  ✅ ${f}"
+            else
+              echo "::error::Missing certificate file: ${CERT_DIR}/${f}"
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ] || {
+            echo "::error::Place the TLS certificate in ${CERT_DIR}, or set the"
+            echo "::error::SSL_CERT_DIR variable on the '${STAGE}' environment to an absolute"
+            echo "::error::path on this VM (e.g. /home/<user>/ssl) so private keys stay out of git."
+            exit 1
+          }
+
+      - name: Start new containers
+        run: |
+          cd "${DEPLOY_DIR}"
+          # --env-file is the single source of interpolation values; TAG and
+          # IMAGE_OWNER come from the job env and intentionally take precedence.
+          docker compose --env-file "${ENV_FILE}" down || true
+
+          # scholarship_prod_network is declared external so it keeps a stable,
+          # unprefixed name the monitoring stack can join — compose never
+          # creates an external network, so it has to exist before `up`.
+          #
+          # Order matters: this runs AFTER `down`. Revisions before the external
+          # switch declared the network inline, so it exists under the compose
+          # project prefix holding this very subnet, and creating the new one
+          # first fails with "Pool overlaps with other one on this address
+          # space". `down` detaches the containers; removing the legacy network
+          # then frees the address space. Both lines are no-ops once migrated.
+          docker network rm "$(basename "${DEPLOY_DIR}")_scholarship_prod_network" 2>/dev/null || true
+          docker network inspect scholarship_prod_network >/dev/null 2>&1 || \
+            docker network create --subnet 172.24.0.0/16 scholarship_prod_network
+
+          docker compose --env-file "${ENV_FILE}" up -d
+
+      - name: Validate and reload nginx config
+        run: |
+          # Config is bind-mounted read-only; `compose up -d` does not reload
+          # nginx when only the file contents change. Validate first — never
+          # leave a broken config running.
+          if docker exec scholarship_nginx_prod nginx -t; then
+            docker exec scholarship_nginx_prod nginx -s reload
+            echo "✅ nginx config validated and reloaded"
+          else
+            echo "::error::nginx config test failed — keeping previously-loaded config"
+            exit 1
+          fi
+
+      - name: Run database migrations
+        run: |
+          # NO error swallowing: a half-applied migration with a green deploy
+          # is the worst possible state (and /health does not verify schema).
+          docker exec scholarship_backend_prod alembic upgrade head
+          docker exec scholarship_backend_prod alembic current
+
+      - name: Seed baseline
+        run: |
+          # --prod creates ONLY admin/lookup/settings/email templates — never
+          # test users. Idempotent. Must succeed (no '|| echo' swallowing).
+          docker exec scholarship_backend_prod python -m app.seed --prod
+
+      - name: Health check
+        run: |
+          # Backend has no published port (expose-only) — check from inside the
+          # container, then end-to-end through nginx.
+          max_retries=10
+          retry_count=0
+          until docker exec scholarship_backend_prod curl -fsS http://localhost:8000/health >/dev/null 2>&1 || [ $retry_count -eq $max_retries ]; do
+            echo "Backend not ready yet... ($retry_count/$max_retries)"
+            sleep 5
+            retry_count=$((retry_count + 1))
+          done
+          if [ $retry_count -eq $max_retries ]; then
+            echo "::error::Backend health check failed"
+            docker logs --tail 100 scholarship_backend_prod
+            exit 1
+          fi
+          echo "✅ Backend healthy"
+
+          retry_count=0
+          until curl -fsk https://localhost/health >/dev/null 2>&1 || [ $retry_count -eq $max_retries ]; do
+            echo "nginx→backend not ready yet... ($retry_count/$max_retries)"
+            sleep 5
+            retry_count=$((retry_count + 1))
+          done
+          if [ $retry_count -eq $max_retries ]; then
+            echo "::error::End-to-end health check via nginx failed"
+            docker logs --tail 50 scholarship_nginx_prod
+            exit 1
+          fi
+          echo "✅ nginx → backend healthy"
+
+      - name: Smoke tests
+        run: |
+          curl -fsk "https://localhost/health" -H "Host: ${DOMAIN}" >/dev/null || exit 1
+          # /api/v1/docs is intentionally disabled when ENVIRONMENT=production
+          # (backend/app/main.py), and docker-compose.prod.yml hardcodes that on
+          # BOTH stages — smoke-test a real mounted API route instead.
+          curl -fsk "https://localhost/api/v1/scholarships" -H "Host: ${DOMAIN}" >/dev/null || exit 1
+          # Frontend through nginx
+          code=$(curl -sk -o /dev/null -w '%{http_code}' "https://localhost/" -H "Host: ${DOMAIN}")
+          [ "$code" = "200" ] || { echo "::error::Frontend returned $code"; exit 1; }
+          echo "✅ Smoke tests passed"
+
+      - name: Record successful deployment tag
+        if: success()
+        run: |
+          echo "${TAG}" > "${DEPLOY_DIR}/last-good-tag"
+          echo "Saved last-good tag: ${TAG}"
+
+      - name: Rollback to last-good deployment
+        if: failure()
+        run: |
+          cd "${DEPLOY_DIR}"
+          # Resolve step may itself have failed, leaving ENV_FILE unset.
+          ENV_FILE="${ENV_FILE:-${DEPLOY_DIR}/.env}"
+          if [ ! -f "${ENV_FILE}" ]; then
+            echo "::error::No usable env file (${ENV_FILE}) — cannot roll back automatically."
+            exit 1
+          fi
+          # last-good-tag is written ONLY by the success path above, so it
+          # always names a tag that actually passed health + smoke checks.
+          if [ -f last-good-tag ]; then
+            PREV_TAG=$(cat last-good-tag)
+            if [ "$PREV_TAG" = "$TAG" ]; then
+              echo "::error::last-good tag is '${PREV_TAG}', identical to the tag that just failed."
+              echo "::error::This happens when deploying the mutable 'latest' tag — rolling back"
+              echo "::error::would re-pull the same image. Redeploy an explicit older tag instead."
+              exit 1
+            fi
+            echo "::warning::Deploy of ${TAG} failed — rolling back to ${PREV_TAG}"
+            TAG=$PREV_TAG docker compose --env-file "${ENV_FILE}" up -d
+            sleep 15
+            if docker exec scholarship_backend_prod curl -fsS http://localhost:8000/health >/dev/null 2>&1; then
+              echo "::notice::Rollback to ${PREV_TAG} succeeded."
+            else
+              echo "::error::Rollback health check ALSO failed — manual intervention required."
+              echo "::error::If a migration was applied, evaluate 'alembic downgrade' or restore the latest backup (see DR runbook)."
+            fi
+          else
+            echo "::warning::No last-good-tag — cannot auto-rollback."
+          fi
+
+      - name: Deployment summary
+        if: success()
+        env:
+          DEPLOY_URL: ${{ vars.DEPLOY_URL }}
+        run: |
+          {
+            echo "## ✅ ${STAGE} deployment successful"
+            echo ""
+            echo "**Stage**: ${STAGE}"
+            echo "**Version**: ${TAG}"
+            echo "**URL**: ${DEPLOY_URL}"
+            echo "**Directory**: ${DEPLOY_DIR}"
+            echo "**Migrations**: $(docker exec scholarship_backend_prod alembic current 2>/dev/null | tail -1)"
+          } >> "$GITHUB_STEP_SUMMARY"

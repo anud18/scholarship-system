@@ -15,6 +15,7 @@ The `setting-env.yml` workflow now **focuses on system prerequisites and Docker 
 
 ## 📋 Table of Contents
 
+- [Environments：兩階段部署與核准閘門](#environments兩階段部署與核准閘門) ⭐ **先讀這個**
 - [Quick Start](#quick-start)
 - [Required Secrets](#required-secrets)
   - [Database VM SSH Access](#database-vm-ssh-access-secrets) ⭐ **Required for Docker setup**
@@ -29,6 +30,117 @@ The `setting-env.yml` workflow now **focuses on system prerequisites and Docker 
 - [Security Best Practices](#security-best-practices)
 - [Validation](#validating-secrets)
 - [Troubleshooting](#troubleshooting)
+
+---
+
+## Environments：兩階段部署與核准閘門
+
+`deploy.yml` 不再直接部署 production。它是一條**兩階段的 promotion pipeline**：
+
+```
+resolve-images ──▶ deploy-test ────────▶ deploy-production
+ (ubuntu-latest)   runner: [self-hosted,   runner: [self-hosted,
+                            linux, test]            linux, production]
+                   environment: test      environment: production
+                   🔒 需 1 位 reviewer 核准  🔒 需 1 位 reviewer 核准
+```
+
+- 同一個 GHCR image 先上 **test AP VM**，跑完 migration + health + smoke 全綠，
+  才輪到 **production AP VM**；`needs: deploy-test` 讓這個順序是結構性的，
+  test 失敗或被拒絕，production 那個 job 根本不會開始。
+- 兩階段共用同一份腳本（`deploy-stack.yml`），差別只有 **runner label** 與
+  **GitHub Environment**。test 因此是 production 的彩排，不是另一套流程。
+
+### 1. 建立兩個 Environment 並設定 reviewer（核准閘門）
+
+**這一步是 YAML 做不到的**：`environment:` 這個 key 本身不會擋任何東西，
+真正的核准規則在 repo 設定裡。沒設 reviewer 的話，兩個階段都會無人值守直接跑完。
+
+Settings → Environments → New environment，建立 `test` 與 `production`，各自：
+
+1. 勾選 **Required reviewers**，加入 **1 位** 有權限的成員（需求：一名 user 同意）。
+2. （建議）**Deployment branches**：限制成 `main`。
+3. （建議）取消勾選 "Allow administrators to bypass configured protection rules"，
+   否則 admin 可以略過核准。
+
+或用 CLI：
+
+```bash
+# <OWNER>/<PROD_REPO> 換成 production repo；<REVIEWER_USER_ID> 是數字 user id
+# （取得方式：gh api users/<LOGIN> --jq .id）
+for ENV in test production; do
+  gh api -X PUT "repos/<OWNER>/<PROD_REPO>/environments/$ENV" \
+    -F "wait_timer=0" \
+    -F "reviewers[][type]=User" -F "reviewers[][id]=<REVIEWER_USER_ID>" \
+    -F "deployment_branch_policy[protected_branches]=true" \
+    -F "deployment_branch_policy[custom_branch_policies]=false"
+done
+```
+
+核准流程：run 開始後停在 "Review deployments"，指定的 reviewer 在 Actions 頁面
+按 **Approve and deploy** 才會繼續。test 核准 → 跑完 → production 再要一次核准。
+
+`setting-env.yml` 也掛了同樣的 environment（它會改機器、寫 `.env`），
+所以它也要先被核准；`backup.yml` / `health-check.yml` 是排程執行、只讀或只寫備份，
+**刻意不掛** environment —— 掛了會卡在等人核准，排程等於失效。
+
+### 2. test 與 production 用不同的 env variable
+
+值放在 **Environment secrets / variables**，不是 repository 層：
+
+| 放在哪 | 內容 | 誰讀得到 |
+|--------|------|----------|
+| Repository secrets | **production 的值** | 所有 workflow（含沒掛 environment 的 `backup.yml`、`health-check.yml`） |
+| Environment `production` | 可留空，fallback 到 repository 層 | `deploy.yml` 的 production 階段、`setting-env.yml`(production) |
+| Environment `test` | **測試環境的值，下面清單要全部各設一份** | `deploy.yml` 的 test 階段、`setting-env.yml`(test) |
+
+> ⚠️ **fallback 陷阱**：environment 沒定義的 secret 會自動往上抓 repository 層的值。
+> 也就是說 `test` environment 少設一個 `DB_HOST`，test 部署就會連上 **production 的
+> 資料庫**，而且不會有任何錯誤訊息。
+
+`test` environment 必須各自設定的 secret（值與 production 不同）：
+
+```
+DOMAIN  SECRET_KEY  CORS_ORIGINS
+DB_HOST  DB_PORT  DB_USER  DB_PASSWORD  DB_NAME
+REDIS_PASSWORD
+MINIO_HOST  MINIO_PORT  MINIO_ACCESS_KEY  MINIO_SECRET_KEY  MINIO_BUCKET_NAME  MINIO_SECURE
+PII_ENCRYPTION_KEYS  PII_ENCRYPTION_ACTIVE_VERSION
+SMTP_HOST  SMTP_PORT  SMTP_USER  SMTP_PASSWORD  EMAIL_FROM  EMAIL_FROM_NAME
+PORTAL_JWT_SERVER_URL  STUDENT_API_BASE_URL  NEXT_PUBLIC_NYCU_PORTAL_URL
+SUPER_ADMIN_NYCU_ID
+```
+
+`SECRET_KEY` 與 `PII_ENCRYPTION_KEYS` **絕對不要兩邊共用**：共用的 `SECRET_KEY`
+等於 test 簽出來的 token 可以拿去打 production；共用的 PII 金鑰則讓測試資料庫
+的備份足以解開正式個資。
+
+環境變數（Variables，不是 secret）：
+
+| Variable | `test` | `production` | 作用 |
+|----------|--------|--------------|------|
+| `DEPLOY_STAGE` | `test` | `production` | 防呆：environment 自報身分，對不上就拒絕部署 |
+| `EXPECT_DOMAIN` | 測試網域 | 正式網域 | 防呆：比對 `secrets.DOMAIN`，抓漏設的 fallback |
+| `EXPECT_DB_HOST` | 測試 DB 位址 | 正式 DB 位址 | 防呆：比對 `secrets.DB_HOST` |
+| `DEPLOY_URL` | `https://ss-test.aa.nycu.edu.tw` | `https://ss.aa.nycu.edu.tw` | Environment 頁面顯示的連結 |
+| `SSL_CERT_DIR` | 選填 | 選填 | 該台 VM 上的憑證目錄 |
+| `ENV_FILE` | 選填 | 選填 | 該台 VM 上 operator 自管的 `.env` 路徑 |
+
+`DEPLOY_STAGE` / `EXPECT_DOMAIN` / `EXPECT_DB_HOST` 在 test 是**必填**：
+deploy 的第一個步驟（Assert stage identity，跑在 checkout 之前）會比對它們，
+一旦 `test` environment 漏設 secret 而 fallback 到 production 的值，這一步就會
+直接失敗，還沒碰到任何 container。
+
+### 3. 兩台 runner 的 label
+
+| VM | labels | bootstrap 指令 |
+|----|--------|----------------|
+| test AP VM | `self-hosted,linux,test` | `./bootstrap-ap-runner.sh --repo-url … --token … --stage test` |
+| production AP VM | `self-hosted,linux,production` | `./bootstrap-ap-runner.sh --repo-url … --token … --stage production` |
+
+兩台都會有 `self-hosted` 與 `linux`，**stage label 是唯一能分辨的依據**。
+`bootstrap-ap-runner.sh --stage` 是必填參數，且會擋掉「`--labels` 沒有含 stage label」
+這種註冊完卻永遠收不到 job 的情況。
 
 ---
 
