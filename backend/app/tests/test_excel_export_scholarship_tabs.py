@@ -127,6 +127,18 @@ def test_sheet_label_sub_type_without_year(service):
     assert service._get_scholarship_sheet_label(item) == "教育部(5000)"
 
 
+def test_sheet_label_falls_back_to_roster_year_when_item_year_null(service):
+    """Monthly/legacy path leaves item.allocation_year NULL — the label must
+    fall back to the roster's academic_year (same semantics as 查看名單's
+    `_roster_item_dict_with_display_year`), so每個年度各自成頁."""
+    unallocated = _make_item(allocated_sub_type="nstc", allocation_year=None)
+    borrowed = _make_item(allocated_sub_type="nstc", allocation_year=113)
+
+    assert service._get_scholarship_sheet_label(unallocated, 114) == "114年 國科會"
+    # An explicit prior-year snapshot must NOT be overwritten by the fallback
+    assert service._get_scholarship_sheet_label(borrowed, 114) == "113年 國科會"
+
+
 def test_sheet_label_falls_back_to_scholarship_name(service):
     item = _make_item(allocated_sub_type=None, scholarship_name="逕博獎學金")
     assert service._get_scholarship_sheet_label(item) == "逕博獎學金"
@@ -269,6 +281,30 @@ def test_export_statistics_sheet_stays_last(service, tmp_path):
 
     assert wb.sheetnames[-1] == "造冊資訊"
     assert "114年 國科會" in wb.sheetnames
+
+
+def test_export_splits_nstc_per_year_even_without_allocation_snapshot(service, tmp_path):
+    """Regression (user report): a roster mixing current-year rows
+    (allocation_year=NULL — the normal generation path) with prior-year-quota
+    rows (allocation_year=113) must yield SEPARATE 國科會 tabs per year.
+    Before the fallback, NULL-year rows rendered a year-less「國科會」tab and
+    every year collapsed into it."""
+    items = [
+        _make_item(student_id_number="A1", student_name="甲", allocated_sub_type="nstc", allocation_year=None),
+        _make_item(student_id_number="A2", student_name="乙", allocated_sub_type="nstc", allocation_year=113),
+        _make_item(student_id_number="A3", student_name="丙", allocated_sub_type="nstc", allocation_year=None),
+    ]
+
+    wb = _export(service, tmp_path, items, include_statistics=False)
+
+    assert wb.sheetnames == ["印領清冊", "114年 國科會", "113年 國科會"]
+    ws114, ws113 = wb["114年 國科會"], wb["113年 國科會"]
+    assert sorted(ws114.cell(row=r, column=2).value for r in range(2, ws114.max_row + 1)) == ["丙", "甲"]
+    assert [ws113.cell(row=r, column=2).value for r in range(2, ws113.max_row + 1)] == ["乙"]
+    # The 分發獎學金 column shows the same resolved year as the tab
+    header = [c.value for c in ws114[1]]
+    alloc_col = header.index("分發獎學金") + 1
+    assert ws114.cell(row=2, column=alloc_col).value == "114年 國科會"
 
 
 def test_scholarship_named_like_statistics_sheet_cannot_take_its_title(service, tmp_path):

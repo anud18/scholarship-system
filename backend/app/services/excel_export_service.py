@@ -278,9 +278,12 @@ class ExcelExportService:
             # 準備Excel資料 + 上色 metadata
             excel_data, cell_fills = self._prepare_excel_data(roster, roster_items, rule_columns)
 
-            # 每列所屬獎學金分頁標籤（與 excel_data 平行；同一筆略過條件）
+            # 每列所屬獎學金分頁標籤（與 excel_data 平行；同一筆略過條件）。
+            # 年度後備取 roster.academic_year — 未快照 allocation_year 的列
+            # 才能標上年度、與 prior-year 配額列分開成頁。
+            roster_year = getattr(roster, "academic_year", None)
             scholarship_labels = [
-                self._get_scholarship_sheet_label(item)
+                self._get_scholarship_sheet_label(item, roster_year)
                 for item in roster_items
                 if self._has_required_export_fields(item)
             ]
@@ -498,13 +501,20 @@ class ExcelExportService:
         return self.template_path
 
     @staticmethod
-    def _format_allocation_display(item: PaymentRosterItem) -> str:
-        """Format allocated sub-type + year for Excel display"""
+    def _format_allocation_display(item: PaymentRosterItem, fallback_year: Optional[int] = None) -> str:
+        """Format allocated sub-type + year for Excel display.
+
+        fallback_year：item.allocation_year 只有手動分發路徑會快照（記錄消耗的
+        prior-year 配額）；月結/一般產生路徑為 NULL。傳入 roster.academic_year
+        作為後備，讓每列都標得出消耗的是哪個年度的配額 — 與 查看名單 的
+        `_roster_item_dict_with_display_year` 同一套語意。
+        """
         if not item.allocated_sub_type:
             return ""
         display = SUB_TYPE_SHORT_LABELS.get(item.allocated_sub_type, item.allocated_sub_type)
-        if item.allocation_year:
-            return f"{item.allocation_year}年 {display}"
+        year = item.allocation_year or fallback_year
+        if year:
+            return f"{year}年 {display}"
         return display
 
     @staticmethod
@@ -513,14 +523,17 @@ class ExcelExportService:
         共用，確保分頁標籤列表與 excel_data 保持平行。"""
         return bool(item.student_id_number and item.student_name)
 
-    def _get_scholarship_sheet_label(self, item: PaymentRosterItem) -> str:
+    def _get_scholarship_sheet_label(self, item: PaymentRosterItem, fallback_year: Optional[int] = None) -> str:
         """該列所屬的獎學金分頁標籤。
 
         有分發快照時用「{年度}年 {子類型}」（與「分發獎學金」欄同字串，
-        e.g.「114年 國科會」）；無分發子類型的獎學金退回 scholarship_name。
+        e.g.「114年 國科會」）；年度取 allocation_year，未快照時退回
+        fallback_year（roster.academic_year），確保各年度各自成頁
+        （「113年 國科會」與「114年 國科會」是不同分頁）。
+        無分發子類型的獎學金退回 scholarship_name。
         """
         if item.allocated_sub_type:
-            return self._format_allocation_display(item)
+            return self._format_allocation_display(item, fallback_year)
         return item.scholarship_name or "未分類"
 
     def _get_filtered_roster_items(self, roster: PaymentRoster, include_excluded: bool) -> List[PaymentRosterItem]:
@@ -542,6 +555,8 @@ class ExcelExportService:
         rule_columns = rule_columns or []
         # 預先算好每欄的快照鍵，避免逐列重建 f"rule_{rid}"
         rule_lookup = [(header, f"rule_{rid}") for rid, header in rule_columns]
+        # 分發年度顯示後備（與分頁標籤、查看名單同語意）
+        roster_year = getattr(roster, "academic_year", None)
         excel_data: List[Dict] = []
         cell_fills: List[Dict[str, str]] = []
 
@@ -565,7 +580,7 @@ class ExcelExportService:
             if item.application_identity:
                 remarks_parts.append(f"身分:{item.application_identity}")
             if item.allocated_sub_type:
-                remarks_parts.append(f"分發:{self._format_allocation_display(item)}")
+                remarks_parts.append(f"分發:{self._format_allocation_display(item, roster_year)}")
             if not item.is_included:
                 remarks_parts.append("狀態:不合格")
             if not item.bank_account:
@@ -622,8 +637,8 @@ class ExcelExportService:
                 "居留天數是否滿183天(是/否)": "是",
                 # 29. 申請身分 (快照欄位)
                 "申請身分": item.application_identity or "",
-                # 30. 分發獎學金 (快照欄位)
-                "分發獎學金": self._format_allocation_display(item),
+                # 30. 分發獎學金 (快照欄位；年度未快照時以 roster 年度顯示)
+                "分發獎學金": self._format_allocation_display(item, roster_year),
             }
 
             fills: Dict[str, str] = {}
