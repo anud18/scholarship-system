@@ -1,3 +1,21 @@
+---
+# Fortify SAST scan.
+#
+# This used to call the reusable NYCUITSC/fortifyscan workflow
+# (fortify-multi-language-scan.yml@main), but that workflow's Python path never
+# runs a Fortify *translation*: it only wraps `pip install` in sourceanalyzer
+# and relies on the build tool to report source files, which pip does not do.
+# With no root-level requirements.txt (ours lives in backend/) it does not even
+# do that, so `sourceanalyzer -b <id> -scan` fails with
+# "Unable to load build session with ID" and no .fpr is produced.
+#
+# We therefore run the scan inline here, translating backend/**/*.py directly.
+# The reusable workflow takes no inputs, so this cannot be fixed from the caller
+# side; if fortifyscan gains a working Python path we can switch back.
+#
+# Requires the self-hosted Windows Fortify runner (sourceanalyzer and
+# BIRTReportGenerator on PATH).
+
 name: Fortify Scan
 
 on:
@@ -9,4 +27,74 @@ on:
 
 jobs:
   fortify:
-    uses: NYCUITSC/fortifyscan/.github/workflows/fortify-multi-language-scan.yml@main
+    runs-on: [self-hosted, Windows, X64]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Fortify SCA scan (python)
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $PROJECT_NAME = "${{ github.event.repository.name }}"
+          $BUILD_ID = "${PROJECT_NAME}_python_build"
+
+          if ("${{ github.event_name }}" -eq "pull_request") {
+              $SUFFIX = "python_PR_${{ github.event.number }}"
+          } else {
+              $SUFFIX = "python_main"
+          }
+
+          $FPR_NAME = "${PROJECT_NAME}_${SUFFIX}.fpr"
+          $DEV_WORKBOOK_PDF = "${PROJECT_NAME}_${SUFFIX}_DeveloperWorkbook_BIRT.pdf"
+          $OWASP_2021_PDF = "${PROJECT_NAME}_${SUFFIX}_OWASP_Top10_2021_BIRT.pdf"
+
+          sourceanalyzer -b $BUILD_ID -clean
+
+          # Translation. Source-based scan: no dependency install, which keeps
+          # the runner clean and is enough for Fortify's Python front end.
+          sourceanalyzer -b $BUILD_ID -python-version 3 `
+            -exclude "backend/alembic/versions/**/*.py" `
+            "backend/**/*.py"
+          if ($LASTEXITCODE -ne 0) {
+              Write-Error "Fortify translation failed (exit $LASTEXITCODE)."
+              exit 1
+          }
+
+          # Fail loudly instead of letting -scan die on an empty build session.
+          $translated = sourceanalyzer -b $BUILD_ID -show-files
+          if (-not $translated) {
+              Write-Error "No files were translated into build session $BUILD_ID."
+              exit 1
+          }
+          Write-Host "Translated $($translated.Count) file(s)."
+
+          sourceanalyzer -b $BUILD_ID -scan -f $FPR_NAME
+          if ($LASTEXITCODE -ne 0) {
+              Write-Error "Fortify scan failed (exit $LASTEXITCODE)."
+              exit 1
+          }
+          if (-not (Test-Path $FPR_NAME)) {
+              Write-Error "Scan finished but $FPR_NAME was not produced."
+              exit 1
+          }
+
+          BIRTReportGenerator -template "Developer Workbook" `
+            -source $FPR_NAME -format PDF -output $DEV_WORKBOOK_PDF
+          BIRTReportGenerator -template "OWASP Top 10" `
+            -source $FPR_NAME -format PDF --Version "OWASP Top 10 2021" `
+            -output $OWASP_2021_PDF
+
+          "FPR_NAME=$FPR_NAME" >> $env:GITHUB_ENV
+          "DEV_WORKBOOK_PDF=$DEV_WORKBOOK_PDF" >> $env:GITHUB_ENV
+          "OWASP_2021_PDF=$OWASP_2021_PDF" >> $env:GITHUB_ENV
+
+      - name: Upload Fortify results
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.repository.name }}-python-${{ github.event_name }}-birt-reports
+          path: |
+            ${{ env.FPR_NAME }}
+            ${{ env.DEV_WORKBOOK_PDF }}
+            ${{ env.OWASP_2021_PDF }}
