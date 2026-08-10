@@ -66,6 +66,10 @@ class ExcelExportService:
     # Excel 工作表名稱不允許的字元（openpyxl 會直接 raise）
     _SHEET_TITLE_INVALID_CHARS = re.compile(r"[\[\]:*?/\\]")
 
+    # 統計資訊工作表名稱 — 保留字：獎學金分頁不得占用（否則 openpyxl 會默默把
+    # 統計頁改名成「造冊資訊1」，兩頁身分互換造成混淆）。
+    STATISTICS_SHEET_TITLE = "造冊資訊"
+
     # 需千分位數字格式的欄位（皆為金額欄）
     NUMERIC_FORMAT_COLUMNS = frozenset({"單價", "免稅給付"})
 
@@ -883,7 +887,9 @@ class ExcelExportService:
             rows.append(row_data)
             row_fills.append(fills)
 
-        used_titles = {sheet.title for sheet in wb.worksheets}
+        # 現有工作表 + 統計頁保留字 — 統計頁在此之後才建立，先占住名稱，
+        # 避免同名獎學金分頁把它擠成「造冊資訊1」。
+        used_titles = {sheet.title for sheet in wb.worksheets} | {self.STATISTICS_SHEET_TITLE}
         for label in sorted(groups, key=self._scholarship_sheet_order):
             rows, row_fills = groups[label]
             ws = wb.create_sheet(self._safe_sheet_title(label, used_titles))
@@ -989,7 +995,7 @@ class ExcelExportService:
 
     def _add_worksheet_info(self, wb: Workbook, roster: PaymentRoster):
         """加入工作表資訊"""
-        info_ws = wb.create_sheet("造冊資訊")
+        info_ws = wb.create_sheet(self.STATISTICS_SHEET_TITLE)
 
         info_data = [
             ["造冊代碼", roster.roster_code],

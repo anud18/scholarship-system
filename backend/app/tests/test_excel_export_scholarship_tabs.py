@@ -271,6 +271,24 @@ def test_export_statistics_sheet_stays_last(service, tmp_path):
     assert "114年 國科會" in wb.sheetnames
 
 
+def test_scholarship_named_like_statistics_sheet_cannot_take_its_title(service, tmp_path):
+    """A scholarship whose name collides with the reserved 造冊資訊 title must
+    NOT squat on it — openpyxl would then silently rename the real statistics
+    sheet to 造冊資訊1, swapping the two sheets' identities. The reservation in
+    `_add_scholarship_sheets` forces the scholarship tab to 造冊資訊(2) and the
+    statistics sheet keeps its canonical name (and stays last)."""
+    items = [
+        _make_item(student_id_number="A1", student_name="甲", allocated_sub_type=None, scholarship_name="造冊資訊")
+    ]
+
+    wb = _export(service, tmp_path, items, include_statistics=True)
+
+    assert wb.sheetnames == ["印領清冊", "造冊資訊(2)", "造冊資訊"]
+    # The real statistics sheet is the label/value page, not a roster page
+    assert wb["造冊資訊"].cell(row=1, column=1).value == "造冊代碼"
+    assert wb["造冊資訊(2)"].cell(row=2, column=2).value == "甲"
+
+
 def test_export_skipped_invalid_rows_keep_labels_parallel(service, tmp_path):
     """A row dropped for missing 身分證字號 must also be dropped from the
     label list (shared `_has_required_export_fields` predicate) — otherwise
