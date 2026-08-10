@@ -24,6 +24,12 @@ on:
         type: boolean
         default: false
 
+      security_reports:
+        description: '產生本次版本的資安報告（ZAP baseline + CodeQL PDF）並附到 production PR'
+        required: false
+        type: boolean
+        default: true
+
 # SECURITY: Limit GITHUB_TOKEN permissions to minimum required
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
@@ -32,11 +38,49 @@ permissions:
   contents: write  # Need write for creating/updating production branch
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Security evidence for the exact commit being shipped.
+  #
+  # These run IN PARALLEL with sync-to-production rather than gating it: a scan
+  # takes tens of minutes, and blocking the mirror on it would make releases
+  # slow without making them safer (nothing here is a merge gate — the reports
+  # are evidence attached to the PR for a human to read).
+  #
+  # They are also deliberately NOT `needs`-ed by the sync job, so a scanner
+  # hiccup can never block a release. attach-security-reports below runs with
+  # `always()` and reports honestly if a scan failed or was skipped.
+  # ---------------------------------------------------------------------------
+  zap-report:
+    name: ZAP baseline report
+    if: github.event_name == 'workflow_dispatch' && inputs.security_reports
+    uses: ./.github/workflows/zap-report.yml
+    with:
+      ref: ${{ github.sha }}
+    permissions:
+      contents: read
+
+  codeql-report:
+    name: CodeQL PDF report
+    if: github.event_name == 'workflow_dispatch' && inputs.security_reports
+    uses: ./.github/workflows/sarif-to-pdf.yml
+    with:
+      # Report on the commit being mirrored, not merely the newest scan.
+      sha: ${{ github.sha }}
+    permissions:
+      actions: read
+      contents: read
+
   sync-to-production:
     name: Sync to Production Repository
     runs-on: ubuntu-latest
     # Only run if secrets are configured
     if: github.event_name == 'workflow_dispatch'
+    # Consumed by attach-security-reports so it can comment the evidence onto
+    # the PR this job created.
+    outputs:
+      pr_url: ${{ steps.create-pr.outputs.pr_url }}
+      version: ${{ steps.version.outputs.version }}
+      temp_branch: ${{ steps.push-temp.outputs.temp_branch }}
 
     steps:
       - name: Checkout repository
@@ -1080,3 +1124,102 @@ jobs:
           git remote remove prod-repo 2>/dev/null || true
 
           echo "::notice::Cleanup completed"
+
+  # ---------------------------------------------------------------------------
+  # Attach the security evidence to the production PR.
+  #
+  # `always()` on purpose: if a scan failed, timed out or was skipped, the PR
+  # should say so explicitly. Silence would read as "scanned and clean", which
+  # is the one outcome we must never imply by accident.
+  # ---------------------------------------------------------------------------
+  attach-security-reports:
+    name: Attach security reports to production PR
+    runs-on: ubuntu-latest
+    needs: [sync-to-production, zap-report, codeql-report]
+    if: always() && needs.sync-to-production.result == 'success' && inputs.security_reports
+    permissions:
+      contents: read
+
+    steps:
+      - name: Compose and post report comment
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          PR_URL: ${{ needs.sync-to-production.outputs.pr_url }}
+          VERSION: ${{ needs.sync-to-production.outputs.version }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT_SHA: ${{ github.sha }}
+
+          ZAP_RESULT: ${{ needs.zap-report.result }}
+          ZAP_HIGH: ${{ needs.zap-report.outputs.high }}
+          ZAP_MEDIUM: ${{ needs.zap-report.outputs.medium }}
+          ZAP_LOW: ${{ needs.zap-report.outputs.low }}
+          ZAP_ARTIFACT: ${{ needs.zap-report.outputs.artifact }}
+
+          CODEQL_RESULT: ${{ needs.codeql-report.result }}
+          CODEQL_TOTAL: ${{ needs.codeql-report.outputs.total }}
+          CODEQL_CRITICAL: ${{ needs.codeql-report.outputs.critical }}
+          CODEQL_HIGH: ${{ needs.codeql-report.outputs.high }}
+          CODEQL_MEDIUM: ${{ needs.codeql-report.outputs.medium }}
+          CODEQL_ARTIFACT: ${{ needs.codeql-report.outputs.artifact }}
+          CODEQL_SHA_MATCHED: ${{ needs.codeql-report.outputs.sha_matched }}
+          CODEQL_RESOLVED_SHA: ${{ needs.codeql-report.outputs.resolved_sha }}
+        run: |
+          set -euo pipefail
+
+          # Renders one row per scanner. A non-success result becomes a visible
+          # "未產出" row rather than a missing row.
+          row() {  # $1 name, $2 result, $3 detail
+            case "$2" in
+              success) echo "| $1 | ✅ 已產出 | $3 |" ;;
+              skipped) echo "| $1 | ⏭️ 已略過 | 本次未執行 |" ;;
+              *)       echo "| $1 | ❌ 未產出（\`$2\`）| 請查看 workflow run |" ;;
+            esac
+          }
+
+          {
+            echo "## 🔐 本版本資安報告 (${VERSION})"
+            echo ""
+            echo "受測 commit：\`${COMMIT_SHA}\`"
+            echo ""
+            echo "| 報告 | 狀態 | 結果 |"
+            echo "|---|---|---|"
+            row "OWASP ZAP (baseline)" "${ZAP_RESULT}" \
+                "High **${ZAP_HIGH:-?}** / Medium **${ZAP_MEDIUM:-?}** / Low ${ZAP_LOW:-?}"
+            row "CodeQL" "${CODEQL_RESULT}" \
+                "Critical **${CODEQL_CRITICAL:-?}** / High **${CODEQL_HIGH:-?}** / Medium ${CODEQL_MEDIUM:-?}（共 ${CODEQL_TOTAL:-?}）"
+            echo ""
+            echo "📥 **下載**（於來源 repo 的 workflow run artifacts）："
+            echo "- [${RUN_URL}](${RUN_URL})"
+            if [ "${ZAP_RESULT}" = "success" ]; then
+              echo "  - ZAP：\`${ZAP_ARTIFACT}\`（PDF / HTML / JSON / MD）"
+            fi
+            if [ "${CODEQL_RESULT}" = "success" ]; then
+              echo "  - CodeQL：\`${CODEQL_ARTIFACT}\`（PDF）"
+            fi
+            echo ""
+
+            if [ "${CODEQL_RESULT}" = "success" ] && [ "${CODEQL_SHA_MATCHED}" != "true" ]; then
+              echo "> ⚠️ **CodeQL 報告並非本 commit**：找不到 \`${COMMIT_SHA}\` 的成功 CodeQL run，"
+              echo "> 報告內容對應的是 \`${CODEQL_RESOLVED_SHA}\`。合併前請確認差異。"
+              echo ""
+            fi
+
+            echo "### 判讀須知"
+            echo ""
+            echo "ZAP 為 **baseline（被動）** 掃描：**不送攻擊 payload、未認證**，"
+            echo "因此不涵蓋 SQLi／XSS／指令注入，也未涵蓋登入後的功能。"
+            echo "**「0 findings」代表「被動掃描未發現」，不等於「已完整測試且安全」。**"
+            echo "完整限制說明在 PDF 內；認證後的主動掃描見來源 repo 的 \`security/zap/\`。"
+          } > /tmp/security-comment.md
+
+          cat /tmp/security-comment.md >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -z "${PR_URL}" ]; then
+            echo "::warning::No production PR URL available; security summary written to the job summary only."
+            exit 0
+          fi
+
+          # The URL fully identifies the target repo; passing --repo as well is
+          # redundant and gh treats the two as competing selectors.
+          gh pr comment "${PR_URL}" --body-file /tmp/security-comment.md
+          echo "::notice::✅ Security report summary posted to ${PR_URL}"

@@ -157,6 +157,39 @@ Trigger a sync manually from GitHub UI:
    - Force push: ☐ (usually not needed)
 5. Click **"Run workflow"**
 
+## 🔐 版本資安報告（ZAP + CodeQL）
+
+每次同步預設會為**本次要上線的 commit** 產生兩份報告，並把摘要留言到 production PR 上。
+由 `security_reports` 這個 input 控制（預設開啟；不需要時取消勾選即可）。
+
+| 報告 | 產生方式 | 內容 |
+|---|---|---|
+| **OWASP ZAP (baseline)** | `.github/workflows/zap-report.yml` | 在 runner 內啟動整套 stack，掃描**正式環境組態的前端**（`frontend/Dockerfile` → `next start`，:3100）與**後端 API**（:8000） |
+| **CodeQL** | `.github/workflows/sarif-to-pdf.yml` | 取用該 commit 的 CodeQL run SARIF，產生 PDF |
+
+兩者皆輸出 PDF（另含 HTML/JSON/MD），存放於**來源 repo** 該次 workflow run 的 artifacts，
+保留 90 天。production PR 上的留言會帶上各風險等級的數量與下載連結。
+
+**設計上的幾個取捨：**
+
+- **不阻擋發布**：兩個掃描與 `sync-to-production` **並行**執行，且刻意不被 `needs` 依賴。
+  掃描要跑數十分鐘，拿它擋住 mirror 只會讓發布變慢而不會更安全——這些報告是給人看的佐證，
+  不是 merge gate。掃描失敗或被略過時，留言會**明確寫出來**（不會靜默省略，
+  以免被誤讀成「掃過了而且沒問題」）。
+- **報告以 commit SHA 命名**，不是版本號：版本號是在 `sync-to-production` 內部算出來的，
+  並行的掃描 job 拿不到。SHA 不會有歧義，版本號則會出現在 PR 留言裡。
+- **CodeQL 對不上該 commit 時會警告**：若找不到該 SHA 的成功 CodeQL run，
+  會退回最近一次成功的 run，並在留言中標明「此報告並非本 commit」。
+- **ZAP 只掃正式組態前端 + 後端**：開發模式前端的 CSP 是為了 Turbopack HMR 刻意放寬的
+  （`unsafe-eval` / `unsafe-inline`），掃它只會產生正式環境不可能出現的 Medium 告警。
+
+⚠️ **ZAP baseline 是被動掃描**：不送攻擊 payload、未認證，因此**不涵蓋 SQLi / XSS / 指令注入**，
+也不涵蓋登入後的功能。**「0 findings」代表「被動掃描未發現」，不等於「已完整測試且安全」。**
+完整限制寫在 PDF 內。需要認證後的主動掃描時，見 `security/zap/`（需可拋棄的測試資料庫）。
+
+兩個 workflow 也都可以單獨手動執行（Actions → 選擇該 workflow → Run workflow），
+用於重新產生某個版本的報告。
+
 ## 💾 Squash Commits 機制
 
 ### 概述
