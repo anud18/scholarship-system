@@ -825,7 +825,15 @@ class ExcelExportService:
             self._write_sheet(ws, excel_data, cell_fills, columns, include_header)
 
             if scholarship_labels is not None:
-                self._add_scholarship_sheets(wb, excel_data, cell_fills, scholarship_labels, columns, include_header)
+                self._add_scholarship_sheets(
+                    wb,
+                    excel_data,
+                    cell_fills,
+                    scholarship_labels,
+                    columns,
+                    include_header,
+                    reserve_statistics_title=include_statistics,
+                )
 
             if include_statistics:
                 self._add_worksheet_info(wb, roster)
@@ -890,6 +898,8 @@ class ExcelExportService:
         scholarship_labels: List[str],
         columns: List[str],
         include_header: bool,
+        *,
+        reserve_statistics_title: bool = True,
     ):
         """每個獎學金各建一個分頁，內容為該獎學金的名單。
 
@@ -903,8 +913,11 @@ class ExcelExportService:
             row_fills.append(fills)
 
         # 現有工作表 + 統計頁保留字 — 統計頁在此之後才建立，先占住名稱，
-        # 避免同名獎學金分頁把它擠成「造冊資訊1」。
-        used_titles = {sheet.title for sheet in wb.worksheets} | {self.STATISTICS_SHEET_TITLE}
+        # 避免同名獎學金分頁把它擠成「造冊資訊1」。統計頁被關掉
+        # （include_statistics=False）時不保留，否則會產生沒有 (1) 的 (2) 分頁。
+        used_titles = {sheet.title for sheet in wb.worksheets}
+        if reserve_statistics_title:
+            used_titles.add(self.STATISTICS_SHEET_TITLE)
         for label in sorted(groups, key=self._scholarship_sheet_order):
             rows, row_fills = groups[label]
             ws = wb.create_sheet(self._safe_sheet_title(label, used_titles))

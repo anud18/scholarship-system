@@ -325,6 +325,21 @@ def test_scholarship_named_like_statistics_sheet_cannot_take_its_title(service, 
     assert wb["造冊資訊(2)"].cell(row=2, column=2).value == "甲"
 
 
+def test_statistics_title_not_reserved_when_statistics_disabled(service, tmp_path):
+    """include_statistics=False (client-settable via the export endpoint) means
+    no statistics sheet exists — the reservation must not apply, or the
+    scholarship tab would be named 造冊資訊(2) with no 造冊資訊 anywhere,
+    reading as a lost sheet."""
+    items = [
+        _make_item(student_id_number="A1", student_name="甲", allocated_sub_type=None, scholarship_name="造冊資訊")
+    ]
+
+    wb = _export(service, tmp_path, items, include_statistics=False)
+
+    assert wb.sheetnames == ["印領清冊", "造冊資訊"]
+    assert wb["造冊資訊"].cell(row=2, column=2).value == "甲"
+
+
 def test_export_skipped_invalid_rows_keep_labels_parallel(service, tmp_path):
     """A row dropped for missing 身分證字號 must also be dropped from the
     label list (shared `_has_required_export_fields` predicate) — otherwise
