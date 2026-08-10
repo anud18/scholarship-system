@@ -45,9 +45,12 @@ resolve-images ──▶ deploy-test ────────▶ deploy-producti
                    🔒 需 1 位 reviewer 核准  🔒 需 1 位 reviewer 核准
 ```
 
-- 同一個 GHCR image 先上 **test AP VM**，跑完 migration + health + smoke 全綠，
-  才輪到 **production AP VM**；`needs: deploy-test` 讓這個順序是結構性的，
-  test 失敗或被拒絕，production 那個 job 根本不會開始。
+- 同一個 GHCR image 一律先上 **test AP VM**，跑完 migration + health + smoke，
+  才輪到 **production AP VM**。順序是結構性的（`needs: deploy-test`）。
+- **但 test 失敗不會否決 production**：production 段仍然會跳出自己的核准要求，
+  reviewer 看著 test 的結果自行判斷要不要放行。test tier 有它自己會壞的理由
+  （它的 DB、憑證、portal），那些不該卡住 production 的 hotfix。真正會否決的只有
+  `resolve-images` —— 沒解析出 tag 就沒東西可部署。
 - 兩階段共用同一份腳本（`deploy-stack.yml`），差別只有 **runner label** 與
   **GitHub Environment**。test 因此是 production 的彩排，不是另一套流程。
 
@@ -122,9 +125,13 @@ SUPER_ADMIN_NYCU_ID
 | `DEPLOY_STAGE` | `test` | `production` | 防呆：environment 自報身分，對不上就拒絕部署 |
 | `EXPECT_DOMAIN` | 測試網域 | 正式網域 | 防呆：比對 `secrets.DOMAIN`，抓漏設的 fallback |
 | `EXPECT_DB_HOST` | 測試 DB 位址 | 正式 DB 位址 | 防呆：比對 `secrets.DB_HOST` |
-| `DEPLOY_URL` | `https://ss-test.aa.nycu.edu.tw` | `https://ss.aa.nycu.edu.tw` | Environment 頁面顯示的連結 |
+| `DEPLOY_URL` | `https://<測試站網域>` | `https://<正式站網域>` | Environment 頁面顯示的連結 |
 | `SSL_CERT_DIR` | 選填 | 選填 | 該台 VM 上的憑證目錄 |
 | `ENV_FILE` | 選填 | 選填 | 該台 VM 上 operator 自管的 `.env` 路徑 |
+| `FORBIDDEN_MARKERS` | 選填（設在 repository 層即可） | 同左 | 空白分隔的字串清單，只會出現在非正式值裡（測試網域、測試寄件者……）。production 段只要有任一 secret 命中就拒絕部署；不設就跳過這項檢查 |
+
+`FORBIDDEN_MARKERS` 取代了以前寫死在 workflow 裡的站台字串（測試網域、`測試` 寄件者
+名稱等）—— 這份模板會被 mirror 進 production repo，不該帶著站台自己的主機名。
 
 `DEPLOY_STAGE` / `EXPECT_DOMAIN` / `EXPECT_DB_HOST` 在 test 是**必填**：
 deploy 的第一個步驟（Assert stage identity，跑在 checkout 之前）會比對它們，
@@ -175,7 +182,7 @@ These secrets configure the connection from AP VM to the PostgreSQL database on 
 
 | Secret Name | Description | Example Value | Required |
 |-------------|-------------|---------------|----------|
-| `DB_HOST` | Database VM hostname or IP address | `10.0.1.100` or `db.internal.nycu.edu.tw` | ✅ Yes |
+| `DB_HOST` | Database VM hostname or IP address | `10.x.x.x` or `db.internal.<your-domain>` | ✅ Yes |
 | `DB_PORT` | PostgreSQL port | `5432` | ⚠️ Optional (default: 5432) |
 | `DB_USER` | PostgreSQL username | `scholarship_user` or `scholar` | ✅ Yes |
 | `DB_PASSWORD` | PostgreSQL password | `SecureP@ssw0rd123456` | ✅ Yes |
@@ -379,7 +386,7 @@ These secrets configure the connection from AP VM to MinIO object storage on DB 
 
 | Secret Name | Description | Example Value | Required |
 |-------------|-------------|---------------|----------|
-| `MINIO_HOST` | MinIO VM hostname or IP | `10.0.1.100` or `minio.internal.nycu.edu.tw` | ✅ Yes |
+| `MINIO_HOST` | MinIO VM hostname or IP | `10.x.x.x` or `minio.internal.<your-domain>` | ✅ Yes |
 | `MINIO_PORT` | MinIO API port | `9000` | ⚠️ Optional (default: 9000) |
 | `MINIO_ROOT_USER` | MinIO admin username | `minioadmin` | ✅ Yes |
 | `MINIO_ROOT_PASSWORD` | MinIO admin password | `MinIO@Secure2024!` | ✅ Yes |
@@ -474,11 +481,11 @@ These secrets configure SMTP for sending system emails (notifications, password 
 
 | Secret Name | Description | Example Value | Required |
 |-------------|-------------|---------------|----------|
-| `SMTP_HOST` | SMTP server hostname | `smtp.nycu.edu.tw` or `smtp.gmail.com` | ✅ Yes |
+| `SMTP_HOST` | SMTP server hostname | `smtp.<your-domain>` or `smtp.gmail.com` | ✅ Yes |
 | `SMTP_PORT` | SMTP server port | `587` (TLS) or `465` (SSL) | ⚠️ Optional (default: 587) |
-| `SMTP_USER` | SMTP authentication username | `scholarship@nycu.edu.tw` | ✅ Yes |
+| `SMTP_USER` | SMTP authentication username | `scholarship@<your-domain>` | ✅ Yes |
 | `SMTP_PASSWORD` | SMTP authentication password | `EmailP@ss2024!` | ✅ Yes |
-| `EMAIL_FROM` | "From" email address | `scholarship@nycu.edu.tw` | ✅ Yes |
+| `EMAIL_FROM` | "From" email address | `scholarship@<your-domain>` | ✅ Yes |
 | `EMAIL_FROM_NAME` | "From" display name | `NYCU Scholarship System` | ⚠️ Optional |
 
 **Common SMTP Providers:**
@@ -487,7 +494,7 @@ These secrets configure SMTP for sending system emails (notifications, password 
 |----------|-----------|-----------|-------|
 | Gmail | `smtp.gmail.com` | `587` | Requires App Password (not account password) |
 | Office 365 | `smtp.office365.com` | `587` | - |
-| NYCU Mail | `smtp.nycu.edu.tw` | `587` | Contact IT for credentials |
+| 校內 Mail | `smtp.<your-domain>` | `587` | Contact IT for credentials |
 
 **For Gmail:**
 1. Enable 2-Factor Authentication on your Google account
@@ -497,7 +504,7 @@ These secrets configure SMTP for sending system emails (notifications, password 
 **Testing SMTP:**
 ```bash
 # Test SMTP connection with openssl
-openssl s_client -starttls smtp -connect smtp.nycu.edu.tw:587
+openssl s_client -starttls smtp -connect smtp.<your-domain>:587
 ```
 
 ---
@@ -510,7 +517,7 @@ These secrets configure Portal SSO integration for user authentication.
 
 | Secret Name | Description | Example Value | Required |
 |-------------|-------------|---------------|----------|
-| `PORTAL_JWT_SERVER_URL` | Portal SSO JWT verification endpoint | `https://portal.nycu.edu.tw/api/auth` | ✅ Yes |
+| `PORTAL_JWT_SERVER_URL` | Portal SSO JWT verification endpoint | `https://portal.<your-domain>/api/auth` | ✅ Yes |
 
 **How to obtain:**
 - Contact NYCU IT Services for Portal SSO endpoint URL
@@ -531,7 +538,7 @@ These secrets configure integration with NYCU Student Information System (SIS) A
 
 | Secret Name | Description | Example Value | Required |
 |-------------|-------------|---------------|----------|
-| `STUDENT_API_BASE_URL` | Student API base URL | `https://api.sis.nycu.edu.tw` | ✅ Yes |
+| `STUDENT_API_BASE_URL` | Student API base URL | `https://api.sis.<your-domain>` | ✅ Yes |
 
 > The student API no longer requires authentication; `STUDENT_API_ACCOUNT` and `STUDENT_API_HMAC_KEY` are no longer used.
 
@@ -560,8 +567,8 @@ These secrets configure general application settings.
 
 | Secret Name | Description | Example Value | Required |
 |-------------|-------------|---------------|----------|
-| `DOMAIN` | Production domain name | `ss.aa.nycu.edu.tw` | ✅ Yes |
-| `CORS_ORIGINS` | Allowed CORS origins (comma-separated) | `https://ss.aa.nycu.edu.tw` | ✅ Yes |
+| `DOMAIN` | Production domain name | `<your-production-domain>` | ✅ Yes |
+| `CORS_ORIGINS` | Allowed CORS origins (comma-separated) | `https://<production-domain>` | ✅ Yes |
 
 **DOMAIN:**
 - Must match DNS A record pointing to AP VM
@@ -573,7 +580,7 @@ These secrets configure general application settings.
 **CORS_ORIGINS:**
 - List of allowed origins for Cross-Origin Resource Sharing
 - Format: Comma-separated URLs (no trailing slash)
-- Example: `https://ss.aa.nycu.edu.tw,https://scholarship.nycu.edu.tw`
+- Example: `https://<production-domain>,https://<alt-domain>`
 - ⚠️ In production, never use `*` (allow all origins)
 
 ---
@@ -638,22 +645,22 @@ gh secret set SECRET_KEY  # Will prompt
 gh secret set REDIS_PASSWORD  # Will prompt
 
 # Email secrets
-gh secret set SMTP_HOST -b "smtp.nycu.edu.tw"
+gh secret set SMTP_HOST -b "smtp.<your-domain>"
 gh secret set SMTP_PORT -b "587"
-gh secret set SMTP_USER -b "scholarship@nycu.edu.tw"
+gh secret set SMTP_USER -b "scholarship@<your-domain>"
 gh secret set SMTP_PASSWORD  # Will prompt
-gh secret set EMAIL_FROM -b "scholarship@nycu.edu.tw"
+gh secret set EMAIL_FROM -b "scholarship@<your-domain>"
 gh secret set EMAIL_FROM_NAME -b "NYCU Scholarship System"
 
 # SSO secrets
-gh secret set PORTAL_JWT_SERVER_URL -b "https://portal.nycu.edu.tw/api/auth"
+gh secret set PORTAL_JWT_SERVER_URL -b "https://portal.<your-domain>/api/auth"
 
 # Student API secrets
-gh secret set STUDENT_API_BASE_URL -b "https://api.sis.nycu.edu.tw"
+gh secret set STUDENT_API_BASE_URL -b "https://api.sis.<your-domain>"
 
 # General configuration
-gh secret set DOMAIN -b "ss.aa.nycu.edu.tw"
-gh secret set CORS_ORIGINS -b "https://ss.aa.nycu.edu.tw"
+gh secret set DOMAIN -b "<production-domain>"
+gh secret set CORS_ORIGINS -b "https://<production-domain>"
 
 echo "✅ All secrets configured!"
 echo "Verify with: gh secret list"
@@ -840,10 +847,10 @@ docker compose exec postgres psql -U postgres -c "ALTER USER scholarship_user PA
 **Solution:**
 ```bash
 # Correct format (include protocol)
-gh secret set PORTAL_JWT_SERVER_URL -b "https://portal.nycu.edu.tw/api/auth"
+gh secret set PORTAL_JWT_SERVER_URL -b "https://portal.<your-domain>/api/auth"
 
-# ❌ Wrong: portal.nycu.edu.tw/api/auth
-# ✅ Right: https://portal.nycu.edu.tw/api/auth
+# ❌ Wrong: portal.<your-domain>/api/auth
+# ✅ Right: https://portal.<your-domain>/api/auth
 ```
 
 ---

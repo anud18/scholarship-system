@@ -47,7 +47,7 @@ warning: here-document at line 10 delimited by end-of-file (wanted `FOOTER_EOF')
 | `bootstrap-ap-runner.sh` 🅾️ | **兩台空 VM 的步驟 0** — 把 bare AP VM 變成可跑 action 的 self-hosted runner | 在 AP VM 手動執行一次 | **必要(前置)** |
 | `setting-env.yml` | 在 AP VM 裝 Docker、SSH 到 DB VM 裝 Docker+傳 image、建部署目錄 | runner 就緒後手動觸發 | **必要** |
 | `auto-tag-on-merge.yml` ⭐ | 自動建立 Git tag 和 Release | PR merge 到 main | **必要** |
-| `deploy.yml` | **兩階段部署編排**：先 test AP VM、通過後才 production AP VM，兩階段各需一位 reviewer 核准 | Push to main / 手動觸發 | **必要** |
+| `deploy.yml` | **兩階段部署編排**：一律先 test AP VM 再 production AP VM，兩階段各需一位 reviewer 核准（test 失敗不否決 production，由 reviewer 判斷） | Push to main / 手動觸發 | **必要** |
 | `deploy-stack.yml` | `deploy.yml` 兩個階段共用的 reusable workflow（實際的部署腳本本體） | 由 `deploy.yml` 呼叫，不單獨觸發 | **必要**（與 deploy.yml 成對） |
 | `health-check.yml` | 監控應用程式健康狀態 | 每 15 分鐘 / 手動觸發 | 選用 |
 | `backup.yml` | 備份資料庫和檔案 | 每日 2AM UTC / 手動觸發 | 選用 |
@@ -191,9 +191,9 @@ cp /path/to/development-repo/.github/production-workflows-examples/backup.yml \
 | Variable | 必填 | `test` 範例 | `production` 範例 |
 |----------|------|-------------|-------------------|
 | `DEPLOY_STAGE` | ✅ | `test` | `production` | 
-| `EXPECT_DOMAIN` | test 必填 | `ss-test.aa.nycu.edu.tw` | `ss.aa.nycu.edu.tw` |
+| `EXPECT_DOMAIN` | test 必填 | 測試站網域 | 正式站網域 |
 | `EXPECT_DB_HOST` | test 必填 | test DB VM 的位址 | production DB VM 的位址 |
-| `DEPLOY_URL` | ✅ | `https://ss-test.aa.nycu.edu.tw` | `https://ss.aa.nycu.edu.tw` |
+| `DEPLOY_URL` | ✅ | `https://<測試站網域>` | `https://<正式站網域>` |
 | `SSL_CERT_DIR` | — | 該台 VM 上憑證目錄的絕對路徑 | 同左 |
 | `ENV_FILE` | — | 該台 VM 上既有 `.env` 的絕對路徑（安裝手冊 5.1）。**設了就用它**，GitHub 完全不存這些值。留空則由 deploy-stack.yml 依下方 secrets 產生 `~/scholarship-<stage>/.env`（權限 600）。 | 同左 |
 
@@ -210,17 +210,17 @@ deploy 時會直接驗證該檔案（缺 key、`portal.test`、`ss-test`、`測�
 
 | Secret Name | Description | Example |
 |-------------|-------------|---------|
-| `DOMAIN` | 對外網域 | `ss.aa.nycu.edu.tw` |
+| `DOMAIN` | 對外網域 | `<正式站網域>` |
 | `SECRET_KEY` | JWT signing key（≥ 32 字元，且必須與 staging 不同） | `openssl rand -hex 32` |
-| `CORS_ORIGINS` | 允許的前端來源 | `https://ss.aa.nycu.edu.tw` |
+| `CORS_ORIGINS` | 允許的前端來源 | `https://<正式站網域>` |
 | `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASSWORD` / `DB_NAME` | DB VM 的 PostgreSQL 連線資訊 | `10.x.x.x` / `5432` / … |
 | `REDIS_PASSWORD` | Redis 密碼（prod compose 強制要求） | `openssl rand -base64 24` |
 | `MINIO_HOST` / `MINIO_PORT` / `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` / `MINIO_BUCKET_NAME` / `MINIO_SECURE` | 物件儲存 | `10.x.x.x` / `9000` / … |
 | `PII_ENCRYPTION_KEYS` / `PII_ENCRYPTION_ACTIVE_VERSION` | PII 加密金鑰 JSON | `{"v1":"<key>"}` / `v1` |
-| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` | 寄信設定 | `smtp-prod2.nycu.edu.tw` / `587` |
-| `EMAIL_FROM` / `EMAIL_FROM_NAME` | 寄件者（不可含 `ss-test` 或 `測試`） | `noreply@aa.nycu.edu.tw` |
-| `PORTAL_JWT_SERVER_URL` | Portal SSO（不可指向 `portal.test`） | `https://portal.nycu.edu.tw/jwt/portal` |
-| `NEXT_PUBLIC_NYCU_PORTAL_URL` | 前端 Portal 連結 | `https://portal.nycu.edu.tw` |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` | 寄信設定 | `smtp.<校內網域>` / `587` |
+| `EMAIL_FROM` / `EMAIL_FROM_NAME` | 寄件者（不可含 `FORBIDDEN_MARKERS` 列出的字串） | `noreply@<校內網域>` |
+| `PORTAL_JWT_SERVER_URL` | Portal SSO（不可含 `FORBIDDEN_MARKERS` 列出的字串） | `https://portal.<校內網域>/jwt/portal` |
+| `NEXT_PUBLIC_NYCU_PORTAL_URL` | 前端 Portal 連結 | `https://portal.<校內網域>` |
 | `STUDENT_API_BASE_URL` | 學籍 API（不可是 localhost/mock） | `http://<ip>/api/SoAA` |
 | `SUPER_ADMIN_NYCU_ID` | 可升級為 super_admin 的職編 | `E00001` |
 
@@ -381,8 +381,10 @@ gh run view --log
 ```
 
 run 會停兩次：先是 `test` 環境的 "Review deployments"，reviewer 按下
-**Approve and deploy** 後才跑 test AP VM；test 全綠後再停一次等 `production`
-的核准。任一階段被拒絕（Reject），後面的階段就不會執行。
+**Approve and deploy** 後才跑 test AP VM；test 跑完再停一次等 `production` 的核准。
+
+test **失敗**時 production 仍然會要求核准 —— reviewer 看得到 test 的失敗結果，
+再決定放行或 Reject。要停下整條 promotion 就按 Reject。
 
 ### 測試健康檢查
 

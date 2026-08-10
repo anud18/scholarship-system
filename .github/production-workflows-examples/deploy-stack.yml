@@ -146,9 +146,9 @@ jobs:
           echo "✅ Stage identity confirmed: ${STAGE} → ${DOMAIN:-${EXPECT_DOMAIN:-(from env file)}}"
 
       # ── Gate 1: fail fast on misconfigured secrets BEFORE touching anything ─
-      # Closes go-live blockers P3/P4/P7/P8: config.py ships staging/dev defaults
-      # (portal.test auth, localhost student API, "(測試)" mail sender), so a
-      # missing secret would not crash — it would silently run against the wrong
+      # Closes go-live blockers P3/P4/P7/P8: config.py ships staging/dev
+      # defaults for auth, the student API and the mail sender, so a missing
+      # secret would not crash — it would silently run against the wrong
       # infrastructure. The backend boot guard (#936) is the second line of
       # defense; this is the first.
       #
@@ -176,6 +176,7 @@ jobs:
           EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
           EMAIL_FROM_NAME: ${{ secrets.EMAIL_FROM_NAME }}
           SUPER_ADMIN_NYCU_ID: ${{ secrets.SUPER_ADMIN_NYCU_ID }}
+          FORBIDDEN_MARKERS: ${{ vars.FORBIDDEN_MARKERS }}
         run: |
           fail=0
           err() { echo "::error::$1"; fail=1; }
@@ -188,7 +189,7 @@ jobs:
           [ -n "$MINIO_ACCESS_KEY" ] || err "MINIO_ACCESS_KEY is not set"
           [ -n "$MINIO_SECRET_KEY" ] || err "MINIO_SECRET_KEY is not set"
           [ -n "$SUPER_ADMIN_NYCU_ID" ] || err "SUPER_ADMIN_NYCU_ID is not set (no one could elevate to super_admin)"
-          [ -n "$SMTP_HOST" ] || err "SMTP_HOST is not set (would default to the staging relay)"
+          [ -n "$SMTP_HOST" ] || err "SMTP_HOST is not set (would default to the test relay)"
 
           # Every stage gets its own key — a shared SECRET_KEY would let a token
           # minted on test authenticate against production.
@@ -203,7 +204,7 @@ jobs:
           fi
 
           case "$PORTAL_JWT_SERVER_URL" in
-            "") err "PORTAL_JWT_SERVER_URL is not set (config.py would default to portal.test)" ;;
+            "") err "PORTAL_JWT_SERVER_URL is not set (config.py would default to the test portal)" ;;
             https://*) : ;;
             *) err "PORTAL_JWT_SERVER_URL must be https://" ;;
           esac
@@ -212,24 +213,29 @@ jobs:
           [ -n "$EMAIL_FROM_NAME" ] || err "EMAIL_FROM_NAME is not set"
 
           if [ "${STAGE}" = "production" ]; then
-            # P3: production must never authenticate against the staging portal.
-            case "$PORTAL_JWT_SERVER_URL" in
-              *portal.test*) err "PORTAL_JWT_SERVER_URL points at portal.test (staging) — set the production Portal endpoint" ;;
-            esac
-            # P8: student API must be the real campus API (no longer uses HMAC auth).
+            # P8: student API must be the real campus API, never the mock.
+            # These markers are generic, so they stay in the template.
             case "$STUDENT_API_BASE_URL" in
               *localhost*|*127.0.0.1*|*mock*) err "STUDENT_API_BASE_URL looks like a mock/localhost endpoint: $STUDENT_API_BASE_URL" ;;
             esac
-            # P7: real applicants must not receive '(測試)' mail from ss-test.
-            case "$EMAIL_FROM" in *ss-test*) err "EMAIL_FROM still uses the staging address: $EMAIL_FROM" ;; esac
-            case "$EMAIL_FROM_NAME" in *測試*) err "EMAIL_FROM_NAME still contains 測試: $EMAIL_FROM_NAME" ;; esac
-          else
-            # Mirror image of the production guards: on test, a value that looks
-            # like the real thing means an environment secret was not overridden.
-            case "$EMAIL_FROM" in
-              *ss-test*|*test*) : ;;
-              *) echo "::warning::EMAIL_FROM ('$EMAIL_FROM') carries no test marker — real applicants could be mailed from the test stack." ;;
-            esac
+
+            # P3/P7: production must not authenticate against the test portal
+            # or mail real applicants from the test sender. The strings that
+            # identify THIS deployment's test tier are site-specific, so they
+            # come from the FORBIDDEN_MARKERS variable rather than being
+            # hardcoded here — this template is mirrored into a repository that
+            # should not carry the site's hostnames.
+            if [ -n "${FORBIDDEN_MARKERS}" ]; then
+              for m in ${FORBIDDEN_MARKERS}; do
+                case "$PORTAL_JWT_SERVER_URL" in *"$m"*) err "PORTAL_JWT_SERVER_URL matches the non-production marker '$m'" ;; esac
+                case "$EMAIL_FROM"            in *"$m"*) err "EMAIL_FROM matches the non-production marker '$m'" ;; esac
+                case "$EMAIL_FROM_NAME"       in *"$m"*) err "EMAIL_FROM_NAME matches the non-production marker '$m'" ;; esac
+                case "$STUDENT_API_BASE_URL"  in *"$m"*) err "STUDENT_API_BASE_URL matches the non-production marker '$m'" ;; esac
+              done
+            else
+              echo "::warning::FORBIDDEN_MARKERS is not set — skipping the 'production must not use test endpoints' check."
+              echo "::warning::Set it to a space-separated list of substrings that only ever appear in test values."
+            fi
           fi
 
           [ "$fail" -eq 0 ] || exit 1
@@ -319,6 +325,7 @@ jobs:
           SSL_CERT_DIR_VAR: ${{ vars.SSL_CERT_DIR }}
           EXPECT_DOMAIN: ${{ vars.EXPECT_DOMAIN }}
           EXPECT_DB_HOST: ${{ vars.EXPECT_DB_HOST }}
+          FORBIDDEN_MARKERS: ${{ vars.FORBIDDEN_MARKERS }}
           DOMAIN: ${{ secrets.DOMAIN }}
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
           CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
@@ -404,14 +411,16 @@ jobs:
             fi
 
             if [ "${STAGE}" = "production" ]; then
-              case "$(v PORTAL_JWT_SERVER_URL)" in
-                *portal.test*) err "PORTAL_JWT_SERVER_URL points at portal.test (staging)" ;;
-              esac
               case "$(v STUDENT_API_BASE_URL)" in
                 *localhost*|*127.0.0.1*|*mock*) err "STUDENT_API_BASE_URL looks like a mock/localhost endpoint" ;;
               esac
-              case "$(v EMAIL_FROM)" in *ss-test*) err "EMAIL_FROM still uses the staging address" ;; esac
-              case "$(v EMAIL_FROM_NAME)" in *測試*) err "EMAIL_FROM_NAME still contains 測試" ;; esac
+              # Site-specific markers come from the FORBIDDEN_MARKERS variable,
+              # not from this file — see the same check in "Validate secrets".
+              for m in ${FORBIDDEN_MARKERS}; do
+                for k in PORTAL_JWT_SERVER_URL EMAIL_FROM EMAIL_FROM_NAME STUDENT_API_BASE_URL; do
+                  case "$(v $k)" in *"$m"*) err "$k matches the non-production marker '$m'" ;; esac
+                done
+              done
             fi
 
             [ "$fail" -eq 0 ] || exit 1

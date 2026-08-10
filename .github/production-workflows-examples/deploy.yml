@@ -10,11 +10,16 @@
 #                      env: test          env: production
 #                      🔒 1 approval      🔒 1 approval
 #
-# Nothing reaches the production VM that has not first been deployed to, and
-# verified on, the test VM by the very same script (deploy-stack.yml) — the
-# stage differs only in which runner it lands on and which GitHub Environment
-# supplies its secrets. `needs: deploy-test` makes that ordering structural: a
-# failed or rejected test stage means the production job never starts.
+# Every image is deployed to, and exercised on, the test VM first by the very
+# same script (deploy-stack.yml) — the stage differs only in which runner it
+# lands on and which GitHub Environment supplies its secrets.
+#
+# The ordering is structural (`needs: deploy-test`), but it is NOT a veto: if
+# the test stage fails, production still asks for its approval and a reviewer
+# may take it through. That is deliberate — the test tier can fail for reasons
+# that say nothing about production (its own DB, certificate or portal), and
+# those must not be able to block a hotfix. What the reviewer gets is the test
+# result in front of them, not a machine deciding for them.
 #
 # The approval gate is a GitHub *Environment protection rule*, not YAML. It has
 # to be configured once, in the production repository:
@@ -45,11 +50,16 @@
 #       DEPLOY_STAGE   = test | production   (stage-identity guard, required)
 #       EXPECT_DOMAIN  = the domain this stage may touch (required on test)
 #       EXPECT_DB_HOST = the DB host this stage may touch (required on test)
-#       DEPLOY_URL     = https://ss-test.aa.nycu.edu.tw | https://ss.aa.nycu.edu.tw
+#       DEPLOY_URL     = that stage's site URL (shown on the Environments page)
 #       SSL_CERT_DIR   = optional; absolute path to the TLS certificate
 #                        directory on that VM (e.g. /home/<user>/ssl).
 #                        Defaults to ./nginx/ssl/prod in the deploy directory.
 #       ENV_FILE       = optional; path to an operator-managed .env on that VM.
+#       FORBIDDEN_MARKERS = optional (repo-level is fine); space-separated
+#                        substrings that only ever appear in non-production
+#                        values (test hostnames, test mail sender, ...). The
+#                        production stage refuses to deploy if a secret
+#                        contains one. Unset = that check is skipped.
 #   - secrets.GH_PAT with read:packages, if the upstream packages are private.
 #   - docker-compose.prod-db.yml stack already running on each stage's DB VM.
 
@@ -164,10 +174,26 @@ jobs:
       contents: read
       packages: read
 
-  # ── Stage 2: PRODUCTION AP VM — only reachable through a green test stage ──
+  # ── Stage 2: PRODUCTION AP VM — runs after test, gated on its own reviewer ─
   deploy-production:
     name: Deploy to production
     needs: [resolve-images, deploy-test]
+    # ORDERED, BUT NOT BLOCKED BY THE TEST RESULT.
+    #
+    # `needs` still makes production wait for the rehearsal to finish, so the
+    # two stages never deploy at once and the reviewer sees the test outcome
+    # before deciding. What it deliberately does NOT do is veto: a red test
+    # stage does not cancel production. The test tier has its own ways to fail
+    # (its DB down, its certificate expired, its portal unreachable) and none
+    # of those should be able to hold a production hotfix hostage.
+    #
+    # The judgement moves to the human at the approval gate — they can read the
+    # failed test job and then approve, or reject and stop the promotion.
+    #
+    # `!cancelled()` keeps a cancelled run from carrying on regardless, and the
+    # resolve-images guard is what actually can veto: without a resolved tag
+    # there is nothing to deploy.
+    if: ${{ !cancelled() && needs.resolve-images.result == 'success' }}
     uses: ./.github/workflows/deploy-stack.yml
     with:
       stage: production
