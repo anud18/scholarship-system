@@ -10,7 +10,11 @@
 #
 # Prerequisites:
 #   - The self-hosted runner registered on the production AP VM, labels
-#     [self-hosted, linux] (same runner deploy.yml uses).
+#     [self-hosted, linux, production] (the same runner deploy.yml's production
+#     stage uses). The `production` label is mandatory — the test AP VM also
+#     answers to [self-hosted, linux], and probes that landed there would
+#     report on the wrong stack. Scheduled, so deliberately NOT behind the
+#     `production` environment's approval gate: it only reads.
 #   - Secrets: DOMAIN, REDIS_PASSWORD (already required by deploy.yml).
 
 name: Production Health Check
@@ -26,7 +30,7 @@ jobs:
     # The runner lives ON the production AP VM, so every probe below is a
     # direct localhost/container check — the most direct signal of service
     # availability, with no VPN or SSH hop to fail independently.
-    runs-on: [self-hosted, linux]
+    runs-on: [self-hosted, linux, production]
     permissions:
       issues: write
       contents: read
