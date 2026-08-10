@@ -238,8 +238,10 @@ def _generate_payment_roster_inner(
         # General roster generation failure (including data consistency errors)
         logger.exception("Roster generation error")
 
-        # 保存 roster ID (如果存在) 用於後續標記
-        roster_id_to_mark = roster.id if (roster and hasattr(roster, "id") and roster.id) else None
+        # 保存 roster ID (如果存在) 用於後續標記。服務內部失敗時本地 roster
+        # 變數拿不到物件，退回例外攜帶的 roster_id（audit commit 已把該 row
+        # 持久化，不標記 FAILED 就會永遠卡在 processing）。
+        roster_id_to_mark = roster.id if (roster and hasattr(roster, "id") and roster.id) else e.roster_id
 
         # 回滾主事務
         db.rollback()
@@ -298,8 +300,11 @@ def _generate_payment_roster_inner(
         # Unexpected errors (including Excel export failures)
         logger.error(f"Unexpected error generating roster: {e}", exc_info=True)
 
-        # 保存 roster ID (如果存在) 用於後續標記
-        roster_id_to_mark = roster.id if (roster and hasattr(roster, "id") and roster.id) else None
+        # 保存 roster ID (如果存在) 用於後續標記；退回例外攜帶的 roster_id
+        # （見 RosterGenerationError 處理分支）。
+        roster_id_to_mark = (
+            roster.id if (roster and hasattr(roster, "id") and roster.id) else getattr(e, "roster_id", None)
+        )
 
         # 如果 roster 已經被 commit (在 Excel 匯出前)，直接更新狀態為 FAILED
         # 如果 roster 尚未 commit (錯誤發生在 Excel 匯出之前)，rollback 並使用獨立 session
