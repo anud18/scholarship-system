@@ -125,6 +125,36 @@ class TestSchemaLengthCaps:
         assert len(setting.value) == 5000
 
 
+class TestSystemSettingKeyQueryCap:
+    """GET /admin/system-setting echoes a missing key back through
+    SystemSettingSchema, so the query param must be capped at the same width or
+    response construction raises inside the handler and answers 500."""
+
+    async def _get(self, key: str) -> int:
+        from httpx import ASGITransport, AsyncClient
+
+        from app.core.security import require_admin
+        from app.db.deps import get_db
+        from app.main import app
+
+        async def _no_db():
+            yield None
+
+        app.dependency_overrides[get_db] = _no_db
+        app.dependency_overrides[require_admin] = lambda: None
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.get("/api/v1/admin/system-setting", params={"key": key})
+            return response.status_code
+        finally:
+            app.dependency_overrides.clear()
+
+    @pytest.mark.asyncio
+    async def test_over_length_key_is_rejected_before_the_handler(self):
+        assert await self._get("k" * 101) == 422
+
+
 class TestMockSsoDefault:
     def test_mock_sso_defaults_to_disabled(self, monkeypatch):
         """Dropping ENABLE_MOCK_SSO must disable, not enable, the dev endpoints."""
