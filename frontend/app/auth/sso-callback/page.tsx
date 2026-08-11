@@ -11,6 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useAuth } from "@/hooks/use-auth";
+import { SsoVerificationUnavailableError, verifySsoToken } from "@/lib/auth/verify-sso-token";
 import { logger } from "@/lib/utils/logger";
 
 function SSOCallbackContent() {
@@ -45,33 +46,12 @@ function SSOCallbackContent() {
           throw new Error("No token provided");
         }
 
-        // Decode JWT token directly to get user data
+        // SECURITY (#1223 A): the token arrives in a URL, so it is attacker-
+        // supplyable. Never decode its payload client-side and believe it — ask
+        // the backend who it belongs to and use THAT answer.
         try {
-          // Simple JWT decode (we trust the token since it came from our backend)
-          const base64Url = token.split(".")[1];
-          const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-          const jsonPayload = decodeURIComponent(
-            atob(base64)
-              .split("")
-              .map(function (c) {
-                return "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2);
-              })
-              .join("")
-          );
-
-          const tokenData = JSON.parse(jsonPayload);
-          logger.debug("JWT decoded", { role: tokenData.role });
-
-          // Create user object from token data
-          const userData = {
-            id: tokenData.sub,
-            nycu_id: tokenData.nycu_id,
-            role: tokenData.role,
-            name: tokenData.nycu_id, // Fallback, will be updated from backend later
-            email: `${tokenData.nycu_id}@nycu.edu.tw`, // Placeholder
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          };
+          const userData = await verifySsoToken(token);
+          logger.debug("SSO token verified by server", { role: userData.role });
 
           // Use the login function from useAuth to set authentication state
           login(token, userData);
@@ -80,7 +60,7 @@ function SSOCallbackContent() {
           setStatus("success");
           setMessage("登入成功！正在重導向...");
 
-          // Redirect based on user role
+          // Redirect based on the SERVER-supplied role, not a URL-supplied claim.
           const userRole = userData.role;
           let finalPath = "/";
 
@@ -100,8 +80,20 @@ function SSOCallbackContent() {
           setTimeout(() => {
             router.push(finalPath);
           }, 200);
-        } catch (decodeError) {
-          logger.error("Token decoding failed", { decodeError });
+        } catch (verifyError) {
+          // Distinguish "this token is bad" from "the server is having a moment".
+          // Conflating them is what turned the 2025 attempt at this fix into a
+          // login outage (see lib/auth/verify-sso-token.ts).
+          if (verifyError instanceof SsoVerificationUnavailableError) {
+            logger.error("SSO verification unavailable", { verifyError });
+            setStatus("error");
+            setMessage("無法連線至伺服器驗證登入，請稍後再試一次");
+            // Deliberately NO auto-redirect: bouncing home would discard a
+            // perfectly valid login over a transient blip.
+            return;
+          }
+
+          logger.error("SSO token rejected", { verifyError });
           setStatus("error");
           setMessage("登入驗證失敗，請重新嘗試");
 

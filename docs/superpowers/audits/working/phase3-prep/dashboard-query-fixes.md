@@ -302,7 +302,7 @@ Affected provider names (lines in `dashboards.yml`):
 ```bash
 for uid in scholarship-overview postgresql-monitoring minio-monitoring nginx-monitoring \
            application-logs container-monitoring node-exporter-system redis-monitoring; do
-  result=$(curl -s -u admin:admin "http://localhost:3000/monitoring/api/dashboards/uid/$uid" | jq -r '.meta.provisioned')
+  result=$(curl -s -u "$GRAFANA_ADMIN_USER:$GRAFANA_ADMIN_PASSWORD" "http://localhost:3000/monitoring/api/dashboards/uid/$uid" | jq -r '.meta.provisioned')
   echo "$uid: provisioned=$result"
 done
 ```
@@ -329,7 +329,7 @@ After the move:
 
 **Verification:**
 ```bash
-curl -s -u admin:admin 'http://localhost:3000/monitoring/api/search?type=dash-db' | \
+curl -s -u "$GRAFANA_ADMIN_USER:$GRAFANA_ADMIN_PASSWORD" 'http://localhost:3000/monitoring/api/search?type=dash-db' | \
   jq '.[] | select(.uid=="application-logs") | {uid, folderTitle}'
 # Expected: {"uid": "application-logs", "folderTitle": "Logs"}
 ```

@@ -52,6 +52,29 @@ export interface DistributionDiff {
   to_remove: DistributionDiffEntry[];
 }
 
+export interface RegenerateRosterResult {
+  roster_id: number;
+  roster_code: string;
+  status: string;
+  project_number: string | null;
+  /** 重建成功的明細數 */
+  rebuilt_items: number;
+  /** 資料不全、未能重建的申請數 */
+  failed_items: number;
+  /** 跨重建保留的人為排除（學生繳回／放棄／移除）數 */
+  preserved_exclusions: number;
+  /** 先前納入、依當下資料改為排除的明細數 */
+  newly_excluded: number;
+  /** 先前納入、如今已不在分發名單中的學生數 */
+  dropped_members: number;
+  qualified_count: number;
+  disqualified_count: number;
+  total_applications: number;
+  total_amount: number;
+  excel_exported: boolean;
+  excel_stale: boolean;
+}
+
 export interface ReconcileResult {
   added: { application_id: number | null; item_id: number | null; is_included: boolean | null; exclusion_reason: string | null }[];
   removed: { application_id: number | null; item_id: number | null }[];
@@ -218,7 +241,7 @@ export function createPaymentRostersApi() {
       params?: {
         skip?: number;
         limit?: number;
-        is_qualified?: boolean | null;
+        is_included?: boolean | null;
       }
     ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.GET(
@@ -354,17 +377,27 @@ export function createPaymentRostersApi() {
     },
 
     /**
-     * 重新產生造冊
-     * Note: POST /payment-rosters/{roster_id}/regenerate is not in the OpenAPI schema
-     * (orphan endpoint, see issue #665). Using `as any` to bypass typed routing.
+     * 重新生成造冊：依當下的分發名單、學生資料與設定重建全部明細
+     * POST /api/v1/payment-rosters/{roster_id}/regenerate
+     *
+     * 與 reconcileRoster 互補——reconcile 只增減名單成員（名單一致時無事可做），
+     * 本端點則刷新每一筆明細的內容並重新匯出 Excel。人為排除會跨重建保留。
      */
-    regenerateRoster: async (roster_id: number): Promise<ApiResponse<unknown>> => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const response = await (typedClient.raw.POST as any)(
+    regenerateRoster: async (
+      roster_id: number,
+      body?: { student_verification_enabled?: boolean }
+    ): Promise<ApiResponse<RegenerateRosterResult>> => {
+      const response = await typedClient.raw.POST(
         '/api/v1/payment-rosters/{roster_id}/regenerate',
-        { params: { path: { roster_id } } }
+        {
+          params: { path: { roster_id } },
+          body: {
+            student_verification_enabled:
+              body?.student_verification_enabled ?? null,
+          },
+        }
       );
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<RegenerateRosterResult>;
     },
 
     /**

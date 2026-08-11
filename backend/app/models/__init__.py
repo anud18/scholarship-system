@@ -12,6 +12,7 @@ from app.models.college_review import CollegeRanking, CollegeRankingItem, QuotaD
 from app.models.document_request import DocumentRequest, DocumentRequestStatus
 from app.models.email_management import EmailCategory, EmailHistory, EmailStatus, ScheduledEmail, ScheduleStatus
 from app.models.enums import ApplicationCycle, QuotaManagementMode, Semester, SubTypeSelectionMode
+from app.models.footer_link import FooterLink, FooterLinkType
 from app.models.notification import Notification, NotificationType
 from app.models.payment_roster import (
     PaymentRoster,
@@ -123,6 +124,9 @@ __all__ = [
     "BankVerificationTaskStatus",
     # Supplementary doc models
     "SupplementaryDoc",
+    # Footer 相關連結 models
+    "FooterLink",
+    "FooterLinkType",
     # Imported received-months ledger
     "ReceivedMonthImport",
     "StudentReceivedMonthRecord",

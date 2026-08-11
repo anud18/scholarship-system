@@ -406,8 +406,9 @@ curl -G -s "http://localhost:3100/loki/api/v1/query" \
 ### 3. Verify Grafana Datasources
 
 ```bash
-# Login to Grafana
-curl -X GET http://admin:admin@localhost:3000/api/datasources
+# Login to Grafana (export GRAFANA_ADMIN_USER / GRAFANA_ADMIN_PASSWORD first —
+# the same values provisioned via the GitHub secrets, see GITHUB_DEPLOYMENT.md)
+curl -X GET -u "$GRAFANA_ADMIN_USER:$GRAFANA_ADMIN_PASSWORD" http://localhost:3000/api/datasources
 
 # Should show Prometheus, Loki (Staging), Loki (Production), Loki (Dev)
 ```
@@ -467,7 +468,7 @@ curl -s http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | {job:
 echo ""
 
 echo "5. Grafana Alert Rules:"
-curl -s -u admin:admin http://localhost:3000/api/v1/provisioning/alert-rules | jq '.[].title'
+curl -s -u "$GRAFANA_ADMIN_USER:$GRAFANA_ADMIN_PASSWORD" http://localhost:3000/api/v1/provisioning/alert-rules | jq '.[].title'
 echo ""
 EOF
 
@@ -549,7 +550,7 @@ stat monitoring/config/grafana/provisioning/datasources/datasources.yml
 docker-compose -f monitoring/docker-compose.monitoring.yml restart grafana
 
 # If still not working, manually check datasources
-curl -X GET http://admin:admin@localhost:3000/api/datasources
+curl -X GET -u "$GRAFANA_ADMIN_USER:$GRAFANA_ADMIN_PASSWORD" http://localhost:3000/api/datasources
 ```
 
 #### 4. High Memory Usage
@@ -731,11 +732,11 @@ curl -s http://localhost:9090/api/v1/targets | grep prod
 
 **Grafana Dashboards**:
 ```bash
-# Export all dashboards
-curl -X GET http://admin:admin@localhost:3000/api/search | \
+# Export all dashboards (export GRAFANA_ADMIN_USER / GRAFANA_ADMIN_PASSWORD first)
+curl -X GET -u "$GRAFANA_ADMIN_USER:$GRAFANA_ADMIN_PASSWORD" http://localhost:3000/api/search | \
   jq -r '.[] | select(.type == "dash-db") | .uid' | \
   while read uid; do
-    curl -X GET http://admin:admin@localhost:3000/api/dashboards/uid/$uid | \
+    curl -X GET -u "$GRAFANA_ADMIN_USER:$GRAFANA_ADMIN_PASSWORD" "http://localhost:3000/api/dashboards/uid/$uid" | \
       jq '.dashboard' > "dashboard-$uid.json"
   done
 ```

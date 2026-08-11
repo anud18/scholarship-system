@@ -213,7 +213,15 @@ services:
       sh -c '
         apk add --no-cache logrotate
         while true; do
-          logrotate /etc/logrotate.conf
+          # logrotate silently ignores any config file it does not own (uid 0)
+          # or that is group/world-writable. The bind-mounted file belongs to
+          # the deploy user on the host, so re-materialise it as a root-owned
+          # copy in here — this container already runs as root — instead of
+          # making the deploy depend on passwordless sudo on the AP VM.
+          cp /etc/logrotate.conf /run/logrotate.conf
+          chown root:root /run/logrotate.conf
+          chmod 644 /run/logrotate.conf
+          logrotate /run/logrotate.conf
           sleep 3600
         done
       '
@@ -230,7 +238,9 @@ services:
     volumes:
       - ./monitoring/config/alloy/prod-ap-vm.alloy:/etc/alloy/config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./logs/nginx:/var/log/nginx:ro
+      # ./logs/nginx was mounted here but never read: the config's only log
+      # source is loki.source.docker. nginx now logs to stdout, which that
+      # source already collects, so the mount is gone rather than misleading.
     networks:
       - scholarship_prod_network
     command: run --server.http.listen-addr=0.0.0.0:12345 /etc/alloy/config.alloy
@@ -354,9 +364,12 @@ volumes:
       device: /opt/scholarship/app/redis/data
 
 networks:
+  # Declared external, like staging's, so the name is exactly
+  # `scholarship_prod_network`. Inline-declared networks get the compose project
+  # prefix (`scholarship-production_…`), and the monitoring stack joins an app
+  # network BY NAME — with the prefix, Loki and Prometheus could never be
+  # attached, alloy's DNS lookups failed, and every log batch was dropped.
+  # deploy.yml creates it (with the 172.24.0.0/16 subnet) if it does not exist.
   scholarship_prod_network:
-    driver: bridge
-    ipam:
-      driver: default
-      config:
-        - subnet: 172.24.0.0/16
+    external: true
+    name: scholarship_prod_network

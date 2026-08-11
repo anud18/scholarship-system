@@ -39,6 +39,12 @@ from app.services.email_automation_service import email_automation_service
 from app.services.email_service import EmailService
 from app.services.minio_service import minio_service
 from app.services.student_service import StudentService
+from app.utils.college_scope import (
+    college_scope_for_user,
+    college_user_may_access,
+    get_application_college_code,
+    get_user_college_code,
+)
 from app.utils.phone_validation import (
     TAIWAN_MOBILE_MESSAGE,
     extract_contact_phone,
@@ -258,6 +264,27 @@ class ApplicationService:
             meta_data=application.meta_data,
             **student_fields,  # Spread extracted student fields
         )
+
+    async def _load_profile_owned_fields(self, user_id: int) -> Dict[str, Optional[str]]:
+        """讀取存放在 UserProfile 的固定欄位（郵局帳號、指導教授資訊）。
+
+        申請精靈把這幾個欄位存進 UserProfile 而非 submitted_form_data，但表單設定
+        (ApplicationFieldService.inject_fixed_fields) 仍會把它們列為 postal_account /
+        advisor_* 固定欄位。前端表單資料頁若只看 submitted_form_data，這些欄位一律
+        顯示「未填寫」，所以由這裡把權威值一併帶進 ApplicationResponse。
+
+        No profile row yet (student has never saved the section) → all None.
+        """
+        from app.models.user_profile import UserProfile
+
+        result = await self.db.execute(select(UserProfile).where(UserProfile.user_id == user_id))
+        profile = result.scalar_one_or_none()
+        return {
+            "postal_account": profile.account_number if profile else None,
+            "advisor_name": profile.advisor_name if profile else None,
+            "advisor_email": profile.advisor_email if profile else None,
+            "advisor_nycu_id": profile.advisor_nycu_id if profile else None,
+        }
 
     def _convert_semester_to_string(self, semester) -> Optional[str]:
         """
@@ -851,8 +878,27 @@ class ApplicationService:
         elif current_user.role == UserRole.professor:
             if application.professor_id != current_user.id:
                 return None
+        elif current_user.role == UserRole.college:
+            # SECURITY (#1223 A): 學院 staff are scoped to their own college's
+            # applicants. This branch previously fell through to an unconditional
+            # `pass` alongside admin, so College-A staff could read — and through
+            # update_application / update_student_data, WRITE — any other college's
+            # application by walking ids. Same rule PR #1222 applied to the file
+            # proxy (endpoints/files.py).
+            if not college_user_may_access(current_user, application):
+                logger.warning(
+                    "SECURITY: college user attempted cross-college application access",
+                    extra={
+                        "user_id": current_user.id,
+                        "user_college": get_user_college_code(current_user),
+                        "owner_college": get_application_college_code(application),
+                        "application_id": application.id,
+                    },
+                )
+                # None (endpoints turn this into 404) rather than 403: do not
+                # confirm that a hidden application id exists.
+                return None
         elif current_user.role in [
-            UserRole.college,
             UserRole.admin,
             UserRole.super_admin,
         ]:
@@ -906,13 +952,10 @@ class ApplicationService:
         if not student_fields.get("student_no") and application.student:
             student_fields["student_no"] = application.student.nycu_id
 
-        # 郵局帳號 lives on the student's UserProfile (student self-service and
-        # batch import both write it there — never into submitted_form_data).
-        from app.models.user_profile import UserProfile
-
-        profile_result = await self.db.execute(select(UserProfile).where(UserProfile.user_id == application.user_id))
-        student_profile = profile_result.scalar_one_or_none()
-        postal_account = student_profile.account_number if student_profile else None
+        # 郵局帳號 and 指導教授資訊 live on the student's UserProfile (the wizard's
+        # fixed-field section and batch import both write them there — never into
+        # submitted_form_data), so every form-data view has to read them from here.
+        profile_owned_fields = await self._load_profile_owned_fields(application.user_id)
 
         # Build sub_type labels from scholarship.sub_type_configs
         sub_type_labels = {}
@@ -997,7 +1040,7 @@ class ApplicationService:
             "scholarship_name": scholarship_name,
             "amount": amount,
             "currency": currency,
-            "postal_account": postal_account,
+            **profile_owned_fields,  # 郵局帳號 + 指導教授資訊 (UserProfile-owned)
             **student_fields,  # Spread extracted student fields
             # Workflow configuration flags
             "requires_professor_recommendation": bool(
@@ -1393,12 +1436,24 @@ class ApplicationService:
             else:
                 # No accessible students, return empty result
                 return []
+        elif current_user.role == UserRole.college:
+            # SECURITY (#1223 A): 學院 reviewers only see their own college's
+            # applicants — the same rule the college review list already applies in
+            # SQL (college_review_service.py) and that _get_application_model now
+            # applies by id. An unbound college account sees nothing, not everything.
+            scope = college_scope_for_user(current_user)
+            if scope is None:
+                logger.warning(
+                    "College user has no college_code binding; returning empty review queue",
+                    extra={"user_id": current_user.id},
+                )
+                return []
+            query = query.where(scope)
         elif current_user.role in [
-            UserRole.college,
             UserRole.admin,
             UserRole.super_admin,
         ]:
-            # College, Admin, and Super Admin can see all applications
+            # Admin and Super Admin can see all applications
             pass
         else:
             # Other roles cannot review applications
@@ -1549,6 +1604,25 @@ class ApplicationService:
         application = result.scalar_one_or_none()
 
         if not application:
+            raise NotFoundError("Application", str(application_id))
+
+        # SECURITY (#1223 A): the role gate above only asks "is this staff?". A
+        # 學院 user must additionally own the application's college — approving or
+        # rejecting another college's application is strictly worse than reading it.
+        if user.role == UserRole.college and not college_user_may_access(user, application):
+            logger.warning(
+                "SECURITY: college user attempted cross-college status update",
+                extra={
+                    "user_id": user.id,
+                    "user_college": get_user_college_code(user),
+                    "owner_college": get_application_college_code(application),
+                    "application_id": application.id,
+                },
+            )
+            # NotFoundError, not AuthorizationError: these methods already raise
+            # NotFoundError for a nonexistent id, so a distinct 403 here would let a
+            # college user enumerate which application ids exist in OTHER colleges.
+            # Matches _get_application_model / files.py, which 404 for the same reason.
             raise NotFoundError("Application", str(application_id))
 
         # ── G16 transition gate ──────────────────────────────────────────
@@ -1706,8 +1780,26 @@ class ApplicationService:
             # Professors can upload files to their students' applications
             if not user.can_access_student_data(application.user_id, "upload_documents"):
                 raise AuthorizationError("Cannot upload files - no access to this student's data")
-        elif user.role in [UserRole.college, UserRole.admin, UserRole.super_admin]:
-            # College, Admin, and Super Admin can upload to any application
+        elif user.role == UserRole.college:
+            # SECURITY (#1223 A): 學院 staff may only attach files to their own
+            # college's applications — previously they could upload to any.
+            if not college_user_may_access(user, application):
+                logger.warning(
+                    "SECURITY: college user attempted cross-college file upload",
+                    extra={
+                        "user_id": user.id,
+                        "user_college": get_user_college_code(user),
+                        "owner_college": get_application_college_code(application),
+                        "application_id": application.id,
+                    },
+                )
+                # NotFoundError, not AuthorizationError: these methods already raise
+            # NotFoundError for a nonexistent id, so a distinct 403 here would let a
+            # college user enumerate which application ids exist in OTHER colleges.
+            # Matches _get_application_model / files.py, which 404 for the same reason.
+            raise NotFoundError("Application", str(application_id))
+        elif user.role in [UserRole.admin, UserRole.super_admin]:
+            # Admin and Super Admin can upload to any application
             pass
         else:
             # Other roles are not allowed to upload
@@ -1831,12 +1923,22 @@ class ApplicationService:
             else:
                 # No accessible students, return empty result
                 return []
+        elif current_user.role == UserRole.college:
+            # SECURITY (#1223 A): scope 學院 staff to their own college. Mirrors
+            # get_applications_for_review and _get_application_model.
+            scope = college_scope_for_user(current_user)
+            if scope is None:
+                logger.warning(
+                    "College user has no college_code binding; returning empty application list",
+                    extra={"user_id": current_user.id},
+                )
+                return []
+            query = query.where(scope)
         elif current_user.role in [
-            UserRole.college,
             UserRole.admin,
             UserRole.super_admin,
         ]:
-            # College, Admin, and Super Admin can see all applications
+            # Admin and Super Admin can see all applications
             pass
         else:
             # Other roles cannot see any applications
@@ -1945,6 +2047,24 @@ class ApplicationService:
             if application.status != ApplicationStatus.draft:
                 raise ValidationError("Only draft applications can be deleted by students")
         elif current_user.role in [UserRole.professor, UserRole.college, UserRole.admin, UserRole.super_admin]:
+            # SECURITY (#1223 A): 學院 staff are scoped to their own college. Gated
+            # INSIDE the staff branch (rather than split into its own elif) so the
+            # mandatory-reason rule below still applies to them.
+            if current_user.role == UserRole.college and not college_user_may_access(current_user, application):
+                logger.warning(
+                    "SECURITY: college user attempted cross-college application delete",
+                    extra={
+                        "user_id": current_user.id,
+                        "user_college": get_user_college_code(current_user),
+                        "owner_college": get_application_college_code(application),
+                        "application_id": application.id,
+                    },
+                )
+                # NotFoundError, not AuthorizationError: these methods already raise
+                # NotFoundError for a nonexistent id, so a distinct 403 here would let a
+                # college user enumerate which application ids exist in OTHER colleges.
+                # Matches _get_application_model / files.py, which 404 for the same reason.
+                raise NotFoundError("Application", application_id)
             # Staff can delete any application but must provide a reason
             if not reason:
                 raise ValidationError("Deletion reason is required for staff users")
@@ -2061,7 +2181,25 @@ class ApplicationService:
             if application.user_id != current_user.id:
                 raise AuthorizationError("You can only restore your own applications")
         elif current_user.role not in [UserRole.professor, UserRole.college, UserRole.admin, UserRole.super_admin]:
+            # Deny-by-default catch-all — keep this branch, do not restructure the
+            # chain into positive role branches or new roles silently gain access.
             raise AuthorizationError("You don't have permission to restore applications")
+        elif current_user.role == UserRole.college and not college_user_may_access(current_user, application):
+            # SECURITY (#1223 A): 學院 staff are scoped to their own college.
+            logger.warning(
+                "SECURITY: college user attempted cross-college application restore",
+                extra={
+                    "user_id": current_user.id,
+                    "user_college": get_user_college_code(current_user),
+                    "owner_college": get_application_college_code(application),
+                    "application_id": application.id,
+                },
+            )
+            # NotFoundError, not AuthorizationError: these methods already raise
+            # NotFoundError for a nonexistent id, so a distinct 403 here would let a
+            # college user enumerate which application ids exist in OTHER colleges.
+            # Matches _get_application_model / files.py, which 404 for the same reason.
+            raise NotFoundError("Application", application_id)
 
         # Restore application to appropriate status based on submission history
         # If the application was previously submitted, restore it to under_review status
@@ -2685,6 +2823,22 @@ class ApplicationService:
         if application is None:
             raise NotFoundError(f"Application {application_id} not found")
 
+        # SECURITY (#1223 A): this bypasses _get_application_model, so it needs its
+        # own college gate — otherwise a 學院 user learns which sub-types another
+        # college's applicant applied for. NotFoundError (not Authorization) so the
+        # response matches the nonexistent-id case and confirms nothing.
+        if current_user.role == UserRole.college and not college_user_may_access(current_user, application):
+            logger.warning(
+                "SECURITY: college user attempted cross-college sub-type read",
+                extra={
+                    "user_id": current_user.id,
+                    "user_college": get_user_college_code(current_user),
+                    "owner_college": get_application_college_code(application),
+                    "application_id": application.id,
+                },
+            )
+            raise NotFoundError(f"Application {application_id} not found")
+
         # Empty scholarship or no configured sub-types -> empty list.
         # The frontend already falls back to a synthetic "default" sub-type
         # in that case (FALLBACK_SUB_TYPE), so we don't need to return one.
@@ -2818,6 +2972,22 @@ class ApplicationService:
             if assigned_by.role == UserRole.student:
                 if application.user_id != assigned_by.id:
                     raise ValidationError("Access denied")
+            # SECURITY (#1223 A): the dept_code check further down compares the
+            # ASSIGNER to the PROFESSOR; nothing checked the application's college.
+            # A 學院 user may only assign reviewers for their own college's applicants.
+            elif assigned_by.role == UserRole.college and not college_user_may_access(assigned_by, application):
+                logger.warning(
+                    "SECURITY: college user attempted cross-college professor assignment",
+                    extra={
+                        "user_id": assigned_by.id,
+                        "user_college": get_user_college_code(assigned_by),
+                        "owner_college": get_application_college_code(application),
+                        "application_id": application.id,
+                    },
+                )
+                # NotFoundError (this method raises it for a nonexistent id too) so
+                # the response does not confirm which ids exist in other colleges.
+                raise NotFoundError(f"Application {application_id} not found")
 
             # Get professor
             stmt = select(User).where(User.nycu_id == professor_nycu_id, User.role == UserRole.professor)
@@ -2846,43 +3016,9 @@ class ApplicationService:
             await self.db.commit()
             await self.db.refresh(application)
 
-            # Send email via React Email HTML system (scheduled_emails queue)
-            if professor.email:
-                try:
-                    from app.core.config import settings
-                    from app.services.frontend_email_renderer import render_email_via_frontend
-
-                    student_name = application.student_data.get("std_cname") if application.student_data else "Unknown"
-                    email_context = {
-                        "app_id": application.app_id,
-                        "student_name": student_name,
-                        "scholarship_type": application.scholarship_name or "獎學金",
-                        "professor_name": professor.name,
-                        "professor_email": professor.email,
-                        "submit_date": application.updated_at.strftime("%Y-%m-%d") if application.updated_at else "",
-                        "system_url": getattr(settings, "FRONTEND_URL", "https://scholarship.nycu.edu.tw"),
-                    }
-                    html = await render_email_via_frontend(
-                        frontend_url=getattr(settings, "INTERNAL_FRONTEND_URL", "http://frontend:3000"),
-                        template_name="professor-review-request",
-                        context=email_context,
-                    )
-                    email_service = EmailService()
-                    await email_service.schedule_email(
-                        db=self.db,
-                        to=professor.email,
-                        subject=f"審查通知 - {student_name} 的 {application.scholarship_name or '獎學金'} 申請",
-                        body=f"申請編號 {application.app_id} 已指派給您進行教授推薦審查。",
-                        scheduled_for=datetime.now(timezone.utc),
-                        html_content=html,
-                        template_key="professor_review_notification",
-                        application_id=application.id,
-                        scholarship_type_id=application.scholarship_type_id,
-                        created_by_user_id=assigned_by.id,
-                    )
-                    logger.info(f"Scheduled HTML email to professor {professor.nycu_id}")
-                except Exception:
-                    logger.exception(f"Failed to send email to professor {professor.nycu_id}")
+            # No email on assignment: professors are only mailed when a student
+            # they supervise submits an application. The in-app notification below
+            # remains the channel for an admin/college-initiated assignment.
 
             # Create in-app notification (use info type which exists in DB enum)
             try:
@@ -2903,7 +3039,12 @@ class ApplicationService:
                     },
                     href=f"/professor/applications/{application.id}",
                     priority=NotificationPriority.high,
-                    channels=[NotificationChannel.in_app, NotificationChannel.email],
+                    # in_app ONLY. NotificationChannel.email here reaches
+                    # _send_email_notification -> EmailService immediately, which
+                    # bypasses the scheduled_emails queue and the assignment
+                    # templates — so it would re-add assignment mail on top of the
+                    # scheduled one.
+                    channels=[NotificationChannel.in_app],
                 )
                 logger.info(f"In-app notification created for professor {professor.nycu_id}")
             except Exception:

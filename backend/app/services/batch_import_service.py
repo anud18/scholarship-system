@@ -425,8 +425,8 @@ class BatchImportService:
         # ordering and quota/distribution lookups assume lowercase.
         real_sub_types = [st.lower() for st in (scholarship.sub_type_list or []) if st and st.lower() != "general"]
 
-        # Custom-field definitions (same set _build_submitted_form_data uses)
-        field_definitions = await self._fetch_field_definitions(scholarship.code)
+        # Custom-field definitions (same set build_submitted_form_data uses)
+        field_definitions = await self.fetch_field_definitions(scholarship.code)
         custom_field_mapping = {f.field_label: f.field_name for f in field_definitions.values()}
         custom_field_types = {f.field_name: f.field_type for f in field_definitions.values()}
 
@@ -987,7 +987,7 @@ class BatchImportService:
 
         return user_map
 
-    async def _upsert_user_profile(self, user: User, row_data: Dict[str, Any]) -> UserProfile:
+    async def upsert_user_profile(self, user: User, row_data: Dict[str, Any]) -> UserProfile:
         """Write postal account and advisor info to the student's UserProfile,
         the same place the student self-service flow keeps them.
 
@@ -1019,7 +1019,7 @@ class BatchImportService:
 
         return profile
 
-    async def _fetch_field_definitions(self, scholarship_code: str) -> Dict[str, Any]:
+    async def fetch_field_definitions(self, scholarship_code: str) -> Dict[str, Any]:
         """Load active ApplicationField definitions for a scholarship, keyed by
         field_name. Definitions are identical for a whole batch, so this is
         fetched ONCE per import and reused for every row (avoids an N+1 query).
@@ -1034,13 +1034,13 @@ class BatchImportService:
         defs_result = await self.db.execute(defs_stmt)
         return {f.field_name: f for f in defs_result.scalars().all()}
 
-    def _build_submitted_form_data(
+    def build_submitted_form_data(
         self, field_definitions: Dict[str, Any], custom_fields: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Shape batch custom-field values into the standard student-submission
         structure: {"fields": {name: {field_id, field_type, value, required}},
         "documents": []}. field_type/required come from the ApplicationField
-        definitions (fetched once via _fetch_field_definitions); a value with no
+        definitions (fetched once via fetch_field_definitions); a value with no
         matching definition falls back to text.
         """
         fields = {}
@@ -1132,7 +1132,7 @@ class BatchImportService:
 
             # Custom-field definitions are identical for every row in the batch;
             # fetch once here instead of once per row (avoids an N+1 query).
-            field_definitions = await self._fetch_field_definitions(scholarship.code)
+            field_definitions = await self.fetch_field_definitions(scholarship.code)
 
             # Submitted-state values are loop-invariant (one shared
             # submitted_at timestamp for the whole batch is intended).
@@ -1178,7 +1178,7 @@ class BatchImportService:
                 else:
                     student_data = snapshot
 
-                submitted_form_data = self._build_submitted_form_data(
+                submitted_form_data = self.build_submitted_form_data(
                     field_definitions, row_data.get("custom_fields", {})
                 )
 
@@ -1214,7 +1214,7 @@ class BatchImportService:
                 # Profile upsert then professor auto-assign — same linkage the
                 # student submit path uses (professor review lists match on
                 # Application.professor_id).
-                profile = await self._upsert_user_profile(user, row_data)
+                profile = await self.upsert_user_profile(user, row_data)
                 await assign_professor_from_profile(self.db, application, user.id, profile=profile)
 
             # Flush all applications at once

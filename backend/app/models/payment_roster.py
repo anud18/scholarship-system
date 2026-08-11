@@ -62,12 +62,55 @@ class StudentVerificationStatus(enum.Enum):
     NOT_FOUND = "not_found"  # 查無此人
 
 
+# 學籍驗證狀態的繁體中文顯示名稱（單一真相來源）。exclusion_reason 會直接呈現在
+# 造冊詳情與 Excel 的「排除原因」欄位，屬使用者可見文案，不得外洩英文列舉值。
+# excel_export_service / student_verification_service 的標籤一律轉呼叫此表。
+STUDENT_VERIFICATION_STATUS_LABELS = {
+    StudentVerificationStatus.VERIFIED: "已驗證",
+    StudentVerificationStatus.GRADUATED: "已畢業",
+    StudentVerificationStatus.SUSPENDED: "休學中",
+    StudentVerificationStatus.WITHDRAWN: "已退學",
+    StudentVerificationStatus.API_ERROR: "驗證錯誤",
+    StudentVerificationStatus.NOT_FOUND: "查無此人",
+}
+
+
+def verification_status_label(status: StudentVerificationStatus) -> str:
+    """取得學籍驗證狀態的繁體中文顯示名稱（未知狀態退回原始值）。"""
+    return STUDENT_VERIFICATION_STATUS_LABELS.get(status, getattr(status, "value", str(status)))
+
+
 # exclusion_reason 前綴：標記「鎖定後手動移除」與「比對分發移除」兩種
 # 人為移除（相對於產生造冊時因資格不符的自動排除）。由 roster_service 寫入、
 # 由 excel_export_service 的審閱視圖過濾——共用同一份常數避免兩端漂移。
 MANUAL_REMOVAL_PREFIX_LOCKED = "鎖定後移除"
 MANUAL_REMOVAL_PREFIX_RECONCILE = "比對分發移除"
 MANUAL_REMOVAL_PREFIXES = (MANUAL_REMOVAL_PREFIX_LOCKED, MANUAL_REMOVAL_PREFIX_RECONCILE)
+
+# 「排除造冊明細」(POST /{roster_id}/items/{item_id}/exclude) 的原因分類 →
+# 顯示標籤。寫入的 exclusion_reason 形如「學生繳回」或「其他: 補充說明」。
+MANUAL_EXCLUSION_CATEGORY_LABELS = {
+    "returned": "學生繳回",
+    "declined": "學生放棄",
+    "other": "其他",
+}
+
+# 「人為排除」= 管理員針對這位學生本身下的判斷（排除明細／鎖定後移除）。
+# 重建造冊時必須跨重建保留，否則已繳回／已放棄的學生會被重新納入造冊，
+# 並灌水該生的累計領取月份（博士 36 個月上限的依據）。
+#
+# 刻意「不」包含 MANUAL_REMOVAL_PREFIX_RECONCILE（比對分發移除）：那不是對學生的
+# 判斷，而是「不在分發名單」這個事實的推導結果，重建時會重新推導。一筆帶著該原因
+# 卻仍出現在重建名單中的申請，代表它已重新獲得分發——原因已然過期，保留它會讓
+# 學生卡在一個當下不成立的理由下。
+MANUAL_EXCLUSION_PREFIXES = (MANUAL_REMOVAL_PREFIX_LOCKED,) + tuple(MANUAL_EXCLUSION_CATEGORY_LABELS.values())
+
+
+def is_manual_exclusion(exclusion_reason: str | None) -> bool:
+    """該筆排除是否為管理員針對學生的人為決定，而非可重新推導的自動判定。"""
+    if not exclusion_reason:
+        return False
+    return exclusion_reason.startswith(MANUAL_EXCLUSION_PREFIXES)
 
 
 class PaymentRoster(Base):
@@ -239,7 +282,8 @@ class PaymentRosterItem(Base):
     verification_at = Column(DateTime(timezone=True))  # 驗證時間
     verification_snapshot = Column(JSON)  # 驗證時的完整資料快照
 
-    # 是否納入造冊
+    # 是否納入造冊 — 造冊人數/總金額的唯一判準（Excel「納入造冊」欄同源）。
+    # 缺少郵局帳號「不」影響此旗標：學生補件即可撥款，僅在 Excel 說明欄提醒。
     is_included = Column(Boolean, default=True, nullable=False)
     exclusion_reason = Column(String(500))  # 排除原因
 
@@ -280,17 +324,12 @@ class PaymentRosterItem(Base):
         return f"<PaymentRosterItem(id={self.id}, student={self.student_name}, amount={self.scholarship_amount})>"
 
     @property
-    def is_qualified(self) -> bool:
-        """撥款合格：學籍驗證通過 + 納入造冊 + 有郵局帳號"""
-        return self.verification_status == StudentVerificationStatus.VERIFIED and self.is_included and self.bank_account
-
-    @property
     def is_eligible(self) -> bool | None:
         """規則資格：造冊產生當下的獎學金規則驗證快照判定。
 
-        Distinct from is_qualified (payment readiness) — this reflects the
-        rule engine's verdict frozen at generation time. None when the item
-        predates rule-validation snapshots.
+        Distinct from is_included (whether the row is counted in the roster) —
+        this reflects the rule engine's verdict frozen at generation time.
+        None when the item predates rule-validation snapshots.
         """
         if not self.rule_validation_result:
             return None
@@ -303,7 +342,7 @@ class PaymentRosterItem(Base):
         if not self.is_included:
             remarks.append(f"排除原因: {self.exclusion_reason}")
         elif self.verification_status != StudentVerificationStatus.VERIFIED:
-            remarks.append(f"學籍狀態: {self.verification_status.value}")
+            remarks.append(f"學籍狀態: {verification_status_label(self.verification_status)}")
         elif not self.bank_account:
             remarks.append("缺少郵局帳號資訊")
         else:

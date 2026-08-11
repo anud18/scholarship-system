@@ -24,6 +24,7 @@ import { createProfessorApi } from './modules/professor';
 import { createCollegeApi } from './modules/college';
 import { createWhitelistApi } from './modules/whitelist';
 import { createSystemSettingsApi } from './modules/system-settings';
+import { createFooterLinksApi } from './modules/footer-links';
 import { createBankVerificationApi } from './modules/bank-verification';
 import { createProfessorStudentApi } from './modules/professor-student';
 import { createEmailAutomationApi } from './modules/email-automation';
@@ -154,6 +155,7 @@ class ExtendedApiClient extends ApiClient {
   private _college?: ReturnType<typeof createCollegeApi>;
   private _whitelist?: ReturnType<typeof createWhitelistApi>;
   private _systemSettings?: ReturnType<typeof createSystemSettingsApi>;
+  private _footerLinks?: ReturnType<typeof createFooterLinksApi>;
   private _bankVerification?: ReturnType<typeof createBankVerificationApi>;
   private _professorStudent?: ReturnType<typeof createProfessorStudentApi>;
   private _emailAutomation?: ReturnType<typeof createEmailAutomationApi>;
@@ -223,6 +225,11 @@ class ExtendedApiClient extends ApiClient {
   get systemSettings(): ReturnType<typeof createSystemSettingsApi> {
     if (!this._systemSettings) this._systemSettings = createSystemSettingsApi();
     return this._systemSettings;
+  }
+
+  get footerLinks(): ReturnType<typeof createFooterLinksApi> {
+    if (!this._footerLinks) this._footerLinks = createFooterLinksApi();
+    return this._footerLinks;
   }
 
   get bankVerification(): ReturnType<typeof createBankVerificationApi> {

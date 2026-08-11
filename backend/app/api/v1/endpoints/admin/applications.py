@@ -44,6 +44,7 @@ from app.schemas.common import PaginatedResponse
 from app.services.application_audit_service import ApplicationAuditService
 from app.services.application_service import ApplicationService
 from app.services.bulk_approval_service import BulkApprovalService
+from app.utils.excel_safety import sanitize_excel_cell
 
 logger = logging.getLogger(__name__)
 
@@ -446,29 +447,38 @@ async def export_historical_applications(
 
     for row in rows:
         app = row.Application
+        # SECURITY (#1081 G / #1223 A): neutralize spreadsheet formula injection.
+        # 姓名/Email come from SIS and the *_reason columns are staff free-text, so a
+        # value leading with "=" would be written by openpyxl as a LIVE formula and
+        # execute when a reviewer opens the download. sanitize_excel_cell only touches
+        # str values that lead with a trigger char — numbers/dates keep their native
+        # type, so the export is byte-identical for normal data.
         ws.append(
             [
-                app.app_id,
-                row.student_name,
-                row.student_nycu_id,
-                row.student_email,
-                row.scholarship_name,
-                app.sub_scholarship_type or "",
-                float(app.amount) if app.amount is not None else "",
-                app.academic_year,
-                app.semester.value if app.semester else "yearly",
-                app.status.value if hasattr(app.status, "value") else str(app.status),
-                "是" if app.is_renewal else "否",
-                _dt(app.submitted_at),
-                _dt(app.approved_at),
-                _dt(app.revoked_at),
-                app.revoke_reason or "",
-                _dt(app.suspended_at),
-                app.suspend_reason or "",
-                "是" if app.deleted_at is not None else "否",
-                _dt(app.deleted_at),
-                app.deletion_reason or "",
-                _dt(app.created_at),
+                sanitize_excel_cell(value)
+                for value in (
+                    app.app_id,
+                    row.student_name,
+                    row.student_nycu_id,
+                    row.student_email,
+                    row.scholarship_name,
+                    app.sub_scholarship_type or "",
+                    float(app.amount) if app.amount is not None else "",
+                    app.academic_year,
+                    app.semester.value if app.semester else "yearly",
+                    app.status.value if hasattr(app.status, "value") else str(app.status),
+                    "是" if app.is_renewal else "否",
+                    _dt(app.submitted_at),
+                    _dt(app.approved_at),
+                    _dt(app.revoked_at),
+                    app.revoke_reason or "",
+                    _dt(app.suspended_at),
+                    app.suspend_reason or "",
+                    "是" if app.deleted_at is not None else "否",
+                    _dt(app.deleted_at),
+                    app.deletion_reason or "",
+                    _dt(app.created_at),
+                )
             ]
         )
 
@@ -566,7 +576,6 @@ async def bulk_approve_applications_endpoint(
         application_ids=payload.application_ids,
         approver_user_id=current_user.id,
         approval_notes=payload.comments,
-        send_notifications=payload.send_notifications,
     )
 
     return {"success": True, "message": "Bulk approval processed successfully", "data": result}

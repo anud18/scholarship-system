@@ -235,7 +235,9 @@ class WhitelistExcelService:
         for row_idx, data in enumerate(example_data, start=2):
             for col_idx, value in enumerate(data, start=1):
                 cell = ws.cell(row=row_idx, column=col_idx)
-                cell.value = value
+                # SECURITY (#1081 G / #1223 A): sub_types are admin-authored keys
+                # from scholarship_configurations.quotas, not an enum.
+                cell.value = sanitize_excel_cell(value)
                 cell.font = self.cell_font
                 cell.alignment = self.cell_alignment
                 cell.border = self.border
@@ -272,7 +274,8 @@ class WhitelistExcelService:
 
         for row_idx, data in enumerate(instructions, start=1):
             for col_idx, value in enumerate(data, start=1):
-                ws_info.cell(row=row_idx, column=col_idx).value = value
+                # The 有效的子獎學金類型 lines interpolate admin-authored sub_type keys.
+                ws_info.cell(row=row_idx, column=col_idx).value = sanitize_excel_cell(value)
 
         # 儲存到 BytesIO
         excel_file = io.BytesIO()

@@ -7,7 +7,7 @@
  * validate/documents/confirm pipeline mutates student/application state and
  * depends on external SIS data, so it stays out of scope here — this spec
  * pins that:
- *   - a college user can upload a CSV with the required columns (學號/學生姓名)
+ *   - an admin user can upload a CSV with the required columns (學號/學生姓名)
  *   - the parser returns a persisted batch_id + per-row preview data
  *   - a malformed CSV (missing required columns) is REJECTED, not silently
  *     accepted as zero rows
@@ -21,7 +21,7 @@ import { BACKEND_URL } from "../helpers/env";
 import { attachRunState, newRunState, pushTrace, type RunState } from "../helpers/runState";
 import { captureDiagnostics } from "../helpers/diagnose";
 
-const COLLEGE_USER = "cs_college";
+const ADMIN_USER = "admin";
 const SCHOLARSHIP_CODE = "phd";
 const ACADEMIC_YEAR = 114;
 const CSV_STUDENT_ID = "313551099";
@@ -29,7 +29,7 @@ const CSV_STUDENT_NAME = "批次匯入測試生";
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("College batch-import upload parses CSV into a preview batch", () => {
+test.describe("Admin batch-import upload parses CSV into a preview batch", () => {
   let runState: RunState;
   let createdBatchId: number | undefined;
 
@@ -50,11 +50,11 @@ test.describe("College batch-import upload parses CSV into a preview batch", () 
     }
   });
 
-  test("@nightly cs_college uploads CSV → batch_id + preview row; malformed CSV rejected", async ({
+  test("@nightly admin uploads CSV → batch_id + preview row; malformed CSV rejected", async ({
     browser,
   }) => {
-    const collegeLogin = await loginAs(browser, COLLEGE_USER);
-    pushTrace(runState, collegeLogin.traceId);
+    const adminLogin = await loginAs(browser, ADMIN_USER);
+    pushTrace(runState, adminLogin.traceId);
 
     // 1. Valid CSV with the required columns (Chinese header variant).
     //    phd defines real sub-types (nstc/moe_1w), so a row with NO sub-type
@@ -69,7 +69,7 @@ test.describe("College batch-import upload parses CSV into a preview batch", () 
         `?scholarship_type=${SCHOLARSHIP_CODE}&academic_year=${ACADEMIC_YEAR}`,
       {
         method: "POST",
-        headers: { Authorization: `Bearer ${collegeLogin.token}` },
+        headers: { Authorization: `Bearer ${adminLogin.token}` },
         body: form,
       },
     );
@@ -98,7 +98,7 @@ test.describe("College batch-import upload parses CSV into a preview batch", () 
     //    history intentionally lists only CONFIRMED imports; a freshly-parsed
     //    batch is still pending.)
     const detailsRes = await apiAs<{ success: boolean; data: Record<string, unknown> }>(
-      collegeLogin.token,
+      adminLogin.token,
       "GET",
       `/college-review/batch-import/${createdBatchId}/details`,
     );
@@ -131,7 +131,7 @@ test.describe("College batch-import upload parses CSV into a preview batch", () 
         `?scholarship_type=${SCHOLARSHIP_CODE}&academic_year=${ACADEMIC_YEAR}`,
       {
         method: "POST",
-        headers: { Authorization: `Bearer ${collegeLogin.token}` },
+        headers: { Authorization: `Bearer ${adminLogin.token}` },
         body: badForm,
       },
     );

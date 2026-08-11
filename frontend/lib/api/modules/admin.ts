@@ -1078,28 +1078,22 @@ export function createAdminApi() {
       applicationIds: number[],
       options?: {
         comments?: string;
-        sendNotifications?: boolean;
       }
     ): Promise<ApiResponse<{
       total_requested: number;
       successful_approvals: Array<{ application_id: number; app_id: string }>;
       failed_approvals: Array<{ application_id: number; reason: string; current_status?: string }>;
-      notifications_sent: number;
-      notifications_failed: number;
     }>> => {
       const response = await typedClient.raw.POST('/api/v1/admin/applications/bulk-approve', {
         body: {
           application_ids: applicationIds,
           ...(options?.comments !== undefined && { comments: options.comments }),
-          send_notifications: options?.sendNotifications ?? true,
         },
       });
       return toApiResponse(response) as ApiResponse<{
         total_requested: number;
         successful_approvals: Array<{ application_id: number; app_id: string }>;
         failed_approvals: Array<{ application_id: number; reason: string; current_status?: string }>;
-        notifications_sent: number;
-        notifications_failed: number;
       }>;
     },
   };

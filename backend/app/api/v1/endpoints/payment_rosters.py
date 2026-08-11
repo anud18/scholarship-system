@@ -22,11 +22,13 @@ from app.core.path_security import validate_object_name_minio
 from app.core.security import check_user_roles
 from app.db.deps import get_db, get_sync_db
 from app.models.payment_roster import (
+    MANUAL_EXCLUSION_CATEGORY_LABELS,
     PaymentRoster,
     PaymentRosterItem,
     RosterStatus,
     RosterTriggerType,
     StudentVerificationStatus,
+    verification_status_label,
 )
 from app.models.user import User, UserRole
 from app.schemas.response import ApiResponse
@@ -34,6 +36,8 @@ from app.schemas.payment_roster import (
     DistributionDiff,
     ReconcileRequest,
     ReconcileResult,
+    RegenerateRosterRequest,
+    RegenerateRosterResult,
     RemoveLockedItemRequest,
     RestoreItemRequest,
     RevokedSuspendedListResponse,
@@ -48,6 +52,7 @@ from app.schemas.roster import (
     RosterStatisticsResponse,
 )
 from app.services.excel_export_service import ExcelExportService
+from app.services.roster_regeneration_service import RosterRegenerationService
 from app.services.roster_service import RosterService
 from app.services.student_verification_service import StudentVerificationService
 from app.utils.academic_period import get_roster_period_dates
@@ -62,6 +67,23 @@ def _require_admin(user: User) -> None:
     """Raise 403 if user is not admin or super_admin."""
     if user.role not in (UserRole.admin, UserRole.super_admin):
         raise HTTPException(status_code=403, detail="Admin role required")
+
+
+def _roster_items_lock_key(roster_id: int) -> str:
+    """Shared distributed lock for the roster-id-scoped whole-roster mutations.
+
+    Reconcile mutates items by id while regenerate hard-deletes and rebuilds
+    all of them, so those two MUST be mutually exclusive — a shared key is what
+    makes that true. Do not give either its own key.
+
+    NOTE the batch path POST /manual-distribution/generate-rosters-from-distribution
+    (force_regenerate) resolves its roster ids inside the service, so it cannot
+    take this key and is NOT serialized against these two. It defends itself with
+    a `SELECT ... FOR UPDATE` on the roster row instead (see
+    `_generate_one_sub_type_roster`), which serializes batch-vs-batch rebuilds but
+    NOT batch-vs-regenerate — that gap is known and unguarded.
+    """
+    return f"roster:items:{roster_id}"
 
 
 # Large per-item JSON snapshots that only the 查看名單 detail view reads;
@@ -216,8 +238,10 @@ def _generate_payment_roster_inner(
         # General roster generation failure (including data consistency errors)
         logger.exception("Roster generation error")
 
-        # 保存 roster ID (如果存在) 用於後續標記
-        roster_id_to_mark = roster.id if (roster and hasattr(roster, "id") and roster.id) else None
+        # 保存 roster ID (如果存在) 用於後續標記。服務內部失敗時本地 roster
+        # 變數拿不到物件，退回例外攜帶的 roster_id（audit commit 已把該 row
+        # 持久化，不標記 FAILED 就會永遠卡在 processing）。
+        roster_id_to_mark = roster.id if (roster and hasattr(roster, "id") and roster.id) else e.roster_id
 
         # 回滾主事務
         db.rollback()
@@ -276,8 +300,11 @@ def _generate_payment_roster_inner(
         # Unexpected errors (including Excel export failures)
         logger.error(f"Unexpected error generating roster: {e}", exc_info=True)
 
-        # 保存 roster ID (如果存在) 用於後續標記
-        roster_id_to_mark = roster.id if (roster and hasattr(roster, "id") and roster.id) else None
+        # 保存 roster ID (如果存在) 用於後續標記；退回例外攜帶的 roster_id
+        # （見 RosterGenerationError 處理分支）。
+        roster_id_to_mark = (
+            roster.id if (roster and hasattr(roster, "id") and roster.id) else getattr(e, "roster_id", None)
+        )
 
         # 如果 roster 已經被 commit (在 Excel 匯出前)，直接更新狀態為 FAILED
         # 如果 roster 尚未 commit (錯誤發生在 Excel 匯出之前)，rollback 並使用獨立 session
@@ -794,7 +821,7 @@ async def preview_roster_students(
             # Check verification status
             if verification_status != StudentVerificationStatus.VERIFIED:
                 is_included = False
-                exclusion_reason = f"學籍驗證未通過: {verification_status.value}"
+                exclusion_reason = f"學籍驗證未通過：{verification_status_label(verification_status)}"
                 summary["exclusion_breakdown"]["verification_failed"] += 1
 
             # Check eligibility rules
@@ -1331,7 +1358,7 @@ async def get_roster_items(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     verification_status: Optional[StudentVerificationStatus] = Query(None),
-    is_qualified: Optional[bool] = Query(None),
+    is_included: Optional[bool] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -1358,8 +1385,8 @@ async def get_roster_items(
         # 套用篩選條件
         if verification_status:
             stmt = stmt.where(PaymentRosterItem.verification_status == verification_status)
-        if is_qualified is not None:
-            stmt = stmt.where(PaymentRosterItem.is_qualified == is_qualified)
+        if is_included is not None:
+            stmt = stmt.where(PaymentRosterItem.is_included.is_(is_included))
 
         # 分頁查詢
         stmt = stmt.order_by(PaymentRosterItem.created_at).offset(skip).limit(limit)
@@ -1403,7 +1430,7 @@ async def lock_roster(
     Lock roster
     """
     # 檢查權限：只有管理員可以鎖定造冊
-    check_user_roles([UserRole.admin], current_user)
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
 
     try:
         stmt = select(PaymentRoster).where(PaymentRoster.id == roster_id)
@@ -1449,7 +1476,7 @@ async def unlock_roster(
     Unlock roster
     """
     # 檢查權限：只有管理員可以解鎖造冊
-    check_user_roles([UserRole.admin], current_user)
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
 
     try:
         stmt = select(PaymentRoster).where(PaymentRoster.id == roster_id)
@@ -1895,11 +1922,11 @@ async def get_roster_statistics(
             ).scalar()
             verification_stats[status_val.value] = item_count
 
-        # 統計合格/不合格人數
+        # 統計納入造冊/排除人數（與造冊詳情、Excel「納入造冊」欄同源）
         qualified_stmt = (
             select(count())
             .select_from(PaymentRosterItem)
-            .where(PaymentRosterItem.roster_id == roster_id, PaymentRosterItem.is_qualified.is_(True))
+            .where(PaymentRosterItem.roster_id == roster_id, PaymentRosterItem.is_included.is_(True))
         )
         qualified_result = await db.execute(qualified_stmt)
         qualified_count = qualified_result.scalar() or 0
@@ -1907,7 +1934,7 @@ async def get_roster_statistics(
         disqualified_stmt = (
             select(count())
             .select_from(PaymentRosterItem)
-            .where(PaymentRosterItem.roster_id == roster_id, PaymentRosterItem.is_qualified.is_(False))
+            .where(PaymentRosterItem.roster_id == roster_id, PaymentRosterItem.is_included.is_(False))
         )
         disqualified_result = await db.execute(disqualified_stmt)
         disqualified_count = disqualified_result.scalar() or 0
@@ -1953,16 +1980,16 @@ async def exclude_roster_item(
     metadata, rather than being hard-deleted (#66).
 
     Notes:
-      - Only admins may exclude items. Roster must NOT be LOCKED.
+      - Only admins / super admins may exclude items. Roster must NOT be LOCKED.
       - This does NOT decrement the student's cumulative received_months;
         if the funds are actually being returned, the admin should adjust
         received_months separately (it lives on CollegeRankingItem and the
         update path is intentionally manual).
       - A RosterAuditLog row is created with action=ITEM_REMOVE.
     """
-    check_user_roles([UserRole.admin], current_user)
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
 
-    if reason_category not in {"returned", "declined", "other"}:
+    if reason_category not in MANUAL_EXCLUSION_CATEGORY_LABELS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="reason_category must be one of: returned / declined / other",
@@ -2008,12 +2035,10 @@ async def exclude_roster_item(
                 detail=(f"明細已被排除(原因:{item.exclusion_reason or '未填'})。" f"如需修改原因請先取消排除。"),
             )
 
-        # Build the human-readable reason string
-        category_label = {
-            "returned": "學生繳回",
-            "declined": "學生放棄",
-            "other": "其他",
-        }[reason_category]
+        # Build the human-readable reason string. The labels are shared with
+        # `is_manual_exclusion()` — regeneration keys off this exact prefix to
+        # know an exclusion was a human decision, so the two must not drift.
+        category_label = MANUAL_EXCLUSION_CATEGORY_LABELS[reason_category]
         full_reason = f"{category_label}: {reason_note}" if reason_note else category_label
 
         # Capture old/new for audit before mutation
@@ -2094,7 +2119,7 @@ async def delete_roster(
     Delete roster (only unlocked rosters)
     """
     # 檢查權限：只有管理員可以刪除造冊
-    check_user_roles([UserRole.admin], current_user)
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
 
     try:
         stmt = select(PaymentRoster).where(PaymentRoster.id == roster_id)
@@ -2302,9 +2327,8 @@ def reconcile_roster_endpoint(
     sets excel_stale; audits each change. Presentation-layer only — does not
     touch quota."""
     _require_admin(current_user)
-    lock_key = f"roster:reconcile:{roster_id}"
     try:
-        with with_lock_sync(lock_key, ttl_seconds=300):
+        with with_lock_sync(_roster_items_lock_key(roster_id), ttl_seconds=300):
             svc = RosterService(db)
             result = svc.reconcile_roster(
                 roster_id=roster_id,
@@ -2319,3 +2343,94 @@ def reconcile_roster_endpoint(
         raise HTTPException(status_code=400, detail=str(e)) from e
     payload = ReconcileResult(**result).model_dump()
     return {"success": True, "message": "已更新造冊名單", "data": payload}
+
+
+def _build_regeneration_message(rebuilt: int, preserved: int, newly_excluded: int, dropped: int, failed: int) -> str:
+    """Honest summary of a roster regeneration.
+
+    Every way a student can leave the roster is named: preserved manual
+    exclusions, students the fresh verdicts newly excluded (which also undoes a
+    prior 回復), students who left the 名單 entirely, and applications that could
+    not be rebuilt. An admin must be able to tell from the message alone —
+    counting only `rebuilt` would let people disappear in silence. Pure function
+    so the wording stays under test.
+    """
+    message = f"已重新生成造冊：{rebuilt} 筆明細"
+    if preserved:
+        message += f"；保留 {preserved} 筆人為排除"
+    if newly_excluded:
+        message += f"；有 {newly_excluded} 筆先前納入的明細依當下資料改為排除"
+    if dropped:
+        message += f"；有 {dropped} 位先前納入的學生已不在分發名單中，已移出造冊"
+    if failed:
+        message += f"；有 {failed} 筆申請資料不全，未能重建"
+    return message
+
+
+@router.post("/{roster_id}/regenerate")
+def regenerate_roster_endpoint(
+    roster_id: int,
+    request: Optional[RegenerateRosterRequest] = None,
+    db: Session = Depends(get_sync_db),
+    current_user: User = Depends(get_current_user),
+):
+    """重新生成造冊：依當下的分發名單、學生資料、獎學金規則與配置重建全部明細。
+
+    不需要人員有異動即可執行——「比對分發名單」(reconcile) 只在名單有差異時
+    才有動作可做，本端點則刷新每一筆明細的內容（金額、計畫編號、學籍驗證、
+    規則判定、郵局帳號…）並重新匯出 Excel。
+
+    管理員的人為排除／移除與人工銀行覆核狀態會跨重建保留。已鎖定的造冊不可
+    重新生成（400），請先解鎖。
+    """
+    _require_admin(current_user)
+    try:
+        with with_lock_sync(_roster_items_lock_key(roster_id), ttl_seconds=300):
+            svc = RosterRegenerationService(db)
+            result = svc.regenerate_roster(
+                roster_id=roster_id,
+                admin_user_id=current_user.id,
+                student_verification_enabled=(request.student_verification_enabled if request else None),
+            )
+    except LockBusy as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="造冊處理中，請稍候再試") from exc
+    except RosterNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except (ValueError, RosterLockedError) as e:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    except Exception as e:
+        db.rollback()
+        logger.exception(f"Failed to regenerate roster {roster_id}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="重新生成造冊失敗") from e
+
+    roster = result.roster
+    logger.info(f"Roster {roster.roster_code} regenerated by user {current_user.id}")
+    payload = RegenerateRosterResult(
+        roster_id=roster.id,
+        roster_code=roster.roster_code,
+        status=roster.status.value,
+        project_number=roster.project_number,
+        rebuilt_items=result.rebuilt_items,
+        failed_items=result.failed_items,
+        preserved_exclusions=result.preserved_exclusions,
+        newly_excluded=result.newly_excluded,
+        dropped_members=result.dropped_members,
+        qualified_count=roster.qualified_count or 0,
+        disqualified_count=roster.disqualified_count or 0,
+        total_applications=roster.total_applications or 0,
+        total_amount=float(roster.total_amount or 0),
+        excel_exported=result.excel_exported,
+        excel_stale=roster.excel_stale,
+    ).model_dump()
+    return {
+        "success": True,
+        "message": _build_regeneration_message(
+            result.rebuilt_items,
+            result.preserved_exclusions,
+            result.newly_excluded,
+            result.dropped_members,
+            result.failed_items,
+        ),
+        "data": payload,
+    }

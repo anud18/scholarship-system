@@ -8,6 +8,7 @@
 import { typedClient } from "../typed-client";
 import { toApiResponse } from "../compat";
 import type { ApiResponse } from "../types";
+import { fetchBinaryExport } from "./binary-export";
 
 /** One reviewer verdict for one sub-type, shown in the 教授推薦/學院推薦 columns. */
 export interface ReviewItemSummary {
@@ -63,7 +64,8 @@ export interface DistributionStudent {
 export interface CollegeQuota {
   total: number;
   allocated: number;
-  /** total − allocated; NOT clamped — negative means over-allocated (advisory). */
+  /** total − allocated; NOT clamped — negative means the college is over its
+   * cell of quotas[sub_type], which the server rejects on allocate/finalize. */
   remaining: number;
 }
 
@@ -370,6 +372,12 @@ export interface GenerateRostersRequest {
 export interface GenerateRostersResult {
   rosters_created: number;
   rosters: RosterSummary[];
+  /** 已存在、未重新產生（force_regenerate=false 時）的造冊 */
+  rosters_skipped?: number;
+  skipped_rosters?: RosterSummary[];
+  /** 已鎖定、force_regenerate 也無法重建的造冊 */
+  rosters_locked?: number;
+  locked_rosters?: RosterSummary[];
 }
 
 export interface DistributionSummaryStudent {
@@ -835,4 +843,34 @@ export function createManualDistributionApi() {
       return body as ApiResponse<unknown>;
     },
   };
+}
+
+/**
+ * Download the 分發結果名單 (受獎名冊) as Excel (default) or PDF.
+ *
+ * Endpoint: GET /api/v1/manual-distribution/distribution-summary/export
+ *   `format` is an OPTIONAL query param: "pdf" appends `?format=pdf`; the
+ *   default "xlsx" is omitted entirely, so the xlsx request URL is unchanged.
+ *
+ * Binary exports bypass typedClient.raw (openapi-fetch cannot stream blobs) —
+ * see lib/api/modules/binary-export.ts.
+ */
+export async function exportDistributionSummary(params: {
+  scholarshipTypeId: number;
+  academicYear: number;
+  semester: string;
+  format?: "xlsx" | "pdf";
+}): Promise<{ blob: Blob; filename: string }> {
+  const format = params.format ?? "xlsx";
+  const search = new URLSearchParams();
+  search.set("scholarship_type_id", String(params.scholarshipTypeId));
+  search.set("academic_year", String(params.academicYear));
+  search.set("semester", params.semester);
+  if (format !== "xlsx") search.set("format", format);
+  return fetchBinaryExport(
+    "/api/v1/manual-distribution/distribution-summary/export",
+    search,
+    `分發名單_${params.academicYear}.${format}`,
+    "無法匯出分發名單"
+  );
 }

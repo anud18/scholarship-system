@@ -182,7 +182,9 @@ class Application(Base):
     # 批次匯入相關 (Batch Import)
     imported_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # 匯入者
     batch_import_id = Column(Integer, ForeignKey("batch_imports.id"), nullable=True)  # 批次匯入紀錄
-    import_source = Column(String(20), nullable=True, default="online")  # 'online' | 'batch_import'
+    # 'online' | 'batch_import' | 'renewal_import' | 'supplementary_import'
+    # NOTE: 'supplementary_import' is exactly 20 chars — String(20) has no headroom left.
+    import_source = Column(String(20), nullable=True, default="online")
     document_status = Column(String(30), nullable=True, default="complete")  # 'complete' | 'pending_documents'
 
     # 其他資訊

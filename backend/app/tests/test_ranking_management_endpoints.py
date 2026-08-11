@@ -307,24 +307,6 @@ class TestRankingAuthorization:
         response = await client.post(f"{RANKINGS_URL}/{ranking_sci.id}/import-excel", json=payload)
         assert response.status_code == 403
 
-    async def test_cross_college_supplementary_import_403(self, client, login, rank_users, ranking_sci):
-        login(rank_users["college_eng"])
-        response = await client.post(
-            f"{RANKINGS_URL}/{ranking_sci.id}/supplementary-import",
-            files={"file": ("dummy.xlsx", b"PK\x03\x04dummy", XLSX_MIME)},
-        )
-        assert response.status_code == 403
-
-    async def test_supplementary_import_flag_closed_403(self, client, login, rank_users, ranking_eng):
-        # Own college, but no ScholarshipConfiguration opened the feature.
-        login(rank_users["college_eng"])
-        response = await client.post(
-            f"{RANKINGS_URL}/{ranking_eng.id}/supplementary-import",
-            files={"file": ("dummy.xlsx", b"PK\x03\x04dummy", XLSX_MIME)},
-        )
-        assert response.status_code == 403
-        assert "補充匯入" in response.json()["message"]
-
     async def test_student_export_excel_403(self, client, login, rank_users, ranking_eng):
         login(rank_users["student"])
         response = await client.get(f"{RANKINGS_URL}/{ranking_eng.id}/export-excel")

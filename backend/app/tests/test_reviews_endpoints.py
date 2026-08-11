@@ -88,6 +88,16 @@ async def review_users(db):
             role=UserRole.college,
             college_code="ENG",
         ),
+        # A bound college user from a DIFFERENT college than review_application's
+        # applicant (#1223 A) — every endpoint here must refuse them.
+        "college_other": User(
+            nycu_id="rev_college_other",
+            name="Other College Reviewer",
+            email="rev_college_other@test.edu",
+            user_type=UserType.employee,
+            role=UserRole.college,
+            college_code="SCI",
+        ),
         "admin": User(
             nycu_id="rev_admin",
             name="Review Admin",
@@ -146,7 +156,13 @@ async def review_application(db, review_users, review_scholarship) -> Applicatio
         academic_year=114,
         semester="first",
         scholarship_subtype_list=["nstc", "moe_1w"],
-        student_data={"std_stdcode": "310460031", "std_cname": "Review Student"},
+        # std_academyno must match review_users["college"].college_code — 學院 staff
+        # are scoped to their own college's applicants (#1223 A).
+        student_data={
+            "std_stdcode": "310460031",
+            "std_cname": "Review Student",
+            "std_academyno": "ENG",
+        },
         submitted_form_data={},
         agree_terms=True,
     )
@@ -233,6 +249,60 @@ class TestReviewsAuthorization:
         login(review_users["college"])
         response = await client.get(f"{REVIEWS_PREFIX}/applications/{review_application.id}/reviews")
         assert response.status_code == 200
+
+    # ------------------------------------------------------------------
+    # Cross-college scoping (#1223 A). Before the fix this whole module
+    # grouped 學院 with admin, so a College-SCI reviewer could read AND
+    # write College-ENG's review records.
+    # ------------------------------------------------------------------
+
+    async def test_other_college_cannot_read_application_reviews(self, client, login, review_users, review_application):
+        login(review_users["college_other"])
+        response = await client.get(f"{REVIEWS_PREFIX}/applications/{review_application.id}/reviews")
+        assert response.status_code == 403
+
+    async def test_other_college_cannot_read_review_status(self, client, login, review_users, review_application):
+        """review-status exposes every review record, per-subtype statuses and
+        decision_reason — the same data the endpoint above now refuses."""
+        login(review_users["college_other"])
+        response = await client.get(f"{REVIEWS_PREFIX}/applications/{review_application.id}/review-status")
+        assert response.status_code == 403
+
+    async def test_other_college_cannot_read_reviewable_subtypes(self, client, login, review_users, review_application):
+        login(review_users["college_other"])
+        response = await client.get(f"{REVIEWS_PREFIX}/applications/{review_application.id}/reviewable-subtypes")
+        assert response.status_code == 403
+
+    async def test_other_college_cannot_submit_a_review(self, client, login, review_users, review_application):
+        """The WRITE counterpart, and the worst of the set: the role gate accepts
+        any is_college() user, so without scoping College-SCI could persist an
+        ApplicationReview against College-ENG's applicant."""
+        login(review_users["college_other"])
+        response = await client.post(_submit_url(review_application.id), json=_approve_items("nstc"))
+        assert response.status_code == 403
+
+    async def test_owning_college_can_still_submit_a_review(self, client, login, review_users, review_application):
+        """The scoping must not break the college that DOES own the application."""
+        login(review_users["college"])
+        response = await client.post(_submit_url(review_application.id), json=_approve_items("nstc"))
+        assert response.status_code != 403
+
+    async def test_unbound_college_user_is_refused(self, client, login, review_users, review_application, db):
+        """Fail closed: a college account with no college_code reaches nothing."""
+        unbound = User(
+            nycu_id="rev_college_unbound",
+            name="Unbound College",
+            email="rev_college_unbound@test.edu",
+            user_type=UserType.employee,
+            role=UserRole.college,
+            college_code=None,
+        )
+        db.add(unbound)
+        await db.flush()
+
+        login(unbound)
+        response = await client.get(f"{REVIEWS_PREFIX}/applications/{review_application.id}/reviews")
+        assert response.status_code == 403
 
     async def test_student_cannot_read_other_application_review_status(
         self, client, login, review_users, review_application

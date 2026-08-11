@@ -15,11 +15,11 @@ import type {
   DistributionHistoryRecord,
   RestoreRequest,
   DistributionSummaryResult,
-  DistributionSummaryGroup,
   AllocationSuggestion,
   DistributionState,
   ReleaseChainItem,
 } from "@/lib/api/modules/manual-distribution";
+import { DistributionSummaryDialog } from "./DistributionSummaryDialog";
 import {
   buildCollegeNameMap,
   getSavedAllocation,
@@ -33,6 +33,7 @@ import {
   unallocatedReasonLabel,
   type UnallocatedReason,
 } from "@/lib/api/modules/manual-distribution";
+import { buildCollegeQuotaGrid } from "@/lib/api/modules/college-quota-grid";
 import { User } from "@/types/user";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -90,6 +91,12 @@ const ALL_ACADEMIES_SYSTEM = "__all__";
 
 /** In-flight marker for the whole-page 預設分發 run; no college_code collides. */
 const ALL_COLLEGES = "__all_colleges__";
+
+/** Refusals when a college is over its own cell of quotas[sub_type] — the
+ * offending cells are listed in the banner, so these only say why nothing ran. */
+const OVERFLOW_BLOCKED_SAVE = "有學院超過名額上限，無法儲存（詳見上方紅色提示）";
+const OVERFLOW_BLOCKED_FINALIZE =
+  "有學院超過名額上限，無法確認分發（詳見上方紅色提示）";
 
 /** Seed local allocation state from the server snapshot (null = 未決). */
 function seedAllocations(
@@ -411,6 +418,71 @@ export function ManualDistributionPanel({
     return counts;
   }, [localAllocations, subTypeCols]);
 
+  // Academies-first code→name map, shared with the quota matrix so every
+  // college label on this screen resolves identically (see buildCollegeNameMap).
+  const collegeNames = useMemo(
+    () => buildCollegeNameMap(academies, students),
+    [academies, students]
+  );
+
+  const studentByItemId = useMemo(
+    () => new Map(students.map(s => [s.ranking_item_id, s])),
+    [students]
+  );
+
+  // Each college's cell of quotas[sub_type] is a HARD cap, enforced server-side
+  // in _assert_round_not_oversubscribed. This is the SAME live grid the
+  // 各學院剩餘名額 matrix renders, so a tick that would overfill a college is
+  // refused on the spot (see collegeQuotaRefusal) and 儲存/確認分發 have a
+  // backstop for states the ticks can't produce (auto-preview, stale snapshot).
+  const collegeQuotaGrid = useMemo(
+    () =>
+      buildCollegeQuotaGrid({
+        cols: subTypeCols,
+        quotaStatus,
+        students,
+        localAllocations,
+      }),
+    [subTypeCols, quotaStatus, students, localAllocations]
+  );
+
+  /**
+   * Why assigning `rankingItemId` to `col` must be refused, or null when it fits.
+   *
+   * Renewal rows are exempt: the backend counts a renewal's consumption via its
+   * approved Application, not its ranking item, so it never moves this grid.
+   */
+  const collegeQuotaRefusal = useCallback(
+    (rankingItemId: number, col: SubTypeConfigCol): string | null => {
+      const student = studentByItemId.get(rankingItemId);
+      if (!student || student.is_renewal) return null;
+      // A non-matrix column has no per-college split at all — only the global
+      // pool caps it, and that is the `atCapacity` disable on the checkbox.
+      if (!collegeQuotaGrid.hasCollegeSplit(col.key)) return null;
+      const code = student.college_code || "";
+      const cell = collegeQuotaGrid.cell(code, col.key);
+      if (!cell || cell.remaining > 0) return null;
+      const college = resolveCollegeName(collegeNames, code, student.college_name);
+      if (cell.total <= 0) {
+        return `${college} 在「${col.display_name}」沒有名額，無法核配`;
+      }
+      return `${college}「${col.display_name}」名額已用完（${cell.total - cell.remaining}/${cell.total}），無法再核配`;
+    },
+    [studentByItemId, collegeQuotaGrid, collegeNames]
+  );
+
+  const collegeOverflowMessage = useMemo(() => {
+    const { overflows } = collegeQuotaGrid;
+    if (overflows.length === 0) return null;
+    const detail = overflows
+      .map(
+        o =>
+          `${resolveCollegeName(collegeNames, o.collegeCode)}／${o.col.display_name} ${o.used}/${o.total}`
+      )
+      .join("；");
+    return `超過各學院名額（已核配/該學院名額）：${detail}。請調整分發後再儲存。`;
+  }, [collegeQuotaGrid, collegeNames]);
+
   const fetchData = useCallback(async () => {
     if (!scholarshipTypeId || !selectedAcademicYear || !selectedSemester)
       return;
@@ -664,11 +736,24 @@ export function ManualDistributionPanel({
     hasStagedChallenge,
   ]);
 
-  const handleCheckbox = (
-    rankingItemId: number,
-    sub_type: string,
-    config_id: number
-  ) => {
+  const handleCheckbox = (rankingItemId: number, col: SubTypeConfigCol) => {
+    const { sub_type, config_id } = col;
+    const current = localAllocations.get(rankingItemId);
+    const isUncheck =
+      current?.sub_type === sub_type && current?.config_id === config_id;
+
+    // A tick that would push this student's college past its own cell of
+    // quotas[sub_type] is a no-op: the controlled checkbox snaps back to its
+    // previous state and the reason surfaces as a toast. Unticking is always
+    // allowed — it can only free a slot.
+    if (!isUncheck) {
+      const refusal = collegeQuotaRefusal(rankingItemId, col);
+      if (refusal) {
+        toast.error(refusal);
+        return;
+      }
+    }
+
     // Unticking returns the row to 未決 — nothing else is remembered about it.
     // A 未決 row is open to 預設分發 again and its slot is free for someone
     // else; to keep a student out of the round entirely, use 撤銷/停發.
@@ -697,6 +782,12 @@ export function ManualDistributionPanel({
   const handleSave = async () => {
     if (!scholarshipTypeId || !selectedAcademicYear || !selectedSemester)
       return;
+    if (collegeOverflowMessage) {
+      // The offending cells are already named in the banner above — don't repeat
+      // the whole list here, just say why the click did nothing.
+      setSaveMessage({ type: "error", text: OVERFLOW_BLOCKED_SAVE });
+      return;
+    }
     setIsSaving(true);
     setSaveMessage(null);
     try {
@@ -727,7 +818,12 @@ export function ManualDistributionPanel({
       }
     } catch (error) {
       logger.error("Save error", { error: error });
-      setSaveMessage({ type: "error", text: "儲存時發生錯誤" });
+      // The quota gates (global pool / per-college cell) come back as a 400 whose
+      // detail names the offending config or college — echo it, never bury it.
+      setSaveMessage({
+        type: "error",
+        text: (error as Error)?.message || "儲存時發生錯誤",
+      });
     } finally {
       setIsSaving(false);
     }
@@ -736,6 +832,10 @@ export function ManualDistributionPanel({
   const handleFinalize = async () => {
     if (!scholarshipTypeId || !selectedAcademicYear || !selectedSemester)
       return;
+    if (collegeOverflowMessage) {
+      setSaveMessage({ type: "error", text: OVERFLOW_BLOCKED_FINALIZE });
+      return;
+    }
     setIsFinalizing(true);
     setSaveMessage(null);
     try {
@@ -755,13 +855,20 @@ export function ManualDistributionPanel({
       }
     } catch (error) {
       logger.error("Finalize error", { error: error });
-      setSaveMessage({ type: "error", text: "確認分發時發生錯誤" });
+      setSaveMessage({
+        type: "error",
+        text: (error as Error)?.message || "確認分發時發生錯誤",
+      });
     } finally {
       setIsFinalizing(false);
     }
   };
 
-  const handleGenerateRosters = async () => {
+  /**
+   * 產生造冊。`forceRegenerate` 為 true 時會重建「已存在」的造冊——不需要人員有
+   * 異動也能以最新的分發／學生資料重新生成（已鎖定的造冊仍會被後端擋下）。
+   */
+  const handleGenerateRosters = async (forceRegenerate = false) => {
     if (!scholarshipTypeId || !selectedAcademicYear || !selectedSemester)
       return;
     setIsGeneratingRosters(true);
@@ -774,12 +881,15 @@ export function ManualDistributionPanel({
           academic_year: selectedAcademicYear,
           semester: selectedSemester,
           student_verification_enabled: false,
+          force_regenerate: forceRegenerate,
         });
       if (resp.success && resp.data) {
         setRosterResult(resp.data);
+        // 後端回傳的 message 會誠實交代「已存在未重新產生 / 已鎖定」的份數；
+        // 只印 rosters_created 會讓「0 個」看起來像失敗。
         setSaveMessage({
           type: "success",
-          text: `已產生 ${resp.data.rosters_created} 個造冊`,
+          text: resp.message || `已產生 ${resp.data.rosters_created} 個造冊`,
         });
       } else {
         setSaveMessage({ type: "error", text: resp.message || "造冊產生失敗" });
@@ -1026,13 +1136,6 @@ export function ManualDistributionPanel({
     });
   }, [students, collegeFilter, searchQuery]);
 
-  // Academies-first code→name map, shared with the quota matrix so every
-  // college label on this screen resolves identically (see buildCollegeNameMap).
-  const collegeNames = useMemo(
-    () => buildCollegeNameMap(academies, students),
-    [academies, students]
-  );
-
   // Group students by college
   const studentsByCollege = useMemo(() => {
     const groups: {
@@ -1122,10 +1225,8 @@ export function ManualDistributionPanel({
                 <Download className="h-4 w-4 mr-1" />
                 匯出申請總表
               </Button>
-              <Button variant="outline" size="sm" disabled>
-                <Download className="h-4 w-4 mr-1" />
-                匯出 Excel
-              </Button>
+              {/* 分發名單 (受獎名冊) 的 Excel/PDF 匯出在「查看分發名單」對話框內
+                  ——與畫面上的名單同一份資料來源，見 DistributionSummaryDialog。 */}
               <Button
                 variant="outline"
                 size="sm"
@@ -1265,12 +1366,49 @@ export function ManualDistributionPanel({
                     <AlertDialogDescription>
                       系統將依據已完成分發的結果，針對每個（子類型 ×
                       配額年度）組合各產生一份造冊。此操作需要分發已完成（已確認分發）。
+                      已存在的造冊會被略過——如需以最新的分發／學生資料重建，請改按「重新生成造冊」。
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>取消</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleGenerateRosters}>
+                    <AlertDialogAction onClick={() => handleGenerateRosters()}>
                       確認產生
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isGeneratingRosters || isLoading}
+                    title="重建已存在的造冊名單（不需人員有異動）"
+                  >
+                    {isGeneratingRosters ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4 mr-1" />
+                    )}
+                    重新生成造冊
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>確認重新生成造冊？</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      系統會依<strong>當下</strong>
+                      的分發名單與學生資料，重建每個（子類型 ×
+                      配額年度）組合的造冊名單——即使人員沒有異動也可以執行，並重新匯出
+                      Excel。您先前的人為排除／移除會保留；已鎖定的造冊不會被重建，需先解鎖。
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>取消</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => handleGenerateRosters(true)}
+                    >
+                      確認重新生成
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
@@ -1360,6 +1498,14 @@ export function ManualDistributionPanel({
           </div>
         </div>
 
+        {/* Per-college quota overflow — 儲存/確認分發 stay blocked until it clears */}
+        {collegeOverflowMessage && (
+          <div className="px-4 py-2 rounded text-sm bg-red-50 text-red-700 border border-red-200 flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>{collegeOverflowMessage}</span>
+          </div>
+        )}
+
         {/* Save message */}
         {saveMessage && (
           <div
@@ -1392,7 +1538,7 @@ export function ManualDistributionPanel({
                     </span>
                   )}
                   <span className="text-blue-600">
-                    合格 {r.qualified_count} 人，${r.total_amount}
+                    納入造冊 {r.qualified_count} 人，${r.total_amount}
                   </span>
                 </div>
               ))}
@@ -1580,7 +1726,7 @@ export function ManualDistributionPanel({
                     <tr>
                       <td
                         colSpan={14 + subTypeCols.length}
-                        className="px-4 py-10 text-center text-slate-500"
+                        className="px-4 py-10 border border-slate-200 text-center text-slate-500"
                       >
                         {students.length === 0
                           ? "尚無已確認排名的學生資料"
@@ -1602,7 +1748,7 @@ export function ManualDistributionPanel({
                           >
                             <td
                               colSpan={14 + subTypeCols.length}
-                              className="px-4 py-1.5 text-xs font-bold text-slate-600 border-y border-slate-300"
+                              className="px-4 py-1.5 text-xs font-bold text-slate-600 border border-slate-300"
                             >
                               {/* Left-aligned next to the college name: the row
                                   spans 14+N columns, so a right-aligned button
@@ -1682,7 +1828,7 @@ export function ManualDistributionPanel({
                             return (
                               <tr
                                 key={student.ranking_item_id}
-                                className={`border-b border-slate-100 transition-colors ${
+                                className={`transition-colors ${
                                   cancelStatus === "revoked"
                                     ? "bg-red-50/60 hover:bg-red-50"
                                     : cancelStatus === "suspended"
@@ -1692,14 +1838,14 @@ export function ManualDistributionPanel({
                                         : "hover:bg-slate-50"
                                 }`}
                               >
-                                <td className="px-1.5 py-1.5 border-r border-slate-100 text-center font-bold text-slate-700 text-[11px]">
+                                <td className="px-1.5 py-1.5 border border-slate-200 text-center font-bold text-slate-700 text-[11px]">
                                   {student.college_rejected ? (
                                     <span className="text-red-600">N</span>
                                   ) : (
                                     student.rank_position
                                   )}
                                 </td>
-                                <td className="px-1.5 py-1.5 border-r border-slate-100 leading-snug text-[10px]">
+                                <td className="px-1.5 py-1.5 border border-slate-200 leading-snug text-[10px]">
                                   {student.applied_sub_types.length > 0 ? (
                                     student.applied_sub_types.map((t, i) => {
                                       const displayName = getSubTypeShortName(
@@ -1721,7 +1867,7 @@ export function ManualDistributionPanel({
                                     </span>
                                   )}
                                 </td>
-                                <td className="px-1.5 py-1.5 border-r border-slate-100 leading-snug">
+                                <td className="px-1.5 py-1.5 border border-slate-200 leading-snug">
                                   {(student.professor_review_items || [])
                                     .length > 0 ||
                                   (student.requires_professor_recommendation &&
@@ -1761,7 +1907,7 @@ export function ManualDistributionPanel({
                                     </span>
                                   )}
                                 </td>
-                                <td className="px-1.5 py-1.5 border-r border-slate-100 leading-snug">
+                                <td className="px-1.5 py-1.5 border border-slate-200 leading-snug">
                                   <div className="flex flex-col gap-0.5">
                                     {/* The ranking IS the college's primary
                                         verdict: rows only exist once the
@@ -1828,6 +1974,20 @@ export function ManualDistributionPanel({
                                     col.total > 0 &&
                                     localUsed >= col.total &&
                                     !isChecked;
+                                  // Per-college cell full (hard cap) — tooltip
+                                  // only. The cell is NOT tinted: "exactly
+                                  // consumed" is the healthy end state of a
+                                  // finished college, and painting it red would
+                                  // be indistinguishable from real overflow.
+                                  // Kept clickable on purpose too: the click is
+                                  // a no-op that toasts the reason, which reads
+                                  // better than a silently greyed-out box.
+                                  const collegeFull = isChecked
+                                    ? null
+                                    : collegeQuotaRefusal(
+                                        student.ranking_item_id,
+                                        col
+                                      );
                                   // Phase 8.2: for a challenge candidate the
                                   // sub_type they already hold a renewal in is
                                   // their "safety net" — they must not be
@@ -1845,9 +2005,9 @@ export function ManualDistributionPanel({
                                   // up and merges the reply back into it, so a
                                   // tick landing in between is both lost AND
                                   // uncounted — the server would hand out a slot
-                                  // it does not know was just taken, and nothing
-                                  // downstream re-checks the per-college matrix
-                                  // (the save gate only recounts the global pool).
+                                  // it does not know was just taken. The save
+                                  // gate would reject the result rather than
+                                  // over-allocate, but only after the fact.
                                   const isMutating =
                                     isSaving ||
                                     isFinalizing ||
@@ -1869,7 +2029,7 @@ export function ManualDistributionPanel({
                                   return (
                                     <td
                                       key={col.key}
-                                      className={`px-0.5 py-1.5 border-r border-slate-100 text-center ${
+                                      className={`px-0.5 py-1.5 border border-slate-200 text-center ${
                                         isCancelled
                                           ? "opacity-40"
                                           : isRejected
@@ -1899,54 +2059,55 @@ export function ManualDistributionPanel({
                                                   : `審核不同意（不推薦）${col.display_name}`
                                                 : atCapacity
                                                   ? `${col.display_name} 名額已滿`
-                                                  : isChecked
-                                                    ? "點擊取消分配"
-                                                    : `分配至 ${col.display_name}`
+                                                  : collegeFull
+                                                    ? collegeFull
+                                                    : isChecked
+                                                      ? "點擊取消分配"
+                                                      : `分配至 ${col.display_name}`
                                         }
                                         onChange={() =>
                                           handleCheckbox(
                                             student.ranking_item_id,
-                                            col.sub_type,
-                                            col.config_id
+                                            col
                                           )
                                         }
                                       />
                                     </td>
                                   );
                                 })}
-                                <td className="px-3 py-2.5 border-r border-slate-100 whitespace-nowrap">
+                                <td className="px-3 py-2.5 border border-slate-200 whitespace-nowrap">
                                   {resolveCollegeName(
                                     collegeNames,
                                     student.college_code,
                                     student.college_name
                                   )}
                                 </td>
-                                <td className="px-3 py-2.5 border-r border-slate-100 whitespace-nowrap">
+                                <td className="px-3 py-2.5 border border-slate-200 whitespace-nowrap">
                                   {student.department_name}
                                 </td>
-                                <td className="px-3 py-2.5 border-r border-slate-100 text-center whitespace-nowrap">
+                                <td className="px-3 py-2.5 border border-slate-200 text-center whitespace-nowrap">
                                   {student.term_count ?? "-"}
                                 </td>
-                                <td className="px-3 py-2.5 border-r border-slate-100 text-center whitespace-nowrap">
+                                <td className="px-3 py-2.5 border border-slate-200 text-center whitespace-nowrap">
                                   {/* 已領月份數 = 匯入 + 系統. The 匯 marker means an
                                       imported 國科會 baseline contributed to the total;
                                       see docs/received-months-calculation.md. */}
                                   <span className={student.received_months_source?.includes("imported") ? "text-blue-600 font-medium" : ""}>{student.received_months ?? "-"}</span>
                                   {student.received_months_source?.includes("imported") && <span className="ml-0.5 text-[9px] text-blue-400" title="含匯入的國科會已領月份數">匯</span>}
                                 </td>
-                                <td className="px-3 py-2.5 border-r border-slate-100 font-medium whitespace-nowrap">
+                                <td className="px-3 py-2.5 border border-slate-200 font-medium whitespace-nowrap">
                                   {student.student_name}
                                 </td>
-                                <td className="px-3 py-2.5 border-r border-slate-100 text-slate-500 whitespace-nowrap">
+                                <td className="px-3 py-2.5 border border-slate-200 text-slate-500 whitespace-nowrap">
                                   {student.nationality}
                                 </td>
-                                <td className="px-3 py-2.5 border-r border-slate-100 text-center tabular-nums whitespace-nowrap">
+                                <td className="px-3 py-2.5 border border-slate-200 text-center tabular-nums whitespace-nowrap">
                                   {student.enrollment_date}
                                 </td>
-                                <td className="px-3 py-2.5 border-r border-slate-100 font-mono text-xs whitespace-nowrap">
+                                <td className="px-3 py-2.5 border border-slate-200 font-mono text-xs whitespace-nowrap">
                                   {student.student_id}
                                 </td>
-                                <td className="px-3 py-2.5 text-xs font-semibold whitespace-nowrap">
+                                <td className="px-3 py-2.5 border border-slate-200 text-xs font-semibold whitespace-nowrap">
                                   {student.is_renewal ? (
                                     <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-300">
                                       {student.renewal_year || ""} 續領
@@ -1993,7 +2154,7 @@ export function ManualDistributionPanel({
                                     </div>
                                   )}
                                 </td>
-                                <td className="px-1.5 py-1.5 border-r border-slate-100 text-center">
+                                <td className="px-1.5 py-1.5 border border-slate-200 text-center">
                                   {/* Rendered for EVERY student, allocated or
                                       not — a 休學/退學/畢業 student must be
                                       markable before 確認分發 so the round
@@ -2136,123 +2297,18 @@ export function ManualDistributionPanel({
         </div>
       </div>
 
-      {/* History Dialog */}
       {/* Distribution Summary Dialog */}
       {showDistributionSummary && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-lg max-w-4xl w-full max-h-[85vh] flex flex-col">
-            <div className="p-4 border-b border-slate-200 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                <Eye className="h-5 w-5" />
-                分發結果名單
-              </h2>
-              <button
-                onClick={() => setShowDistributionSummary(false)}
-                className="text-slate-400 hover:text-slate-600 text-2xl leading-none"
-              >
-                ×
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4">
-              {isLoadingSummary ? (
-                <div className="flex justify-center py-12">
-                  <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
-                </div>
-              ) : !distributionSummary ||
-                distributionSummary.groups.length === 0 ? (
-                <p className="text-center text-slate-500 py-8">
-                  尚未完成分發，或無已分配的學生
-                </p>
-              ) : (
-                <div className="space-y-6">
-                  <div className="text-sm text-slate-600">
-                    共 {distributionSummary.total_allocated} 位學生已分發到{" "}
-                    {distributionSummary.groups.length} 個獎學金類別
-                  </div>
-                  {distributionSummary.groups.map(group => (
-                    <div
-                      key={`${group.sub_type}-${group.allocation_year}`}
-                      className="border border-slate-200 rounded-lg overflow-hidden"
-                    >
-                      <div className="bg-slate-50 px-4 py-2 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-sm text-slate-800">
-                            {getSubTypeShortName(
-                              group.sub_type,
-                              group.sub_type
-                            )}
-                          </span>
-                          <span className="text-xs text-slate-500 font-mono">
-                            ({group.sub_type})
-                          </span>
-                          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
-                            {group.allocation_year} 年度配額
-                          </span>
-                        </div>
-                        <span className="text-sm font-medium text-slate-700">
-                          {group.count} 人
-                        </span>
-                      </div>
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-slate-100 text-xs text-slate-500">
-                            <th className="text-left px-4 py-2">排名</th>
-                            <th className="text-left px-4 py-2">學號</th>
-                            <th className="text-left px-4 py-2">姓名</th>
-                            <th className="text-left px-4 py-2">學院</th>
-                            <th className="text-left px-4 py-2">系所</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {group.students
-                            .sort((a, b) => a.rank_position - b.rank_position)
-                            .map(student => (
-                              <tr
-                                key={student.ranking_item_id}
-                                className="border-b border-slate-50 hover:bg-slate-50"
-                              >
-                                <td className="px-4 py-1.5 text-slate-400">
-                                  {student.college_rejected ? (
-                                    <span className="text-red-600">N</span>
-                                  ) : (
-                                    student.rank_position
-                                  )}
-                                </td>
-                                <td className="px-4 py-1.5 font-mono text-xs">
-                                  {student.student_id}
-                                </td>
-                                <td className="px-4 py-1.5 font-medium">
-                                  {student.student_name}
-                                </td>
-                                <td className="px-4 py-1.5">
-                                  {resolveCollegeName(
-                                    collegeNames,
-                                    student.college_code,
-                                    student.college_name
-                                  )}
-                                </td>
-                                <td className="px-4 py-1.5 text-slate-600">
-                                  {student.department_name}
-                                </td>
-                              </tr>
-                            ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="p-4 border-t border-slate-200 flex justify-end">
-              <Button
-                variant="outline"
-                onClick={() => setShowDistributionSummary(false)}
-              >
-                關閉
-              </Button>
-            </div>
-          </div>
-        </div>
+        <DistributionSummaryDialog
+          summary={distributionSummary}
+          isLoading={isLoadingSummary}
+          collegeNames={collegeNames}
+          getSubTypeLabel={code => getSubTypeShortName(code, code)}
+          scholarshipTypeId={scholarshipTypeId}
+          academicYear={selectedAcademicYear}
+          semester={selectedSemester}
+          onClose={() => setShowDistributionSummary(false)}
+        />
       )}
 
       {showHistoryDialog && (

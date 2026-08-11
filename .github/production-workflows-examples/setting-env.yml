@@ -7,7 +7,18 @@
 # - Creates necessary directory structure with correct permissions
 # - Generates .env files from GitHub Secrets
 #
-# GitHub Runner: Runs on self-hosted runner installed on AP VM
+# GitHub Runner: Runs on the self-hosted runner installed on the selected
+# stage's AP VM. There are TWO such VMs and both answer to [self-hosted, linux],
+# so the `stage` input picks the runner by its stage label — never leave it to
+# chance, or a "setup" run can reconfigure the wrong machine.
+#
+# Approval: this workflow writes .env files and installs packages on the VM, so
+# the production stage runs under the `production` GitHub Environment and is
+# blocked until a required reviewer approves it. The test stage is gated the
+# same way by the `test` environment. Configure the reviewers once in
+# Settings → Environments (see SECRETS-SETUP-GUIDE.md § Environments) — the
+# `environment:` key alone gates nothing.
+#
 # Reference: See installation manual Section 3 (Docker) and Section 6 (GitHub Runner)
 
 name: Setup Production Environment
@@ -15,6 +26,14 @@ name: Setup Production Environment
 on:
   workflow_dispatch:
     inputs:
+      stage:
+        description: 'Which AP VM to configure'
+        required: true
+        type: choice
+        options:
+          - test
+          - production
+        default: 'test'
       action:
         description: 'Action to perform'
         required: true
@@ -25,10 +44,20 @@ on:
           - full-check
         default: 'validate'
 
+# Least privilege: the only token consumer in this workflow is actions/checkout.
+permissions:
+  contents: read
+
 jobs:
   setup-environment:
-    name: ${{ github.event.inputs.action == 'validate' && 'Validate Environment' || github.event.inputs.action == 'setup' && 'Setup Environment' || 'Full Check & Setup' }}
-    runs-on: [self-hosted, linux]
+    name: ${{ inputs.stage }} — ${{ github.event.inputs.action == 'validate' && 'Validate Environment' || github.event.inputs.action == 'setup' && 'Setup Environment' || 'Full Check & Setup' }}
+    # Stage label appended to the shared [self-hosted, linux] pair so the job
+    # is pinned to exactly one VM.
+    runs-on: ${{ fromJSON(format('["self-hosted","linux","{0}"]', inputs.stage)) }}
+    # The approval gate, and the source of this stage's secrets: the `test`
+    # environment supplies the test database/portal/SMTP values, `production`
+    # the real ones. Both require a reviewer before the job starts.
+    environment: ${{ inputs.stage }}
     # Bounded so a hung SSH/sudo prompt or an offline runner doesn't wait
     # forever. If the job sits queued, the AP VM runner service is likely down
     # — SSH in and run: sudo systemctl status actions.runner.*

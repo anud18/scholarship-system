@@ -194,7 +194,7 @@ describe("Application Helpers", () => {
       expect(timeline[3].date).not.toBe("");
     });
 
-    it("does not check 已核定 for non-approved status even when the toggle is on", () => {
+    it("does not check 已核定 before the distribution round is finalized, even when the toggle is on", () => {
       const app = {
         ...mockApplication,
         status: "under_review",
@@ -204,6 +204,36 @@ describe("Application Helpers", () => {
       const timeline = getApplicationTimeline(app, "zh");
 
       expect(timeline[3].status).toBe("pending");
+    });
+
+    // Passed review but missed the quota cut: the backend intentionally leaves
+    // app.status untouched (#45) and only advances review_stage, so the final
+    // step must key off the distribution outcome, not `approved`.
+    it("checks 已核定 for a distributed-but-unfunded application once the toggle is on", () => {
+      const app = {
+        ...mockApplication,
+        status: "under_review",
+        review_stage: "quota_distributed",
+        approved_at: undefined,
+        allow_college_view_distribution: true,
+      };
+      const timeline = getApplicationTimeline(app, "zh");
+
+      expect(timeline[3].status).toBe("completed");
+      // No approved_at for an unfunded application — the step still shows,
+      // just without a date.
+      expect(timeline[3].date).toBe("");
+    });
+
+    it("leaves a distributed-but-unfunded application current while the toggle is off", () => {
+      const app = {
+        ...mockApplication,
+        status: "under_review",
+        review_stage: "quota_distributed",
+      };
+      const timeline = getApplicationTimeline(app, "zh");
+
+      expect(timeline[3].status).toBe("current");
     });
 
     it("marks the final step rejected for cancelled_by_challenge", () => {

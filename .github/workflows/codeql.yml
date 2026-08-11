@@ -127,7 +127,6 @@ jobs:
       uses: advanced-security/filter-sarif@v1
       with:
         patterns: |
-          -backend/app/core/regex_validator.py:py/regex-injection
           -backend/app/api/v1/endpoints/admin/bank_verification.py:py/stack-trace-exposure
         input: sarif-results/${{ steps.sarif-lang.outputs.name }}.sarif
         output: sarif-results/${{ steps.sarif-lang.outputs.name }}.sarif

@@ -7,6 +7,51 @@ on:
         description: "GitHub Actions run ID that produced SARIF artifacts (leave empty for latest)"
         required: false
         type: string
+      sha:
+        description: "Commit SHA to report on (resolves the CodeQL run for exactly that commit; overrides 'latest')"
+        required: false
+        type: string
+      label:
+        description: "Label shown in the report header and appended to artifact names (e.g. v1.2.3)"
+        required: false
+        type: string
+
+  # Callable from other workflows (mirror-to-production.yml uses this to
+  # produce a per-release report) so the ~300-line SARIF parser below lives
+  # in exactly one place.
+  workflow_call:
+    inputs:
+      run_id:
+        required: false
+        type: string
+      sha:
+        required: false
+        type: string
+      label:
+        required: false
+        type: string
+    outputs:
+      total:
+        description: "Total number of CodeQL findings"
+        value: ${{ jobs.generate-pdf.outputs.total }}
+      critical:
+        description: "Critical-severity findings"
+        value: ${{ jobs.generate-pdf.outputs.critical }}
+      high:
+        description: "High-severity findings"
+        value: ${{ jobs.generate-pdf.outputs.high }}
+      medium:
+        description: "Medium-severity findings"
+        value: ${{ jobs.generate-pdf.outputs.medium }}
+      artifact:
+        description: "Name of the uploaded PDF artifact"
+        value: ${{ jobs.generate-pdf.outputs.artifact }}
+      resolved_sha:
+        description: "Commit SHA the reported CodeQL run actually analysed"
+        value: ${{ jobs.generate-pdf.outputs.resolved_sha }}
+      sha_matched:
+        description: "'true' when the CodeQL run analysed the requested SHA exactly"
+        value: ${{ jobs.generate-pdf.outputs.sha_matched }}
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
@@ -18,28 +63,91 @@ jobs:
     permissions:
       actions: read
       contents: read
+    outputs:
+      total: ${{ steps.counts.outputs.total }}
+      critical: ${{ steps.counts.outputs.critical }}
+      high: ${{ steps.counts.outputs.high }}
+      medium: ${{ steps.counts.outputs.medium }}
+      artifact: ${{ steps.names.outputs.pdf_artifact }}
+      resolved_sha: ${{ steps.set-run-id.outputs.resolved_sha }}
+      sha_matched: ${{ steps.set-run-id.outputs.sha_matched }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Get latest CodeQL run ID
-        if: ${{ github.event.inputs.run_id == '' }}
-        id: get-run-id
-        run: |
-          LATEST_RUN=$(gh run list --workflow=codeql.yml --status=success --limit=1 --json databaseId --jq '.[0].databaseId')
-          echo "run_id=$LATEST_RUN" >> $GITHUB_OUTPUT
+      - name: Resolve CodeQL run ID
+        id: set-run-id
         env:
           GH_TOKEN: ${{ github.token }}
-
-      - name: Set run ID
-        id: set-run-id
+          INPUT_RUN_ID: ${{ inputs.run_id }}
+          INPUT_SHA: ${{ inputs.sha }}
         run: |
-          if [ -n "${{ github.event.inputs.run_id }}" ]; then
-            echo "run_id=${{ github.event.inputs.run_id }}" >> $GITHUB_OUTPUT
+          set -euo pipefail
+
+          # Explicit run id always wins.
+          if [ -n "${INPUT_RUN_ID}" ]; then
+            RUN_ID="${INPUT_RUN_ID}"
+            RESOLVED_SHA=$(gh run view "$RUN_ID" --json headSha --jq '.headSha' 2>/dev/null || echo "")
+            MATCHED="true"
+          elif [ -n "${INPUT_SHA}" ]; then
+            # Report on a SPECIFIC commit. Anything else would silently attach
+            # a report for different code to a release, which is worse than
+            # having no report at all — so a mismatch is surfaced loudly and
+            # exported for the caller to show.
+            RUN_ID=$(gh run list --workflow=codeql.yml --status=success --limit=50 \
+              --json databaseId,headSha \
+              --jq "[.[] | select(.headSha==\"${INPUT_SHA}\")] | .[0].databaseId // empty")
+            if [ -n "$RUN_ID" ]; then
+              RESOLVED_SHA="${INPUT_SHA}"
+              MATCHED="true"
+            else
+              echo "::warning::No successful CodeQL run found for ${INPUT_SHA}; falling back to the most recent successful run. The report will NOT describe the requested commit."
+              RUN_ID=$(gh run list --workflow=codeql.yml --status=success --limit=1 --json databaseId --jq '.[0].databaseId')
+              RESOLVED_SHA=$(gh run view "$RUN_ID" --json headSha --jq '.headSha' 2>/dev/null || echo "")
+              MATCHED="false"
+            fi
           else
-            echo "run_id=${{ steps.get-run-id.outputs.run_id }}" >> $GITHUB_OUTPUT
+            RUN_ID=$(gh run list --workflow=codeql.yml --status=success --limit=1 --json databaseId --jq '.[0].databaseId')
+            RESOLVED_SHA=$(gh run view "$RUN_ID" --json headSha --jq '.headSha' 2>/dev/null || echo "")
+            MATCHED="true"
           fi
+
+          if [ -z "$RUN_ID" ]; then
+            echo "::error::Could not resolve a successful CodeQL run to report on."
+            exit 1
+          fi
+
+          echo "::notice::Using CodeQL run $RUN_ID (sha ${RESOLVED_SHA:-unknown})"
+          {
+            echo "run_id=$RUN_ID"
+            echo "resolved_sha=$RESOLVED_SHA"
+            echo "sha_matched=$MATCHED"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Compute report labels
+        id: names
+        env:
+          INPUT_LABEL: ${{ inputs.label }}
+          RESOLVED_SHA: ${{ steps.set-run-id.outputs.resolved_sha }}
+        run: |
+          set -euo pipefail
+          SHORT_SHA=$(echo "${RESOLVED_SHA}" | cut -c1-8)
+          if [ -n "${INPUT_LABEL}" ]; then
+            LABEL="${INPUT_LABEL}"
+            SUFFIX="-${INPUT_LABEL}"
+          elif [ -n "$SHORT_SHA" ]; then
+            LABEL="$SHORT_SHA"
+            SUFFIX="-$SHORT_SHA"
+          else
+            LABEL=""
+            SUFFIX=""
+          fi
+          {
+            echo "label=$LABEL"
+            echo "pdf_artifact=codeql-security-report${SUFFIX}"
+            echo "html_artifact=codeql-security-report-html${SUFFIX}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Download SARIF artifacts
         uses: dawidd6/action-download-artifact@v6
@@ -293,6 +401,8 @@ jobs:
               <div class="meta-info">
                   <p><strong>Generated:</strong> {{ timestamp }}</p>
                   <p><strong>Repository:</strong> {{ repo }}</p>
+                  {% if label %}<p><strong>Version:</strong> {{ label }}</p>{% endif %}
+                  {% if commit %}<p><strong>Commit analysed:</strong> <code>{{ commit }}</code></p>{% endif %}
                   <p><strong>Languages Analyzed:</strong> {{ languages|join(', ') }}</p>
                   <p><strong>Total Findings:</strong> {{ total_findings }}</p>
               </div>
@@ -372,6 +482,8 @@ jobs:
           html_content = html_template.render(
               timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC"),
               repo="${{ github.repository }}",
+              label="${{ steps.names.outputs.label }}",
+              commit="${{ steps.set-run-id.outputs.resolved_sha }}",
               languages=sorted(languages),
               total_findings=len(all_results),
               severity_counts=severity_counts,
@@ -382,6 +494,20 @@ jobs:
           # Write HTML file
           pathlib.Path("codeql-report.html").write_text(html_content, encoding="utf-8")
           print(f"Generated HTML report with {len(all_results)} findings")
+
+          # Totals for the workflow outputs, so callers can summarise without
+          # re-parsing the SARIF.
+          totals = defaultdict(int)
+          for r in all_results:
+              totals[r["severity"]] += 1
+          pathlib.Path("codeql-counts.json").write_text(json.dumps({
+              "total": len(all_results),
+              "critical": totals["Critical"],
+              "high": totals["High"],
+              "medium": totals["Medium"],
+              "low": totals["Low"],
+              "info": totals["Info"],
+          }), encoding="utf-8")
 
       - name: Convert HTML to PDF
         shell: python
@@ -409,28 +535,55 @@ jobs:
       - name: Verify PDF output
         run: ls -lh codeql-security-report.pdf
 
+      - name: Export finding counts
+        id: counts
+        run: |
+          set -euo pipefail
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, pathlib
+          c = json.loads(pathlib.Path("codeql-counts.json").read_text())
+          for k in ("total", "critical", "high", "medium", "low", "info"):
+              print(f"{k}={c[k]}")
+          PY
+
       - name: Upload PDF Report
         uses: actions/upload-artifact@v6
         with:
-          name: codeql-security-report
+          name: ${{ steps.names.outputs.pdf_artifact }}
           path: codeql-security-report.pdf
           retention-days: 90
 
       - name: Upload HTML Report
         uses: actions/upload-artifact@v6
         with:
-          name: codeql-security-report-html
+          name: ${{ steps.names.outputs.html_artifact }}
           path: codeql-report.html
           retention-days: 90
 
       - name: Summary
         run: |
-          echo "## CodeQL PDF Report Generated ✅" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "📊 **Report Details:**" >> $GITHUB_STEP_SUMMARY
-          echo "- Source Run ID: ${{ steps.set-run-id.outputs.run_id }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Generated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "📥 **Download:**" >> $GITHUB_STEP_SUMMARY
-          echo "- PDF report available in workflow artifacts" >> $GITHUB_STEP_SUMMARY
-          echo "- HTML report also available for preview" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## CodeQL PDF Report Generated ✅"
+            echo ""
+            echo "| Property | Value |"
+            echo "|---|---|"
+            echo "| Source Run ID | ${{ steps.set-run-id.outputs.run_id }} |"
+            echo "| Commit analysed | \`${{ steps.set-run-id.outputs.resolved_sha }}\` |"
+            echo "| Version label | ${{ steps.names.outputs.label || '(none)' }} |"
+            echo "| Generated | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |"
+            echo ""
+            echo "| Severity | Count |"
+            echo "|---|---:|"
+            echo "| Critical | ${{ steps.counts.outputs.critical }} |"
+            echo "| High | ${{ steps.counts.outputs.high }} |"
+            echo "| Medium | ${{ steps.counts.outputs.medium }} |"
+            echo "| Low | ${{ steps.counts.outputs.low }} |"
+            echo "| Info | ${{ steps.counts.outputs.info }} |"
+            echo "| **Total** | **${{ steps.counts.outputs.total }}** |"
+            echo ""
+            echo "📥 PDF and HTML are available in this run's artifacts."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "${{ steps.set-run-id.outputs.sha_matched }}" != "true" ]; then
+            echo "> ⚠️ **The requested commit had no successful CodeQL run.** This report describes \`${{ steps.set-run-id.outputs.resolved_sha }}\` instead — do not attach it to a release as-is." >> "$GITHUB_STEP_SUMMARY"
+          fi

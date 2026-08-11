@@ -124,6 +124,11 @@ export interface Application {
   scholarship_type: string;
   scholarship_type_zh?: string;
   status: ApplicationStatus;
+  /** Workflow position (ReviewStage). Load-bearing for the student progress
+   *  timeline: the final step keys off it, since an application that passes
+   *  review but misses the quota cut keeps its original `status` and only
+   *  advances `review_stage` to `quota_distributed`. */
+  review_stage?: string;
   is_renewal?: boolean;
   /** 續領年份 (民國年，如 113)；批次匯入指定或承接自前一申請 */
   renewal_year?: number | null;
@@ -148,8 +153,10 @@ export interface Application {
   /** Whether this scholarship requires a college review step (top-level flag
    *  surfaced on application list/detail responses). */
   requires_college_review?: boolean;
-  /** Admin toggle「開放學院查看分發結果」— the student timeline's final
-   *  已核定(請洽院辦) step is only checked once this is opened. */
+  /** Admin toggle「開放學院查看分發結果」— once opened, the student timeline's
+   *  final 已核定(請洽院辦) step is checked for every application that already
+   *  has a distribution outcome (approved, or review_stage ≥ quota_distributed
+   *  for the passed-review-but-unfunded case). */
   allow_college_view_distribution?: boolean;
   professor_review_completed?: boolean;
   college_review_completed?: boolean;
@@ -170,6 +177,10 @@ export interface Application {
   student_no?: string;
   /** 郵局帳號 (from the student's UserProfile.account_number, not submitted_form_data) */
   postal_account?: string | null;
+  /** 指導教授資訊 (from the student's UserProfile, not submitted_form_data) */
+  advisor_name?: string | null;
+  advisor_email?: string | null;
+  advisor_nycu_id?: string | null;
   student_termcount?: number;
   gpa?: number;
   department?: string;

@@ -174,7 +174,7 @@ class RosterNotificationService:
             List[int]: 已發送通知的使用者ID清單
         """
         if notify_roles is None:
-            notify_roles = [UserRole.admin]
+            notify_roles = [UserRole.admin, UserRole.super_admin]
 
         try:
             target_users = self._get_users_by_roles(notify_roles)
@@ -336,7 +336,7 @@ class RosterNotificationService:
             List[int]: 已發送通知的使用者ID清單
         """
         if notify_roles is None:
-            notify_roles = [UserRole.admin]
+            notify_roles = [UserRole.admin, UserRole.super_admin]
 
         try:
             target_users = self._get_users_by_roles(notify_roles)

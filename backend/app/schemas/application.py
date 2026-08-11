@@ -364,6 +364,11 @@ class ApplicationResponse(BaseModel):
     postal_account: Optional[str] = Field(
         None, description="郵局帳號（來自學生 UserProfile.account_number，非 submitted_form_data）"
     )
+    # 指導教授資訊與郵局帳號一樣存放在 UserProfile（申請精靈的固定欄位區塊），
+    # 表單設定卻把它們列為 advisor_* 固定欄位，因此表單資料頁需要從這裡取值。
+    advisor_name: Optional[str] = Field(None, description="指導教授姓名（來自學生 UserProfile）")
+    advisor_email: Optional[str] = Field(None, description="指導教授Email（來自學生 UserProfile）")
+    advisor_nycu_id: Optional[str] = Field(None, description="指導教授本校人事編號（來自學生 UserProfile）")
 
     # === Academic Organization ===
     academy_code: Optional[str] = None  # std_academyno / trm_academyno
@@ -707,7 +712,6 @@ class BulkApproveRequest(BaseModel):
 
     application_ids: List[int] = Field(..., min_length=1, description="Application IDs to approve")
     comments: Optional[str] = Field(None, description="Optional approval notes")
-    send_notifications: bool = Field(True, description="Whether to notify applicants")
 
 
 class RevokeRequest(BaseModel):

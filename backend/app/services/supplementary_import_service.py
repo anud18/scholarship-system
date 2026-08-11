@@ -1,178 +1,77 @@
-"""Supplementary import service — adds new students to an existing ranking post-distribution."""
+"""Supplementary import service — a college creates applications for new students.
+
+補充匯入 is the college's own way to submit applications on a student's behalf.
+It replaced 批次匯入 for colleges and therefore reads the SAME workbook: parsing,
+the sub-type checkmark columns, the advisor trio and the custom-field mapping all
+come from BatchImportService, so a file downloaded from either panel imports
+through either panel. What differs is only the surrounding flow — one step
+instead of upload/preview/confirm, scoped to the caller's own college, and no
+BatchImport record.
+
+The applications it creates are ordinary submitted applications: no rank, and no
+CollegeRankingItem. 名次 is decided later by the ordinary college ranking flow,
+exactly as it is for every other applicant.
+"""
 
 from __future__ import annotations
 
-import io
 import logging
-import re
-from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
-
-from openpyxl import load_workbook
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-# Column indices (1-based, matching 學生資料彙整表 export format)
-_COL_RANK = 2
-_COL_SCHOLARSHIP_TYPE = 3
-_COL_STUDENT_ID = 13
-_COL_BANK_ACCOUNT = 15
-_COL_ADVISOR_NAME = 18
-_STATIC_COL_COUNT = 18
-
-
-@dataclass
-class SupplementaryRow:
-    """Parsed data for one student from the supplementary import Excel."""
-
-    student_id: str
-    excel_rank: int  # Value from col 2 (will be offset by max existing rank)
-    sub_type_preferences: List[str]
-    bank_account: Optional[str]
-    advisor_name: Optional[str]
-    submitted_form_fields: Dict[str, str]  # field_name -> raw cell value
-
-
-def parse_scholarship_type_cell(cell_value: str, label_to_code: Dict[str, str]) -> List[str]:
-    """Parse 申請獎學金類別 cell into ordered sub_type_preference codes.
-
-    Formats:
-        "XXX"                                      -> [code_of_XXX]
-        "XXX(第一志願)暨YYY(第二志願)"              -> [code_of_XXX, code_of_YYY]
-    """
-    cell_value = (cell_value or "").strip()
-    dual_match = re.fullmatch(r"(.+?)\(第一志願\)暨(.+?)\(第二志願\)", cell_value)
-    if dual_match:
-        first_label = dual_match.group(1).strip()
-        second_label = dual_match.group(2).strip()
-        for label in (first_label, second_label):
-            if label not in label_to_code:
-                raise ValueError(f"無法識別的獎學金類別：「{label}」")
-        return [label_to_code[first_label], label_to_code[second_label]]
-
-    if cell_value in label_to_code:
-        return [label_to_code[cell_value]]
-
-    raise ValueError(f"無法識別的獎學金類別：「{cell_value}」")
-
 
 class SupplementaryImportService:
-    """Handles all logic for supplementary student import after distribution."""
+    """Handles all logic for the college's 補充匯入."""
 
     def __init__(self, db, student_service=None):
+        from app.services.batch_import_service import BatchImportService
         from app.services.student_service import StudentService
 
         self.db = db
         self.student_service = student_service or StudentService()
+        # Same reader as 批次匯入 — see module docstring.
+        self.batch_service = BatchImportService(db)
 
-    # -------- Pure helpers (no DB / no HTTP) --------
+    async def parse_file(
+        self,
+        file_content: bytes,
+        scholarship_type_id: int,
+        academic_year: int,
+        semester: Optional[str],
+    ) -> Tuple[List[Dict[str, Any]], List[str]]:
+        """Parse the uploaded workbook, returning (rows, human-readable errors).
 
-    @staticmethod
-    def parse_excel(
-        file_bytes: bytes,
-        label_to_code: Dict[str, str],
-        dynamic_field_names: List[str],
-    ) -> Tuple[List[SupplementaryRow], List[str]]:
-        """Parse a 學生資料彙整表 Excel file.
-
-        Returns (rows, errors). If errors is non-empty the caller should
-        abort and return them to the client; rows may be partially populated.
+        Delegates to the batch-import parser so the accepted file is byte-for-byte
+        the 批次匯入 format. Errors are flattened to strings because 補充匯入 is a
+        single-shot import with no preview screen to render structured rows into.
         """
-        errors: List[str] = []
-        rows: List[SupplementaryRow] = []
-        seen_student_ids: Dict[str, int] = {}  # student_id -> first excel row number
-        seen_ranks: Dict[int, int] = {}  # rank -> first excel row number
+        rows, validation_errors = await self.batch_service.parse_excel_file(
+            file_content=file_content,
+            scholarship_type_id=scholarship_type_id,
+            academic_year=academic_year,
+            semester=semester,
+        )
 
-        try:
-            wb = load_workbook(io.BytesIO(file_bytes), data_only=True, read_only=True)
-            ws = wb.active
-        except Exception as exc:
-            return [], [f"無法讀取 Excel 檔案：{exc}"]
+        messages: List[str] = []
+        for err in validation_errors:
+            row_number = getattr(err, "row_number", None) or 0
+            message = getattr(err, "message", str(err))
+            messages.append(f"第 {row_number} 列：{message}" if row_number else message)
 
-        # Row 1 = title, Row 2 = headers, Row 3+ = data
-        excel_row_num = 2  # last header row
-        for excel_row in ws.iter_rows(min_row=3, values_only=True):
-            excel_row_num += 1
-            student_id_raw = excel_row[_COL_STUDENT_ID - 1] if len(excel_row) >= _COL_STUDENT_ID else None
-            if not student_id_raw:
-                continue  # skip empty rows
+        # 續領 has its own admin-only import; a renewal row here would silently
+        # become a brand-new application under a renewal year.
+        renewal_ids = [r["student_id"] for r in rows if r.get("is_renewal")]
+        if renewal_ids:
+            messages.append("補充匯入僅供新申請學生使用，續領請由管理員以「匯入續領生」處理：" + "、".join(renewal_ids))
 
-            student_id = str(student_id_raw).strip()
-
-            # Duplicate student ID check
-            if student_id in seen_student_ids:
-                errors.append(f"學號重複：{student_id}（首次出現在第 {seen_student_ids[student_id]} 行）")
-                continue
-            seen_student_ids[student_id] = excel_row_num
-
-            # Parse rank (col 2)
-            rank_raw = excel_row[_COL_RANK - 1] if len(excel_row) >= _COL_RANK else None
-            try:
-                excel_rank = int(rank_raw)
-                if excel_rank < 1:
-                    raise ValueError()
-            except (TypeError, ValueError):
-                errors.append(f"排名無效（學號 {student_id}）：必須為正整數，收到 '{rank_raw}'")
-                continue
-
-            if excel_rank in seen_ranks:
-                errors.append(f"排名重複：第 {excel_rank} 名出現超過一次（學號 {student_id}）")
-                continue
-            seen_ranks[excel_rank] = excel_row_num
-
-            # Parse 申請獎學金類別 (col 3)
-            scholarship_cell_raw = (
-                excel_row[_COL_SCHOLARSHIP_TYPE - 1] if len(excel_row) >= _COL_SCHOLARSHIP_TYPE else None
-            )
-            scholarship_cell = str(scholarship_cell_raw or "").strip()
-            try:
-                sub_type_preferences = parse_scholarship_type_cell(scholarship_cell, label_to_code)
-            except ValueError as exc:
-                errors.append(f"學號 {student_id}：{exc}")
-                continue
-
-            # Other static columns
-            bank_account_raw = excel_row[_COL_BANK_ACCOUNT - 1] if len(excel_row) >= _COL_BANK_ACCOUNT else None
-            bank_account = str(bank_account_raw).strip() if bank_account_raw else None
-
-            advisor_raw = excel_row[_COL_ADVISOR_NAME - 1] if len(excel_row) >= _COL_ADVISOR_NAME else None
-            advisor_name = str(advisor_raw).strip() if advisor_raw else None
-
-            # Dynamic columns (col 19+)
-            submitted_form_fields: Dict[str, str] = {}
-            for idx, field_name in enumerate(dynamic_field_names):
-                col_idx = _STATIC_COL_COUNT + idx  # 0-based
-                if col_idx < len(excel_row):
-                    raw = excel_row[col_idx]
-                    if raw is not None and str(raw).strip():
-                        submitted_form_fields[field_name] = str(raw).strip()
-
-            rows.append(
-                SupplementaryRow(
-                    student_id=student_id,
-                    excel_rank=excel_rank,
-                    sub_type_preferences=sub_type_preferences,
-                    bank_account=bank_account,
-                    advisor_name=advisor_name,
-                    submitted_form_fields=submitted_form_fields,
-                )
-            )
-
-        # Validate rank sequence is consecutive starting from 1
-        if rows and not errors:
-            expected = set(range(1, len(rows) + 1))
-            actual = {r.excel_rank for r in rows}
-            missing = expected - actual
-            if missing:
-                errors.append(f"排名不連續：缺少第 {', '.join(str(r) for r in sorted(missing))} 名")
-
-        return rows, errors
+        return rows, messages
 
     # -------- DB + SIS helpers --------
 
     async def validate_no_duplicate_applications(
         self,
-        rows: List["SupplementaryRow"],
+        rows: List[Dict[str, Any]],
         scholarship_type_id: int,
         academic_year: int,
         semester: Optional[str],
@@ -182,7 +81,7 @@ class SupplementaryImportService:
         from app.models.application import Application
         from app.models.user import User
 
-        student_ids = [r.student_id for r in rows]
+        student_ids = [r["student_id"] for r in rows]
         if not student_ids:
             return []
 
@@ -223,39 +122,51 @@ class SupplementaryImportService:
         student_ids: List[str],
         academic_year: int,
         semester: Optional[str],
-    ) -> Tuple[Dict[str, dict], List[str]]:
+    ) -> Tuple[Dict[str, dict], List[str], List[str]]:
         """Fetch student_data from SIS API for each student_id.
 
-        Returns (data_map, missing_ids).
-        Raises ValueError if SIS API is not enabled.
-        Uses get_student_snapshot to capture API 1 + API 2 + metadata.
+        Returns (data_map, missing_ids, errored_ids).
+
+        `missing_ids` are 學號 the SIS positively does not know — a data problem the
+        college can fix. `errored_ids` failed for any other reason (timeout, 5xx,
+        transport): telling the operator those 學號 "do not exist" would send them
+        hunting for a typo in a perfectly correct number, so the caller must report
+        them differently. Raises ValueError if the SIS API is not enabled at all.
+
+        Lookups run concurrently (bounded) via the shared batch-import helper —
+        a sequential loop took 20-45s for a full sheet and the Next.js proxy
+        reset the socket before it finished (issue #1172).
         """
         from app.core.exceptions import NotFoundError
+        from app.services.batch_import_service import _fetch_per_student
 
         if not getattr(self.student_service, "api_enabled", False):
             raise ValueError("學生 API 未啟用，無法驗證學生資料")
 
+        results = await _fetch_per_student(
+            student_ids,
+            lambda student_id: self.student_service.get_student_snapshot(
+                student_id,
+                academic_year=str(academic_year),
+                semester=semester,
+            ),
+        )
+
         data_map: Dict[str, dict] = {}
         missing: List[str] = []
+        errored: List[str] = []
 
         for student_id in student_ids:
-            try:
-                data = await self.student_service.get_student_snapshot(
-                    student_id,
-                    academic_year=str(academic_year),
-                    semester=semester,
-                )
-            except NotFoundError:
+            data = results.get(student_id)
+            if isinstance(data, NotFoundError):
                 missing.append(student_id)
-                continue
-            except Exception as exc:
-                logger.warning("SIS API error for %s: %s", student_id, exc, exc_info=True)
-                missing.append(student_id)
-                continue
+            elif isinstance(data, BaseException):
+                logger.warning("SIS API error for %s: %s", student_id, data, exc_info=data)
+                errored.append(student_id)
+            else:
+                data_map[student_id] = data
 
-            data_map[student_id] = data
-
-        return data_map, missing
+        return data_map, missing, errored
 
     async def find_or_create_users(self, student_data_map: Dict[str, dict]) -> Dict[str, object]:
         """Return {student_id: User} — creates User if not found."""
@@ -290,67 +201,61 @@ class SupplementaryImportService:
     async def upsert_user_profiles(
         self,
         user_map: Dict[str, object],
-        rows: List["SupplementaryRow"],
-    ) -> None:
-        """Create or update UserProfile with bank_account and advisor_name from Excel."""
-        from sqlalchemy import select
-        from app.models.user_profile import UserProfile
+        rows: List[Dict[str, Any]],
+    ) -> Dict[int, object]:
+        """Write 郵局帳號 + the advisor trio to each student's UserProfile.
 
-        user_ids = [u.id for u in user_map.values()]
-        if not user_ids:
-            return
+        Delegates to the batch-import upsert so the overwrite policy (a non-empty
+        cell wins, a blank cell preserves) is identical across both import paths.
+        Crucially it stores 指導教授本校人事編號, which is what makes the professor
+        auto-assignment in create_applications able to resolve at all.
 
-        existing_stmt = select(UserProfile).where(UserProfile.user_id.in_(user_ids))
-        existing_result = await self.db.execute(existing_stmt)
-        profile_map: Dict[int, UserProfile] = {p.user_id: p for p in existing_result.scalars().all()}
-
-        row_map = {r.student_id: r for r in rows}
+        Returns {user_id: UserProfile} so the caller can hand the already-loaded
+        profile to assign_professor_from_profile instead of re-SELECTing it.
+        """
+        row_map = {r["student_id"]: r for r in rows}
+        profile_map: Dict[int, object] = {}
 
         for student_id, user in user_map.items():
             row = row_map.get(student_id)
             if not row:
                 continue
-            if user.id in profile_map:
-                profile = profile_map[user.id]
-                if row.bank_account:
-                    profile.account_number = row.bank_account
-                if row.advisor_name:
-                    profile.advisor_name = row.advisor_name
-            else:
-                profile = UserProfile(
-                    user_id=user.id,
-                    account_number=row.bank_account,
-                    advisor_name=row.advisor_name,
-                )
-                self.db.add(profile)
+            profile_map[user.id] = await self.batch_service.upsert_user_profile(user, row)
 
         await self.db.flush()
+        return profile_map
 
-    async def create_applications_and_items(
+    async def create_applications(
         self,
-        rows: List["SupplementaryRow"],
+        rows: List[Dict[str, Any]],
         user_map: Dict[str, object],
         student_data_map: Dict[str, dict],
-        ranking,  # CollegeRanking ORM object
-        max_existing_rank: int,
-        scholarship_configuration,  # ScholarshipConfiguration ORM object (same period as ranking)
-    ) -> int:
-        """Create Application + CollegeRankingItem for each supplementary row.
+        scholarship_configuration,  # ScholarshipConfiguration ORM object
+        importer_id: int,
+        profile_map: Optional[Dict[int, object]] = None,
+    ) -> Tuple[int, List[str]]:
+        """Create one submitted Application per imported row.
 
-        Returns count of created items.
+        Returns (created_count, student_ids whose 指導教授 could not be resolved).
+
+        No CollegeRankingItem is created and no rank is assigned: an imported
+        student joins the ordinary applicant pool and is ranked by the normal
+        college ranking flow, exactly like a self-submitting student.
 
         `scholarship_configuration` is required: roster rule validation loads
         that period's rules via applications.scholarship_configuration_id, so
         an application created without it gets excluded from 造冊 with
         「未關聯獎學金配置」(issue #1213).
         """
-        from sqlalchemy import select
+        from app.core.exceptions import ValidationError
         from app.models.application import Application
-        from app.models.application_sequence import ApplicationSequence
-        from app.models.college_review import CollegeRankingItem
+        from app.models.enums import Semester
         from app.services.application_builder import (
+            assign_professor_from_profile,
             build_submitted_application_values,
             derive_sub_scholarship_type,
+            generate_app_id,
+            validate_sub_type_for_submission,
         )
 
         if scholarship_configuration is None:
@@ -360,102 +265,97 @@ class SupplementaryImportService:
             )
 
         if not rows:
-            return 0
+            return 0, []
 
-        semester_str = ranking.semester if ranking.semester else "yearly"
+        cfg = scholarship_configuration
+        scholarship = cfg.scholarship_type
+        profile_map = profile_map or {}
 
-        # Lock sequence once, reserve len(rows) slots
-        seq_stmt = (
-            select(ApplicationSequence)
-            .where(
-                ApplicationSequence.academic_year == ranking.academic_year,
-                ApplicationSequence.semester == semester_str,
-            )
-            .with_for_update()
-        )
-        seq_result = await self.db.execute(seq_stmt)
-        seq_record = seq_result.scalar_one_or_none()
-        if not seq_record:
-            seq_record = ApplicationSequence(
-                academic_year=ranking.academic_year,
-                semester=semester_str,
-                last_sequence=0,
-            )
-            self.db.add(seq_record)
-            await self.db.flush()
-
-        base_seq = seq_record.last_sequence
-        seq_record.last_sequence = base_seq + len(rows)
-        await self.db.flush()
+        # ScholarshipConfiguration.semester is an Enum column; a yearly cycle stores
+        # NULL there and Application.semester must stay NULL too. The app-id sequence
+        # keys on the string "yearly" instead (see ApplicationSequence.format_app_id).
+        # getattr(..., "value", ...) tolerates both the enum member a DB load returns
+        # and a bare string an in-memory fixture may carry.
+        raw_semester = getattr(cfg.semester, "value", cfg.semester)
+        semester_value = None if raw_semester in (None, "", Semester.yearly.value) else raw_semester
+        sequence_semester = semester_value or "yearly"
 
         # Shared submitted-application invariants (status/status_name/review_stage/
         # submitted_at/amount/scholarship_name) — same source as the student and
         # batch-import paths; one shared timestamp for the whole import is intended.
-        submitted_values = build_submitted_application_values(ranking.scholarship_type, scholarship_configuration)
+        submitted_values = build_submitted_application_values(scholarship, cfg)
+
+        # Custom-field definitions are identical for the whole import — fetch once
+        # (the batch path does the same) and reuse for every row.
+        field_definitions = await self.batch_service.fetch_field_definitions(scholarship.code)
 
         created = 0
-        for idx, row in enumerate(rows):
-            user = user_map.get(row.student_id)
+        unresolved_professors: List[str] = []
+        for row in rows:
+            student_id = row["student_id"]
+            user = user_map.get(student_id)
             if not user:
                 continue
 
-            sis_data = student_data_map.get(row.student_id, {})
+            sis_data = student_data_map.get(student_id, {})
 
-            app_id = ApplicationSequence.format_app_id(ranking.academic_year, semester_str, base_seq + idx + 1)
+            # sub_types already carry the shared preference ordering (moe_1w first)
+            # applied by the batch parser — do not re-order here.
+            sub_types = list(row.get("sub_types") or [])
+            sub_scholarship_type = derive_sub_scholarship_type(sub_types)
+            try:
+                validate_sub_type_for_submission(scholarship, sub_scholarship_type)
+            except ValidationError as exc:
+                raise ValidationError(f"學號 {student_id}：{exc.message}") from exc
 
-            submitted_form_data = {
-                "fields": {
-                    field_name: {
-                        "field_id": field_name,
-                        "field_type": "text",
-                        "value": value,
-                    }
-                    for field_name, value in row.submitted_form_fields.items()
-                }
-            }
+            # commit=False keeps the sequence row locked for the whole import so it
+            # stays atomic — same trade-off the batch-import path makes.
+            app_id = await generate_app_id(self.db, cfg.academic_year, sequence_semester, commit=False)
+
+            submitted_form_data = self.batch_service.build_submitted_form_data(
+                field_definitions, row.get("custom_fields") or {}
+            )
 
             # scholarship_subtype_list is what the manual-distribution panel reads
-            # as `applied_sub_types`; sub_type_preferences is the ordered preference list
-            # used by allocation logic. Set both from the Excel 申請獎學金類別 column so
-            # admin can see + distribute supplementary students. The Excel cell encodes
-            # an explicit 志願 order, so we keep it verbatim (no moe_1w reordering).
-            # sub_scholarship_type must reflect the first preference — roster rule
-            # validation selects rule sets by it, and the default "general" would
-            # pick the wrong rules.
+            # as `applied_sub_types`; sub_type_preferences is the ordered preference
+            # list used by allocation logic. Both come from the checkmark columns so
+            # admin can see + distribute these students. sub_scholarship_type must
+            # reflect the first preference — roster rule validation selects rule sets
+            # by it, and the default "general" would pick the wrong rules.
             app = Application(
                 app_id=app_id,
                 user_id=user.id,
-                scholarship_type_id=ranking.scholarship_type_id,
-                scholarship_configuration_id=scholarship_configuration.id,
+                scholarship_type_id=cfg.scholarship_type_id,
+                scholarship_configuration_id=cfg.id,
                 scholarship_name=submitted_values["scholarship_name"],
                 amount=submitted_values["amount"],
-                academic_year=ranking.academic_year,
-                semester=ranking.semester,
+                academic_year=cfg.academic_year,
+                semester=semester_value,
                 status=submitted_values["status"],
                 status_name=submitted_values["status_name"],
                 review_stage=submitted_values["review_stage"],
                 submitted_at=submitted_values["submitted_at"],
-                sub_type_selection_mode=ranking.scholarship_type.sub_type_selection_mode,
+                sub_type_selection_mode=scholarship.sub_type_selection_mode,
                 student_data=sis_data,
-                sub_scholarship_type=derive_sub_scholarship_type(row.sub_type_preferences),
-                scholarship_subtype_list=list(row.sub_type_preferences or []),
-                sub_type_preferences=row.sub_type_preferences,
+                sub_scholarship_type=sub_scholarship_type,
+                scholarship_subtype_list=sub_types,
+                sub_type_preferences=sub_types or None,
                 submitted_form_data=submitted_form_data,
+                imported_by_id=importer_id,
+                import_source="supplementary_import",
+                document_status="pending_documents",
             )
             self.db.add(app)
             await self.db.flush()
 
-            rank_item = CollegeRankingItem(
-                ranking_id=ranking.id,
-                application_id=app.id,
-                rank_position=max_existing_rank + row.excel_rank,
-                is_supplementary=True,
-                status="ranked",
-                college_rejected=False,
-                is_allocated=False,
-            )
-            self.db.add(rank_item)
+            # Professor linkage is what makes the application visible in the
+            # professor review queue (it filters on Application.professor_id);
+            # without it the student is stuck at 教授審核中 forever.
+            professor = await assign_professor_from_profile(self.db, app, user.id, profile=profile_map.get(user.id))
+            if professor is None:
+                unresolved_professors.append(student_id)
+
             created += 1
 
         await self.db.flush()
-        return created
+        return created, unresolved_professors

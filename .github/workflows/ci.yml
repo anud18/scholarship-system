@@ -51,6 +51,11 @@ jobs:
               - 'frontend/**'
               - '!frontend/README.md'
               - '!frontend/**/*.md'
+              # The nginx configs are asserted by
+              # frontend/__tests__/security-headers-nginx-parity.test.ts — without
+              # this, an nginx-only PR that drops or edits a security header never
+              # runs the test that catches the drift.
+              - 'nginx/**'
             docker:
               - 'docker-compose*.yml'
               - '**/Dockerfile*'

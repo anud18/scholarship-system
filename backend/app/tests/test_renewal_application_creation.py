@@ -152,13 +152,29 @@ async def authed_client(client: AsyncClient, test_user: User):
 
 @pytest.fixture(autouse=True)
 def freeze_current_academic_year(monkeypatch):
-    """Force `get_current_academic_period()` to return AY114 so tests are stable."""
+    """Force `get_current_academic_period()` to return AY114 so tests are stable.
+
+    Patched where it is LOOKED UP, not only where it is defined. ``renewal.py``
+    does ``from app.utils.academic_period import get_current_academic_period``,
+    which binds the function object into that module's namespace at import time —
+    so patching only ``academic_period.get_current_academic_period`` leaves the
+    endpoint calling the real one. That made this fixture a silent no-op: the
+    tests passed only while the wall-clock ROC academic year happened to be 114,
+    and broke the moment it rolled over to 115 on 2026-08-01 (the calendar rolls
+    in August, see calculate_academic_period_from_date).
+    """
+    from app.api.v1.endpoints import renewal
     from app.utils import academic_period
 
     def _fake_current_period():
-        return {"academic_year": CURRENT_ACADEMIC_YEAR, "semester": "first", "western_year": 2025}
+        return {
+            "academic_year": CURRENT_ACADEMIC_YEAR,
+            "semester": "first",
+            "western_year": CURRENT_ACADEMIC_YEAR + 1911,
+        }
 
     monkeypatch.setattr(academic_period, "get_current_academic_period", _fake_current_period)
+    monkeypatch.setattr(renewal, "get_current_academic_period", _fake_current_period)
 
 
 # --------------------------------------------------------------------------- #

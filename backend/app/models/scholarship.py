@@ -594,7 +594,7 @@ class ScholarshipConfiguration(Base):
 
     review_deadline = Column(DateTime(timezone=True), nullable=True)
 
-    # 補充匯入開關 — admin 控制，分發完成後是否開放學院上傳新學生 Excel
+    # 補充匯入開關 — admin 控制，是否開放學院匯入新的申請學生（Excel）
     allow_supplementary_import = Column(Boolean, default=False, nullable=False, server_default="false")
 
     # 分發結果查看開關 — admin 控制，是否開放學院查看自己學生的分發結果（正取/備取/未錄取）

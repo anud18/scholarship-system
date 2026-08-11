@@ -160,6 +160,21 @@ export const getApplicationTimeline = (
     status === "cancelled" ||
     status === "cancelled_by_challenge";
 
+  // 是否已有分發結果。未獲配額的申請「不會」被改成 approved(見後端
+  // manual_distribution_service 的 #45 註解:通過審核但未上榜者維持原狀態,
+  // 只有 review_stage 前進到 quota_distributed),因此不能只看 approved,
+  // 否則這些學生的最終步驟永遠停在未完成。
+  const hasDistributionOutcome =
+    status === "approved" || hasReachedStage(reviewStage, "quota_distributed");
+
+  // 最終步驟只揭露「結果已出爐,請洽院辦」,不揭露是否獲獎,
+  // 因此以管理員的「開放學院查看分發結果」開關為打勾時機。
+  const getFinalStepStatus = (): TimelineStep["status"] => {
+    if (isTerminated) return "rejected";
+    if (!hasDistributionOutcome) return "pending";
+    return allowCollegeViewDistribution ? "completed" : "current";
+  };
+
   const steps: TimelineStep[] = [
     // 1. 提交申請
     {
@@ -199,19 +214,14 @@ export const getApplicationTimeline = (
   }
 
   // 4. 已核定(請洽院辦) — 僅在管理員開放學院查看分發結果後才打勾
+  const finalStepStatus = getFinalStepStatus();
   steps.push({
     id: "final_decision",
     title: locale === "zh" ? "已核定(請洽院辦)" : "Finalized (Contact College Office)",
-    status: isTerminated
-      ? "rejected"
-      : status === "approved"
-        ? allowCollegeViewDistribution
-          ? "completed"
-          : "current"
-        : "pending",
+    status: finalStepStatus,
     date: isTerminated
       ? formatDate(application.reviewed_at, locale)
-      : status === "approved" && allowCollegeViewDistribution
+      : finalStepStatus === "completed"
         ? formatDate(application.approved_at, locale)
         : "",
   });
@@ -299,6 +309,13 @@ export const formatFieldName = (fieldName: string, locale: Locale) => {
     contact_address: locale === "zh" ? "通訊地址" : "Contact Address",
     bank_account: locale === "zh" ? "銀行帳戶" : "Bank Account",
     account_number: locale === "zh" ? "郵局帳號" : "Post Office Account",
+    // Fixed fields injected into every form config (see the backend's
+    // FIXED_FIELD_LABELS) — needed as a fallback when the config fails to load.
+    postal_account: locale === "zh" ? "郵局帳號" : "Post Office Account",
+    advisor_name: locale === "zh" ? "指導教授姓名" : "Advisor Name",
+    advisor_email: locale === "zh" ? "指導教授Email" : "Advisor Email",
+    advisor_nycu_id:
+      locale === "zh" ? "指導教授本校人事編號" : "Advisor NYCU ID",
     research_proposal: locale === "zh" ? "研究計畫" : "Research Proposal",
     budget_plan: locale === "zh" ? "預算規劃" : "Budget Plan",
     milestone_plan: locale === "zh" ? "里程碑規劃" : "Milestone Plan",

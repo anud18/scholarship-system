@@ -32,16 +32,17 @@ class BulkApprovalService:
         application_ids: List[int],
         approver_user_id: int,
         approval_notes: Optional[str] = None,
-        send_notifications: bool = True,
     ) -> Dict[str, Any]:
-        """Bulk approve multiple applications"""
+        """Bulk approve multiple applications.
+
+        Students are NOT emailed about the outcome — the only mail a student
+        receives is the submission confirmation and the 3-day draft reminder.
+        """
 
         results = {
             "total_requested": len(application_ids),
             "successful_approvals": [],
             "failed_approvals": [],
-            "notifications_sent": 0,
-            "notifications_failed": 0,
         }
 
         try:
@@ -104,20 +105,6 @@ class BulkApprovalService:
                         }
                     )
 
-                    # Send notification if requested
-                    if send_notifications:
-                        try:
-                            notification_sent = await self.notification_service.send_status_change_notification(
-                                application, old_status, application.status
-                            )
-                            if notification_sent:
-                                results["notifications_sent"] += 1
-                            else:
-                                results["notifications_failed"] += 1
-                        except Exception:
-                            logger.exception(f"Failed to send notification for application {application.id}")
-                            results["notifications_failed"] += 1
-
                     logger.info(f"Bulk approved application {application.app_id}")
 
                 except Exception as e:
@@ -144,16 +131,16 @@ class BulkApprovalService:
         application_ids: List[int],
         rejector_user_id: int,
         rejection_reason: str,
-        send_notifications: bool = True,
     ) -> Dict[str, Any]:
-        """Bulk reject multiple applications"""
+        """Bulk reject multiple applications.
+
+        As with bulk approval, no outcome email is sent to the student.
+        """
 
         results = {
             "total_requested": len(application_ids),
             "successful_rejections": [],
             "failed_rejections": [],
-            "notifications_sent": 0,
-            "notifications_failed": 0,
         }
 
         try:
@@ -211,20 +198,6 @@ class BulkApprovalService:
                             "rejection_reason": rejection_reason,
                         }
                     )
-
-                    # Send notification
-                    if send_notifications:
-                        try:
-                            notification_sent = await self.notification_service.send_status_change_notification(
-                                application, old_status, application.status
-                            )
-                            if notification_sent:
-                                results["notifications_sent"] += 1
-                            else:
-                                results["notifications_failed"] += 1
-                        except Exception:
-                            logger.exception(f"Failed to send notification for application {application.id}")
-                            results["notifications_failed"] += 1
 
                     logger.info(f"Bulk rejected application {application.app_id}")
 
@@ -482,14 +455,12 @@ class BulkApprovalService:
                     application_ids,
                     operator_user_id,
                     operation_params.get("approval_notes"),
-                    operation_params.get("send_notifications", True),
                 )
             elif operation_type == "reject":
                 results = await self.bulk_reject_applications(
                     application_ids,
                     operator_user_id,
                     operation_params.get("rejection_reason", "Bulk rejection"),
-                    operation_params.get("send_notifications", True),
                 )
             elif operation_type == "update_status":
                 results = await self.bulk_status_update(

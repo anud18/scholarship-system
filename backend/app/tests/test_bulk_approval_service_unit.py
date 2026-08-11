@@ -120,8 +120,8 @@ async def test_bulk_approve_applications_success(monkeypatch):
 
     assert result["total_requested"] == 2
     assert len(result["successful_approvals"]) == 2
-    assert result["notifications_sent"] == 1
-    assert result["notifications_failed"] == 1
+    # Students are never emailed about a bulk outcome.
+    assert notification_stub.status_calls == []
     assert session.commits == 2
     # Note: priority_score calculation removed - no longer needed
     assert all(item["new_status"] == ApplicationStatus.approved.value for item in result["successful_approvals"])
@@ -141,29 +141,29 @@ async def test_bulk_approve_applications_handles_invalid_status():
 
 
 @pytest.mark.asyncio
-async def test_bulk_approve_handles_missing_ids_and_no_notifications():
+async def test_bulk_approve_handles_missing_ids():
     app = DummyApplication("APP-missing", ApplicationStatus.submitted.value)
     session = StubSession([StubResult([app])])
     service = make_service(session)
 
-    result = await service.bulk_approve_applications([app.id, 999], approver_user_id=2, send_notifications=False)
+    result = await service.bulk_approve_applications([app.id, 999], approver_user_id=2)
 
     assert result["total_requested"] == 2
     assert len(result["successful_approvals"]) == 1
-    assert result["notifications_sent"] == 0
-    assert result["notifications_failed"] == 0
 
 
 @pytest.mark.asyncio
-async def test_bulk_approve_records_notification_error(monkeypatch):
+async def test_bulk_approve_never_notifies_the_student():
+    """A notifier that would explode proves the approval path never calls it."""
     app = DummyApplication("APP-4", ApplicationStatus.under_review.value)
     session = StubSession([StubResult([app])])
-    notification_stub = StubNotificationService(responses=[RuntimeError("boom")])
+    notification_stub = StubNotificationService(responses=[RuntimeError("must not be sent")])
     service = make_service(session, notification_stub)
 
     result = await service.bulk_approve_applications([app.id], approver_user_id=5)
 
-    assert result["notifications_failed"] == 1
+    assert len(result["successful_approvals"]) == 1
+    assert notification_stub.status_calls == []
     assert session.commits == 1
     assert session.rollbacks == 0
 
@@ -214,7 +214,7 @@ async def test_bulk_reject_applications_success():
     result = await service.bulk_reject_applications([app.id], rejector_user_id=7, rejection_reason="missing docs")
 
     assert len(result["successful_rejections"]) == 1
-    assert result["notifications_sent"] == 1
+    assert notification_stub.status_calls == []
     # Note: rejection_reason moved to ApplicationReview model
     assert len(session.added_objects) == 1  # ApplicationReview record created
     assert session.added_objects[0].comments == "missing docs"
@@ -252,17 +252,16 @@ async def test_bulk_reject_commit_failure():
 
 
 @pytest.mark.asyncio
-async def test_bulk_reject_no_notifications():
+async def test_bulk_reject_never_notifies_the_student():
     app = DummyApplication("APP-reject2", ApplicationStatus.under_review.value)
     session = StubSession([StubResult([app])])
-    service = make_service(session)
+    notification_stub = StubNotificationService(responses=[RuntimeError("must not be sent")])
+    service = make_service(session, notification_stub)
 
-    result = await service.bulk_reject_applications(
-        [app.id], rejector_user_id=5, rejection_reason="late", send_notifications=False
-    )
+    result = await service.bulk_reject_applications([app.id], rejector_user_id=5, rejection_reason="late")
 
-    assert result["notifications_sent"] == 0
-    assert result["notifications_failed"] == 0
+    assert len(result["successful_rejections"]) == 1
+    assert notification_stub.status_calls == []
 
 
 @pytest.mark.asyncio

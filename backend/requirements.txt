@@ -15,14 +15,14 @@ greenlet>=3.0,<4  # Required by SQLAlchemy sync engine (used by health check + A
 PyJWT[crypto]==2.13.0  # Security update: patched CVEs PYSEC-2026-175/176/177/178/179
 passlib[bcrypt]==1.7.4
 bcrypt==4.2.1  # Updated for Python 3.13 compatibility
-cryptography==49.0.0  # Security: GHSA-537c-gmf6-5ccf (<48.0.1); >=49 required by fastapi-mail 1.6.5
+cryptography==50.0.0  # Security: GHSA-g6cj-pr64-35w5 (PKCS#7 EnvelopedData Bleichenbacher oracle, >=44,<50); unblocked by dropping fastapi-mail (capped <50)
 python-decouple==3.8
 
 # Data validation and serialization
-pydantic==2.13.4  # >=2.12.5 required by fastapi-mail 1.6.3+
-pydantic[email]==2.13.4  # >=2.12.5 required by fastapi-mail 1.6.3+
+pydantic==2.13.4
+pydantic[email]==2.13.4
 pydantic-settings==2.14.2  # Updated to match pydantic version
-email-validator==2.3.0  # >=2.3.0 required by fastapi-mail 1.6.5
+email-validator==2.3.0
 
 # HTTP client and utilities
 httpx==0.28.1  # Updated for Python 3.13 compatibility
@@ -39,7 +39,7 @@ apscheduler==3.10.4
 croniter==1.4.1
 
 # Email services
-fastapi-mail==1.6.5  # 1.6.3+ required for starlette>=1.0 compatibility
+aiosmtplib==5.1.2  # Direct SMTP sending (EmailService); declared explicitly after dropping fastapi-mail
 jinja2==3.1.6  # Security: Fixed sandbox escape vulnerability (GHSA-cpwx-vrp4-4pq7)
 
 # File processing and OCR
@@ -58,7 +58,7 @@ openpyxl==3.1.2
 
 # PDF generation
 reportlab==4.4.10  # Used by export_package_service
-pypdf==6.14.2  # Merged 申請資料合併檔 PDF in the export package (pdf_merge.py)
+pypdf==6.15.0  # Security: CVE-2026-71852/71870 (ToUnicode token length, CID width range DoS, <6.15.0); merged 申請資料合併檔 PDF in the export package (pdf_merge.py)
 
 # Logging and monitoring
 structlog==24.4.0  # Updated for Python 3.13 compatibility

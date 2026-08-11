@@ -84,6 +84,8 @@ async def _application(
         status=ApplicationStatus.submitted,
         sub_type_selection_mode=SubTypeSelectionMode.multiple,
         scholarship_subtype_list=applied,
+        # College scoping (#1223 A) reads the academy code from the SIS snapshot.
+        student_data={"std_academyno": "C"},
     )
     db.add(app)
     await db.flush()
@@ -167,6 +169,7 @@ class TestGetApplicationAvailableSubTypes:
             email="college@nycu.edu.tw",
             user_type=UserType.employee,
             role=UserRole.college,
+            college_code="C",
         )
         db.add(college)
         await db.flush()

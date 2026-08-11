@@ -14,6 +14,7 @@
 
 import {
   createManualDistributionApi,
+  exportDistributionSummary,
   isCancelledAllocation,
   mergeSuggestions,
   reasonsBySuggestion,
@@ -599,5 +600,109 @@ describe("reasonsBySuggestion / summarizeReasons", () => {
     expect(
       unallocatedReasonLabel("brand_new_code" as UnallocatedReason)
     ).toBe("brand_new_code");
+  });
+});
+
+// ─── Binary export (shared fetchBinaryExport) ──────────────────────
+
+describe("exportDistributionSummary", () => {
+  const okResponse = (disposition: string) => ({
+    ok: true,
+    headers: { get: jest.fn().mockReturnValue(disposition) },
+    blob: jest.fn().mockResolvedValue(new Blob(["xlsx"])),
+  });
+
+  it("sends the three selection params, Bearer auth, and decodes filename*", async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValue(
+        okResponse("attachment; filename*=UTF-8''%E5%88%86%E7%99%BC%E5%90%8D%E5%96%AE.xlsx")
+      );
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const result = await exportDistributionSummary({
+      scholarshipTypeId: 7,
+      academicYear: 114,
+      semester: "yearly",
+    });
+
+    const url = fetchMock.mock.calls[0][0] as string;
+    expect(url).toContain(
+      "/api/v1/manual-distribution/distribution-summary/export"
+    );
+    expect(url).toContain("scholarship_type_id=7");
+    expect(url).toContain("academic_year=114");
+    expect(url).toContain("semester=yearly");
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe(
+      "Bearer test-token"
+    );
+    expect(result.filename).toBe("分發名單.xlsx");
+  });
+
+  it("omits format for xlsx (URL unchanged) and appends it for pdf", async () => {
+    const fetchMock = jest.fn().mockResolvedValue(okResponse(""));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await exportDistributionSummary({
+      scholarshipTypeId: 7,
+      academicYear: 114,
+      semester: "first",
+    });
+    expect(fetchMock.mock.calls[0][0]).not.toContain("format=");
+
+    await exportDistributionSummary({
+      scholarshipTypeId: 7,
+      academicYear: 114,
+      semester: "first",
+      format: "pdf",
+    });
+    expect(fetchMock.mock.calls[1][0]).toContain("format=pdf");
+  });
+
+  it("falls back to 分發名單_{year}.{ext} without Content-Disposition", async () => {
+    const fetchMock = jest.fn().mockResolvedValue(okResponse(""));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const result = await exportDistributionSummary({
+      scholarshipTypeId: 7,
+      academicYear: 114,
+      semester: "yearly",
+      format: "pdf",
+    });
+    expect(result.filename).toBe("分發名單_114.pdf");
+  });
+
+  it("surfaces the backend message on a non-OK response", async () => {
+    // The 404 branches (尚未完成分發 / 尚無已分配的學生) must reach the toast,
+    // not the generic fallback.
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: false,
+      json: jest.fn().mockResolvedValue({ message: "尚未完成分發，無法匯出" }),
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(
+      exportDistributionSummary({
+        scholarshipTypeId: 7,
+        academicYear: 114,
+        semester: "yearly",
+      })
+    ).rejects.toThrow("尚未完成分發，無法匯出");
+  });
+
+  it("falls back to zh-TW when the error body is unparseable", async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: false,
+      json: jest.fn().mockRejectedValue(new Error("no JSON")),
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(
+      exportDistributionSummary({
+        scholarshipTypeId: 7,
+        academicYear: 114,
+        semester: "yearly",
+      })
+    ).rejects.toThrow("無法匯出分發名單");
   });
 });

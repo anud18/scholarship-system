@@ -34,11 +34,7 @@ import { Application, User as UserType } from "@/lib/api";
 import api from "@/lib/api";
 import { ApplicationFormDataDisplay } from "@/components/application-form-data-display";
 import { ProfessorAssignmentDropdown } from "@/components/professor-assignment-dropdown";
-import {
-  ApplicationStatus,
-  getApplicationStatusLabel,
-  getApplicationStatusBadgeVariant,
-} from "@/lib/enums";
+import { ApplicationStatus } from "@/lib/enums";
 import {
   getApplicationTimeline,
   getDocumentLabel,
@@ -46,6 +42,7 @@ import {
   formatFieldName,
   formatDisplayValue,
 } from "@/lib/utils/application-helpers";
+import { canonicalizeFieldId } from "@/lib/utils/profile-owned-fields";
 import { useReferenceData, getDegreeName } from "@/hooks/use-reference-data";
 import {
   getAcademyName,
@@ -496,10 +493,30 @@ export function ApplicationDetailDialog({
     const dynamicFields: Record<string, any> = {};
     const basicFields: Record<string, any> = {};
 
-    // 處理後端的 submitted_form_data.fields 結構
-    if (formData.submitted_form_data && formData.submitted_form_data.fields) {
-      // 後端結構：{ submitted_form_data: { fields: { field_id: { value: "..." } } } }
-      Object.entries(formData.submitted_form_data.fields).forEach(
+    // 郵局帳號 is submitted as `account_number` but the form config calls it
+    // `postal_account`; without canonicalizing it counts as an extra「基本欄位」
+    // and 郵局帳號 gets rendered a second time in the 申請表單欄位 card.
+    const assignField = (rawFieldId: string, value: any) => {
+      const fieldId = canonicalizeFieldId(rawFieldId);
+      // First writer wins, matching ApplicationFormDataDisplay — otherwise a
+      // legacy submission carrying both synonyms could resolve to a different
+      // account here than in the 動態申請欄位 card.
+      if (fieldId in dynamicFields || fieldId in basicFields) return;
+
+      if (applicationFields.includes(fieldId)) {
+        dynamicFields[fieldId] = value;
+      } else {
+        basicFields[fieldId] = value;
+      }
+    };
+
+    // 後端結構：{ submitted_form_data: { fields: { field_id: { value: "..." } } } }
+    // 或已展開的 { fields: ... }
+    const wrappedFields =
+      formData.submitted_form_data?.fields || formData.fields;
+
+    if (wrappedFields) {
+      Object.entries(wrappedFields).forEach(
         ([fieldId, fieldData]: [string, any]) => {
           if (
             fieldData &&
@@ -513,36 +530,7 @@ export function ApplicationDetailDialog({
               fieldId !== "files" &&
               fieldId !== "agree_terms"
             ) {
-              if (applicationFields.includes(fieldId)) {
-                dynamicFields[fieldId] = value;
-              } else {
-                basicFields[fieldId] = value;
-              }
-            }
-          }
-        }
-      );
-    } else if (formData.fields) {
-      // 直接處理 fields 結構
-      Object.entries(formData.fields).forEach(
-        ([fieldId, fieldData]: [string, any]) => {
-          if (
-            fieldData &&
-            typeof fieldData === "object" &&
-            "value" in fieldData
-          ) {
-            const value = fieldData.value;
-            if (
-              value &&
-              value !== "" &&
-              fieldId !== "files" &&
-              fieldId !== "agree_terms"
-            ) {
-              if (applicationFields.includes(fieldId)) {
-                dynamicFields[fieldId] = value;
-              } else {
-                basicFields[fieldId] = value;
-              }
+              assignField(fieldId, value);
             }
           }
         }
@@ -559,11 +547,7 @@ export function ApplicationDetailDialog({
           return;
         }
 
-        if (applicationFields.includes(key)) {
-          dynamicFields[key] = value;
-        } else {
-          basicFields[key] = value;
-        }
+        assignField(key, value);
       });
     }
 
@@ -667,23 +651,8 @@ export function ApplicationDetailDialog({
                     </Label>
                     <p className="text-sm">{application.scholarship_type_zh}</p>
                   </div>
-                  <div>
-                    <Label className="font-medium">
-                      {t("dialogs.application_detail.status")}
-                    </Label>
-                    <p>
-                      <Badge
-                        variant={getApplicationStatusBadgeVariant(
-                          application.status as ApplicationStatus
-                        )}
-                      >
-                        {getApplicationStatusLabel(
-                          application.status as ApplicationStatus,
-                          locale
-                        )}
-                      </Badge>
-                    </p>
-                  </div>
+                  {/* 申請狀態不對學生顯示：核定結果一律由院辦告知，
+                      學生端只看下方「審核進度」時間軸。 */}
                   <div>
                     <Label className="font-medium">
                       {t("dialogs.application_detail.created_at")}
@@ -720,6 +689,7 @@ export function ApplicationDetailDialog({
               <CardContent>
                 <ProgressTimeline
                   steps={getApplicationTimeline(application, locale)}
+                  showProgress={false}
                 />
               </CardContent>
             </Card>

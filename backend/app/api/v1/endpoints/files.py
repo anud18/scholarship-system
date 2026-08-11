@@ -19,7 +19,11 @@ from app.models.application import Application, ApplicationFile
 from app.models.user import User, UserRole
 from app.services.auth_service import AuthService
 from app.services.minio_service import minio_service
-from app.utils.application_helpers import get_college_code_from_data
+from app.utils.college_scope import (
+    college_user_may_access,
+    get_application_college_code,
+    get_user_college_code,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -57,15 +61,13 @@ def _assert_college_may_access(current_user: User, application: Application, fil
     unconditional ``pass`` for UserRole.college, letting College-A staff stream
     any other college's transcripts and bank passbooks by walking file ids.
     """
-    user_college = (current_user.college_code or "").strip()
-    owner_college = (get_college_code_from_data(application.student_data or {}) or "").strip()
-    if not user_college or user_college != owner_college:
+    if not college_user_may_access(current_user, application):
         logger.warning(
             "SECURITY: college user attempted cross-college file access",
             extra={
                 "user_id": current_user.id,
-                "user_college": user_college,
-                "owner_college": owner_college,
+                "user_college": get_user_college_code(current_user),
+                "owner_college": get_application_college_code(application),
                 "file_id": file_id,
                 "application_id": application.id,
             },

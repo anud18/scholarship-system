@@ -3,18 +3,72 @@ Email automation service for handling automated email triggers
 """
 
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.sql_read_only_guard import UnsafeConditionQueryError, assert_read_only_select, mask_literals
 from app.models.email_management import EmailAutomationRule, EmailCategory, TriggerEvent
 from app.services.email_service import EmailService
 from app.services.frontend_email_renderer import render_email_via_frontend
 from app.services.system_setting_service import EmailTemplateService
 
 logger = logging.getLogger(__name__)
+
+# ``{placeholder}`` -> ``:placeholder`` rewriting for admin-authored recipient queries.
+_PLACEHOLDER_RE = re.compile(r"\{(\w+)\}")
+
+# Hard ceiling for a single recipient query (PostgreSQL only).
+RECIPIENT_QUERY_TIMEOUT_MS = 5000
+
+
+def _dialect_name(db: AsyncSession) -> str:
+    """Dialect of the session's bind.
+
+    FAILS CLOSED. An earlier revision wrapped this in ``except Exception: return
+    ""``, which meant a bind-resolution failure silently skipped BOTH
+    ``statement_timeout`` and ``transaction_read_only`` — the admin-authored query
+    then ran unbounded and write-enabled with no log line saying the control had
+    been skipped. A security control must not degrade quietly.
+
+    The only tolerated case is a session object with no ``get_bind`` at all (unit
+    test stubs), where there is no real database to protect.
+    """
+    get_bind = getattr(db, "get_bind", None)
+    if get_bind is None:
+        return ""
+    name = getattr(getattr(get_bind(), "dialect", None), "name", None)
+    if not name:
+        raise UnsafeConditionQueryError("could not determine the database dialect to apply read-only guards")
+    return name
+
+
+def bind_placeholders(sql: str, context: Dict[str, Any]) -> str:
+    """Rewrite ``{key}`` to ``:key`` so values bind as parameters, never as SQL text.
+
+    Occurrences are located on the MASKED copy, so a ``{...}`` sitting inside a
+    string literal or a comment is left alone — rewriting it would corrupt the
+    literal. The substitution itself is applied to the ORIGINAL by offset, which
+    is why the mask must be the same length.
+
+    A placeholder with no matching context key raises: silently leaving a literal
+    ``{key}`` in the SQL would send a malformed statement to the database.
+    """
+    masked = mask_literals(sql)
+    result: list[str] = []
+    cursor = 0
+    for match in _PLACEHOLDER_RE.finditer(masked):
+        key = match.group(1)
+        if key not in context:
+            raise UnsafeConditionQueryError(f"references unknown context key: {{{key}}}")
+        result.append(sql[cursor : match.start()])
+        result.append(f":{key}")
+        cursor = match.end()
+    result.append(sql[cursor:])
+    return "".join(result)
 
 
 class EmailAutomationService:
@@ -119,48 +173,78 @@ class EmailAutomationService:
         self, db: AsyncSession, rule: EmailAutomationRule, context: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
         """
-        Get email recipients based on the rule's condition query.
+        Resolve email recipients from the rule's admin-configured condition query.
 
-        SECURITY: Uses parameterized queries to prevent SQL injection.
-        Context values are passed as bound parameters, not string-formatted into SQL.
+        SECURITY (#1223 A): ``condition_query`` is free-form SQL stored in the
+        database and previously executed verbatim. It is now re-validated HERE, not
+        only when an admin saves it — seeds, Alembic migrations, direct DB writes and
+        the ``PATCH /{id}/toggle`` endpoint all bypass the write-time validator — and
+        executed inside a SAVEPOINT that is always rolled back with
+        ``transaction_read_only`` set. A rule therefore cannot write, and a broken
+        rule cannot poison the caller's transaction.
+
+        Failures RAISE rather than returning []: ``process_trigger`` already isolates
+        each rule in its own try/except, so raising surfaces the misconfiguration in
+        the logs without stopping the other rules or the surrounding business
+        transaction. Returning [] silently turned a broken rule into "nobody was
+        supposed to be notified".
         """
         if not rule.condition_query:
             logger.warning(f"⚠️  No condition_query defined for rule {rule.template_key}")
             return []
 
+        # Validate BEFORE any database work, so an unsafe rule never reaches the DB.
         try:
-            # SECURITY FIX: Use parameterized query instead of string formatting
-            # Convert condition_query placeholders from {key} to :key format for bindparams
-            parameterized_query = rule.condition_query
+            assert_read_only_select(rule.condition_query)
+            parameterized_query = bind_placeholders(rule.condition_query, context)
+        except UnsafeConditionQueryError:
+            logger.exception(
+                f"❌ Refusing to run unsafe condition_query for rule {rule.template_key}",
+            )
+            raise
 
-            # Replace {placeholder} with :placeholder for SQLAlchemy bindparams
-            import re
+        logger.info(f"📧 Executing recipient query for {rule.template_key}")
+        logger.debug(f"   Query template: {parameterized_query[:200]}")
 
-            placeholders = re.findall(r"\{(\w+)\}", rule.condition_query)
-            for placeholder in placeholders:
-                parameterized_query = parameterized_query.replace(f"{{{placeholder}}}", f":{placeholder}")
+        rows = await self._execute_read_only(db, parameterized_query, context)
 
-            logger.info(f"📧 Executing recipient query for {rule.template_key}:")
-            logger.info(f"   Query template: {parameterized_query[:200]}...")
-            logger.info(f"   Parameters: {context}")
+        recipients = [{"email": row[0]} for row in rows if row]
+        logger.info(f"✓ Found {len(recipients)} recipients for rule {rule.template_key}")
+        return recipients
 
-            # Execute with bound parameters (prevents SQL injection)
-            result = await db.execute(text(parameterized_query), context)
+    async def _execute_read_only(self, db: AsyncSession, sql: str, params: Dict[str, Any]) -> List[Any]:
+        """Run *sql* inside a SAVEPOINT that is ALWAYS rolled back.
 
-            recipients = []
-            for row in result:
-                # Convert row to dict - assuming first column is email
-                if row:
-                    recipients.append({"email": row[0]})
+        Two reasons the savepoint is rolled back rather than released:
+        ``RELEASE SAVEPOINT`` does not revert ``SET LOCAL``, so releasing would leave
+        the whole outer transaction read-only and the caller's later
+        ``scheduled_emails`` INSERT would fail; and rolling back guarantees a
+        misbehaving query leaves no trace in the caller's transaction.
 
-            logger.info(f"✓ Found {len(recipients)} recipients: {[r['email'] for r in recipients]}")
-            return recipients
+        A savepoint (rather than a separate connection) keeps read-your-own-writes
+        semantics, so a future caller that triggers before committing still resolves
+        the rows it just wrote.
 
-        except Exception:
-            logger.exception(f"❌ Failed to execute condition query for rule {rule.template_key}")
-            logger.error(f"   Context: {context}")
-            logger.error(f"   Query: {rule.condition_query}")
-            return []
+        ``nested`` is initialised to None and checked in ``finally`` because
+        ``begin_nested()`` performs an implicit flush that can itself raise — without
+        the null guard that failure would skip the rollback and leave the session in
+        PendingRollbackError, which is exactly the transaction-abort bug this method
+        exists to fix.
+        """
+        nested = None
+        try:
+            nested = await db.begin_nested()
+            if _dialect_name(db) == "postgresql":
+                # statement_timeout caps a pathological query; transaction_read_only
+                # blocks writes. Neither stops pg_read_file — that is what the
+                # identifier deny-list in sql_read_only_guard is for.
+                await db.execute(text(f"SET LOCAL statement_timeout = '{RECIPIENT_QUERY_TIMEOUT_MS}ms'"))
+                await db.execute(text("SET LOCAL transaction_read_only = ON"))
+            result = await db.execute(text(sql), params)
+            return list(result.fetchall())
+        finally:
+            if nested is not None:
+                await nested.rollback()
 
     async def _send_automated_email(
         self,
@@ -329,6 +413,7 @@ class EmailAutomationService:
             "whitelist_notification": EmailCategory.application_whitelist,
             "deadline_reminder_draft": EmailCategory.application_student,
             "college_review_notification": EmailCategory.review_college,
+            "college_ranking_submitted": EmailCategory.review_college,
             "supplement_request": EmailCategory.supplement_student,
             "result_notification_student": EmailCategory.result_student,
             "result_notification_professor": EmailCategory.result_professor,
@@ -344,6 +429,7 @@ class EmailAutomationService:
             "application_submitted_student": "application-submitted",
             "professor_review_notification": "professor-review-request",
             "college_review_notification": "college-review-request",
+            "college_ranking_submitted": "college-ranking-submitted",
             "application_deadline_reminder": "deadline-reminder",
             "document_request_notification": "document-request",
             "result_notification_student": "result-notification",
@@ -411,107 +497,42 @@ class EmailAutomationService:
         await self.process_trigger(db, "application_submitted", context)
         logger.info(f"✓ Email automation trigger completed for application {application_id}")
 
-    async def trigger_professor_review_submitted(
-        self, db: AsyncSession, application_id: int, review_data: Dict[str, Any]
-    ):
-        """Trigger emails when professor submits review"""
+    async def trigger_college_ranking_submitted(self, db: AsyncSession, ranking_data: Dict[str, Any]):
+        """Trigger emails when a college submits (finalizes) its ranking.
+
+        Unlike the other triggers this one is ranking-scoped, not
+        application-scoped: one mail per finalized ranking, addressed to the
+        reviewers of the college that owns it. ``college_code`` is therefore the
+        key the rule's condition_query binds against — it is passed through even
+        when None so that a global (admin) ranking resolves to no recipients
+        rather than raising on an unknown placeholder.
+        """
         from app.core.config import settings
 
-        scholarship_type_value = review_data.get("scholarship_type", "")
+        scholarship_type_value = ranking_data.get("scholarship_type", "")
         context = {
-            "application_id": application_id,
-            "app_id": review_data.get("app_id", ""),
-            "student_name": review_data.get("student_name", ""),
-            "professor_name": review_data.get("professor_name", ""),
-            "professor_email": review_data.get("professor_email", ""),
+            "ranking_id": ranking_data.get("ranking_id"),
+            "college_code": ranking_data.get("college_code"),
+            "college_name": ranking_data.get("college_name", ""),
+            "ranking_name": ranking_data.get("ranking_name", ""),
             "scholarship_type": scholarship_type_value,
-            "scholarship_name": scholarship_type_value,  # Alias for backward compatibility with templates
-            "scholarship_type_id": review_data.get("scholarship_type_id"),
-            "review_result": review_data.get("review_result", ""),
-            "review_date": review_data.get("review_date", datetime.now().strftime("%Y-%m-%d")),
-            "professor_recommendation": review_data.get("professor_recommendation", ""),
-            "college_name": review_data.get("college_name", ""),
-            "review_deadline": review_data.get("review_deadline", ""),
+            "scholarship_name": scholarship_type_value,  # Alias for templates
+            "scholarship_type_id": ranking_data.get("scholarship_type_id"),
+            "sub_type_code": ranking_data.get("sub_type_code", ""),
+            "academic_year": ranking_data.get("academic_year", ""),
+            "semester": ranking_data.get("semester", ""),
+            "total_applications": ranking_data.get("total_applications", ""),
+            "finalized_by": ranking_data.get("finalized_by", ""),
+            "finalized_at": ranking_data.get("finalized_at", datetime.now().strftime("%Y-%m-%d %H:%M")),
             "system_url": settings.frontend_url,
         }
 
-        await self.process_trigger(db, "professor_review_submitted", context)
-
-    async def trigger_final_result_decided(self, db: AsyncSession, application_id: int, result_data: Dict[str, Any]):
-        """Trigger emails when final result is decided"""
-        from app.core.config import settings
-
-        scholarship_type_value = result_data.get("scholarship_type", "")
-        context = {
-            "application_id": application_id,
-            "app_id": result_data.get("app_id", ""),
-            "student_name": result_data.get("student_name", ""),
-            "student_email": result_data.get("student_email", ""),
-            "professor_name": result_data.get("professor_name", ""),
-            "professor_email": result_data.get("professor_email", ""),
-            "college_name": result_data.get("college_name", ""),
-            "scholarship_type": scholarship_type_value,
-            "scholarship_name": scholarship_type_value,  # Alias for backward compatibility with templates
-            "scholarship_type_id": result_data.get("scholarship_type_id"),
-            "result_status": result_data.get("result_status", ""),
-            "approved_amount": result_data.get("approved_amount", ""),
-            "result_message": result_data.get("result_message", ""),
-            "next_steps": result_data.get("next_steps", ""),
-            "system_url": settings.frontend_url,
-        }
-
-        await self.process_trigger(db, "final_result_decided", context)
-
-    async def trigger_college_review_submitted(
-        self, db: AsyncSession, application_id: int, review_data: Dict[str, Any]
-    ):
-        """Trigger emails when college submits review"""
-        from app.core.config import settings
-
-        scholarship_type_value = review_data.get("scholarship_type", "")
-        context = {
-            "application_id": application_id,
-            "app_id": review_data.get("app_id", ""),
-            "student_name": review_data.get("student_name", ""),
-            "student_email": review_data.get("student_email", ""),
-            "college_name": review_data.get("college_name", ""),
-            # Note: college_ranking_score removed - use final_rank instead
-            "college_final_rank": review_data.get("final_rank"),
-            "college_recommendation": review_data.get("recommendation", ""),
-            "college_comments": review_data.get("comments", ""),
-            "reviewer_name": review_data.get("reviewer_name", ""),
-            "scholarship_type": scholarship_type_value,
-            "scholarship_name": scholarship_type_value,  # Alias for backward compatibility with templates
-            "scholarship_type_id": review_data.get("scholarship_type_id"),
-            "review_date": review_data.get("review_date", datetime.now().strftime("%Y-%m-%d")),
-            "system_url": settings.frontend_url,
-        }
-
+        logger.info(
+            "🚀 EMAIL AUTOMATION TRIGGERED: college_review_submitted (ranking %s, college %s)",
+            context["ranking_id"],
+            context["college_code"],
+        )
         await self.process_trigger(db, "college_review_submitted", context)
-
-    async def trigger_supplement_requested(self, db: AsyncSession, application_id: int, request_data: Dict[str, Any]):
-        """Trigger emails when supplement documents are requested"""
-        from app.core.config import settings
-
-        scholarship_type_value = request_data.get("scholarship_type", "")
-        context = {
-            "application_id": application_id,
-            "app_id": request_data.get("app_id", ""),
-            "student_name": request_data.get("student_name", ""),
-            "student_email": request_data.get("student_email", ""),
-            "requested_documents": ", ".join(request_data.get("requested_documents", [])),
-            "reason": request_data.get("reason", ""),
-            "notes": request_data.get("notes", ""),
-            "requester_name": request_data.get("requester_name", ""),
-            "deadline": request_data.get("deadline", ""),
-            "scholarship_type": scholarship_type_value,
-            "scholarship_name": scholarship_type_value,  # Alias for backward compatibility with templates
-            "scholarship_type_id": request_data.get("scholarship_type_id"),
-            "request_date": request_data.get("request_date", datetime.now().strftime("%Y-%m-%d")),
-            "system_url": settings.frontend_url,
-        }
-
-        await self.process_trigger(db, "supplement_requested", context)
 
     async def trigger_deadline_approaching(self, db: AsyncSession, application_id: int, deadline_data: Dict[str, Any]):
         """Trigger emails when deadline is approaching"""

@@ -13,6 +13,30 @@ import { test, expect } from "@playwright/test";
 import { loginAs } from "../helpers/auth";
 
 test.describe("Admin student scholarship history", () => {
+  test("shows the 查詢開放設定 switches for 學生 and 學院", async ({
+    browser,
+  }) => {
+    const { context } = await loginAs(browser, "admin");
+    const page = await context.newPage();
+    await page.goto("/");
+    await page.getByRole("tab", { name: "系統管理" }).click();
+    await page.getByRole("tab", { name: "學生領獎紀錄查詢" }).click();
+    // Read-only assertion on purpose: flipping a system-wide switch here would
+    // leak into every other spec sharing the seeded database.
+    const card = page.getByTestId("history-visibility-card");
+    await expect(card).toBeVisible();
+    const studentSwitch = card.getByLabel("開放學生查詢");
+    const collegeSwitch = card.getByLabel("開放學院查詢");
+    await expect(studentSwitch).toBeVisible();
+    await expect(collegeSwitch).toBeVisible();
+    // Seeded default: both audiences open, and the switches are enabled once
+    // the visibility request resolves.
+    await expect(studentSwitch).toBeEnabled({ timeout: 10000 });
+    await expect(studentSwitch).toBeChecked();
+    await expect(collegeSwitch).toBeChecked();
+    await context.close();
+  });
+
   test("rejects invalid student number client-side", async ({ browser }) => {
     const { context } = await loginAs(browser, "admin");
     const page = await context.newPage();
@@ -36,6 +60,20 @@ test.describe("Admin student scholarship history", () => {
     await page.getByRole("button", { name: "查詢" }).click();
     await expect(page.getByText("查無此學生資料")).toBeVisible({
       timeout: 10000,
+    });
+    await context.close();
+  });
+
+  test("multi-student query renders a block per 學號", async ({ browser }) => {
+    const { context } = await loginAs(browser, "admin");
+    const page = await context.newPage();
+    await page.goto("/");
+    await page.getByRole("tab", { name: "系統管理" }).click();
+    await page.getByRole("tab", { name: "學生領獎紀錄查詢" }).click();
+    await page.getByLabel("學號").fill("GHOST00001 GHOST00002");
+    await page.getByRole("button", { name: "查詢" }).click();
+    await expect(page.getByText("查無此學生資料")).toHaveCount(2, {
+      timeout: 15000,
     });
     await context.close();
   });

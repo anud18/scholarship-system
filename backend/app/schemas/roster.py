@@ -245,7 +245,7 @@ class RosterItemSummaryResponse(BaseModel):
     student_id_number: str
     scholarship_amount: Decimal
     verification_status: StudentVerificationStatus
-    is_qualified: bool
+    is_included: bool
 
 
 # 統計和報表相關模型

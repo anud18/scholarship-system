@@ -20,6 +20,7 @@ import { logger } from '@/lib/utils/logger';
 import ApplicationSubmitted from '@/emails/application-submitted';
 import ProfessorReviewRequest from '@/emails/professor-review-request';
 import CollegeReviewRequest from '@/emails/college-review-request';
+import CollegeRankingSubmitted from '@/emails/college-ranking-submitted';
 import DeadlineReminder from '@/emails/deadline-reminder';
 import DocumentRequest from '@/emails/document-request';
 import ResultNotification from '@/emails/result-notification';
@@ -33,6 +34,7 @@ export type EmailTemplate =
   | 'application-submitted'
   | 'professor-review-request'
   | 'college-review-request'
+  | 'college-ranking-submitted'
   | 'deadline-reminder'
   | 'document-request'
   | 'result-notification'
@@ -46,6 +48,7 @@ const templateMap: Record<EmailTemplate, React.ComponentType<any>> = {
   'application-submitted': ApplicationSubmitted,
   'professor-review-request': ProfessorReviewRequest,
   'college-review-request': CollegeReviewRequest,
+  'college-ranking-submitted': CollegeRankingSubmitted,
   'deadline-reminder': DeadlineReminder,
   'document-request': DocumentRequest,
   'result-notification': ResultNotification,

@@ -3,7 +3,6 @@
 import { useMemo } from "react";
 import { Building2 } from "lucide-react";
 import type {
-  CollegeQuota,
   DistributionStudent,
   LocalAlloc,
   QuotaStatus,
@@ -11,10 +10,9 @@ import type {
 } from "@/lib/api/modules/manual-distribution";
 import {
   buildCollegeNameMap,
-  getSavedAllocation,
-  makeColKey,
   resolveCollegeName,
 } from "@/lib/api/modules/manual-distribution";
+import { buildCollegeQuotaGrid } from "@/lib/api/modules/college-quota-grid";
 
 interface CollegeQuotaMatrixProps {
   cols: SubTypeConfigCol[];
@@ -25,25 +23,13 @@ interface CollegeQuotaMatrixProps {
   academies: Array<{ code: string; name: string }>;
 }
 
-function cellKey(collegeCode: string, colKey: string) {
-  return `${collegeCode}|${colKey}`;
-}
-
-/** A cell for a college the matrix has no quota/consumers for (staged-only). */
-const ZERO_QUOTA_CELL: CollegeQuota = { total: 0, allocated: 0, remaining: 0 };
-
 /**
- * College × (sub_type × config) remaining-quota matrix (advisory display).
+ * College × (sub_type × config) remaining-quota matrix.
  *
- * liveRemaining = serverRemaining − Δlocal, where Δlocal counts the UNSAVED
- * difference between each student's current local allocation and their
- * server-saved allocation. The delta form avoids double-counting: server
- * `allocated` already includes saved allocations, and `localAllocations` is
- * seeded from them (plus auto-preview suggestions).
- *
- * Renewal students are excluded from the delta: the backend counts a
- * renewal's consumption via its approved Application, not its ranking item,
- * so checkbox changes on a renewal row don't move quota server-side.
+ * Each cell is `liveRemaining/total`, where liveRemaining already nets out the
+ * UNSAVED checkbox changes (see buildCollegeQuotaGrid). A red (negative) cell is
+ * not a warning to weigh — it blocks 儲存/確認分發, both on this screen and in the
+ * server's own quota gate.
  */
 export function CollegeQuotaMatrix({
   cols,
@@ -52,67 +38,17 @@ export function CollegeQuotaMatrix({
   localAllocations,
   academies,
 }: CollegeQuotaMatrixProps) {
-  const localDelta = useMemo(() => {
-    const delta: Record<string, number> = {};
-    const bump = (college: string, colKey: string, amount: number) => {
-      const k = cellKey(college, colKey);
-      delta[k] = (delta[k] ?? 0) + amount;
-    };
-    for (const s of students) {
-      if (s.is_renewal) continue;
-      const college = s.college_code || "";
-      const saved = getSavedAllocation(s);
-      if (saved) {
-        bump(college, makeColKey(saved.sub_type, saved.config_id), -1);
-      }
-      const local = localAllocations.get(s.ranking_item_id);
-      if (local) {
-        bump(college, makeColKey(local.sub_type, local.config_id), +1);
-      }
-    }
-    return delta;
-  }, [students, localAllocations]);
-
-  // Per visible column: the server's per-college grid (null = non-matrix config).
-  const byColKey = useMemo(() => {
-    const map: Record<string, Record<string, CollegeQuota> | null> = {};
-    for (const col of cols) {
-      const cData = (quotaStatus[col.sub_type]?.by_config ?? []).find(
-        c => c.config_id === col.config_id
-      );
-      map[col.key] = cData?.by_college ?? null;
-    }
-    return map;
-  }, [cols, quotaStatus]);
-
-  // Rows: colleges known to the server, plus colleges that only exist as
-  // staged (unsaved) allocations into a matrix column — those must surface
-  // so over-allocating a zero-quota college warns BEFORE saving.
-  const collegeRows = useMemo(() => {
-    const codes = new Set<string>();
-    for (const col of cols) {
-      for (const code of Object.keys(byColKey[col.key] ?? {})) {
-        codes.add(code);
-      }
-    }
-    for (const [key, delta] of Object.entries(localDelta)) {
-      if (delta === 0) continue;
-      const sep = key.indexOf("|");
-      const college = key.slice(0, sep);
-      const colKey = key.slice(sep + 1);
-      if (byColKey[colKey] != null) {
-        codes.add(college);
-      }
-    }
-    return Array.from(codes).sort((a, b) => a.localeCompare(b));
-  }, [cols, byColKey, localDelta]);
+  const grid = useMemo(
+    () => buildCollegeQuotaGrid({ cols, quotaStatus, students, localAllocations }),
+    [cols, quotaStatus, students, localAllocations]
+  );
 
   const collegeNames = useMemo(
     () => buildCollegeNameMap(academies, students),
     [academies, students]
   );
 
-  if (cols.length === 0 || collegeRows.length === 0) return null;
+  if (cols.length === 0 || grid.collegeCodes.length === 0) return null;
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm mb-3">
@@ -122,16 +58,16 @@ export function CollegeQuotaMatrix({
           各學院剩餘名額
         </h3>
         <span className="text-[10px] text-slate-400">
-          剩餘/總額；已即時扣除未儲存的勾選；超額僅供參考，鎖定時以全域名額檢查為準
+          剩餘/總額；已即時扣除未儲存的勾選；紅字表示超過該學院名額，須調整後才能儲存
         </span>
       </div>
       <div className="p-3 overflow-x-auto">
-        <table className="w-full text-xs">
+        <table className="w-full text-xs border-collapse border border-slate-300">
           <thead>
-            <tr className="text-slate-500">
+            <tr className="text-slate-500 bg-slate-50">
               <th
                 scope="col"
-                className="text-left font-medium py-1.5 pr-3 whitespace-nowrap"
+                className="text-left font-medium py-1.5 px-2 whitespace-nowrap border border-slate-300"
               >
                 學院
               </th>
@@ -139,7 +75,7 @@ export function CollegeQuotaMatrix({
                 <th
                   key={col.key}
                   scope="col"
-                  className="text-center font-medium py-1.5 px-2 whitespace-nowrap"
+                  className="text-center font-medium py-1.5 px-2 whitespace-nowrap border border-slate-300"
                 >
                   {col.display_name}
                   {!col.is_own && (
@@ -149,53 +85,78 @@ export function CollegeQuotaMatrix({
                   )}
                 </th>
               ))}
+              <th
+                scope="col"
+                className="text-center font-medium py-1.5 px-2 whitespace-nowrap border border-slate-300 bg-slate-100 text-slate-600"
+              >
+                總名額
+              </th>
             </tr>
           </thead>
           <tbody>
-            {collegeRows.map(code => (
-              <tr key={code || "__unknown__"} className="border-t border-slate-100">
-                <th
-                  scope="row"
-                  className="text-left py-1.5 pr-3 font-medium text-slate-700 whitespace-nowrap"
-                >
-                  {resolveCollegeName(collegeNames, code)}
-                </th>
-                {cols.map(col => {
-                  const colColleges = byColKey[col.key];
-                  const delta = localDelta[cellKey(code, col.key)] ?? 0;
-                  // Synthesize a 0/0 cell when a matrix column only has
-                  // staged allocations for this college (no server entry).
-                  const entry =
-                    colColleges?.[code] ??
-                    (colColleges != null && delta !== 0
-                      ? ZERO_QUOTA_CELL
-                      : undefined);
-                  if (!entry) {
+            {grid.collegeCodes.map(code => {
+              const rowCells = cols.map(col => ({
+                col,
+                entry: grid.cell(code, col.key),
+              }));
+              const rowTotal = rowCells.reduce(
+                (acc, { entry }) => acc + (entry?.total ?? 0),
+                0
+              );
+              const rowRemaining = rowCells.reduce(
+                (acc, { entry }) => acc + (entry?.remaining ?? 0),
+                0
+              );
+              return (
+                <tr key={code || "__unknown__"}>
+                  <th
+                    scope="row"
+                    className="text-left py-1.5 px-2 font-medium text-slate-700 whitespace-nowrap border border-slate-300"
+                  >
+                    {resolveCollegeName(collegeNames, code)}
+                  </th>
+                  {rowCells.map(({ col, entry }) => {
+                    if (!entry) {
+                      return (
+                        <td
+                          key={col.key}
+                          className="py-1.5 px-2 text-center text-slate-300 border border-slate-300"
+                        >
+                          —
+                        </td>
+                      );
+                    }
+                    const tone =
+                      entry.remaining < 0
+                        ? "text-red-600 font-bold"
+                        : entry.remaining === 0
+                          ? "text-slate-400"
+                          : "text-[#003d7a] font-semibold";
                     return (
-                      <td key={col.key} className="py-1.5 px-2 text-center text-slate-300">
-                        —
+                      <td
+                        key={col.key}
+                        className={`py-1.5 px-2 text-center font-mono tabular-nums border border-slate-300 ${tone}`}
+                        title={`總額 ${entry.total}・已儲存核配 ${entry.allocated}`}
+                      >
+                        {entry.remaining}/{entry.total}
                       </td>
                     );
-                  }
-                  const liveRemaining = entry.remaining - delta;
-                  const tone =
-                    liveRemaining < 0
-                      ? "text-red-600 font-bold"
-                      : liveRemaining === 0
-                        ? "text-slate-400"
-                        : "text-[#003d7a] font-semibold";
-                  return (
-                    <td
-                      key={col.key}
-                      className={`py-1.5 px-2 text-center font-mono tabular-nums ${tone}`}
-                      title={`總額 ${entry.total}・已儲存核配 ${entry.allocated}`}
-                    >
-                      {liveRemaining}/{entry.total}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
+                  })}
+                  <td
+                    className={`py-1.5 px-2 text-center font-mono tabular-nums border border-slate-300 bg-slate-50 ${
+                      rowRemaining < 0
+                        ? "text-red-600 font-bold"
+                        : rowRemaining === 0
+                          ? "text-slate-400"
+                          : "text-[#003d7a] font-bold"
+                    }`}
+                    title={`本學院各欄位加總：剩餘 ${rowRemaining}・總額 ${rowTotal}`}
+                  >
+                    {rowRemaining}/{rowTotal}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

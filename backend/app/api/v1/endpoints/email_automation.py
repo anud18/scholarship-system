@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.regex_validator import RegexValidationError, safe_regex_search
 from app.core.security import require_admin
+from app.core.sql_read_only_guard import describe_if_unsafe
 from app.db.deps import get_db
 from app.models.email_management import EmailAutomationRule, TriggerEvent
 from app.models.user import User
@@ -38,15 +39,11 @@ def validate_condition_query(query: Optional[str]) -> None:
     if not query:
         return
 
-    # SECURITY LAYER 1: Pre-validation checks to prevent obvious ReDoS attacks
-    MAX_QUERY_LENGTH = 5000
+    # SECURITY LAYER 1: Pre-validation checks to prevent obvious ReDoS attacks.
+    # The LENGTH check lives in sql_read_only_guard (layer 2) and is not repeated
+    # here — a second local MAX_QUERY_LENGTH constant is exactly how the old
+    # inline blacklist drifted away from the executor's own rules.
     MAX_CONSECUTIVE_BRACES = 50
-
-    if len(query) > MAX_QUERY_LENGTH:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"condition_query exceeds maximum length of {MAX_QUERY_LENGTH} characters",
-        )
 
     # Check for excessive consecutive braces (potential ReDoS attack pattern)
     consecutive_open_braces = re.search(r"\{{50,}", query)
@@ -57,58 +54,26 @@ def validate_condition_query(query: Optional[str]) -> None:
             detail=f"condition_query contains suspicious pattern: excessive consecutive braces (max {MAX_CONSECUTIVE_BRACES})",
         )
 
-    # Convert to uppercase for case-insensitive checking
-    query_upper = query.upper()
-
-    # SECURITY LAYER 2: SQL Injection Prevention
-    # Whitelist: Only allow SELECT statements
-    if not query_upper.strip().startswith("SELECT"):
+    # SECURITY LAYER 2: shape + keyword checks, delegated to the SHARED guard that
+    # also runs at execution time (app/core/sql_read_only_guard.py). Keeping a second
+    # private copy here is what let the two drift: the old inline blacklist did plain
+    # substring matching on the uppercased query, so it
+    #   * rejected legitimate columns — CREATE ⊂ created_at, UPDATE ⊂ updated_at,
+    #     SET ⊂ OFFSET — which made the seeded 申請提交確認郵件 rule unsaveable;
+    #   * rejected UNION, which that same seeded rule uses; and
+    #   * let `SELECT 1; LOCK TABLE users;` through, because its multi-statement test
+    #     only fired when the query did NOT end in a semicolon.
+    # The shared guard masks string literals and comments before matching and uses
+    # word boundaries, so none of those hold.
+    # describe_if_unsafe returns a CURATED, documented client-safe reason (or None)
+    # rather than tunnelling str(exc) into the body — see
+    # test_no_exception_leak_in_endpoints for why endpoints must not echo exception
+    # text. The admin needs the specific reason to fix their query.
+    rejection = describe_if_unsafe(query)
+    if rejection is not None:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="condition_query must be a SELECT statement only"
-        )
-
-    # Blacklist dangerous SQL keywords that could modify data
-    dangerous_keywords = [
-        "DROP",
-        "DELETE",
-        "UPDATE",
-        "INSERT",
-        "ALTER",
-        "CREATE",
-        "TRUNCATE",
-        "REPLACE",
-        "MERGE",
-        "UNION",
-        "INTERSECT",
-        "EXCEPT",
-        "GRANT",
-        "REVOKE",
-        "EXEC",
-        "EXECUTE",
-        "CALL",
-        "DECLARE",
-        "SET",
-        "INTO OUTFILE",
-        "INTO DUMPFILE",
-        "LOAD_FILE",
-        ";--",
-        "/*",
-        "*/",
-        "XP_",
-        "SP_",
-        "WAITFOR",
-    ]
-
-    for keyword in dangerous_keywords:
-        if keyword in query_upper:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail=f"condition_query contains forbidden keyword: {keyword}"
-            )
-
-    # Check for multiple statements (semicolon followed by non-comment)
-    if ";" in query and not query.strip().endswith(";"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="condition_query cannot contain multiple SQL statements"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"condition_query {rejection}",
         )
 
     # SECURITY LAYER 3: Placeholder validation with ReDoS protection
@@ -457,6 +422,14 @@ async def toggle_automation_rule(
 
         if not rule:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"找不到 ID 為 {rule_id} 的自動化規則")
+
+        # SECURITY (#1223 A): re-validate before ACTIVATING. This endpoint used to
+        # flip is_active without looking at condition_query, so a rule whose query
+        # was written by a seed, a migration or direct DB access could be switched on
+        # having never passed the validator. (Deactivating is always allowed — that
+        # can only reduce what runs.)
+        if not rule.is_active and rule.condition_query:
+            validate_condition_query(rule.condition_query)
 
         # Toggle is_active
         rule.is_active = not rule.is_active

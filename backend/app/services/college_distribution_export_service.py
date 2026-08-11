@@ -8,11 +8,10 @@ layer is responsible for loading and authorizing the data.
 (``_headers``), per-row cell values (``_row_cells``) and column sizing
 (``_COLUMNS`` weights), so the two formats never drift apart.
 
-This module is a deliberate FORK of ``college_ranking_export_service`` — the
-table-rendering chassis (PDF styles, KeepInFrame cells, border/width helpers) was
-copied from it rather than shared, so a fix to that chassis likely belongs in BOTH
-modules. If a THIRD export service is ever needed, extract the shared chassis
-instead of forking again.
+The table-rendering chassis (PDF styles, KeepInFrame cells, border/width
+helpers) lives in ``app.services.export_table_chassis``, shared with
+``manual_distribution_export_service``. ``college_ranking_export_service`` still
+carries its own pre-extraction copy — a chassis fix likely belongs there too.
 
 Unlike the 學生資料彙整表 export this carries NO PII (no 身分證字號, no 匯款帳號):
 colleges get exactly what the 分發結果 panel already shows them.
@@ -24,27 +23,32 @@ import io
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
-# `escape` is a pure string-escaping helper (`<` → `&lt;` …) used to sanitise
-# cell values before they go into reportlab Paragraph markup. It does not parse
-# untrusted XML, so the B406 warning is a false positive here.
-from xml.sax.saxutils import escape as xml_escape  # nosec B406
-
 from openpyxl import Workbook
-from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-from openpyxl.utils import get_column_letter
-from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
-from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
-from reportlab.platypus import KeepInFrame, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import SimpleDocTemplate, Spacer, Table, TableStyle
 
-from app.services.pdf_fonts import CJK_FONT_NAME, ensure_cjk_font
+from app.services.export_table_chassis import (
+    PDF_HEADER_RESERVE_PT,
+    PDF_MARGIN_PT,
+    apply_xlsx_borders,
+    apply_xlsx_column_widths,
+    base_pdf_table_style,
+    make_pdf_styles,
+    pdf_cell,
+    pdf_col_widths,
+    pdf_paragraph,
+    safe_str,
+    style_xlsx_header_cell,
+    write_xlsx_title_row,
+)
+from app.services.pdf_fonts import ensure_cjk_font
 from app.utils.excel_safety import sanitize_excel_cell
 
 # (header label, PDF column weight). HEADERS and the PDF weight vector are both
 # derived from this one list so they can never drift — renaming a label can't
 # silently mis-size a column. The normalize-to-page-width math lives in
-# _pdf_col_widths.
+# the chassis' pdf_col_widths.
 _COLUMNS: List[Tuple[str, float]] = [
     ("類別", 1.4),
     ("結果", 0.7),
@@ -123,22 +127,11 @@ class CollegeDistributionExportService:
         headers = self._headers()
         total_cols = len(headers)
 
-        # Row 1: title (merged across all columns). Sanitized like the data rows: the
-        # caller's f-string happens to lead with an int today, but that is incidental —
-        # this keeps a formula trigger impossible regardless of how the title is built.
-        ws.cell(row=1, column=1, value=sanitize_excel_cell(title))
-        if total_cols > 1:
-            ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=total_cols)
-        title_cell = ws.cell(row=1, column=1)
-        title_cell.font = Font(bold=True, size=14)
-        title_cell.alignment = Alignment(horizontal="center", vertical="center")
+        write_xlsx_title_row(ws, title=title, total_cols=total_cols)
 
         # Row 2: header
         for col_idx, header in enumerate(headers, start=1):
-            cell = ws.cell(row=2, column=col_idx, value=header)
-            cell.font = Font(bold=True)
-            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-            cell.fill = PatternFill("solid", fgColor="DDDDDD")
+            style_xlsx_header_cell(ws.cell(row=2, column=col_idx, value=header))
 
         # Data rows — written from the same _row_cells used by the PDF export
         for idx, row in enumerate(rows, start=1):
@@ -149,8 +142,8 @@ class CollegeDistributionExportService:
                 ws.cell(row=excel_row, column=col_idx, value=sanitize_excel_cell(value))
 
         max_row = len(rows) + 2
-        self._apply_borders(ws, max_row=max_row, max_col=total_cols)
-        self._apply_column_widths(ws)
+        apply_xlsx_borders(ws, max_row=max_row, max_col=total_cols)
+        apply_xlsx_column_widths(ws, _COL_WEIGHTS)
         ws.freeze_panes = "A3"
 
         buf = io.BytesIO()
@@ -173,90 +166,43 @@ class CollegeDistributionExportService:
         headers = self._headers()
 
         page_width, page_height = landscape(A4)
-        usable_width = page_width - (self._PDF_MARGIN_PT * 2)
+        usable_width = page_width - (PDF_MARGIN_PT * 2)
         col_widths = self._pdf_col_widths(usable_width)
-        # A reportlab Table cannot split ONE row across pages, so a single very long
-        # cell would raise LayoutError and fail the WHOLE export. Cap each cell to the
-        # usable content height and let KeepInFrame shrink anything taller to fit.
-        cell_max_height = page_height - (self._PDF_MARGIN_PT * 2) - self._PDF_HEADER_RESERVE_PT
+        cell_max_height = page_height - (PDF_MARGIN_PT * 2) - PDF_HEADER_RESERVE_PT
 
-        title_style = ParagraphStyle(
-            "DistributionPdfTitle",
-            fontName=CJK_FONT_NAME,
-            fontSize=12,
-            leading=15,
-            alignment=1,  # center
-        )
-        header_style = ParagraphStyle(
-            "DistributionPdfHeader",
-            fontName=CJK_FONT_NAME,
-            fontSize=8,
-            leading=10,
-            alignment=1,
-            wordWrap="CJK",
-        )
-        cell_style = ParagraphStyle(
-            "DistributionPdfCell",
-            fontName=CJK_FONT_NAME,
-            fontSize=7.5,
-            leading=9,
-            wordWrap="CJK",  # break long CJK and unspaced ASCII
-        )
+        title_style, header_style, cell_style = make_pdf_styles("Distribution")
 
-        data: List[list] = [[Paragraph(xml_escape(h), header_style) for h in headers]]
+        data: List[list] = [[pdf_paragraph(h, header_style) for h in headers]]
         for row in rows:
             values = self._row_cells(row)
             data.append(
                 [
-                    KeepInFrame(
-                        col_widths[col],
-                        cell_max_height,
-                        [Paragraph(xml_escape(self._safe_str(v)), cell_style)],
-                        mode="shrink",
-                    )
+                    pdf_cell(safe_str(v), width=col_widths[col], max_height=cell_max_height, style=cell_style)
                     for col, v in enumerate(values)
                 ]
             )
 
         table = Table(data, colWidths=col_widths, repeatRows=1)
-        table.setStyle(
-            TableStyle(
-                [
-                    ("GRID", (0, 0), (-1, -1), 0.4, colors.Color(0.6, 0.6, 0.6)),
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.Color(0.87, 0.87, 0.87)),
-                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                    ("FONTNAME", (0, 0), (-1, -1), CJK_FONT_NAME),
-                    ("LEFTPADDING", (0, 0), (-1, -1), 3),
-                    ("RIGHTPADDING", (0, 0), (-1, -1), 3),
-                    ("TOPPADDING", (0, 0), (-1, -1), 2),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-                ]
-            )
-        )
+        table.setStyle(TableStyle(base_pdf_table_style()))
 
         buf = io.BytesIO()
         doc = SimpleDocTemplate(
             buf,
             pagesize=landscape(A4),
-            leftMargin=self._PDF_MARGIN_PT,
-            rightMargin=self._PDF_MARGIN_PT,
-            topMargin=self._PDF_MARGIN_PT,
-            bottomMargin=self._PDF_MARGIN_PT,
+            leftMargin=PDF_MARGIN_PT,
+            rightMargin=PDF_MARGIN_PT,
+            topMargin=PDF_MARGIN_PT,
+            bottomMargin=PDF_MARGIN_PT,
         )
-        doc.build([Paragraph(xml_escape(title), title_style), Spacer(1, 4 * mm), table])
+        doc.build([pdf_paragraph(title, title_style), Spacer(1, 4 * mm), table])
         return buf.getvalue()
 
     # -------- PDF layout helpers --------
 
-    _PDF_MARGIN_PT = 10 * mm
-    # Vertical space reserved (per page) for the title + spacer + repeated header row.
-    _PDF_HEADER_RESERVE_PT = 60
-
     def _pdf_col_widths(self, usable_width: float) -> List[float]:
-        # Unlike the sibling service the column set here is static, so the weights come
+        # Unlike the ranking service the column set here is static, so the weights come
         # straight from _COL_WEIGHTS — no headers argument needed.
-        total = sum(_COL_WEIGHTS) or 1.0
-        return [usable_width * w / total for w in _COL_WEIGHTS]
+        return pdf_col_widths(_COL_WEIGHTS, usable_width)
 
     # -------- Shared column/value model (single source of truth) --------
 
@@ -279,31 +225,3 @@ class CollegeDistributionExportService:
             row.department,
             row.applied_scholarships,
         ]
-
-    def _safe_str(self, value: Any) -> str:
-        if value is None:
-            return ""
-        return str(value)
-
-    # -------- Formatting --------
-
-    def _apply_borders(self, ws, *, max_row: int, max_col: int) -> None:
-        thin = Side(style="thin", color="999999")
-        border = Border(left=thin, right=thin, top=thin, bottom=thin)
-        for r in range(2, max_row + 1):
-            for c in range(1, max_col + 1):
-                ws.cell(row=r, column=c).border = border
-
-    # Excel width per unit of PDF column weight, plus a fixed padding allowance. Chosen
-    # so the narrowest column (名次, weight 0.6) still fits its header comfortably.
-    _XLSX_WIDTH_PER_WEIGHT = 8
-    _XLSX_WIDTH_PADDING = 6
-
-    def _apply_column_widths(self, ws) -> None:
-        # Sized from the SAME _COLUMNS weights the PDF uses, so the two formats keep
-        # one source of truth for relative column sizing (deriving width from header
-        # text length instead would clamp every 2-char CJK header to an identical
-        # width, silently ignoring the weights).
-        for idx, weight in enumerate(_COL_WEIGHTS, start=1):
-            width = round(self._XLSX_WIDTH_PER_WEIGHT * weight) + self._XLSX_WIDTH_PADDING
-            ws.column_dimensions[get_column_letter(idx)].width = width

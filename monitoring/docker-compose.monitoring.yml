@@ -45,6 +45,7 @@ services:
     networks:
       - monitoring_network
       - app_network
+      - prod_app_network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
@@ -74,6 +75,7 @@ services:
     networks:
       - monitoring_network
       - app_network
+      - prod_app_network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3100/ready"]
@@ -117,6 +119,7 @@ services:
     networks:
       - monitoring_network
       - app_network
+      - prod_app_network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
@@ -197,3 +200,11 @@ networks:
   app_network:
     external: true
     name: ${APP_NETWORK_NAME}
+  # The stack serves BOTH environments, but only ever joined one app network,
+  # hardcoded to staging in deploy-monitoring-stack.yml. Production's alloy sat
+  # on a network Loki and Prometheus were not attached to, so its DNS lookups
+  # failed and every batch was dropped ("no retries left, dropping data"), and
+  # prod nginx could not reach Grafana for the /monitoring proxy either.
+  prod_app_network:
+    external: true
+    name: ${PROD_APP_NETWORK_NAME:-scholarship_prod_network}

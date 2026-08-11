@@ -15,6 +15,7 @@ import { typedClient } from "../typed-client";
 import { toApiResponse } from "../compat";
 import type { ApiResponse } from "../types";
 import type { components as SchemaComponents } from "../generated/schema";
+import { fetchBinaryExport } from "./binary-export";
 
 // Shared PATCH for the per-config admin toggles (supplementary-import, college-view-distribution):
 // both flip one boolean on a ScholarshipConfiguration via the same auth + error-unwrap path.
@@ -594,7 +595,7 @@ export function createCollegeApi() {
      * Admin: toggle supplementary import open/close for a scholarship configuration.
      * PATCH /api/v1/scholarship-configurations/configurations/{id}/supplementary-import
      *
-     * The flag applies to ALL colleges' rankings under that
+     * The flag applies to ALL colleges' 補充匯入 under that
      * (scholarship_type, academic_year, semester) configuration.
      */
     toggleConfigSupplementaryImport: (
@@ -622,24 +623,104 @@ export function createCollegeApi() {
       ),
 
     /**
-     * College: upload supplementary Excel for a ranking.
-     * POST /api/v1/college-review/rankings/{ranking_id}/supplementary-import
+     * College: check whether 補充匯入 is open for a period.
+     * GET /api/v1/college-review/supplementary-import/availability
+     */
+    getSupplementaryImportAvailability: async (
+      scholarshipTypeCode: string,
+      academicYear: number,
+      semester: string
+    ): Promise<
+      ApiResponse<{ allowed: boolean; configuration_id: number | null }>
+    > => {
+      const token = typedClient.getToken();
+      const params = new URLSearchParams({
+        scholarship_type: scholarshipTypeCode,
+        academic_year: String(academicYear),
+        semester,
+      });
+      const resp = await fetch(
+        `/api/v1/college-review/supplementary-import/availability?${params}`,
+        {
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        }
+      );
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => null);
+        throw new Error(err?.message || err?.detail || "查詢補充匯入狀態失敗");
+      }
+      return resp.json();
+    },
+
+    /**
+     * College: download the 補充匯入 template.
+     * GET /api/v1/college-review/supplementary-import/template
+     *
+     * Byte-identical to the admin 批次匯入 example file (shared generator), so it
+     * depends only on the scholarship type — not on the academic period.
+     * Returns the xlsx blob; the caller owns saving it.
+     */
+    downloadSupplementaryImportTemplate: async (
+      scholarshipTypeCode: string
+    ): Promise<{ blob: Blob; filename: string }> => {
+      const token = typedClient.getToken();
+      const params = new URLSearchParams({
+        scholarship_type: scholarshipTypeCode,
+      });
+      const resp = await fetch(
+        `/api/v1/college-review/supplementary-import/template?${params}`,
+        {
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        }
+      );
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => null);
+        throw new Error(err?.message || err?.detail || "下載範本失敗");
+      }
+      // Prefer the server's RFC 5987 filename — it carries the 學年期 and
+      // scholarship name, which the client would otherwise have to re-derive.
+      const disposition = resp.headers.get("content-disposition") || "";
+      const encoded = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1];
+      const filename = encoded
+        ? decodeURIComponent(encoded)
+        : "補充匯入範本.xlsx";
+      return { blob: await resp.blob(), filename };
+    },
+
+    /**
+     * College: upload a 學生資料彙整表 Excel to create applications for new students.
+     * POST /api/v1/college-review/supplementary-import/upload
+     *
+     * The imported students carry no rank — they enter the ordinary review and
+     * ranking flow like any other applicant.
      */
     uploadSupplementaryImport: async (
-      rankingId: number,
+      scholarshipTypeCode: string,
+      academicYear: number,
+      semester: string,
       file: File
     ): Promise<
       ApiResponse<{
+        configuration_id: number;
         imported_count: number;
-        max_existing_rank: number;
-        new_rank_range: string;
+        student_ids: string[];
+        unresolved_professors: string[];
       }>
     > => {
       const token = typedClient.getToken();
       const formData = new FormData();
       formData.append("file", file);
+      const params = new URLSearchParams({
+        scholarship_type: scholarshipTypeCode,
+        academic_year: String(academicYear),
+        semester,
+      });
       const resp = await fetch(
-        `/api/v1/college-review/rankings/${rankingId}/supplementary-import`,
+        `/api/v1/college-review/supplementary-import/upload?${params}`,
         {
           method: "POST",
           headers: {
@@ -699,49 +780,8 @@ export function createCollegeApi() {
   };
 }
 
-async function _fetchBinaryExport(
-  path: string,
-  params: URLSearchParams,
-  fallbackFilename: string,
-  errorFallback: string
-): Promise<{ blob: Blob; filename: string }> {
-  const token = typedClient.getToken();
-  const baseURL =
-    typeof window !== "undefined"
-      ? ""
-      : process.env.INTERNAL_API_URL || "http://localhost:8000";
-
-  const query = params.toString();
-  const url = `${baseURL}${path}${query ? `?${query}` : ""}`;
-
-  const response = await fetch(url, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-  });
-
-  if (!response.ok) {
-    let message = errorFallback;
-    try {
-      const errorData = await response.json();
-      message = errorData?.detail || errorData?.message || errorData?.error || message;
-    } catch {
-      // Non-JSON error body — keep default.
-    }
-    throw new Error(message);
-  }
-
-  const disposition = response.headers.get("content-disposition") || "";
-  const filenameMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i);
-  const filename = filenameMatch
-    ? decodeURIComponent(filenameMatch[1].trim())
-    : fallbackFilename;
-
-  const blob = await response.blob();
-  return { blob, filename };
-}
+// The shared authed binary fetcher lives in binary-export.ts (also used by the
+// manual-distribution 分發名單 export).
 
 /**
  * Download the 學生資料彙整表 for a college ranking, as Excel (default) or PDF.
@@ -760,7 +800,7 @@ export async function exportRankingExcel(
 ): Promise<{ blob: Blob; filename: string }> {
   const params = new URLSearchParams();
   if (format !== "xlsx") params.set("format", format);
-  return _fetchBinaryExport(
+  return fetchBinaryExport(
     `/api/v1/college-review/rankings/${rankingId}/export-excel`,
     params,
     `學生資料彙整表_${rankingId}.${format}`,
@@ -780,7 +820,7 @@ export async function downloadRankingTemplate(
 ): Promise<{ blob: Blob; filename: string }> {
   const params = new URLSearchParams();
   params.set("template", "true");
-  return _fetchBinaryExport(
+  return fetchBinaryExport(
     `/api/v1/college-review/rankings/${rankingId}/export-excel`,
     params,
     `學生資料彙整表_${rankingId}_範本.xlsx`,
@@ -807,7 +847,7 @@ export async function exportDistributionResults(params: {
   search.set("academic_year", String(params.academicYear));
   if (params.semester) search.set("semester", params.semester);
   if (format !== "xlsx") search.set("format", format);
-  return _fetchBinaryExport(
+  return fetchBinaryExport(
     "/api/v1/college-review/distribution-results/export",
     search,
     `分發結果_${params.academicYear}.${format}`,
@@ -835,7 +875,7 @@ export async function exportDepartmentSummary(
   if (args.semester) params.set("semester", args.semester);
   params.set("department_code", args.department_code);
 
-  return _fetchBinaryExport(
+  return fetchBinaryExport(
     "/api/v1/college-review/applications/department-summary-export",
     params,
     "申請總表.xlsx",
@@ -863,7 +903,7 @@ export async function exportDepartmentSummaryBulk(
   params.set("scope", args.scope);
   if (args.academy_code) params.set("academy_code", args.academy_code);
 
-  return _fetchBinaryExport(
+  return fetchBinaryExport(
     "/api/v1/college-review/applications/department-summary-export-bulk",
     params,
     "申請總表.zip",
