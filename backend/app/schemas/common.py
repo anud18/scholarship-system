@@ -71,7 +71,8 @@ class ErrorResponse(BaseModel):
 class SystemSettingSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    key: str
+    # key mirrors system_settings.key (String(100)); value is a Text column.
+    key: str = Field(..., max_length=100)
     value: str
 
 

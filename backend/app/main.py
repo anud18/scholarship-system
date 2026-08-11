@@ -20,6 +20,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.api.v1.api import api_router
 from app.core.config import settings
 from app.core.database_health import check_database_health
+from app.core.db_errors import is_constraint_violation_error, is_invalid_input_error
 from app.core.exceptions import ScholarshipException, scholarship_exception_handler
 from app.core.security import require_admin
 from app.models.user import User
@@ -284,6 +285,32 @@ async def general_exception_handler(request: Request, exc: Exception):  # pylint
             content={
                 "success": False,
                 "message": "Service temporarily unavailable - database connection issue",
+                "trace_id": trace_id,
+            },
+        )
+
+    # A PostgreSQL data exception means the request carried a value the column
+    # cannot store (over-length string, unknown enum label, numeric overflow).
+    # That is a client error; answering 500 both misreports it and trips
+    # vulnerability scanners looking for crash-on-payload behaviour.
+    if is_invalid_input_error(exc):
+        return JSONResponse(
+            status_code=422,
+            content={
+                "success": False,
+                "message": "Invalid request parameters. Please check your input and try again.",
+                "trace_id": trace_id,
+            },
+        )
+
+    # Likewise a unique/foreign-key/check violation: the request conflicts with
+    # existing data rather than crashing the server.
+    if is_constraint_violation_error(exc):
+        return JSONResponse(
+            status_code=409,
+            content={
+                "success": False,
+                "message": "The request conflicts with existing data.",
                 "trace_id": trace_id,
             },
         )

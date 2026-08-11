@@ -13,14 +13,16 @@ from app.models.application_field import FieldType
 class ApplicationFieldBase(BaseModel):
     """Base schema for application field"""
 
-    scholarship_type: str = Field(..., description="Scholarship type")
-    field_name: str = Field(..., description="Field name (English)")
-    field_label: str = Field(..., description="Field label (Chinese)")
-    field_label_en: Optional[str] = Field(None, description="Field label (English)")
-    field_type: str = Field(default=FieldType.TEXT.value, description="Field type")
+    # max_length mirrors the application_fields column widths — without it an
+    # over-length value reaches Postgres and fails there instead of at the boundary.
+    scholarship_type: str = Field(..., max_length=50, description="Scholarship type")
+    field_name: str = Field(..., max_length=100, description="Field name (English)")
+    field_label: str = Field(..., max_length=200, description="Field label (Chinese)")
+    field_label_en: Optional[str] = Field(None, max_length=200, description="Field label (English)")
+    field_type: str = Field(default=FieldType.TEXT.value, max_length=20, description="Field type")
     is_required: bool = Field(default=False, description="Is field required")
-    placeholder: Optional[str] = Field(None, description="Placeholder text")
-    placeholder_en: Optional[str] = Field(None, description="Placeholder text (English)")
+    placeholder: Optional[str] = Field(None, max_length=500, description="Placeholder text")
+    placeholder_en: Optional[str] = Field(None, max_length=500, description="Placeholder text (English)")
     max_length: Optional[int] = Field(None, description="Maximum length")
     min_value: Optional[float] = Field(None, description="Minimum value")
     max_value: Optional[float] = Field(None, description="Maximum value")
@@ -60,12 +62,12 @@ class ApplicationFieldCreate(ApplicationFieldBase):
 class ApplicationFieldUpdate(BaseModel):
     """Schema for updating application field"""
 
-    field_label: Optional[str] = None
-    field_label_en: Optional[str] = None
-    field_type: Optional[str] = None
+    field_label: Optional[str] = Field(None, max_length=200)
+    field_label_en: Optional[str] = Field(None, max_length=200)
+    field_type: Optional[str] = Field(None, max_length=20)
     is_required: Optional[bool] = None
-    placeholder: Optional[str] = None
-    placeholder_en: Optional[str] = None
+    placeholder: Optional[str] = Field(None, max_length=500)
+    placeholder_en: Optional[str] = Field(None, max_length=500)
     max_length: Optional[int] = None
     min_value: Optional[float] = None
     max_value: Optional[float] = None
