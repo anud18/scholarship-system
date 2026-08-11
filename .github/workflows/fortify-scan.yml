@@ -1,27 +1,34 @@
 ---
-# Fortify SAST scan.
+# Fortify SAST scan, for the production repository.
 #
-# This used to call the reusable NYCUITSC/fortifyscan workflow
-# (fortify-multi-language-scan.yml@main), but that workflow's Python path never
-# runs a Fortify *translation*: it only wraps `pip install` in sourceanalyzer
-# and relies on the build tool to report source files, which pip does not do.
-# With no root-level requirements.txt (ours lives in backend/) it does not even
-# do that, so `sourceanalyzer -b <id> -scan` fails with
-# "Unable to load build session with ID" and no .fpr is produced.
+# Do not call the reusable NYCUITSC/fortifyscan workflow
+# (fortify-multi-language-scan.yml@main): its Python path never runs a Fortify
+# *translation*. It only wraps `pip install` in sourceanalyzer and relies on the
+# build tool to report source files, which pip does not do. With no root-level
+# requirements.txt (ours lives in backend/) it does not even do that, so
+# `sourceanalyzer -b <id> -scan` fails with "Unable to load build session with
+# ID" and no .fpr is produced. That workflow takes no inputs, so it cannot be
+# corrected from the caller side -- we run the scan inline here instead.
 #
-# We therefore run the scan inline here. The reusable workflow takes no inputs,
-# so this cannot be fixed from the caller side; if fortifyscan gains a working
-# Python path we can switch back.
-#
-# Rulepacks are not selectable by flag -- Fortify loads them based on which
-# languages actually end up in the build session. We translate Python, JS/TS
-# and the config/content files into one session so the Core/Extended Python,
-# JavaScript, Configuration and Content rulepacks all engage.
+# Rulepacks are not selectable by flag: Fortify loads them from whichever
+# languages end up in the build session. Translating Python, JS/TS and the
+# config/content files into one session engages 9 of the 11 rulepacks on the
+# runner (Core/Extended Python, JavaScript, Configuration, Content, Cloud,
+# Universal).
 #
 # SQL is deliberately left out: Fortify's SQL front end only supports T-SQL and
 # PL/SQL, and this project is PostgreSQL, so the .sql files would only produce
 # parse noise. backend/db_*_backup.sql are generated dumps rather than source
 # anyway, and the data dump should not be shipped inside a scan artifact.
+#
+# Every ${{ }} value reaches PowerShell through `env:` rather than being
+# interpolated into the script body. Direct interpolation is what Fortify's own
+# "Command Injection: GitHub Actions" rule flags, and it was the single High
+# finding in the first scan of this file.
+#
+# Runtime: translation takes ~5 minutes, but the -scan dataflow analysis takes
+# ~2.5 hours on this codebase and holds the shared org Fortify runner for the
+# duration.
 #
 # Requires the self-hosted Windows Fortify runner (sourceanalyzer and
 # BIRTReportGenerator on PATH).
@@ -48,14 +55,18 @@ jobs:
 
       - name: Run Fortify SCA scan
         shell: powershell
+        env:
+          PROJECT_NAME: ${{ github.event.repository.name }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.number }}
         run: |
           $ErrorActionPreference = "Stop"
 
-          $PROJECT_NAME = "${{ github.event.repository.name }}"
+          $PROJECT_NAME = $env:PROJECT_NAME
           $BUILD_ID = "${PROJECT_NAME}_build"
 
-          if ("${{ github.event_name }}" -eq "pull_request") {
-              $SUFFIX = "PR_${{ github.event.number }}"
+          if ($env:EVENT_NAME -eq "pull_request") {
+              $SUFFIX = "PR_$($env:PR_NUMBER)"
           } else {
               $SUFFIX = "main"
           }
