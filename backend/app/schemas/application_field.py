@@ -111,22 +111,24 @@ class ApplicationFieldResponse(ApplicationFieldBase):
 class ApplicationDocumentBase(BaseModel):
     """Base schema for application document"""
 
-    scholarship_type: str = Field(..., description="Scholarship type")
-    document_name: str = Field(..., description="Document name")
-    document_name_en: Optional[str] = Field(None, description="Document name (English)")
+    # max_length mirrors the application_documents column widths (description,
+    # description_en and upload_instructions* are Text, so they stay uncapped).
+    scholarship_type: str = Field(..., max_length=50, description="Scholarship type")
+    document_name: str = Field(..., max_length=200, description="Document name")
+    document_name_en: Optional[str] = Field(None, max_length=200, description="Document name (English)")
     description: Optional[str] = Field(None, description="Document description")
     description_en: Optional[str] = Field(None, description="Document description (English)")
     is_required: bool = Field(default=True, description="Is document required")
     display_in_list: bool = Field(default=True, description="Show in scholarship-list document boxes")
     requires_upload: bool = Field(default=True, description="Student must upload this document in step 3")
     accepted_file_types: List[str] = Field(default=["PDF"], description="Accepted file types")
-    max_file_size: str = Field(default="5MB", description="Maximum file size")
+    max_file_size: str = Field(default="5MB", max_length=20, description="Maximum file size")
     max_file_count: int = Field(default=1, description="Maximum file count")
     display_order: int = Field(default=0, description="Display order")
     is_active: bool = Field(default=True, description="Is document active")
     upload_instructions: Optional[str] = Field(None, description="Upload instructions")
     upload_instructions_en: Optional[str] = Field(None, description="Upload instructions (English)")
-    example_file_url: Optional[str] = Field(None, description="Example file MinIO object name")
+    example_file_url: Optional[str] = Field(None, max_length=500, description="Example file MinIO object name")
     validation_rules: Optional[Dict[str, Any]] = Field(None, description="Validation rules")
 
 
@@ -139,21 +141,21 @@ class ApplicationDocumentCreate(ApplicationDocumentBase):
 class ApplicationDocumentUpdate(BaseModel):
     """Schema for updating application document"""
 
-    document_name: Optional[str] = None
-    document_name_en: Optional[str] = None
+    document_name: Optional[str] = Field(None, max_length=200)
+    document_name_en: Optional[str] = Field(None, max_length=200)
     description: Optional[str] = None
     description_en: Optional[str] = None
     is_required: Optional[bool] = None
     display_in_list: Optional[bool] = None
     requires_upload: Optional[bool] = None
     accepted_file_types: Optional[List[str]] = None
-    max_file_size: Optional[str] = None
+    max_file_size: Optional[str] = Field(None, max_length=20)
     max_file_count: Optional[int] = None
     display_order: Optional[int] = None
     is_active: Optional[bool] = None
     upload_instructions: Optional[str] = None
     upload_instructions_en: Optional[str] = None
-    example_file_url: Optional[str] = None
+    example_file_url: Optional[str] = Field(None, max_length=500)
     validation_rules: Optional[Dict[str, Any]] = None
 
 

@@ -3,7 +3,9 @@
 Covers the three changes that removed the Medium/High findings of the
 2026-08-11 authenticated active scan:
 
-1. PostgreSQL data exceptions surface as 422, not 500 (``is_invalid_input_error``).
+1. Database errors are classified by SQLSTATE, so an unrepresentable value
+   surfaces as 422 and a genuine conflict as 409 — while a broken server-side
+   invariant (not-null, check, division-by-zero) stays a 500.
 2. String schemas cap length at the DB column width, so over-length payloads are
    rejected at the boundary instead of by Postgres.
 3. Mock SSO defaults to OFF, so dropping the env var cannot expose the
@@ -12,18 +14,26 @@ Covers the three changes that removed the Medium/High findings of the
 
 import pytest
 from pydantic import ValidationError
-from sqlalchemy.exc import DataError, DBAPIError, IntegrityError, OperationalError
+from sqlalchemy.exc import DBAPIError, IntegrityError, OperationalError
 
-from app.core.db_errors import is_constraint_violation_error, is_invalid_input_error
-from app.schemas.application_field import ApplicationFieldCreate
+from app.core.db_errors import is_constraint_violation_error, is_invalid_input_error, sqlstate_of
+from app.schemas.application_field import ApplicationDocumentCreate, ApplicationFieldCreate
 from app.schemas.common import SystemSettingSchema
 
 
-def _asyncpg_data_error(message: str):
-    """Build the driver exception asyncpg would raise for a class-22 error."""
-    from asyncpg.exceptions import StringDataRightTruncationError
+class _Psycopg2Error(Exception):
+    """psycopg2 exposes the SQLSTATE as .pgcode; asyncpg as .sqlstate."""
 
-    return StringDataRightTruncationError(message)
+    def __init__(self, pgcode: str):
+        super().__init__(f"psycopg2 error {pgcode}")
+        self.pgcode = pgcode
+
+
+def _asyncpg_error(name: str):
+    """Build the driver exception asyncpg would raise, by class name."""
+    import asyncpg.exceptions
+
+    return getattr(asyncpg.exceptions, name)("driver error")
 
 
 def _dbapi_error(orig: BaseException) -> DBAPIError:
@@ -31,59 +41,99 @@ def _dbapi_error(orig: BaseException) -> DBAPIError:
     return DBAPIError("SELECT 1", {}, orig)
 
 
-class TestIsInvalidInputError:
-    def test_sync_data_error_is_invalid_input(self):
-        """psycopg2 path: SQLAlchemy already classifies it as DataError."""
-        exc = DataError("INSERT ...", {}, Exception("value too long"))
-        assert is_invalid_input_error(exc) is True
+def _wrapped(orig: BaseException) -> DBAPIError:
+    """asyncpg path: the driver error hides one level down, under the wrapper."""
+    wrapper = Exception("dialect wrapper")
+    wrapper.__cause__ = orig
+    return _dbapi_error(wrapper)
 
-    def test_asyncpg_data_error_through_cause_chain(self):
-        """asyncpg path: the driver error hides behind the dialect wrapper."""
-        driver_error = _asyncpg_data_error("value too long for type character varying(100)")
-        wrapper = Exception("dialect wrapper")
-        wrapper.__cause__ = driver_error
-        assert is_invalid_input_error(_dbapi_error(wrapper)) is True
 
-    def test_asyncpg_data_error_as_direct_orig(self):
-        driver_error = _asyncpg_data_error('invalid input value for enum semester: "semester"')
-        assert is_invalid_input_error(_dbapi_error(driver_error)) is True
+class TestSqlstateExtraction:
+    def test_reads_sqlstate_from_asyncpg_through_cause_chain(self):
+        assert sqlstate_of(_wrapped(_asyncpg_error("StringDataRightTruncationError"))) == "22001"
 
-    def test_connection_failure_is_not_invalid_input(self):
-        """Operational problems must keep their 503, not become a 422."""
-        exc = OperationalError("SELECT 1", {}, Exception("connection refused"))
-        assert is_invalid_input_error(exc) is False
+    def test_reads_sqlstate_from_direct_orig(self):
+        assert sqlstate_of(_dbapi_error(_asyncpg_error("UniqueViolationError"))) == "23505"
 
-    def test_unrelated_exception_is_not_invalid_input(self):
-        assert is_invalid_input_error(ValueError("boom")) is False
+    def test_reads_pgcode_from_psycopg2(self):
+        assert sqlstate_of(_dbapi_error(_Psycopg2Error("22001"))) == "22001"
+
+    def test_non_dbapi_exception_has_no_sqlstate(self):
+        assert sqlstate_of(ValueError("boom")) is None
 
     def test_self_referential_cause_chain_terminates(self):
         """A cyclic __cause__ must not hang the handler."""
         looping = Exception("loop")
         looping.__cause__ = looping
-        assert is_invalid_input_error(_dbapi_error(looping)) is False
+        assert sqlstate_of(_dbapi_error(looping)) is None
+
+
+class TestIsInvalidInputError:
+    @pytest.mark.parametrize(
+        "driver_error_name",
+        [
+            "StringDataRightTruncationError",  # 22001 — value longer than the column
+            "InvalidTextRepresentationError",  # 22P02 — unknown enum label
+            "NumericValueOutOfRangeError",  # 22003
+            "InvalidDatetimeFormatError",  # 22007
+        ],
+    )
+    def test_unrepresentable_value_is_invalid_input(self, driver_error_name):
+        assert is_invalid_input_error(_wrapped(_asyncpg_error(driver_error_name))) is True
+
+    def test_psycopg2_truncation_is_invalid_input(self):
+        assert is_invalid_input_error(_dbapi_error(_Psycopg2Error("22001"))) is True
+
+    def test_division_by_zero_stays_a_server_error(self):
+        """Server-side arithmetic is not the client's fault — must remain a 500."""
+        assert is_invalid_input_error(_wrapped(_asyncpg_error("DivisionByZeroError"))) is False
+
+    def test_connection_failure_is_not_invalid_input(self):
+        """Operational problems must keep their 503, not become a 422."""
+        exc = OperationalError("SELECT 1", {}, _Psycopg2Error("08006"))
+        assert is_invalid_input_error(exc) is False
+
+    def test_unrelated_exception_is_not_invalid_input(self):
+        assert is_invalid_input_error(ValueError("boom")) is False
 
 
 class TestIsConstraintViolationError:
-    def test_sync_integrity_error_is_constraint_violation(self):
-        exc = IntegrityError("INSERT ...", {}, Exception("duplicate key value"))
+    @pytest.mark.parametrize(
+        "driver_error_name",
+        [
+            "UniqueViolationError",  # 23505
+            "ForeignKeyViolationError",  # 23503
+        ],
+    )
+    def test_genuine_conflict_is_a_constraint_violation(self, driver_error_name):
+        assert is_constraint_violation_error(_wrapped(_asyncpg_error(driver_error_name))) is True
+
+    def test_psycopg2_unique_violation_is_a_constraint_violation(self):
+        exc = IntegrityError("INSERT ...", {}, _Psycopg2Error("23505"))
         assert is_constraint_violation_error(exc) is True
 
-    def test_asyncpg_unique_violation_through_cause_chain(self):
-        from asyncpg.exceptions import UniqueViolationError
-
-        driver_error = UniqueViolationError("duplicate key value violates unique constraint")
-        wrapper = Exception("dialect wrapper")
-        wrapper.__cause__ = driver_error
-        assert is_constraint_violation_error(_dbapi_error(wrapper)) is True
+    @pytest.mark.parametrize(
+        "driver_error_name",
+        [
+            "NotNullViolationError",  # 23502
+            "CheckViolationError",  # 23514
+        ],
+    )
+    def test_broken_invariant_stays_a_server_error(self, driver_error_name):
+        """A service that omits a NOT NULL column is a backend bug, not a conflict:
+        answering 409 would lie to the client and hide it from 5xx alerting."""
+        exc = _wrapped(_asyncpg_error(driver_error_name))
+        assert is_constraint_violation_error(exc) is False
+        assert is_invalid_input_error(exc) is False
 
     def test_data_error_is_not_a_constraint_violation(self):
         """The two classes must stay disjoint so each keeps its own status code."""
-        exc = _dbapi_error(_asyncpg_data_error("value too long"))
+        exc = _wrapped(_asyncpg_error("StringDataRightTruncationError"))
         assert is_constraint_violation_error(exc) is False
         assert is_invalid_input_error(exc) is True
 
     def test_connection_failure_is_not_a_constraint_violation(self):
-        exc = OperationalError("SELECT 1", {}, Exception("connection refused"))
+        exc = OperationalError("SELECT 1", {}, _Psycopg2Error("08006"))
         assert is_constraint_violation_error(exc) is False
 
 
@@ -123,6 +173,19 @@ class TestSchemaLengthCaps:
         """value is a Text column — long content must still be allowed."""
         setting = SystemSettingSchema(key="k", value="v" * 5000)
         assert len(setting.value) == 5000
+
+    def test_document_name_over_column_width_is_rejected(self):
+        """The document schemas share the router the field schemas were capped in."""
+        with pytest.raises(ValidationError):
+            ApplicationDocumentCreate(scholarship_type="phd_nstc", document_name="d" * 201)
+
+    def test_document_description_is_unbounded_text(self):
+        doc = ApplicationDocumentCreate(
+            scholarship_type="phd_nstc",
+            document_name="成績單",
+            description="x" * 5000,
+        )
+        assert len(doc.description) == 5000
 
 
 class TestSystemSettingKeyQueryCap:
