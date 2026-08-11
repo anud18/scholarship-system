@@ -156,9 +156,13 @@ class TestSystemSettingKeyQueryCap:
 
 
 class TestMockSsoDefault:
-    def test_mock_sso_defaults_to_disabled(self, monkeypatch):
-        """Dropping ENABLE_MOCK_SSO must disable, not enable, the dev endpoints."""
-        monkeypatch.delenv("ENABLE_MOCK_SSO", raising=False)
+    def test_mock_sso_defaults_to_disabled(self):
+        """Dropping ENABLE_MOCK_SSO must disable, not enable, the dev endpoints.
+
+        Asserts the declared default rather than instantiating Settings, which
+        would need the whole required-env set and is sensitive to whatever the
+        preceding test left in os.environ.
+        """
         from app.core.config import Settings
 
-        assert Settings(_env_file=None).enable_mock_sso is False
+        assert Settings.model_fields["enable_mock_sso"].default is False
