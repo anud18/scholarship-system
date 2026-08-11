@@ -1,0 +1,148 @@
+---
+# Fortify SAST scan, for the production repository.
+#
+# Do not call the reusable NYCUITSC/fortifyscan workflow
+# (fortify-multi-language-scan.yml@main): its Python path never runs a Fortify
+# *translation*. It only wraps `pip install` in sourceanalyzer and relies on the
+# build tool to report source files, which pip does not do. With no root-level
+# requirements.txt (ours lives in backend/) it does not even do that, so
+# `sourceanalyzer -b <id> -scan` fails with "Unable to load build session with
+# ID" and no .fpr is produced. That workflow takes no inputs, so it cannot be
+# corrected from the caller side -- we run the scan inline here instead.
+#
+# Rulepacks are not selectable by flag: Fortify loads them from whichever
+# languages end up in the build session. Translating Python, JS/TS and the
+# config/content files into one session engages 9 of the 11 rulepacks on the
+# runner (Core/Extended Python, JavaScript, Configuration, Content, Cloud,
+# Universal).
+#
+# SQL is deliberately left out: Fortify's SQL front end only supports T-SQL and
+# PL/SQL, and this project is PostgreSQL, so the .sql files would only produce
+# parse noise. backend/db_*_backup.sql are generated dumps rather than source
+# anyway, and the data dump should not be shipped inside a scan artifact.
+#
+# Every ${{ }} value reaches PowerShell through `env:` rather than being
+# interpolated into the script body. Direct interpolation is what Fortify's own
+# "Command Injection: GitHub Actions" rule flags, and it was the single High
+# finding in the first scan of this file.
+#
+# Runtime: translation takes ~5 minutes, but the -scan dataflow analysis takes
+# ~2.5 hours on this codebase and holds the shared org Fortify runner for the
+# duration. That is why this runs on pushes to main only -- a pull_request
+# trigger would spend 2.5 hours of the shared runner on every mirrored sync PR.
+#
+# Requires the self-hosted Windows Fortify runner (sourceanalyzer and
+# BIRTReportGenerator on PATH).
+
+name: Fortify Scan
+
+permissions:
+  contents: read
+  actions: read
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  fortify:
+    runs-on: [self-hosted, Windows, X64]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Fortify SCA scan
+        shell: powershell
+        env:
+          PROJECT_NAME: ${{ github.event.repository.name }}
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $PROJECT_NAME = $env:PROJECT_NAME
+          $BUILD_ID = "${PROJECT_NAME}_build"
+
+          $SUFFIX = "main"
+
+          $FPR_NAME = "${PROJECT_NAME}_${SUFFIX}.fpr"
+          $DEV_WORKBOOK_PDF = "${PROJECT_NAME}_${SUFFIX}_DeveloperWorkbook_BIRT.pdf"
+          $OWASP_2021_PDF = "${PROJECT_NAME}_${SUFFIX}_OWASP_Top10_2021_BIRT.pdf"
+
+          function Invoke-Translation {
+              param([string]$Label, [string[]]$ScaArgs)
+
+              Write-Host "::group::Translate $Label"
+              sourceanalyzer -b $BUILD_ID @ScaArgs
+              $code = $LASTEXITCODE
+              Write-Host "::endgroup::"
+              if ($code -ne 0) {
+                  Write-Error "$Label translation failed (exit $code)."
+                  exit 1
+              }
+          }
+
+          sourceanalyzer -b $BUILD_ID -clean
+
+          # Source-based scans throughout: no dependency install, which keeps
+          # the runner clean. Cross-package dataflow traces are shallower than a
+          # build-integrated scan, but the front ends parse the sources fine.
+          Invoke-Translation "python" @(
+              "-python-version", "3",
+              "-exclude", "backend/alembic/versions/**/*.py",
+              "backend/**/*.py"
+          )
+
+          # node_modules/.next are not committed, but a dirty runner workspace
+          # would otherwise pull tens of thousands of files into the session.
+          Invoke-Translation "javascript" @(
+              "-exclude", "**/node_modules/**/*",
+              "-exclude", "frontend/.next/**/*",
+              "-exclude", "frontend/coverage/**/*",
+              "frontend/**/*.js", "frontend/**/*.jsx",
+              "frontend/**/*.ts", "frontend/**/*.tsx"
+          )
+
+          Invoke-Translation "configuration/content" @(
+              "-exclude", "**/node_modules/**/*",
+              "-exclude", "frontend/.next/**/*",
+              "-exclude", "**/package-lock.json",
+              "**/*.yml", "**/*.yaml", "**/*.json",
+              "**/*.html", "nginx/**/*.conf"
+          )
+
+          # Fail loudly instead of letting -scan die on an empty build session.
+          $translated = sourceanalyzer -b $BUILD_ID -show-files
+          if (-not $translated) {
+              Write-Error "No files were translated into build session $BUILD_ID."
+              exit 1
+          }
+          Write-Host "Translated $($translated.Count) file(s)."
+
+          sourceanalyzer -b $BUILD_ID -scan -f $FPR_NAME
+          if ($LASTEXITCODE -ne 0) {
+              Write-Error "Fortify scan failed (exit $LASTEXITCODE)."
+              exit 1
+          }
+          if (-not (Test-Path $FPR_NAME)) {
+              Write-Error "Scan finished but $FPR_NAME was not produced."
+              exit 1
+          }
+
+          BIRTReportGenerator -template "Developer Workbook" `
+            -source $FPR_NAME -format PDF -output $DEV_WORKBOOK_PDF
+          BIRTReportGenerator -template "OWASP Top 10" `
+            -source $FPR_NAME -format PDF --Version "OWASP Top 10 2021" `
+            -output $OWASP_2021_PDF
+
+          "FPR_NAME=$FPR_NAME" >> $env:GITHUB_ENV
+          "DEV_WORKBOOK_PDF=$DEV_WORKBOOK_PDF" >> $env:GITHUB_ENV
+          "OWASP_2021_PDF=$OWASP_2021_PDF" >> $env:GITHUB_ENV
+
+      - name: Upload Fortify results
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.repository.name }}-${{ github.event_name }}-birt-reports
+          path: |
+            ${{ env.FPR_NAME }}
+            ${{ env.DEV_WORKBOOK_PDF }}
+            ${{ env.OWASP_2021_PDF }}
