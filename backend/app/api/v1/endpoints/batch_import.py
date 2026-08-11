@@ -40,17 +40,22 @@ from app.schemas.batch_import import (
     BatchImportUploadResponse,
 )
 from app.services.batch_import_service import BatchImportService
+from app.services.batch_import_template_service import build_batch_import_template
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-def require_college_role(current_user: User = Depends(get_current_user)) -> User:
-    """Dependency to require college, admin, or super admin role"""
-    if current_user.role not in [UserRole.college, UserRole.admin, UserRole.super_admin]:
+def require_admin_role(current_user: User = Depends(get_current_user)) -> User:
+    """Dependency to require admin or super admin role.
+
+    Colleges no longer use 批次匯入 — they import students through 補充匯入
+    (app/api/v1/endpoints/supplementary_import.py).
+    """
+    if current_user.role not in [UserRole.admin, UserRole.super_admin]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="此功能僅限學院或管理員角色使用",
+            detail="此功能僅限管理員角色使用",
         )
     return current_user
 
@@ -63,7 +68,7 @@ async def upload_batch_import_data(
     # Empty string is accepted and normalized to None below — the frontend
     # sends semester="" for yearly scholarships whose period has no semester.
     semester: Optional[str] = Query(None, description="學期", pattern=r"^(first|second|yearly)?$"),
-    current_user: User = Depends(require_college_role),
+    current_user: User = Depends(require_admin_role),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -75,7 +80,7 @@ async def upload_batch_import_data(
     3. 返回預覽資料與驗證摘要
     4. 待確認後執行匯入
 
-    **權限**: 僅限 college 角色
+    **權限**: 僅限管理員角色
     """
     service = BatchImportService(db)
 
@@ -90,14 +95,9 @@ async def upload_batch_import_data(
             detail=f"獎學金類型 {scholarship_type} 不存在",
         )
 
-    # Get college code from user (skip for admin / super_admin, who are not
-    # bound to a single college and fall back to the "admin" record value)
+    # Admins are not bound to a single college, so there is no college scope to
+    # validate against — the batch is recorded under the "admin" sentinel below.
     college_code = current_user.college_code
-    if not college_code and current_user.role not in (UserRole.super_admin, UserRole.admin):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="使用者未設定學院代碼",
-        )
 
     # Read file content
     file_content = await file.read()
@@ -215,7 +215,7 @@ async def upload_batch_import_data(
     # Create batch import record
     batch_import = await service.create_batch_import_record(
         importer_id=current_user.id,
-        college_code=college_code or "admin",  # Use special value for super_admin (max 10 chars)
+        college_code=college_code or "admin",  # Sentinel for admins, who own no college (max 10 chars)
         scholarship_type_id=scholarship.id,
         academic_year=academic_year,
         semester=normalized_semester,
@@ -345,7 +345,7 @@ async def upload_batch_import_data(
 async def update_batch_record(
     batch_id: int,
     request: BatchImportUpdateRecordRequest,
-    current_user: User = Depends(require_college_role),
+    current_user: User = Depends(require_admin_role),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -356,7 +356,7 @@ async def update_batch_record(
     2. 更新指定索引的記錄
     3. 返回更新結果
 
-    **權限**: College 角色僅能編輯自己上傳的批次
+    **權限**: 一般管理員僅能編輯自己上傳的批次
     """
     # Get batch import record
     batch_import = await db.get(BatchImport, batch_id)
@@ -424,7 +424,7 @@ async def update_batch_record(
 @router.post("/{batch_id}/validate")
 async def revalidate_batch_import(
     batch_id: int,
-    current_user: User = Depends(require_college_role),
+    current_user: User = Depends(require_admin_role),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -436,7 +436,7 @@ async def revalidate_batch_import(
     3. 更新 parsed_data 中的錯誤列表
     4. 返回驗證摘要
 
-    **權限**: College 角色僅能驗證自己上傳的批次
+    **權限**: 一般管理員僅能驗證自己上傳的批次
     """
     # Get batch import record
     batch_import = await db.get(BatchImport, batch_id)
@@ -472,8 +472,12 @@ async def revalidate_batch_import(
     validation_errors: List[Dict[str, Any]] = []
     validation_warnings: List[Dict[str, Any]] = []
 
-    # Get college code from user
-    college_code = current_user.college_code
+    # Get college code from user. `batch_import.college_code` holds the literal
+    # "admin" sentinel for admin-created batches (see create_batch_import_record
+    # below) — passing that through would make every student look like a
+    # cross-college mismatch, so it must resolve to "no college scope" instead.
+    raw_college_code = current_user.college_code or batch_import.college_code or ""
+    college_code = "" if raw_college_code == "admin" else raw_college_code
 
     student_ids = [row["student_id"] for row in parsed_data]
     student_dept_map = {row["student_id"]: row.get("dept_code") for row in parsed_data}
@@ -485,7 +489,7 @@ async def revalidate_batch_import(
         permission_warnings,
     ) = await service.bulk_validate_permissions_and_duplicates(
         student_ids=student_ids,
-        college_code=college_code or batch_import.college_code or "",
+        college_code=college_code,
         scholarship_type_id=batch_import.scholarship_type_id,
         academic_year=batch_import.academic_year,
         semester=batch_import.semester,
@@ -577,7 +581,7 @@ async def revalidate_batch_import(
 async def delete_batch_record(
     batch_id: int,
     record_index: int,
-    current_user: User = Depends(require_college_role),
+    current_user: User = Depends(require_admin_role),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -589,7 +593,7 @@ async def delete_batch_record(
     3. 更新總筆數
     4. 返回刪除結果
 
-    **權限**: College 角色僅能刪除自己上傳的批次中的記錄
+    **權限**: 一般管理員僅能刪除自己上傳的批次中的記錄
     """
     # Get batch import record
     batch_import = await db.get(BatchImport, batch_id)
@@ -681,7 +685,7 @@ async def delete_batch_record(
 async def upload_batch_documents(
     batch_id: int,
     file: UploadFile = File(..., description="包含所有文件的 ZIP 檔案"),
-    current_user: User = Depends(require_college_role),
+    current_user: User = Depends(require_admin_role),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -703,7 +707,7 @@ async def upload_batch_documents(
     4. 上傳文件到 MinIO
     5. 建立 ApplicationFile 記錄
 
-    **權限**: College 角色僅能為自己的批次上傳文件
+    **權限**: 一般管理員僅能為自己的批次上傳文件
     """
     import zipfile
     from io import BytesIO
@@ -1016,7 +1020,7 @@ async def upload_batch_documents(
 async def confirm_batch_import(
     batch_id: int,
     request: BatchImportConfirmRequest | None = Body(None),
-    current_user: User = Depends(require_college_role),
+    current_user: User = Depends(require_admin_role),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -1024,11 +1028,11 @@ async def confirm_batch_import(
 
     **流程**:
     1. 驗證批次記錄
-    2. 檢查權限（College 角色僅能確認自己上傳的批次，Super Admin 可確認所有批次）
+    2. 檢查權限（一般管理員僅能確認自己上傳的批次，Super Admin 可確認所有批次）
     3. 建立所有申請記錄
     4. 更新批次狀態
 
-    **權限**: College 角色僅能確認自己上傳的批次，Super Admin 可確認所有批次
+    **權限**: 一般管理員僅能確認自己上傳的批次，Super Admin 可確認所有批次
     """
     # Get batch import record
     batch_import = await db.get(BatchImport, batch_id)
@@ -1226,13 +1230,13 @@ async def confirm_batch_import(
 async def get_batch_import_history(
     skip: int = Query(0, ge=0, description="跳過筆數"),
     limit: int = Query(20, ge=1, le=100, description="每頁筆數"),
-    current_user: User = Depends(require_college_role),
+    current_user: User = Depends(require_admin_role),
     db: AsyncSession = Depends(get_db),
 ):
     """
     查詢批次匯入歷史記錄
 
-    **權限**: College 角色僅能查看自己上傳的記錄，Super Admin 可查看所有記錄
+    **權限**: 一般管理員僅能查看自己上傳的記錄，Super Admin 可查看所有記錄
     """
     # Query batch imports - only show confirmed imports (exclude pending)
     # Pending imports are temporary and should not appear in history until confirmed
@@ -1324,13 +1328,13 @@ async def get_batch_import_history(
 @router.get("/{batch_id}/details")
 async def get_batch_import_details(
     batch_id: int,
-    current_user: User = Depends(require_college_role),
+    current_user: User = Depends(require_admin_role),
     db: AsyncSession = Depends(get_db),
 ):
     """
     查詢批次匯入詳細資訊
 
-    **權限**: College 角色僅能查看自己上傳的記錄，Super Admin 可查看所有記錄
+    **權限**: 一般管理員僅能查看自己上傳的記錄，Super Admin 可查看所有記錄
     """
     # Get batch import
     batch_import = await db.get(BatchImport, batch_id)
@@ -1390,13 +1394,13 @@ async def get_batch_import_details(
 @router.get("/{batch_id}/download")
 async def download_batch_import_file(
     batch_id: int,
-    current_user: User = Depends(require_college_role),
+    current_user: User = Depends(require_admin_role),
     db: AsyncSession = Depends(get_db),
 ):
     """
     下載批次匯入的原始 Excel 檔案
 
-    **權限**: College 角色僅能下載自己上傳的檔案，Super Admin 可下載所有檔案
+    **權限**: 一般管理員僅能下載自己上傳的檔案，Super Admin 可下載所有檔案
     """
     from app.services.minio_service import MinIOService
 
@@ -1472,13 +1476,13 @@ async def download_batch_import_file(
 @router.delete("/{batch_id}")
 async def delete_batch_import(
     batch_id: int,
-    current_user: User = Depends(require_college_role),
+    current_user: User = Depends(require_admin_role),
     db: AsyncSession = Depends(get_db),
 ):
     """
     刪除批次匯入記錄及其所有相關申請
 
-    **權限**: College 角色僅能刪除自己上傳的批次，Admin/Super Admin 可刪除所有批次
+    **權限**: Admin / Super Admin 皆可刪除所有批次（不限自己上傳的）
     """
     from app.core.config import settings
     from app.services.minio_service import MinIOService
@@ -1496,14 +1500,6 @@ async def delete_batch_import(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"批次匯入記錄 {batch_id} 不存在",
         )
-
-    # Verify ownership (skip for admin/super_admin)
-    if current_user.role not in [UserRole.admin, UserRole.super_admin]:
-        if batch_import.importer_id != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="僅能刪除自己上傳的批次匯入記錄",
-            )
 
     # Get applications using explicit query (avoid lazy loading)
     from app.models.application import Application
@@ -1624,7 +1620,7 @@ async def delete_batch_import(
 @router.get("/template")
 async def download_batch_import_template(
     scholarship_type: str = Query(..., description="獎學金類型代碼", pattern=r"^[a-z_]{1,50}$"),
-    current_user: User = Depends(require_college_role),
+    current_user: User = Depends(require_admin_role),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -1638,7 +1634,7 @@ async def download_batch_import_template(
 
     **注意**: 系所代碼會自動從學籍系統獲取，不需要在檔案中提供
 
-    **權限**: 僅限 college 角色
+    **權限**: 僅限管理員角色
     """
     from app.models.application_field import ApplicationField
 
@@ -1653,205 +1649,7 @@ async def download_batch_import_template(
             detail=f"獎學金類型 {scholarship_type} 不存在",
         )
 
-    # Define base columns (Traditional Chinese)
-    columns = [
-        "學號",  # student_id - 必填
-        "學生姓名",  # student_name - 必填
-        "郵局帳號",  # postal_account - 可選
-    ]
-
-    # Mapping for internal use (Chinese to English)
-    column_mapping = {
-        "學號": "student_id",
-        "學生姓名": "student_name",
-        "郵局帳號": "postal_account",
-    }
-
-    # Check if scholarship requires professor recommendation for advisor fields
-    from app.services.application_field_service import ApplicationFieldService
-
-    field_service = ApplicationFieldService(db)
-    requires_advisor = await field_service.check_requires_professor_recommendation(scholarship.code)
-
-    # Add advisor fixed fields if required (after postal_account, before sub_types)
-    if requires_advisor:
-        columns.extend(
-            [
-                "指導教授姓名",  # advisor_name
-                "指導教授Email",  # advisor_email
-                "指導教授本校人事編號",  # advisor_nycu_id
-            ]
-        )
-        column_mapping.update(
-            {
-                "指導教授姓名": "advisor_name",
-                "指導教授Email": "advisor_email",
-                "指導教授本校人事編號": "advisor_nycu_id",
-            }
-        )
-
-    # Sub-type label mapping — inverted from the parser's shared constant so
-    # a downloaded template is always importable (labels can never drift).
-    from app.services.batch_import_service import SUB_TYPE_CODE_BY_LABEL
-
-    sub_type_labels = {code: label for label, code in SUB_TYPE_CODE_BY_LABEL.items()}
-
-    # Add sub_type columns if scholarship has sub types (Traditional Chinese)
-    if scholarship.sub_type_list:
-        for sub_type_code in scholarship.sub_type_list:
-            label = sub_type_labels.get(sub_type_code, sub_type_code)
-            columns.append(label)
-            column_mapping[label] = f"sub_type_{sub_type_code}"
-
-    # Query custom fields for this scholarship type
-    custom_fields_stmt = (
-        select(ApplicationField)
-        .where(ApplicationField.scholarship_type == scholarship.code)
-        .where(ApplicationField.is_active)
-        .order_by(ApplicationField.display_order)
-    )
-    custom_fields_result = await db.execute(custom_fields_stmt)
-    custom_fields = custom_fields_result.scalars().all()
-
-    # Add custom field columns (Traditional Chinese), skipping any that would
-    # duplicate a base/fixed column already present. postal_account and the
-    # advisor fields are also seeded as ApplicationFields, so without this the
-    # column list gets duplicate labels — which makes pandas return a DataFrame
-    # for df[label] and breaks the column-width pass with
-    # "'DataFrame' object has no attribute 'tolist'".
-    reserved_field_names = {"student_id", "student_name", "postal_account"}
-    if requires_advisor:
-        reserved_field_names.update({"advisor_name", "advisor_email", "advisor_nycu_id"})
-
-    template_custom_fields = []
-    for field in custom_fields:
-        if field.field_name in reserved_field_names or field.field_label in columns:
-            continue
-        template_custom_fields.append(field)
-        columns.append(field.field_label)  # Use Chinese label
-        column_mapping[field.field_label] = f"custom_{field.field_name}"
-
-    # Create sample data (2 example rows)
-    sample_data = [
-        {
-            "學號": "111111111",
-            "學生姓名": "王小明",
-            "郵局帳號": "1234567890123",
-        },
-        {
-            "學號": "222222222",
-            "學生姓名": "陳小華",
-            "郵局帳號": "9876543210987",
-        },
-    ]
-
-    # Add advisor field sample values if required
-    if requires_advisor:
-        sample_data[0].update(
-            {
-                "指導教授姓名": "張教授",
-                "指導教授Email": "professor.chang@nycu.edu.tw",
-                "指導教授本校人事編號": "P001234",
-            }
-        )
-        sample_data[1].update(
-            {
-                "指導教授姓名": "李教授",
-                "指導教授Email": "professor.lee@nycu.edu.tw",
-                "指導教授本校人事編號": "P005678",
-            }
-        )
-
-    # Add sub_type sample values if applicable.
-    # Sub-type cells are checkmarks: 1 (or V/✓) = applying for that category,
-    # 0 or blank = not applying. Preference order is NOT read from these
-    # cells — the system forces MOE (moe_1w) as first preference, mirroring
-    # the student wizard. The two sample rows deliberately contrast 1 and 0
-    # so the semantics are visible in the file itself; the header comments
-    # added below spell them out.
-    if scholarship.sub_type_list:
-        for row_index, row in enumerate(sample_data):
-            for st_index, sub_type_code in enumerate(scholarship.sub_type_list):
-                label = sub_type_labels.get(sub_type_code, sub_type_code)
-                row[label] = 1 if row_index == 0 or st_index == 0 else 0
-
-    # Add custom field sample values
-    for field in template_custom_fields:
-        for i, row in enumerate(sample_data):
-            # Provide sample values based on field type
-            if field.field_type == "text":
-                row[field.field_label] = f"範例{field.field_label}{i + 1}"
-            elif field.field_type == "number":
-                row[field.field_label] = 100 + i
-            elif field.field_type == "select":
-                # Use first option if available
-                if field.field_options and len(field.field_options) > 0:
-                    row[field.field_label] = field.field_options[0].get("label", "")
-                else:
-                    row[field.field_label] = ""
-            elif field.field_type == "checkbox":
-                row[field.field_label] = "Y" if i == 0 else ""
-            else:
-                row[field.field_label] = ""
-
-    # Create DataFrame
-    df = pd.DataFrame(sample_data, columns=columns)
-
-    # Create Excel file in memory
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="批次匯入範例")
-
-        # Auto-adjust column widths
-        from openpyxl.comments import Comment
-        from openpyxl.utils import get_column_letter
-
-        # Sub-type headers (國科會/教育部…) get a hover comment explaining the
-        # checkmark semantics — the 1/0 cell values alone don't tell staff
-        # what they mean.
-        SUB_TYPE_COMMENT_TEXT = "1 = 有申請此類別；0 或空白 = 未申請（亦可填 V 或 ✓）"
-        SUB_TYPE_COMMENT_BOX_HEIGHT = 80
-        SUB_TYPE_COMMENT_BOX_WIDTH = 280
-        sub_type_column_labels = {sub_type_labels.get(code, code) for code in (scholarship.sub_type_list or [])}
-
-        worksheet = writer.sheets["批次匯入範例"]
-        for idx, col in enumerate(df.columns, 1):
-            # Calculate max length for this column. Use positional access so a
-            # duplicate column label can never turn df[col] into a DataFrame
-            # (which has no .tolist()).
-            column_values = df.iloc[:, idx - 1].astype(str).tolist()
-
-            # Collect all content in this column (header + all data)
-            all_content = [str(col)] + column_values
-
-            # Calculate max character length
-            max_length = max(len(text) for text in all_content) if all_content else 0
-
-            # Count Chinese characters in each cell and find the max
-            # Chinese characters need approximately 2x the width of English characters
-            max_chinese_in_cell = (
-                max(sum(1 for c in text if "\u4e00" <= c <= "\u9fff") for text in all_content) if all_content else 0
-            )
-
-            # Adjusted width calculation:
-            # - Base width from character count
-            # - Add extra width for Chinese characters (they're wider)
-            # - Add padding
-            adjusted_width = max_length + max_chinese_in_cell * 1.2 + 2
-
-            # Apply width to column
-            column_letter = get_column_letter(idx)
-            worksheet.column_dimensions[column_letter].width = adjusted_width
-
-            if col in sub_type_column_labels:
-                worksheet.cell(row=1, column=idx).comment = Comment(
-                    SUB_TYPE_COMMENT_TEXT,
-                    "獎學金系統",
-                    height=SUB_TYPE_COMMENT_BOX_HEIGHT,
-                    width=SUB_TYPE_COMMENT_BOX_WIDTH,
-                )
-
-    output.seek(0)
+    payload = await build_batch_import_template(db, scholarship)
 
     # Return as downloadable file with Chinese filename
     from urllib.parse import quote
@@ -1860,7 +1658,10 @@ async def download_batch_import_template(
     encoded_filename = quote(filename, encoding="utf-8")
 
     return StreamingResponse(
-        output,
+        iter([payload]),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"},
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+            "Content-Length": str(len(payload)),
+        },
     )

@@ -238,16 +238,16 @@ class TestBatchImportService:
             # sequence lookup per row.
             patch.object(
                 service,
-                "_fetch_field_definitions",
+                "fetch_field_definitions",
                 new_callable=AsyncMock,
                 return_value={},
             ),
             patch.object(
                 service,
-                "_build_submitted_form_data",
+                "build_submitted_form_data",
                 return_value={"fields": {}, "documents": []},
             ),
-            patch.object(service, "_upsert_user_profile", new_callable=AsyncMock),
+            patch.object(service, "upsert_user_profile", new_callable=AsyncMock),
             patch(
                 "app.services.batch_import_service.assign_professor_from_profile",
                 new_callable=AsyncMock,

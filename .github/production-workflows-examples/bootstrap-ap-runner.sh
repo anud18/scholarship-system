@@ -25,9 +25,18 @@
 #        ./bootstrap-ap-runner.sh \
 #            --repo-url https://github.com/<OWNER>/<PROD_REPO> \
 #            --token    <REGISTRATION_TOKEN>
-#      Optional: --labels "self-hosted,linux"  (default)
+#            --stage    test|production
+#      Optional: --labels "self-hosted,linux,<stage>"  (default, derived from --stage)
 #                --runner-version 2.319.1       (default: latest at write time)
-#                --name <runner-name>           (default: <hostname>-ap)
+#                --name <runner-name>           (default: <hostname>-ap-<stage>)
+#
+#   --stage IS MANDATORY. There are two AP VMs and both register as
+#   [self-hosted, linux]; the stage label is the ONLY thing that tells the
+#   workflows apart. deploy.yml targets ["self-hosted","linux","test"] and
+#   ["self-hosted","linux","production"] explicitly — a runner without its
+#   stage label is invisible to them, and a runner with the WRONG one will
+#   happily accept a production deploy on the test VM. Run this script once
+#   per VM with the matching --stage.
 #
 # GUARANTEES:
 #   - set -euo pipefail + an ERR trap that prints the failing line — a failure
@@ -58,14 +67,16 @@ trap 'on_err "$LINENO"' ERR
 # ── args ─────────────────────────────────────────────────────────────────
 REPO_URL=""
 REG_TOKEN=""
-LABELS="self-hosted,linux"
+STAGE=""
+LABELS=""
 RUNNER_VERSION="2.319.1"
-RUNNER_NAME="$(hostname)-ap"
+RUNNER_NAME=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo-url)        REPO_URL="$2"; shift 2 ;;
     --token)           REG_TOKEN="$2"; shift 2 ;;
+    --stage)           STAGE="$2"; shift 2 ;;
     --labels)          LABELS="$2"; shift 2 ;;
     --runner-version)  RUNNER_VERSION="$2"; shift 2 ;;
     --name)            RUNNER_NAME="$2"; shift 2 ;;
@@ -76,6 +87,24 @@ done
 
 [ -n "$REPO_URL" ]  || die "--repo-url is required (https://github.com/<OWNER>/<PROD_REPO>)"
 [ -n "$REG_TOKEN" ] || die "--token is required (runner registration token, expires ~1h)"
+case "$STAGE" in
+  test|production) : ;;
+  "") die "--stage is required (test|production). The workflows select the VM by its stage label; a runner without one gets no jobs." ;;
+  *)  die "--stage must be 'test' or 'production' (got: $STAGE)" ;;
+esac
+
+# Derived AFTER the stage is known, so both default to the right thing while
+# an explicit --labels/--name still wins.
+: "${LABELS:=self-hosted,linux,$STAGE}"
+: "${RUNNER_NAME:=$(hostname)-ap-$STAGE}"
+
+# An explicit --labels that drops the stage label registers a runner no
+# workflow will ever dispatch to — catch it here, not after a silent hour of
+# "queued" jobs.
+case ",$LABELS," in
+  *",$STAGE,"*) : ;;
+  *) die "--labels ($LABELS) does not contain the stage label '$STAGE' — deploy.yml would never dispatch to this runner." ;;
+esac
 
 RUN_USER="$(id -un)"
 [ "$RUN_USER" != "root" ] || die "Run as a normal sudo-capable user, NOT root — the GitHub runner refuses to run as root."
@@ -83,6 +112,7 @@ RUN_USER="$(id -un)"
 log "Bootstrap plan"
 echo "   AP VM user      : $RUN_USER"
 echo "   Repo URL        : $REPO_URL"
+echo "   Stage           : $STAGE"
 echo "   Runner name     : $RUNNER_NAME"
 echo "   Runner labels   : $LABELS"
 echo "   Runner version  : $RUNNER_VERSION"

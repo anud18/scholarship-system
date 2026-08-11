@@ -5,12 +5,15 @@ Provides endpoints for admin to manually allocate scholarships to students.
 """
 
 import logging
-from typing import Optional
+from typing import Literal, NamedTuple, Optional
+from urllib.parse import quote as _url_quote
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.deps import get_current_admin_user, get_db
 from app.db.deps import get_sync_db
@@ -19,13 +22,19 @@ from app.models.application import Application
 from app.models.audit_log import AuditAction, AuditLog
 from app.models.college_review import CollegeRanking, CollegeRankingItem, ManualDistributionHistory
 from app.models.email_management import EmailCategory
-from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
+from app.models.scholarship import ScholarshipConfiguration, ScholarshipSubTypeConfig, ScholarshipType
 from app.models.user import User
 from app.schemas.application import RevokeRequest, SuspendRequest
 from app.services.application_audit_service import ApplicationAuditService
 from app.services.email_service import EmailService
+from app.services.manual_distribution_export_service import (
+    ManualDistributionExportService,
+    RecipientExportGroup,
+    build_recipient_row,
+)
 from app.services.manual_distribution_service import ManualDistributionService
 from app.utils.date_utils import now_taipei_str
+from app.utils.export_download import XLSX_MEDIA_TYPE, sanitise_filename_part
 
 logger = logging.getLogger(__name__)
 
@@ -423,6 +432,101 @@ async def restore_from_history(
         ) from e
 
 
+class _AllocatedGroup(NamedTuple):
+    """One 分發 group: sub_type × 消耗配額 config, with its allocated items."""
+
+    sub_type: str
+    allocation_config_id: Optional[int]
+    allocation_year: Optional[int]
+    items: list  # CollegeRankingItem, with .application / .allocation_config loaded
+
+
+async def _load_allocated_groups(
+    db: AsyncSession,
+    *,
+    scholarship_type_id: int,
+    academic_year: int,
+    semester: str,
+) -> Optional[list[_AllocatedGroup]]:
+    """Load every allocated student, grouped by (sub_type, allocation_config_id).
+
+    Shared by the distribution-summary JSON endpoint and its file export, so the
+    exported file can never disagree with the 分發結果名單 panel.
+
+    Returns ``None`` when NO finalized+executed ranking exists (尚未完成分發) —
+    distinct from ``[]``, which means the distribution ran but zero students are
+    currently allocated.
+    """
+    # 取得已完成分發的排名
+    if semester in ("annual", "yearly", ""):
+        sem_filter = or_(
+            CollegeRanking.semester.is_(None),
+            CollegeRanking.semester == "annual",
+            CollegeRanking.semester == "yearly",
+        )
+    else:
+        sem_filter = CollegeRanking.semester == semester
+
+    ranking_stmt = select(CollegeRanking).where(
+        and_(
+            CollegeRanking.scholarship_type_id == scholarship_type_id,
+            CollegeRanking.academic_year == academic_year,
+            sem_filter,
+            CollegeRanking.is_finalized.is_(True),
+            CollegeRanking.distribution_executed.is_(True),
+        )
+    )
+    ranking_result = await db.execute(ranking_stmt)
+    rankings = ranking_result.scalars().all()
+    if not rankings:
+        return None
+
+    ranking_ids = [r.id for r in rankings]
+
+    # 取得所有已分配的 ranking items
+    items_stmt = (
+        select(CollegeRankingItem)
+        .where(
+            and_(
+                CollegeRankingItem.ranking_id.in_(ranking_ids),
+                CollegeRankingItem.is_allocated.is_(True),
+            )
+        )
+        .options(
+            selectinload(CollegeRankingItem.application),
+            selectinload(CollegeRankingItem.allocation_config),
+        )
+    )
+    items_result = await db.execute(items_stmt)
+    allocated_items = items_result.scalars().all()
+
+    # 按 (sub_type, allocation_config_id) 分組；顯示年度取自消耗的配置
+    grouped: dict[tuple, list] = {}
+    for item in allocated_items:
+        sub_type = item.allocated_sub_type or "general"
+        grouped.setdefault((sub_type, item.allocation_config_id), []).append(item)
+
+    groups: list[_AllocatedGroup] = []
+    # None allocation_config_id (whole-period sentinel) sorts first via -1
+    for (sub_type, config_id), items in sorted(
+        grouped.items(),
+        key=lambda kv: (kv[0][0], kv[0][1] if kv[0][1] is not None else -1),
+    ):
+        # Display year = consumed config's academic_year (falls back to the
+        # requesting year for whole-period rows with no linked config).
+        consumed = items[0].allocation_config if items else None
+        alloc_year = consumed.academic_year if consumed else academic_year
+        groups.append(
+            _AllocatedGroup(
+                sub_type=sub_type,
+                allocation_config_id=config_id,
+                allocation_year=alloc_year,
+                items=items,
+            )
+        )
+    return groups
+
+
 @router.get("/distribution-summary")
 async def get_distribution_summary(
     scholarship_type_id: int = Query(...),
@@ -435,78 +539,25 @@ async def get_distribution_summary(
     取得分發結果摘要：所有被分發的學生及其分配到的獎學金子類型。
     回傳所有已分配學生，按 sub_type × allocation_year 分組。
     """
-    from sqlalchemy import and_, or_
-    from sqlalchemy.orm import selectinload
-
     try:
-        # 取得已完成分發的排名
-        if semester in ("annual", "yearly", ""):
-            sem_filter = or_(
-                CollegeRanking.semester.is_(None),
-                CollegeRanking.semester == "annual",
-                CollegeRanking.semester == "yearly",
-            )
-        else:
-            sem_filter = CollegeRanking.semester == semester
-
-        ranking_stmt = select(CollegeRanking).where(
-            and_(
-                CollegeRanking.scholarship_type_id == scholarship_type_id,
-                CollegeRanking.academic_year == academic_year,
-                sem_filter,
-                CollegeRanking.is_finalized.is_(True),
-                CollegeRanking.distribution_executed.is_(True),
-            )
+        groups = await _load_allocated_groups(
+            db,
+            scholarship_type_id=scholarship_type_id,
+            academic_year=academic_year,
+            semester=semester,
         )
-        ranking_result = await db.execute(ranking_stmt)
-        rankings = ranking_result.scalars().all()
-
-        if not rankings:
+        if groups is None:
             return {
                 "success": True,
                 "message": "尚未完成分發",
                 "data": {"groups": [], "total_allocated": 0},
             }
 
-        ranking_ids = [r.id for r in rankings]
-
-        # 取得所有已分配的 ranking items
-        items_stmt = (
-            select(CollegeRankingItem)
-            .where(
-                and_(
-                    CollegeRankingItem.ranking_id.in_(ranking_ids),
-                    CollegeRankingItem.is_allocated.is_(True),
-                )
-            )
-            .options(
-                selectinload(CollegeRankingItem.application),
-                selectinload(CollegeRankingItem.allocation_config),
-            )
-        )
-        items_result = await db.execute(items_stmt)
-        allocated_items = items_result.scalars().all()
-
-        # 按 (sub_type, allocation_config_id) 分組；顯示年度取自消耗的配置
-        groups: dict[tuple, list] = {}
-        for item in allocated_items:
-            sub_type = item.allocated_sub_type or "general"
-            key = (sub_type, item.allocation_config_id)
-            groups.setdefault(key, []).append(item)
-
         group_data = []
         total_allocated = 0
-        # None allocation_config_id (whole-period sentinel) sorts first via -1
-        for (sub_type, config_id), items in sorted(
-            groups.items(),
-            key=lambda kv: (kv[0][0], kv[0][1] if kv[0][1] is not None else -1),
-        ):
-            # Display year = consumed config's academic_year (falls back to the
-            # requesting year for whole-period rows with no linked config).
-            consumed = items[0].allocation_config if items else None
-            alloc_year = consumed.academic_year if consumed else academic_year
+        for group in groups:
             students = []
-            for item in items:
+            for item in group.items:
                 app = item.application
                 sd = (app.student_data or {}) if app else {}
                 students.append(
@@ -519,6 +570,12 @@ async def get_distribution_summary(
                         "college_name": sd.get("trm_academyname", ""),
                         "department_name": sd.get("trm_depname", ""),
                         "rank_position": item.rank_position,
+                        # The panel renders a red "N" instead of the rank for these.
+                        # An allocated-but-college-rejected row is legitimate: admin
+                        # may allocate over a college rejection (see CollegeRankingItem
+                        # .college_rejected), so the list must not hide it.
+                        "college_rejected": bool(item.college_rejected),
+                        "is_supplementary": bool(item.is_supplementary),
                         "is_renewal": app.is_renewal if app else False,
                         "renewal_year": app.renewal_year if app else None,
                     }
@@ -526,9 +583,9 @@ async def get_distribution_summary(
             total_allocated += len(students)
             group_data.append(
                 {
-                    "sub_type": sub_type,
-                    "allocation_config_id": config_id,
-                    "allocation_year": alloc_year,
+                    "sub_type": group.sub_type,
+                    "allocation_config_id": group.allocation_config_id,
+                    "allocation_year": group.allocation_year,
                     "count": len(students),
                     "students": students,
                 }
@@ -548,6 +605,170 @@ async def get_distribution_summary(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="取得分發摘要失敗",
         ) from e
+
+
+_SEMESTER_EXPORT_LABELS = {"first": "第一學期", "second": "第二學期"}
+
+
+def _export_sort_key(item) -> tuple:
+    """(學院代碼, 名次, id) for one allocated ranking item.
+
+    The college code comes from the same snapshot keys the JSON summary uses, so
+    the export and the panel bucket a student into the same college.
+    """
+    app = item.application
+    sd = (app.student_data or {}) if app else {}
+    college = sd.get("std_academyno") or sd.get("trm_academyno") or ""
+    return (str(college), item.rank_position or 0, item.id)
+
+
+@router.get("/distribution-summary/export")
+async def export_distribution_summary(
+    request: Request,
+    scholarship_type_id: int = Query(...),
+    academic_year: int = Query(...),
+    semester: str = Query(...),
+    format: Literal["xlsx", "pdf"] = Query("xlsx", description="Output format: xlsx (default) or pdf"),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_admin_user),
+):
+    """Export the 分發結果名單 as Excel (default) or PDF — 受獎名冊 layout.
+
+    Reads through the SAME ``_load_allocated_groups`` loader as the JSON
+    endpoint, so the file can never show a student the panel would not.
+
+    Carries no 身分證字號 and no 匯款帳號, but it is NOT the PII-free case the
+    college 分發結果 export is: on top of 學號/姓名/系所 it emits 國籍, 性別,
+    碩士畢業院/校/系所 and 首次註冊入學日期, plus three derived flags that label a
+    student as 在職生 / 陸港澳生 / 休學. That is personal data about identified
+    students leaving the system in bulk, so it writes a ``pii_access`` AuditLog
+    like the 學生資料彙整表 export does.
+    """
+    log_extra = {
+        "actor_user_id": current_user.id,
+        "actor_role": (current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)),
+        "scholarship_type_id": scholarship_type_id,
+        "academic_year": academic_year,
+        "semester": semester,
+        "export_format": format,
+    }
+
+    groups = await _load_allocated_groups(
+        db,
+        scholarship_type_id=scholarship_type_id,
+        academic_year=academic_year,
+        semester=semester,
+    )
+    if groups is None:
+        logger.warning("distribution-summary export rejected: no finalized distribution", extra=log_extra)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="尚未完成分發，無法匯出")
+    if not groups:
+        logger.warning("distribution-summary export rejected: no allocated students", extra=log_extra)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="尚無已分配的學生可匯出")
+
+    # Sub-type display labels from configuration (NOT the hardcoded legacy maps);
+    # unknown / historical codes fall through as the raw code. Deliberately no
+    # is_active filter: a finalized distribution may reference a since-disabled
+    # sub-type and its label must still render.
+    label_rows = await db.execute(
+        select(ScholarshipSubTypeConfig.sub_type_code, ScholarshipSubTypeConfig.name).where(
+            ScholarshipSubTypeConfig.scholarship_type_id == scholarship_type_id
+        )
+    )
+    sub_type_labels = {code: name for code, name in label_rows.all()}
+
+    # scalar_one() not scalar_one_or_none(): finalized rankings exist for this id
+    # (checked above) and they FK onto scholarship_types — a miss here is a broken
+    # invariant that must surface, not be papered over with a default title.
+    scholarship_name = (
+        await db.execute(select(ScholarshipType.name).where(ScholarshipType.id == scholarship_type_id))
+    ).scalar_one()
+
+    export_groups = []
+    _seq_counter = 0
+    for group in groups:
+        # Order by 學院 first, then rank. rank_position is scoped to ONE college's
+        # CollegeRanking, so sorting on it alone interleaves colleges (工學院 #1,
+        # 電機 #1, 工學院 #2 …) and the roster reads as if the ranks were global.
+        # Matches get_students_for_distribution's (college_code, rank_position).
+        ordered_items = sorted(group.items, key=_export_sort_key)
+        rows = []
+        for _it in ordered_items:
+            _seq_counter += 1
+            rows.append(build_recipient_row(_seq_counter, _it.application))
+        export_groups.append(
+            RecipientExportGroup(
+                label=sub_type_labels.get(group.sub_type, group.sub_type),
+                sub_type_code=group.sub_type,
+                allocation_year=group.allocation_year,
+                rows=rows,
+            )
+        )
+
+    semester_label = _SEMESTER_EXPORT_LABELS.get(semester, "")
+    title = f"{academic_year}學年度{semester_label}{scholarship_name}分發名單"
+    stem = sanitise_filename_part(f"分發名單_{scholarship_name}_{academic_year}學年度{semester_label}".rstrip("_"))
+    encoded = _url_quote(f"{stem}.{format}", safe="")
+
+    service = ManualDistributionExportService()
+    if format == "pdf":
+        payload = service.build_pdf(groups=export_groups, title=title)
+        media_type = "application/pdf"
+    else:
+        payload = service.build_workbook(groups=export_groups, title=title)
+        media_type = XLSX_MEDIA_TYPE
+
+    student_count = sum(len(g.rows) for g in export_groups)
+    logger.info(
+        "distribution-summary export issued: groups=%d students=%d size_bytes=%d",
+        len(export_groups),
+        student_count,
+        len(payload),
+        extra={**log_extra, "export_filename": f"{stem}.{format}", "size_bytes": len(payload)},
+    )
+
+    exported_app_ids = [item.application_id for group in groups for item in group.items]
+    try:
+        db.add(
+            AuditLog(
+                user_id=current_user.id,
+                action=AuditAction.pii_access.value,
+                resource_type="scholarship_type",
+                resource_id=str(scholarship_type_id),
+                resource_name=f"{stem}.{format}",
+                description=(
+                    f"匯出分發名單（含國籍/性別/學籍檢核）: scholarship_type_id={scholarship_type_id}, "
+                    f"academic_year={academic_year}, records={student_count}"
+                ),
+                ip_address=(request.client.host if request.client else None),
+                user_agent=request.headers.get("user-agent"),
+                request_method=request.method,
+                request_url=str(request.url.path),
+                status="success",
+                meta_data={
+                    "scholarship_type_id": scholarship_type_id,
+                    "academic_year": academic_year,
+                    "semester": semester,
+                    "record_count": student_count,
+                    "application_ids": exported_app_ids,
+                    "pii_fields": ["std_cname", "std_stdcode", "std_nation", "std_sex", "std_enrollyear"],
+                    "export_format": format,
+                },
+            )
+        )
+        await db.commit()
+    except Exception:  # noqa: BLE001 — audit failure must not block the download
+        logger.exception("Failed to record pii_access audit log for distribution-summary export")
+        await db.rollback()
+
+    return StreamingResponse(
+        iter([payload]),
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded}",
+            "Content-Length": str(len(payload)),
+        },
+    )
 
 
 class GenerateRostersRequest(BaseModel):

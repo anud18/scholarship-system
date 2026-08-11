@@ -783,7 +783,7 @@ function ProfessorReviewComponentInner({
               {isLocked && (
                 <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
                   <strong>本申請已進入「{lockedStageLabel}」階段。</strong>
-                  教授審核已鎖定，您無法再修改或提交審核意見。如需更動，請聯繫管理員。
+                  教授審核已鎖定，您無法再修改或提交審核意見。如需更動，請聯繫各學院獎學金承辦人。
                 </div>
               )}
 

@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Eye, Mail, Code, FileText, AlertCircle, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
+import { useCspNonce } from "@/components/providers/csp-nonce";
 
 interface TemplateVariable {
   name: string;
@@ -252,6 +253,9 @@ function PreviewDialog({ template, open, onClose }: PreviewDialogProps) {
 }
 
 export function ReactEmailTemplateViewer() {
+  // The 查看源碼 popup is an about:blank window, which INHERITS this document's
+  // CSP — so the <style> it writes needs the nonce like any other (#1273).
+  const nonce = useCspNonce();
   const [templates, setTemplates] = useState<ReactEmailTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -306,7 +310,7 @@ export function ReactEmailTemplateViewer() {
           <html>
             <head>
               <title>${template.display_name} - 源碼</title>
-              <style>
+              <style${nonce ? ` nonce="${nonce}"` : ""}>
                 body { margin: 0; font-family: monospace; }
                 pre { margin: 0; padding: 20px; background: #1e1e1e; color: #d4d4d4; overflow: auto; }
               </style>

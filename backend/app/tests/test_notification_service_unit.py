@@ -322,3 +322,107 @@ async def test_add_and_remove_websocket(dummy_service):
 
     await dummy_service.remove_websocket_connection(user_id=1, websocket=connection)
     assert dummy_service._websocket_connections[1] == []
+
+
+class _FakeSessionCM:
+    """Async context manager standing in for AsyncSessionLocal()."""
+
+    def __init__(self, session):
+        self.session = session
+
+    async def __aenter__(self):
+        return self.session
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+@pytest.fixture
+def email_notification():
+    from types import SimpleNamespace
+
+    from app.models.notification import Notification
+
+    notification = Notification(user_id=1, title="Test Title", message="Test Message")
+    notification.__dict__["user"] = SimpleNamespace(email="student@nycu.edu.tw")
+    return notification
+
+
+@pytest.fixture
+def email_env(monkeypatch):
+    from types import SimpleNamespace
+
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "smtp_host", "smtp.test.nycu.edu.tw")
+    monkeypatch.setattr(settings, "email_from", "noreply@nycu.edu.tw")
+
+    fake_db = object()
+    monkeypatch.setattr("app.db.session.AsyncSessionLocal", lambda: _FakeSessionCM(fake_db))
+
+    class FakeEmailService:
+        instances = []
+
+        def __init__(self, db):
+            self.db = db
+            self.send_email = AsyncMock()
+            FakeEmailService.instances.append(self)
+
+    monkeypatch.setattr("app.services.email_service.EmailService", FakeEmailService)
+    return SimpleNamespace(fake_db=fake_db, service_cls=FakeEmailService)
+
+
+@pytest.mark.asyncio
+async def test_send_email_notification_routes_through_email_service(dummy_service, email_notification, email_env):
+    from app.models.email_management import EmailCategory
+
+    await dummy_service._send_email_notification(email_notification)
+
+    assert len(email_env.service_cls.instances) == 1
+    instance = email_env.service_cls.instances[0]
+    # EmailService must run on the dedicated session, never the notification session
+    assert instance.db is email_env.fake_db
+    assert instance.db is not dummy_service.db
+
+    instance.send_email.assert_awaited_once()
+    kwargs = instance.send_email.await_args.kwargs
+    assert kwargs["to"] == "student@nycu.edu.tw"
+    assert kwargs["subject"] == "Test Title"
+    assert "Test Message" in kwargs["html_content"]
+    assert kwargs["db"] is email_env.fake_db
+    assert kwargs["email_category"] == EmailCategory.system
+
+
+@pytest.mark.asyncio
+async def test_send_email_notification_skips_without_smtp_config(
+    dummy_service, email_notification, email_env, monkeypatch
+):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "smtp_host", "")
+
+    await dummy_service._send_email_notification(email_notification)
+
+    assert email_env.service_cls.instances == []
+
+
+@pytest.mark.asyncio
+async def test_send_email_notification_skips_without_user_email(dummy_service, email_notification, email_env):
+    email_notification.user.email = None
+
+    await dummy_service._send_email_notification(email_notification)
+
+    assert email_env.service_cls.instances == []
+
+
+@pytest.mark.asyncio
+async def test_send_email_notification_swallows_send_errors(dummy_service, email_notification, email_env, monkeypatch):
+    class FailingEmailService(email_env.service_cls):
+        def __init__(self, db):
+            super().__init__(db)
+            self.send_email = AsyncMock(side_effect=RuntimeError("SMTP down"))
+
+    monkeypatch.setattr("app.services.email_service.EmailService", FailingEmailService)
+
+    # Must not raise — email failures never break the notification flow
+    await dummy_service._send_email_notification(email_notification)

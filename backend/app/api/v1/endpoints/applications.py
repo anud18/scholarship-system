@@ -862,7 +862,13 @@ async def get_application_audit_trail(
     # Verify application exists and user has access
     service = ApplicationService(db)
     try:
-        await service.get_application_by_id(id, current_user)
+        # get_application_by_id RETURNS None on a permission miss — it does not
+        # raise — so the except below could never fire and the audit trail was
+        # served regardless. Check the value (#1223 A).
+        if await service.get_application_by_id(id, current_user) is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found") from exc
 

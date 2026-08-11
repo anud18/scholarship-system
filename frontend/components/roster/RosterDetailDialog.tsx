@@ -31,7 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Loader2, Lock, LockOpen, X, AlertTriangle, RefreshCw, RotateCcw } from "lucide-react";
+import { Loader2, Lock, LockOpen, X, AlertTriangle, RefreshCw, RotateCcw, RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import type { RevokedSuspendedList, DistributionDiff, DistributionDiffEntry } from "@/lib/api/modules/payment-rosters";
@@ -126,6 +126,11 @@ export function RosterDetailDialog({
 
   const [isLocking, setIsLocking] = useState(false);
   const [isUnlocking, setIsUnlocking] = useState(false);
+
+  // 重新生成造冊 — 不需要人員有異動即可重建整份名單
+  const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
+  const [regenerateVerify, setRegenerateVerify] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
 
   // 資格對比 detail dialog state
   const [eligibilityTarget, setEligibilityTarget] = useState<RosterItem | null>(null);
@@ -256,6 +261,41 @@ export function RosterDetailDialog({
       toast.error(e instanceof Error ? e.message : "解鎖失敗");
     } finally {
       setIsUnlocking(false);
+    }
+  };
+
+  const handleRegenerate = async () => {
+    if (!period.roster_id) return;
+    setIsRegenerating(true);
+    try {
+      // Additive only: ticked → force verification on for THIS run; unticked →
+      // send nothing and inherit the roster's own setting. Never send an
+      // explicit `false` — the box starts unticked every time, so doing so
+      // would silently DISABLE verification on a roster that was generated with
+      // it on, re-including 已畢業/已退學 students into a payment roster.
+      // The backend does not persist the override, so this cannot latch on.
+      const resp = await apiClient.paymentRosters.regenerateRoster(
+        period.roster_id,
+        regenerateVerify ? { student_verification_enabled: true } : undefined
+      );
+      if (resp.success) {
+        setShowRegenerateConfirm(false);
+        // Same post-mutation sequence as reconcile: refresh the dialog's own
+        // snapshot first (the `period` prop is frozen from when it opened),
+        // then let the parent refetch its list badges.
+        await Promise.all([loadRosterItems(), fetchAuditLogs()]);
+        setDiff(null);
+        setExcelStale(resp.data?.excel_stale ?? false);
+        onRosterChanged?.();
+        toast.success(resp.message || "造冊已重新生成");
+      } else {
+        toast.error(resp.message || "重新生成造冊失敗");
+      }
+    } catch (e) {
+      logger.error("regenerate roster failed", { error: e });
+      toast.error(e instanceof Error ? e.message : "重新生成造冊失敗");
+    } finally {
+      setIsRegenerating(false);
     }
   };
 
@@ -856,6 +896,25 @@ export function RosterDetailDialog({
 
           {period.roster_id && (
             <div className="mt-3 flex gap-2 justify-end">
+              {period.roster_status !== "locked" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setRegenerateVerify(false);
+                    setShowRegenerateConfirm(true);
+                  }}
+                  disabled={isRegenerating || loading}
+                  title="依當下的分發名單與學生資料重建整份名單（不需人員有異動）"
+                >
+                  {isRegenerating ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                  ) : (
+                    <RefreshCcw className="h-4 w-4 mr-1" />
+                  )}
+                  重新生成造冊
+                </Button>
+              )}
               {period.roster_status !== "locked" ? (
                 <Button
                   size="sm"
@@ -950,6 +1009,63 @@ export function RosterDetailDialog({
         item={eligibilityTarget}
         onClose={() => setEligibilityTarget(null)}
       />
+
+      {/* 重新生成造冊 — confirm + 學籍驗證 option */}
+      <Dialog
+        open={showRegenerateConfirm}
+        onOpenChange={open =>
+          !open && !isRegenerating && setShowRegenerateConfirm(false)
+        }
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>確認重新生成造冊？</DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-2 text-left">
+                <p>
+                  系統會依<strong>當下</strong>
+                  的分發名單、學生資料與獎學金設定，重建本造冊的全部明細——
+                  即使名單人員沒有異動也可以執行。
+                </p>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>刷新金額、計畫編號、郵局帳號與規則資格判定</li>
+                  <li>補上已分發但不在造冊中的學生，移除已不在分發名單者</li>
+                  <li>
+                    <strong>保留</strong>
+                    您先前的人為排除／移除（學生繳回、放棄…）與人工帳戶覆核
+                  </li>
+                  <li>完成後會重新匯出 Excel</li>
+                </ul>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={regenerateVerify}
+              onChange={e => setRegenerateVerify(e.target.checked)}
+              disabled={isRegenerating}
+            />
+            同時重新驗證學籍（較慢，會排除已休學／退學／畢業的學生）。
+            不勾選則沿用本造冊原本的驗證設定。
+          </label>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowRegenerateConfirm(false)}
+              disabled={isRegenerating}
+            >
+              取消
+            </Button>
+            <Button onClick={handleRegenerate} disabled={isRegenerating}>
+              {isRegenerating ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : null}
+              確認重新生成
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 比對分發名單 — single-row confirm */}
       <Dialog

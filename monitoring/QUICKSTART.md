@@ -28,7 +28,7 @@ nano .env.monitoring
 **Minimal config for testing**:
 ```bash
 GRAFANA_ADMIN_USER=admin
-GRAFANA_ADMIN_PASSWORD=admin123
+GRAFANA_ADMIN_PASSWORD=<choose-a-strong-password>   # e.g. openssl rand -base64 24
 ```
 
 ## Step 2: Start Monitoring Server (1 minute)

@@ -125,7 +125,7 @@ dependencies = [
     "PyJWT[crypto]==2.13.0",
     "passlib[bcrypt]==1.7.4",
     "bcrypt==4.2.1",
-    "cryptography==49.0.0",
+    "cryptography==50.0.0",
     "python-decouple==3.8",
     
     # Data validation and serialization
@@ -149,7 +149,7 @@ dependencies = [
     "croniter==1.4.1",
     
     # Email services
-    "fastapi-mail==1.6.5",
+    "aiosmtplib==5.1.2",
     "jinja2==3.1.6",
     
     # File processing and OCR
@@ -168,7 +168,7 @@ dependencies = [
 
     # PDF generation
     "reportlab==4.4.10",
-    "pypdf==6.14.2",  # Merged 申請資料合併檔 PDF in the export package (pdf_merge.py)
+    "pypdf==6.15.0",  # Security: CVE-2026-71852/71870 (ToUnicode token length, CID width range DoS, <6.15.0); merged 申請資料合併檔 PDF in the export package (pdf_merge.py)
 
     # Logging and monitoring
     "structlog==24.4.0",

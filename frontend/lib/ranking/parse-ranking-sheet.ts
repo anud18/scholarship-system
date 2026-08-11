@@ -18,6 +18,10 @@ const COL_RANK = "學院初審會議之學院排序";
 
 const FIRST_DATA_EXCEL_ROW = 3;
 
+// Appended to rank-sequence errors so the toast states the rule that was broken,
+// not just the symptom. Mirrors the backend (ranking_management.py).
+const RANK_SEQUENCE_RULE = "，排名數字不可重複、不可跳號";
+
 export interface ExcelRankingImportRow {
   student_id: string;
   student_name: string;
@@ -110,7 +114,7 @@ export function parseRankingSheet(
   countOccurrences(integerRanks).forEach((count, rank) => {
     if (count > 1) {
       hasDuplicateRanks = true;
-      errors.push(`排名 ${rank} 重複出現（${count} 次）`);
+      errors.push(`排名 ${rank} 重複出現（${count} 次）${RANK_SEQUENCE_RULE}`);
     }
   });
 
@@ -124,7 +128,9 @@ export function parseRankingSheet(
       if (!rankSet.has(i)) missing.push(i);
     }
     if (missing.length > 0) {
-      errors.push(`排名不連續：缺少第 ${missing.join(", ")} 名`);
+      errors.push(
+        `排名不連續：缺少第 ${missing.join(", ")} 名${RANK_SEQUENCE_RULE}`
+      );
     }
   }
 

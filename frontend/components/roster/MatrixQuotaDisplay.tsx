@@ -48,7 +48,11 @@ export function MatrixQuotaDisplay({ quotas, hasMatrix }: MatrixQuotaDisplayProp
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <Table>
+        {/* Rule every cell. shadcn's Table only draws row separators (`border-b`
+            on TableRow), which leaves a dense 學院 × 子類型 numeric grid with no
+            column lines at all — the same full-border treatment as 各學院剩餘名額
+            (CollegeQuotaMatrix) on the 獎學金分發 screen. */}
+        <Table className="border-collapse border border-slate-300 [&_th]:border [&_th]:border-slate-300 [&_td]:border [&_td]:border-slate-300">
           <TableHeader>
             <TableRow>
               <TableHead className="font-semibold whitespace-nowrap">子類型</TableHead>

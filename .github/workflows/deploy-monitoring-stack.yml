@@ -93,20 +93,30 @@ jobs:
 
           # Required env vars; unset values fail-fast below
           export APP_NETWORK_NAME="scholarship_staging_network"
+          # The stack serves both environments. Grafana/Loki/Prometheus join
+          # this second app network too, so production's alloy can push and
+          # prod nginx can proxy /monitoring to Grafana. Without it the prod
+          # side resolved nothing and silently dropped every batch.
+          export PROD_APP_NETWORK_NAME="scholarship_prod_network"
           export GRAFANA_ADMIN_USER="${{ secrets.GRAFANA_ADMIN_USER }}"
           export GRAFANA_ADMIN_PASSWORD="${{ secrets.GRAFANA_ADMIN_PASSWORD }}"
           export GRAFANA_ROOT_URL="${{ secrets.GRAFANA_ROOT_URL }}"
 
-          for var in APP_NETWORK_NAME GRAFANA_ADMIN_USER GRAFANA_ADMIN_PASSWORD GRAFANA_ROOT_URL; do
+          for var in APP_NETWORK_NAME PROD_APP_NETWORK_NAME GRAFANA_ADMIN_USER GRAFANA_ADMIN_PASSWORD GRAFANA_ROOT_URL; do
             if [ -z "${!var}" ]; then
               echo "::error::Required env var $var is unset"
               exit 1
             fi
           done
 
-          # Verify the named external network exists; create if missing
+          # Verify the named external networks exist; create if missing.
+          # docker-compose.prod.yml declares scholarship_prod_network external
+          # with this exact subnet, so create it the same way here — whichever
+          # side runs first wins and the other simply finds it.
           docker network inspect "$APP_NETWORK_NAME" >/dev/null 2>&1 || \
             docker network create "$APP_NETWORK_NAME"
+          docker network inspect "$PROD_APP_NETWORK_NAME" >/dev/null 2>&1 || \
+            docker network create --subnet 172.24.0.0/16 "$PROD_APP_NETWORK_NAME"
 
           # Write GH_PAT to a secrets file Grafana can mount via $__file{}
           sudo mkdir -p /opt/scholarship/secrets

@@ -41,15 +41,14 @@ class TestBulkApprovalServiceApprove:
         with patch.object(
             service.notification_service,
             "send_status_change_notification",
-            return_value=True,
-        ):
-            results = await service.bulk_approve_applications(
-                application_ids=[1], approver_user_id=2, send_notifications=True
-            )
+            new_callable=AsyncMock,
+        ) as mock_notify:
+            results = await service.bulk_approve_applications(application_ids=[1], approver_user_id=2)
 
         assert results["total_requested"] == 1
         assert len(results["successful_approvals"]) == 1
-        assert results["notifications_sent"] == 1
+        # Bulk approval no longer emails the student.
+        mock_notify.assert_not_called()
         assert mock_application.status == ApplicationStatus.approved.value
 
     async def test_bulk_approve_invalid_status(self, service, mock_application):
@@ -60,9 +59,7 @@ class TestBulkApprovalServiceApprove:
         mock_result.scalars.return_value.all.return_value = [mock_application]
         service.db.execute = AsyncMock(return_value=mock_result)
 
-        results = await service.bulk_approve_applications(
-            application_ids=[1], approver_user_id=2, send_notifications=False
-        )
+        results = await service.bulk_approve_applications(application_ids=[1], approver_user_id=2)
 
         assert len(results["failed_approvals"]) == 1
         assert "Invalid status" in results["failed_approvals"][0]["reason"]

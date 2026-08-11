@@ -1,0 +1,470 @@
+name: "Generate ZAP Security Report"
+
+# OWASP ZAP baseline scan against a stack booted inside the runner, rendered to
+# PDF for release evidence. Callable from mirror-to-production.yml so every
+# production sync can carry a scan of exactly the code being shipped.
+#
+# WHAT IS SCANNED, AND WHY THOSE TWO TARGETS
+#   * the frontend built in PRODUCTION mode (frontend/Dockerfile -> next start)
+#     — this is the configuration that actually ships. The dev server emits a
+#     deliberately relaxed CSP (unsafe-eval/unsafe-inline for Turbopack HMR),
+#     so scanning it produces Mediums that cannot occur in production and
+#     mislead anyone reading the report.
+#   * the backend API — scanned on the dev stack, which means DEBUG differs
+#     from production. Called out in the report rather than papered over.
+#
+# WHAT THIS IS NOT
+#   A baseline scan is PASSIVE: it sends no attack payloads, so it does not
+#   cover SQLi/XSS/injection. It is also UNAUTHENTICATED, so it only reaches
+#   public pages — the backend crawl bottoms out at a handful of URLs. Both
+#   limits are printed into the report so a green result is not mistaken for
+#   "the application was tested and is clean".
+#   For the authenticated active scan see security/zap/ (needs a throwaway
+#   database; not run here).
+
+on:
+  workflow_dispatch:
+    inputs:
+      label:
+        description: "Label shown in the report header and appended to artifact names (e.g. v1.2.3)"
+        required: false
+        type: string
+      spider_minutes:
+        description: "Minutes to spend crawling each target"
+        required: false
+        type: string
+        default: "5"
+
+  workflow_call:
+    inputs:
+      label:
+        required: false
+        type: string
+      spider_minutes:
+        required: false
+        type: string
+        default: "5"
+      ref:
+        description: "Commit/ref to check out and scan"
+        required: false
+        type: string
+    outputs:
+      high:
+        description: "High-risk alerts across both targets"
+        value: ${{ jobs.zap-scan.outputs.high }}
+      medium:
+        description: "Medium-risk alerts across both targets"
+        value: ${{ jobs.zap-scan.outputs.medium }}
+      low:
+        description: "Low-risk alerts across both targets"
+        value: ${{ jobs.zap-scan.outputs.low }}
+      artifact:
+        description: "Name of the uploaded report artifact"
+        value: ${{ jobs.zap-scan.outputs.artifact }}
+      scanned_sha:
+        description: "Commit SHA that was actually scanned"
+        value: ${{ jobs.zap-scan.outputs.scanned_sha }}
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  zap-scan:
+    name: ZAP baseline scan
+    runs-on: ubuntu-latest
+    # Stack build + two 5-minute crawls; generous ceiling so a slow image
+    # build cannot leave the job hanging for the default 6 hours.
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    outputs:
+      high: ${{ steps.counts.outputs.high }}
+      medium: ${{ steps.counts.outputs.medium }}
+      low: ${{ steps.counts.outputs.low }}
+      artifact: ${{ steps.names.outputs.artifact }}
+      scanned_sha: ${{ steps.names.outputs.sha }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - name: Compute report labels
+        id: names
+        env:
+          INPUT_LABEL: ${{ inputs.label }}
+        run: |
+          set -euo pipefail
+          SHA=$(git rev-parse HEAD)
+          SHORT_SHA=$(echo "$SHA" | cut -c1-8)
+          if [ -n "${INPUT_LABEL}" ]; then
+            LABEL="${INPUT_LABEL}"
+            SUFFIX="-${INPUT_LABEL}"
+          else
+            LABEL="$SHORT_SHA"
+            SUFFIX="-$SHORT_SHA"
+          fi
+          {
+            echo "sha=$SHA"
+            echo "short_sha=$SHORT_SHA"
+            echo "label=$LABEL"
+            echo "artifact=zap-security-report${SUFFIX}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Bring up docker-compose.dev.yml
+        # Same best-effort bringup as ci.yml's E2E smoke lane: the compose file
+        # mixes private GHCR images with `build:` directives, so a pull can fail
+        # and `up --build` then rebuilds locally. Readiness — not the pull —
+        # decides the outcome, and the guard below fails hard.
+        continue-on-error: true
+        run: |
+          docker compose -f docker-compose.dev.yml pull --quiet 2>&1 | tail -5 || true
+          docker compose -f docker-compose.dev.yml up -d --build 2>&1 | tail -50 || true
+          echo "Waiting for backend (/health) and frontend (:3000)..."
+          ready=0
+          for i in $(seq 1 90); do
+            if curl -fsS http://localhost:8000/health > /dev/null 2>&1 \
+               && curl -fsS http://localhost:3000 > /dev/null 2>&1; then
+              echo "Services up after $((i * 2))s"
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo "::warning title=zap-report::Services did not become ready; the guard step will fail the job."
+            docker compose -f docker-compose.dev.yml ps || true
+            docker compose -f docker-compose.dev.yml logs --tail=100 || true
+          fi
+          echo "READY=$ready" >> "$GITHUB_ENV"
+
+      - name: Fail-on-not-ready guard
+        if: env.READY != '1'
+        run: |
+          echo "::error title=zap-report::Compose stack failed to become ready; refusing to publish a scan of a half-booted app."
+          exit 1
+
+      - name: Migrate + seed inside backend container
+        # /health returns 200 as soon as FastAPI starts — it does not check the
+        # schema. Without this the crawler hits endpoints that 500 on a missing
+        # `users` table, which shows up as spurious findings.
+        run: |
+          docker compose -f docker-compose.dev.yml exec -T backend alembic upgrade head
+          docker compose -f docker-compose.dev.yml exec -T backend python -m app.seed || echo "seed completed"
+
+      - name: Build and start production-mode frontend
+        run: |
+          set -euo pipefail
+          docker build -t scholarship-frontend-zap:prod -f frontend/Dockerfile frontend/
+          docker run -d --name zap-prod-frontend --network host \
+            -e NODE_ENV=production -e PORT=3100 \
+            -e NEXT_PUBLIC_API_URL=http://localhost:8000 \
+            scholarship-frontend-zap:prod
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3100/ > /dev/null 2>&1; then
+              echo "Production frontend up after $((i * 3))s"
+              break
+            fi
+            sleep 3
+          done
+          curl -fsS -o /dev/null http://localhost:3100/ || {
+            echo "::error::Production frontend did not start"
+            docker logs zap-prod-frontend --tail 100 || true
+            exit 1
+          }
+          # Record the CSP actually served, so the report can show that the
+          # production policy (nonce + strict-dynamic) is what was scanned.
+          curl -sI http://localhost:3100/ | grep -i '^content-security-policy:' > /tmp/prod-csp.txt || true
+
+      - name: Prepare report directory
+        run: |
+          mkdir -p zap-out
+          # The ZAP image runs as uid 1000; the mounted dir must be writable
+          # by it or every report write fails at the very end of the scan.
+          chmod 777 zap-out
+
+      - name: ZAP baseline scan - production frontend
+        run: |
+          set -euo pipefail
+          # -a alpha passive rules, -j AJAX spider (required for a Next.js SPA),
+          # -m crawl minutes. Exit code is intentionally tolerated: zap-baseline
+          # returns non-zero when WARNs are present, which is the normal case and
+          # is not a reason to fail a reporting job.
+          docker run --rm --network host \
+            -v "$(pwd)/zap-out:/zap/wrk/:rw" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py -t http://localhost:3100 \
+              -r zap-frontend-prod-report.html \
+              -J zap-frontend-prod-report.json \
+              -w zap-frontend-prod-report.md \
+              -a -j -m "${{ inputs.spider_minutes || '5' }}" || true
+          test -f zap-out/zap-frontend-prod-report.json
+
+      - name: ZAP baseline scan - backend API
+        run: |
+          set -euo pipefail
+          # No -j: the API serves no HTML, so the AJAX spider has nothing to do.
+          docker run --rm --network host \
+            -v "$(pwd)/zap-out:/zap/wrk/:rw" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py -t http://localhost:8000 \
+              -r zap-backend-report.html \
+              -J zap-backend-report.json \
+              -w zap-backend-report.md \
+              -a -m "${{ inputs.spider_minutes || '5' }}" || true
+          test -f zap-out/zap-backend-report.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install jinja2 weasyprint
+
+      - name: Install CJK fonts
+        # This report is written in Traditional Chinese. Without a CJK font
+        # WeasyPrint lays the text out with no glyphs — the PDF renders and the
+        # job goes green, but every Chinese heading and the entire limitations
+        # section come out blank. Verified: with only fonts-dejavu-core, none of
+        # "正式環境組態 / 後端 API / 掃描限制" survive into the PDF text layer.
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fonts-noto-cjk
+
+      - name: Build summary report
+        id: counts
+        env:
+          LABEL: ${{ steps.names.outputs.label }}
+          COMMIT: ${{ steps.names.outputs.sha }}
+          REPO: ${{ github.repository }}
+        shell: python
+        run: |
+          import json, os, pathlib, collections
+          from datetime import datetime, timezone
+          from jinja2 import Template
+
+          OUT = pathlib.Path("zap-out")
+          TARGETS = [
+              ("正式環境組態前端 (production build)", "zap-frontend-prod-report.json",
+               "http://localhost:3100", "next start，與正式環境相同的 build"),
+              ("後端 API", "zap-backend-report.json",
+               "http://localhost:8000", "開發堆疊（DEBUG 與正式環境不同）"),
+          ]
+
+          RISKS = ["High", "Medium", "Low", "Informational"]
+          per_target = []
+          totals = collections.Counter()
+
+          for title, filename, url, note in TARGETS:
+              path = OUT / filename
+              counts = collections.Counter()
+              alerts = []
+              if path.exists():
+                  data = json.loads(path.read_text(encoding="utf-8"))
+                  for site in data.get("site", []):
+                      for alert in site.get("alerts", []):
+                          # riskdesc looks like "Medium (High)" -> risk, confidence
+                          risk = alert.get("riskdesc", "Informational").split(" ")[0]
+                          counts[risk] += 1
+                          totals[risk] += 1
+                          alerts.append({
+                              "name": alert.get("name", "?"),
+                              "risk": risk,
+                              "confidence": alert.get("riskdesc", ""),
+                              "count": alert.get("count", "0"),
+                              "desc": (alert.get("desc") or "").strip(),
+                          })
+              order = {r: i for i, r in enumerate(RISKS)}
+              alerts.sort(key=lambda a: order.get(a["risk"], 99))
+              per_target.append({
+                  "title": title, "url": url, "note": note,
+                  "counts": counts, "alerts": alerts,
+                  "total": sum(counts.values()),
+                  "missing": not path.exists(),
+              })
+
+          csp = ""
+          csp_file = pathlib.Path("/tmp/prod-csp.txt")
+          if csp_file.exists():
+              csp = csp_file.read_text(encoding="utf-8").strip()
+
+          template = Template('''
+          <!DOCTYPE html>
+          <html><head><meta charset="utf-8"><title>OWASP ZAP Baseline Report</title>
+          <style>
+            /* Noto CJK first: the report body is Traditional Chinese and a
+               Latin-only font silently drops every glyph. */
+            body { font-family: 'Noto Sans CJK TC', 'Noto Sans CJK SC', 'DejaVu Sans', sans-serif;
+                   margin: 36px; line-height: 1.55; color: #333; }
+            h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 8px; }
+            h2 { color: #34495e; margin-top: 28px; border-left: 4px solid #3498db; padding-left: 10px; }
+            .meta { background: #ecf0f1; padding: 14px; border-radius: 5px; margin: 18px 0; }
+            table { width: 100%; border-collapse: collapse; margin: 14px 0; }
+            th, td { border: 1px solid #bdc3c7; padding: 8px; text-align: left; font-size: 0.95em; }
+            th { background: #34495e; color: #fff; }
+            tr:nth-child(even) { background: #f8f9fa; }
+            .num { text-align: right; }
+            .r-High { color: #c0392b; font-weight: bold; }
+            .r-Medium { color: #d35400; font-weight: bold; }
+            .r-Low { color: #2980b9; }
+            .r-Informational { color: #7f8c8d; }
+            .limits { background: #fff8e6; border-left: 4px solid #f39c12; padding: 12px 16px; margin: 18px 0; }
+            code { background: #ecf0f1; padding: 2px 5px; border-radius: 3px; word-break: break-all; }
+            .foot { margin-top: 40px; padding-top: 14px; border-top: 1px solid #bdc3c7;
+                    text-align: center; color: #7f8c8d; font-size: 0.9em; }
+          </style></head><body>
+            <h1>OWASP ZAP 弱點掃描報告（Baseline）</h1>
+            <div class="meta">
+              <p><strong>Repository:</strong> {{ repo }}</p>
+              {% if label %}<p><strong>Version:</strong> {{ label }}</p>{% endif %}
+              <p><strong>Commit:</strong> <code>{{ commit }}</code></p>
+              <p><strong>Generated:</strong> {{ timestamp }}</p>
+              <p><strong>Tool:</strong> OWASP ZAP (ghcr.io/zaproxy/zaproxy:stable)</p>
+              <p><strong>Mode:</strong> Baseline — 被動掃描 + AJAX Spider，<strong>不發送攻擊 payload</strong></p>
+            </div>
+
+            <h2>總覽</h2>
+            <table>
+              <tr><th>受測對象</th><th class="num">High</th><th class="num">Medium</th>
+                  <th class="num">Low</th><th class="num">Info</th><th class="num">合計</th></tr>
+              {% for t in targets %}
+              <tr>
+                <td><strong>{{ t.title }}</strong><br><code>{{ t.url }}</code><br>
+                    <span style="color:#7f8c8d">{{ t.note }}</span></td>
+                <td class="num r-High">{{ t.counts['High'] or 0 }}</td>
+                <td class="num r-Medium">{{ t.counts['Medium'] or 0 }}</td>
+                <td class="num r-Low">{{ t.counts['Low'] or 0 }}</td>
+                <td class="num r-Informational">{{ t.counts['Informational'] or 0 }}</td>
+                <td class="num"><strong>{{ t.total }}</strong></td>
+              </tr>
+              {% endfor %}
+            </table>
+
+            {% if csp %}
+            <h2>正式環境組態實測 CSP</h2>
+            <p><code>{{ csp }}</code></p>
+            {% endif %}
+
+            {% for t in targets %}
+            <h2>{{ t.title }}</h2>
+            {% if t.missing %}
+              <p><strong>此目標沒有產出報告檔</strong>（掃描可能失敗）。</p>
+            {% elif t.alerts %}
+            <table>
+              <tr><th>告警</th><th>風險（信心）</th><th class="num">實例數</th></tr>
+              {% for a in t.alerts %}
+              <tr><td>{{ a.name }}</td>
+                  <td class="r-{{ a.risk }}">{{ a.confidence }}</td>
+                  <td class="num">{{ a.count }}</td></tr>
+              {% endfor %}
+            </table>
+            {% else %}
+              <p>無任何告警。</p>
+            {% endif %}
+            {% endfor %}
+
+            <h2>掃描限制（請與報告一併閱讀）</h2>
+            <div class="limits">
+              <ol>
+                <li><strong>被動掃描</strong>：未發送攻擊 payload，<strong>不涵蓋</strong> SQL Injection、
+                    XSS、指令注入等主動測試項目。</li>
+                <li><strong>未認證</strong>：僅涵蓋公開頁面。登入後的管理／學院／教授功能未被爬取；
+                    後端 API 需 Bearer token，故僅掃到少數公開路徑。</li>
+                <li><strong>未經 nginx</strong>：直連容器，未經正式環境的反向代理，
+                    因此安全標頭類告警不代表正式環境實際組態。</li>
+                <li><strong>後端為開發堆疊</strong>：DEBUG 等設定與正式環境不同。</li>
+                <li><strong>爬取不具決定性</strong>：AJAX Spider 每次涵蓋的 URL 集合略有差異，
+                    比較兩次掃描應以「告警類型」而非「筆數」為準。</li>
+              </ol>
+              <p style="margin-bottom:0"><strong>因此「0 findings」代表的是「被動掃描未發現」，
+              而不是「已完整測試且安全」。</strong>需要涵蓋認證後範圍或主動攻擊測試時，
+              請執行 <code>security/zap/</code> 的 authenticated active scan（需可拋棄的測試資料庫）。</p>
+            </div>
+
+            <div class="foot">Generated by OWASP ZAP via GitHub Actions</div>
+          </body></html>
+          ''')
+
+          html = template.render(
+              repo=os.environ.get("REPO", ""),
+              label=os.environ.get("LABEL", ""),
+              commit=os.environ.get("COMMIT", ""),
+              timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+              targets=per_target,
+              csp=csp,
+          )
+          pathlib.Path("zap-out/zap-summary.html").write_text(html, encoding="utf-8")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write(f"high={totals['High']}\n")
+              fh.write(f"medium={totals['Medium']}\n")
+              fh.write(f"low={totals['Low']}\n")
+              fh.write(f"info={totals['Informational']}\n")
+              fh.write(f"total={sum(totals.values())}\n")
+
+          print("Totals:", dict(totals))
+
+      - name: Convert summary to PDF
+        run: |
+          python - <<'PY'
+          from weasyprint import HTML, CSS
+          from weasyprint.text.fonts import FontConfiguration
+          fc = FontConfiguration()
+          css = CSS(string='@page { size: A4; margin: 14mm; }', font_config=fc)
+          HTML('zap-out/zap-summary.html').write_pdf(
+              'zap-out/zap-security-report.pdf', stylesheets=[css], font_config=fc)
+          print("PDF generated")
+          PY
+          ls -lh zap-out/zap-security-report.pdf
+
+      - name: Upload ZAP report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ steps.names.outputs.artifact }}
+          path: |
+            zap-out/zap-security-report.pdf
+            zap-out/zap-summary.html
+            zap-out/*.html
+            zap-out/*.json
+            zap-out/*.md
+          retention-days: 90
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## OWASP ZAP Baseline Report ✅"
+            echo ""
+            echo "| Property | Value |"
+            echo "|---|---|"
+            echo "| Commit scanned | \`${{ steps.names.outputs.sha }}\` |"
+            echo "| Version label | ${{ steps.names.outputs.label }} |"
+            echo ""
+            echo "| Risk | Count |"
+            echo "|---|---:|"
+            echo "| High | ${{ steps.counts.outputs.high }} |"
+            echo "| Medium | ${{ steps.counts.outputs.medium }} |"
+            echo "| Low | ${{ steps.counts.outputs.low }} |"
+            echo "| Informational | ${{ steps.counts.outputs.info }} |"
+            echo ""
+            echo "Passive scan only — no attack payloads, unauthenticated. A clean result means"
+            echo "\"nothing found passively\", not \"tested and secure\". See the PDF for the full"
+            echo "limitations section."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          docker compose -f docker-compose.dev.yml logs backend frontend --tail=200 || true
+          docker logs zap-prod-frontend --tail=100 || true
+
+      - name: Tear down
+        if: always()
+        run: |
+          docker rm -f zap-prod-frontend || true
+          docker compose -f docker-compose.dev.yml down -v || true

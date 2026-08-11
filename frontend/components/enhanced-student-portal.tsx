@@ -31,6 +31,7 @@ import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { StudentApplicationWizard } from "@/components/student-wizard/StudentApplicationWizard";
 import { DocumentRequestAlert } from "@/components/document-request-alert";
 import { RenewalApplicationCard } from "@/components/student/RenewalApplicationCard";
+import { TotalReceivedMonthsCard } from "@/components/student/TotalReceivedMonthsCard";
 import { ChallengeApplicationCard } from "@/components/student/ChallengeApplicationCard";
 import type { StudentDocumentRequest } from "@/lib/api/modules/document-requests";
 import {
@@ -80,15 +81,8 @@ import api, {
   ApplicationField,
   ApplicationDocument,
 } from "@/lib/api";
-import {
-  ApplicationStatus,
-  getApplicationStatusLabel,
-  getApplicationStatusBadgeVariant,
-} from "@/lib/enums";
-import {
-  getApplicationTimeline,
-  getDisplayStatusInfo,
-} from "@/lib/utils/application-helpers";
+import { ApplicationStatus } from "@/lib/enums";
+import { getApplicationTimeline } from "@/lib/utils/application-helpers";
 import { clsx } from "@/lib/utils";
 import { User } from "@/types/user";
 
@@ -1053,25 +1047,9 @@ export function EnhancedStudentPortal({
   const renderApplicationCard = (application: Application) => (
     <Card key={application.id} className="mb-4">
       <CardHeader>
+        {/* 狀態/階段 badge 不對學生顯示 — 核定結果請洽院辦，進度看時間軸。 */}
         <CardTitle className="flex items-center justify-between">
           <span>{application.scholarship_type}</span>
-          <div className="flex gap-2">
-            {(() => {
-              const statusInfo = getDisplayStatusInfo(application, locale);
-              return (
-                <>
-                  <Badge variant={statusInfo.statusVariant}>
-                    {statusInfo.statusLabel}
-                  </Badge>
-                  {statusInfo.showStage && statusInfo.stageLabel && (
-                    <Badge variant={statusInfo.stageVariant}>
-                      {statusInfo.stageLabel}
-                    </Badge>
-                  )}
-                </>
-              );
-            })()}
-          </div>
         </CardTitle>
         <CardDescription>
           {t("applications.submitted_at")}:{" "}
@@ -1081,7 +1059,10 @@ export function EnhancedStudentPortal({
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <ProgressTimeline steps={getApplicationTimeline(application, locale)} />
+        <ProgressTimeline
+          steps={getApplicationTimeline(application, locale)}
+          showProgress={false}
+        />
         {application.status === "draft" && (
           <div className="mt-4 flex justify-end space-x-2">
             <Button
@@ -1165,6 +1146,8 @@ export function EnhancedStudentPortal({
 
       {/* Conditional rendering based on activeTab */}
       {activeTab === "applications" && (
+        <>
+        <TotalReceivedMonthsCard locale={locale} />
         <Card>
           <CardHeader>
             <CardTitle>{t("portal.application_records")}</CardTitle>
@@ -1265,17 +1248,9 @@ export function EnhancedStudentPortal({
                           </p>
                         )}
                       </div>
+                      {/* 不顯示申請狀態 badge：核定結果一律由院辦告知
+                          (見時間軸的「已核定(請洽院辦)」)，學生端只看審核進度。 */}
                       <div className="flex flex-col items-end gap-1">
-                        <Badge
-                          variant={getApplicationStatusBadgeVariant(
-                            app.status as ApplicationStatus
-                          )}
-                        >
-                          {getApplicationStatusLabel(
-                            app.status as ApplicationStatus,
-                            locale
-                          )}
-                        </Badge>
                         {app.status ===
                           ApplicationStatus.CANCELLED_BY_CHALLENGE && (
                           <Badge
@@ -1297,9 +1272,14 @@ export function EnhancedStudentPortal({
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
+                        {/* showProgress={false}: the card header is already
+                            「審核進度」and the steps themselves show where the
+                            application stands — the extra n/N (%) bar was a
+                            duplicate label students don't need. */}
                         <ProgressTimeline
                           steps={getApplicationTimeline(app, locale)}
                           orientation="horizontal"
+                          showProgress={false}
                         />
                       </CardContent>
                     </Card>
@@ -1341,6 +1321,7 @@ export function EnhancedStudentPortal({
             )}
           </CardContent>
         </Card>
+        </>
       )}
 
       {activeTab === "new-application" &&

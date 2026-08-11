@@ -32,6 +32,7 @@ from app.models.payment_roster import (
     RosterStatus,
     RosterTriggerType,
     StudentVerificationStatus,
+    is_manual_exclusion,
     verification_status_label,
 )
 from app.models.roster_audit import RosterAuditAction, RosterAuditLevel, RosterAuditLog
@@ -63,12 +64,72 @@ class RosterGenerationResult:
     locked: List["PaymentRoster"] = field(default_factory=list)
 
 
+# 由人工覆核流程寫入、重建無法重新推導的明細欄位——必須跨重建搬運。
+PRESERVED_ITEM_FIELDS = (
+    "bank_account_number_status",
+    "bank_account_holder_status",
+    "bank_verification_details",
+    "bank_manual_review_notes",
+)
+
+
+@dataclass
+class PreservedItemState:
+    """一筆造冊明細中「不由重建推導」的狀態快照（以 application_id 為 key）。"""
+
+    is_manually_excluded: bool
+    was_included: bool
+    exclusion_reason: Optional[str]
+    review_fields: Dict[str, Any] = field(default_factory=dict)
+
+
 class RosterService:
     """造冊服務"""
 
     def __init__(self, db: Session):
         self.db = db
         self.student_verification_service = StudentVerificationService()
+
+    # ------------------------------------------------------------------
+    # 重建造冊明細時必須跨重建保留的人為狀態
+    # ------------------------------------------------------------------
+
+    def _snapshot_manual_state(self, roster_id: int) -> Dict[int, "PreservedItemState"]:
+        """重建前，以 application_id 為 key 快照「不由重建推導」的明細狀態。
+
+        EVERY path that wipes and rebuilds a roster's items must call this first
+        and re-apply it with `_apply_preserved_state` afterwards. Skipping it
+        silently re-includes students the admin excluded (學生繳回／放棄／鎖定後移除),
+        which inflates their cumulative received_months — the PhD 36-month cap.
+        """
+        items = self.db.query(PaymentRosterItem).filter(PaymentRosterItem.roster_id == roster_id).all()
+        return {
+            item.application_id: PreservedItemState(
+                is_manually_excluded=(not item.is_included and is_manual_exclusion(item.exclusion_reason)),
+                was_included=bool(item.is_included),
+                exclusion_reason=item.exclusion_reason,
+                review_fields={f: getattr(item, f) for f in PRESERVED_ITEM_FIELDS},
+            )
+            for item in items
+        }
+
+    @staticmethod
+    def _apply_preserved_state(item: PaymentRosterItem, state: Optional["PreservedItemState"]) -> bool:
+        """把快照的人為狀態套回新建的明細。回傳是否套用了人為排除。
+
+        人為排除優先於重建算出的納入判定；重建自己算出的排除原因不會消失——
+        它完整保存在 rule_validation_result / failed_rules / verification_status。
+        """
+        if state is None:
+            return False
+        for field_name, value in state.review_fields.items():
+            if value is not None:
+                setattr(item, field_name, value)
+        if not state.is_manually_excluded:
+            return False
+        item.is_included = False
+        item.exclusion_reason = state.exclusion_reason
+        return True
 
     def generate_roster(
         self,
@@ -100,8 +161,12 @@ class RosterService:
 
         Raises:
             RosterAlreadyExistsError: 造冊已存在且未強制重新產生
-            RosterGenerationError: 造冊產生過程中發生錯誤
+            RosterGenerationError: 造冊產生過程中發生錯誤（帶 roster_id 供端點標記 FAILED）
         """
+        # 先宣告：except 需要判斷造冊 row 是否已建立（audit log 的 commit 會把它
+        # 持久化），把 id 掛上 RosterGenerationError 讓端點標 FAILED，
+        # 否則該筆造冊會永遠卡在 processing。
+        roster: Optional[PaymentRoster] = None
         try:
             # 強化的冪等性檢查
             existing_roster = self.check_roster_exists(scholarship_configuration_id, period_label)
@@ -165,10 +230,14 @@ class RosterService:
             # 產生造冊代碼
             roster_code = self._generate_roster_code(scholarship_configuration_id, period_label, academic_year)
 
+            # 人為排除／人工帳戶覆核在重建前先取快照，重建後套回（見 _snapshot_manual_state）。
+            preserved: Dict[int, PreservedItemState] = {}
+
             # 建立造冊主檔
             if existing_roster and force_regenerate:
                 # 更新現有造冊
                 roster = existing_roster
+                preserved = self._snapshot_manual_state(roster.id)
                 roster.status = RosterStatus.PROCESSING
                 roster.trigger_type = trigger_type
                 roster.student_verification_enabled = student_verification_enabled
@@ -367,6 +436,9 @@ class RosterService:
                     roster_item = self._create_roster_item(
                         roster, application, verification_result, verification_status, eligibility_result
                     )
+                    # 重建時把管理員的人為排除／人工帳戶覆核套回，且必須在統計之前——
+                    # 否則已排除的學生會被重新計入人數與總金額。
+                    self._apply_preserved_state(roster_item, preserved.get(application.id))
 
                     # 統計以「納入造冊」為準，與 Excel 的「納入造冊」欄、
                     # 造冊詳情的「納入造冊人數」及 _recompute_roster_totals_sync 同源
@@ -447,7 +519,10 @@ class RosterService:
             # 不在此處執行 rollback，讓調用者決定如何處理事務
             # 這避免了與 API 端點的 rollback 重複執行
             logger.exception("Error generating roster")
-            raise RosterGenerationError(f"Failed to generate roster: {e}") from e
+            raise RosterGenerationError(
+                f"Failed to generate roster: {e}",
+                roster_id=getattr(roster, "id", None),
+            ) from e
 
     def validate_roster_consistency(self, roster: PaymentRoster) -> Dict[str, Any]:
         """
@@ -853,6 +928,9 @@ class RosterService:
         # 查詢 CollegeRankingItem 以取得備取資訊與分發子類型
         backup_info = None
         allocated_sub_type = None
+        # 提供子類型的那筆排名項 — 其 allocation_config_id 記錄消耗的是哪個
+        # 年度的配額（借用前年度配額時 ≠ 申請本身的配置）。
+        alloc_ranking_item = None
         from app.models.college_review import CollegeRanking, CollegeRankingItem
 
         if roster.ranking_id:
@@ -872,6 +950,8 @@ class RosterService:
                     backup_info = ranking_item.backup_allocations
                     logger.info(f"Application {application.id} has backup allocations: {len(backup_info)} positions")
                 allocated_sub_type = ranking_item.allocated_sub_type
+                if allocated_sub_type:
+                    alloc_ranking_item = ranking_item
 
         # 若無 ranking_id（月份造冊），從同學年度已分發排名中查詢子類型。
         # 此處僅 gate 在 is_allocated + academic_year（未含 is_finalized /
@@ -893,20 +973,31 @@ class RosterService:
             )
             if alloc_item:
                 allocated_sub_type = alloc_item.allocated_sub_type
+                alloc_ranking_item = alloc_item
 
         # 續領申請沒有 CollegeRankingItem；子類型直接取自申請本身。
         if not allocated_sub_type and application.is_renewal:
             allocated_sub_type = application.sub_scholarship_type
 
+        # 消耗配置 id：roster 層級快照優先（分發矩陣路徑，一冊一組），
+        # 否則退回排名項的 allocation_config_id（一般/月結路徑 — 借用
+        # 前年度配額的年度資訊只存在這裡）。
+        allocation_config_id = roster.allocation_config_id
+        if allocation_config_id is None and alloc_ranking_item is not None:
+            allocation_config_id = alloc_ranking_item.allocation_config_id
+
         # 載入消耗配置 (consumed config) — 借用前年度配額時不同於發放配置。
         # allocation_config_id NULL ⇒ 全期 sentinel，退回造冊自身的發放配置。
         consumed_config = None
-        if roster.allocation_config_id is not None:
-            consumed_config = self.db.get(ScholarshipConfiguration, roster.allocation_config_id)
+        if allocation_config_id is not None:
+            consumed_config = self.db.get(ScholarshipConfiguration, allocation_config_id)
         if consumed_config is None:
             consumed_config = application.scholarship_configuration
-        # allocation_year 顯示快照取自造冊（= 消耗配置學年度）
+        # allocation_year 顯示快照：造冊層級優先，否則取消耗配置的學年度 —
+        # 沒有這個後備，113 年度配額的學生會在 Excel/查看名單被誤標成造冊年度。
         allocation_year = roster.allocation_year
+        if allocation_year is None and allocation_config_id is not None and consumed_config is not None:
+            allocation_year = consumed_config.academic_year
 
         # 計算申請身分別
         application_identity = None
@@ -926,7 +1017,7 @@ class RosterService:
             scholarship_name=application.scholarship_configuration.scholarship_type.name,
             scholarship_amount=application.amount or consumed_config.amount,
             scholarship_subtype=application.sub_scholarship_type,
-            allocation_config_id=roster.allocation_config_id,  # 消耗配置 id 快照
+            allocation_config_id=allocation_config_id,  # 消耗配置 id 快照（roster 優先，退排名項）
             allocation_year=allocation_year,  # 消耗配置學年度顯示快照
             allocated_sub_type=allocated_sub_type,  # 分發到的子類型快照
             application_identity=application_identity,  # 申請身分快照
@@ -1729,6 +1820,11 @@ class RosterService:
 
         # 檢查是否已存在（unique key: scholarship_configuration_id + period_label
         # + allocation_config_id + sub_type）
+        #
+        # with_for_update：本批次路徑沒有分散式鎖，重建又是「先全刪再重插」。
+        # 兩個並行的重建若各自只看見自己快照裡的明細，會各刪各的、各插一份，
+        # 造冊最後帶著兩套明細與加倍金額。鎖住造冊主檔列即可把兩者序列化。
+        # （SQLite 測試環境會忽略 FOR UPDATE，不影響單執行緒測試。）
         existing_roster = (
             self.db.query(PaymentRoster)
             .filter(
@@ -1739,6 +1835,7 @@ class RosterService:
                     PaymentRoster.allocation_config_id == consumed_config.id,
                 )
             )
+            .with_for_update()
             .first()
         )
 
@@ -1757,8 +1854,12 @@ class RosterService:
         user = self.db.query(User).filter(User.id == created_by_user_id).first()
         user_name = user.name if user else "Unknown"
 
+        # 人為排除／人工帳戶覆核在重建前先取快照，重建後套回（見 _snapshot_manual_state）。
+        preserved: Dict[int, PreservedItemState] = {}
+
         if existing_roster and force_regenerate:
             roster = existing_roster
+            preserved = self._snapshot_manual_state(roster.id)
             roster.status = RosterStatus.PROCESSING
             roster.trigger_type = RosterTriggerType.MANUAL
             roster.student_verification_enabled = student_verification_enabled
@@ -1773,6 +1874,10 @@ class RosterService:
             roster.allocation_config_id = consumed_config.id
             roster.allocation_year = allocation_year
             self.db.query(PaymentRosterItem).filter(PaymentRosterItem.roster_id == roster.id).delete()
+            # flush + expire：Excel 匯出讀的是 roster.items 關聯集合，若不失效，
+            # 本 Session 先前載入的舊集合會讓匯出寫出過期名單。
+            self.db.flush()
+            self.db.expire(roster, ["items"])
             logger.info(f"Regenerating roster {roster_code}")
         else:
             roster = PaymentRoster(
@@ -1814,6 +1919,7 @@ class RosterService:
         disqualified_count = 0
         total_amount = 0
         verification_failures = 0
+        preserved_exclusions = 0
 
         for application in applications:
             try:
@@ -1847,6 +1953,10 @@ class RosterService:
                 roster_item = self._create_roster_item(
                     roster, application, verification_result, verification_status, eligibility_result
                 )
+                # 重建時把管理員的人為排除／人工帳戶覆核套回，且必須在統計之前——
+                # 否則已排除的學生會被重新計入人數與總金額。
+                if self._apply_preserved_state(roster_item, preserved.get(application.id)):
+                    preserved_exclusions += 1
 
                 # 同 generate_roster：統計以「納入造冊」為準
                 if roster_item.is_included:
@@ -1891,8 +2001,12 @@ class RosterService:
                 include_excluded=False,
             )
             self.db.flush()  # Persist minio_object_name and excel_filename
+            # 匯出成功 ⇒ 檔案與明細一致，清除「需重新匯出」提示（可能是先前的
+            # 移除／比對留下的）。失敗則標記為過期：MinIO 上那份已經對不上名單。
+            roster.excel_stale = False
             logger.info(f"Excel generated for roster {roster_code}: {roster.minio_object_name}")
         except Exception:
+            roster.excel_stale = True
             logger.exception(f"Failed to generate Excel for roster {roster_code}")
 
         audit_service.log_roster_operation(
@@ -1901,7 +2015,10 @@ class RosterService:
             title=f"批次造冊產生: {sub_type} {allocation_year}年度 納入造冊{qualified_count}人",
             user_id=created_by_user_id,
             user_name=user_name,
-            description=f"計畫編號: {project_number or '未設定'}，總金額: ${total_amount}",
+            description=(
+                f"計畫編號: {project_number or '未設定'}，總金額: ${total_amount}"
+                + (f"，保留人為排除 {preserved_exclusions} 筆" if preserved_exclusions else "")
+            ),
             old_values=None,
             new_values=None,
             level=RosterAuditLevel.INFO,
@@ -1912,6 +2029,7 @@ class RosterService:
                 "project_number": project_number,
                 "qualified_count": qualified_count,
                 "disqualified_count": disqualified_count,
+                "preserved_exclusions": preserved_exclusions,
                 "total_amount": float(total_amount),
             },
             tags=["batch_generation", sub_type],
@@ -2207,10 +2325,20 @@ class RosterService:
             "to_remove": to_remove,
         }
 
-    def _verify_and_create_item(self, roster: PaymentRoster, application: Application) -> PaymentRosterItem:
+    def _verify_and_create_item(
+        self,
+        roster: PaymentRoster,
+        application: Application,
+        verification_enabled: Optional[bool] = None,
+    ) -> PaymentRosterItem:
         """Verify (if enabled) + validate eligibility + build a PaymentRosterItem.
         Mirrors the generation per-application block. self.db.add()s the item
-        (does NOT flush/commit) and returns it."""
+        (does NOT flush/commit) and returns it.
+
+        `verification_enabled` overrides the roster's stored 學籍驗證 setting for
+        THIS call only — it is deliberately not written back to the roster, so a
+        one-off "also re-verify" run can never latch verification on permanently.
+        """
         sd = application.student_data or {}
         student_id_number = sd.get("std_stdcode")
         student_name = sd.get("std_cname")
@@ -2221,7 +2349,8 @@ class RosterService:
         verification_status = StudentVerificationStatus.VERIFIED
         fresh_student_data = None
 
-        if roster.student_verification_enabled:
+        verify = roster.student_verification_enabled if verification_enabled is None else verification_enabled
+        if verify:
             verification_result = self.student_verification_service.verify_student(
                 sd.get("std_stdcode"), sd.get("std_cname")
             )

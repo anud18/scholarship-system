@@ -712,7 +712,6 @@ class BulkApproveRequest(BaseModel):
 
     application_ids: List[int] = Field(..., min_length=1, description="Application IDs to approve")
     comments: Optional[str] = Field(None, description="Optional approval notes")
-    send_notifications: bool = Field(True, description="Whether to notify applicants")
 
 
 class RevokeRequest(BaseModel):

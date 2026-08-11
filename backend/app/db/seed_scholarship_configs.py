@@ -20,6 +20,41 @@ from app.models.system_setting import EmailTemplate, SendingType
 
 logger = logging.getLogger(__name__)
 
+# --- 學院送出排名通知 -------------------------------------------------------
+# The third and last automatic trigger point in the system: a college finalizes
+# ("送出") its ranking and its own reviewers get a confirmation. Recipients are
+# resolved by college_code, so the rule is ranking-scoped, not application-scoped.
+COLLEGE_RANKING_SUBMITTED_TEMPLATE_KEY = "college_ranking_submitted"
+
+COLLEGE_RANKING_SUBMITTED_SUBJECT = "排名已送出 - {scholarship_name} {ranking_name}"
+
+COLLEGE_RANKING_SUBMITTED_BODY = """{college_name} 您好：
+
+貴學院的 {scholarship_name} 推薦排名已完成送出並鎖定，後續將由承辦單位進行配額分發。
+
+排名資訊：
+- 排名名稱：{ranking_name}
+- 申請類別：{sub_type_code}
+- 學年度學期：{academic_year} 學年度 {semester}
+- 排名人數：{total_applications}
+- 送出時間：{finalized_at}（操作人：{finalized_by}）
+
+排名送出後即無法修改。若需調整，請聯繫承辦單位解除鎖定。
+
+請至系統查看：{system_url}/college/rankings
+
+國立陽明交通大學
+獎學金管理系統"""
+
+COLLEGE_RANKING_SUBMITTED_CONDITION_QUERY = """
+                SELECT u.email
+                FROM users u
+                WHERE u.role = 'college'
+                AND u.college_code = {college_code}
+                AND u.email IS NOT NULL
+                AND u.email != ''
+            """
+
 
 async def seed_scholarship_configurations(session: AsyncSession) -> None:
     """Initialize scholarship configurations with quota and workflow settings"""
@@ -859,13 +894,12 @@ async def seed_email_templates(session: AsyncSession) -> None:
     logger.info("Initializing email templates...")
     print("  📧 Initializing email templates...")
 
-    # Check if templates already exist
-    result = await session.execute(select(EmailTemplate))
-    existing_templates = result.scalars().all()
-
-    if existing_templates:
-        print(f"  ✓ Email templates already initialized ({len(existing_templates)} found)")
-        return
+    # Seed per key, NOT "skip if the table has any row". Migrations may legitimately
+    # insert a single template before this runs (alembic upgrade precedes seeding in
+    # scripts/reset_database.sh), and a table-level skip would then silently drop
+    # every other template — including the ones the submission emails depend on.
+    result = await session.execute(select(EmailTemplate.key).where(EmailTemplate.scholarship_type_id.is_(None)))
+    existing_keys = set(result.scalars().all())
 
     # Define default email templates
     default_templates = [
@@ -967,6 +1001,13 @@ async def seed_email_templates(session: AsyncSession) -> None:
             "sending_type": SendingType.single,
             "recipient_options": [{"label": "學院承辦人", "value": "college"}],
         },
+        {
+            "key": COLLEGE_RANKING_SUBMITTED_TEMPLATE_KEY,
+            "subject_template": COLLEGE_RANKING_SUBMITTED_SUBJECT,
+            "body_template": COLLEGE_RANKING_SUBMITTED_BODY,
+            "sending_type": SendingType.single,
+            "recipient_options": [{"label": "學院承辦人", "value": "college"}],
+        },
         # Bulk sending type templates
         {
             "key": "scholarship_announcement",
@@ -1015,13 +1056,14 @@ async def seed_email_templates(session: AsyncSession) -> None:
         },
     ]
 
-    for template_data in default_templates:
+    missing = [t for t in default_templates if t["key"] not in existing_keys]
+    for template_data in missing:
         template = EmailTemplate(**template_data)
         session.add(template)
 
     await session.commit()
     logger.info("Email templates initialized successfully!")
-    print(f"  📊 Inserted: {len(default_templates)} email templates")
+    print(f"  📊 Inserted: {len(missing)} email templates ({len(existing_keys)} already present)")
 
 
 async def seed_email_automation_rules(session: AsyncSession) -> None:
@@ -1031,15 +1073,15 @@ async def seed_email_automation_rules(session: AsyncSession) -> None:
     logger.info("Initializing email automation rules...")
     print("  🤖 Initializing email automation rules...")
 
-    # Check if automation rules already exist
-    result = await session.execute(select(EmailAutomationRule))
-    existing_rules = result.scalars().all()
+    # Seed per rule name, NOT "skip if the table has any row" — see the same note in
+    # seed_email_templates. email_timing_three_triggers_001 inserts 學院排名送出通知
+    # on a fresh DB, and a table-level skip would then drop the two submission rules,
+    # leaving trigger point 1 (student + professor) with no active rule at all.
+    result = await session.execute(select(EmailAutomationRule.name))
+    existing_names = set(result.scalars().all())
 
-    if existing_rules:
-        print(f"  ✓ Email automation rules already initialized ({len(existing_rules)} found)")
-        return
-
-    # Define initial automation rules (disabled by default, admin must activate)
+    # Define initial automation rules — these are the three trigger points the
+    # system actually sends mail for (see docs: 送出申請 / 草稿截止前三天 / 送出排名).
     initial_rules = [
         {
             "name": "申請提交確認郵件",
@@ -1086,22 +1128,24 @@ async def seed_email_automation_rules(session: AsyncSession) -> None:
             """,
         },
         {
-            "name": "學院審核通知",
-            "description": "當教授審核完成後，通知學院有新案件待審核",
-            "trigger_event": TriggerEvent.professor_review_submitted,
-            "template_key": "college_review_notification",
+            "name": "學院排名送出通知",
+            "description": "當學院送出（確認）排名後，通知該學院承辦人排名已送出",
+            "trigger_event": TriggerEvent.college_review_submitted,
+            "template_key": COLLEGE_RANKING_SUBMITTED_TEMPLATE_KEY,
             "delay_hours": 0,
-            "is_active": False,
+            "is_active": True,
+            "condition_query": COLLEGE_RANKING_SUBMITTED_CONDITION_QUERY,
         },
     ]
 
-    for rule_data in initial_rules:
+    missing = [r for r in initial_rules if r["name"] not in existing_names]
+    for rule_data in missing:
         rule = EmailAutomationRule(**rule_data)
         session.add(rule)
 
     await session.commit()
     logger.info("Email automation rules initialized successfully!")
-    print(f"  📊 Inserted: {len(initial_rules)} email automation rules (disabled by default)")
+    print(f"  📊 Inserted: {len(missing)} email automation rules ({len(existing_names)} already present)")
 
 
 async def init_all_scholarship_configs() -> None:
@@ -1126,7 +1170,7 @@ async def init_all_scholarship_configs() -> None:
     print("- 3 scholarship configurations (114 academic year)")
     print("- 18 scholarship rules (114 academic year)")
     print("- 3 sub-type configurations (NSTC, MOE_1W, MOE_2W)")
-    print("- 6 email templates (single + bulk sending)")
+    print("- 7 email templates (single + bulk sending)")
 
 
 if __name__ == "__main__":

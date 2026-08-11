@@ -6,6 +6,7 @@ import { DebugPanelWrapper } from "@/components/debug-panel-wrapper";
 import { AppProvider } from "@/components/providers/app-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { getNonce } from "./NonceProvider";
+import { CspNonceProvider } from "@/components/providers/csp-nonce";
 
 export const metadata: Metadata = {
   title: "獎學金申請與審核系統 | 國立陽明交通大學教務處",
@@ -46,13 +47,17 @@ export default async function RootLayout({
         {/* Next.js will automatically apply nonce to all injected scripts */}
       </head>
       <body className="antialiased" nonce={nonce}>
-        <AppProvider>
-          <SessionExpiredProvider>
-            {children}
-            <DebugPanelWrapper />
-            <Toaster />
-          </SessionExpiredProvider>
-        </AppProvider>
+        {/* Outermost: sets __webpack_nonce__ and serves useCspNonce() to every
+            Radix primitive that renders its own <style> — see csp-nonce.tsx */}
+        <CspNonceProvider nonce={nonce}>
+          <AppProvider>
+            <SessionExpiredProvider>
+              {children}
+              <DebugPanelWrapper />
+              <Toaster />
+            </SessionExpiredProvider>
+          </AppProvider>
+        </CspNonceProvider>
       </body>
     </html>
   );

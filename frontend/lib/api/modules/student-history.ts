@@ -1,8 +1,11 @@
 /**
- * Admin Student Scholarship History API Module
+ * Student Scholarship History API Module
  *
- * Single-student lookup by 學號 — returns academic info + paid-roster payment
- * records (rosters in COMPLETED or LOCKED state).
+ * - Batch lookup by 學號 for admin/college (academic info + paid-roster
+ *   payment records; rosters in COMPLETED or LOCKED state). College users are
+ *   server-scoped to their own college and receive a projected payload
+ *   without admin-only fields.
+ * - Student self-service 總領月份數 (months total only).
  */
 
 import { typedClient } from "../typed-client";
@@ -91,18 +94,82 @@ export interface StudentScholarshipHistoryData {
   received_months: ReceivedMonthsBreakdown[];
 }
 
+/**
+ * One entry of POST /student-history/batch. Per-student failures (查無資料,
+ * out-of-college scope) arrive here with success=false — the HTTP call itself
+ * still succeeds.
+ */
+export interface StudentHistoryBatchResult {
+  student_number: string;
+  success: boolean;
+  error: string | null;
+  data: StudentScholarshipHistoryData | null;
+}
+
+export interface StudentHistoryBatchData {
+  results: StudentHistoryBatchResult[];
+}
+
+/** Student self-service payload — 總月數 only, no amounts or payment details. */
+export interface MyReceivedMonthsData {
+  student_number: string;
+  total_received_months: number;
+}
+
+/**
+ * The two admin switches deciding who 領獎紀錄查詢 is open to. Readable by any
+ * authenticated user so the student card and the college tab can hide
+ * themselves instead of rendering an entry point that 403s.
+ */
+export interface StudentHistoryVisibility {
+  student_enabled: boolean;
+  college_enabled: boolean;
+}
+
+/** Admin toggle payload — omit a field to leave that audience untouched. */
+export interface StudentHistoryVisibilityUpdate {
+  student_enabled?: boolean;
+  college_enabled?: boolean;
+}
+
 export function createStudentHistoryApi() {
   return {
-    async getByNumber(
-      studentNumber: string,
-    ): Promise<ApiResponse<StudentScholarshipHistoryData>> {
-      const response = await typedClient.raw.GET(
-        "/api/v1/admin/student-history/{student_number}",
+    async getBatch(
+      studentNumbers: string[],
+    ): Promise<ApiResponse<StudentHistoryBatchData>> {
+      const response = await typedClient.raw.POST(
+        "/api/v1/student-history/batch",
         {
-          params: { path: { student_number: studentNumber } },
+          body: { student_numbers: studentNumbers },
         },
       );
-      return toApiResponse<StudentScholarshipHistoryData>(response);
+      return toApiResponse<StudentHistoryBatchData>(response);
+    },
+
+    async getMyMonths(): Promise<ApiResponse<MyReceivedMonthsData>> {
+      const response = await typedClient.raw.GET(
+        "/api/v1/student-history/me/months",
+        {},
+      );
+      return toApiResponse<MyReceivedMonthsData>(response);
+    },
+
+    async getVisibility(): Promise<ApiResponse<StudentHistoryVisibility>> {
+      const response = await typedClient.raw.GET(
+        "/api/v1/student-history/visibility",
+        {},
+      );
+      return toApiResponse<StudentHistoryVisibility>(response);
+    },
+
+    async updateVisibility(
+      update: StudentHistoryVisibilityUpdate,
+    ): Promise<ApiResponse<StudentHistoryVisibility>> {
+      const response = await typedClient.raw.PUT(
+        "/api/v1/student-history/visibility",
+        { body: update },
+      );
+      return toApiResponse<StudentHistoryVisibility>(response);
     },
   };
 }

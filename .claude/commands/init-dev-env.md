@@ -86,3 +86,28 @@ docker compose -f docker-compose.dev.yml logs backend --tail 10
 ```
 
 Confirm `Application startup complete.` appears in the output.
+
+## Troubleshooting
+
+### `up -d` fails with "Conflict. The container name ... is already in use"
+
+The stack's `container_name`s are fixed, so only **one** project/worktree can own them at a
+time. This means the stack is already running (possibly re-pointed at a different worktree).
+Check first instead of assuming a fresh init is needed:
+
+```bash
+docker ps -a --filter "name=scholarship_" --format '{{.Names}}\t{{.Status}}\t{{.Image}}'
+```
+
+If containers are already `Up`/`healthy`, skip Steps 1–6 — just verify the mount (Step 0) matches
+where you want to work. Use the **change-dev-env-worktree** skill to re-point an already-running
+stack's `backend`/`frontend` to a different worktree without touching the data tier.
+
+### Frontend crash-loops: `TurbopackInternalError: Symlink node_modules is invalid, it points out of the filesystem root`
+
+This is the worktree `node_modules` trap: the worktree's `frontend/node_modules` is a symlink to
+the main checkout, and the image's baked `/app/node_modules` is *also* a symlink — Turbopack
+can't resolve either from inside the container. It's not fixed by restarting; the `.next` cache
+also needs clearing once it's crashed on the bad state. Use the **change-dev-env-worktree** skill,
+which handles the real bind-mount override and clears the stale `.next` volume — do not just
+`restart` the frontend container.

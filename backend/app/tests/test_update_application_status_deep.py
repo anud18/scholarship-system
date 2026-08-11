@@ -37,13 +37,15 @@ def _val(x):
     return x.value if hasattr(x, "value") else x
 
 
-async def _seed_user(db: AsyncSession, *, role: UserRole, nycu_id: str) -> User:
+async def _seed_user(db: AsyncSession, *, role: UserRole, nycu_id: str, college_code: str | None = None) -> User:
     u = User(
         nycu_id=nycu_id,
         name=f"User {nycu_id}",
         email=f"{nycu_id}@u.edu",
         user_type=UserType.employee if role != UserRole.student else UserType.student,
         role=role,
+        # 學院 users are scoped to their own college (#1223 A).
+        college_code=college_code if college_code is not None else ("C" if role == UserRole.college else None),
     )
     db.add(u)
     await db.commit()
@@ -91,7 +93,8 @@ async def _seed_app(
         sub_type_selection_mode="single",
         status=status,
         submitted_form_data={"fields": {}, "documents": []},
-        student_data={"std_cname": student.name},
+        # std_academyno drives college scoping (#1223 A).
+        student_data={"std_cname": student.name, "std_academyno": "C"},
     )
     db.add(app)
     await db.commit()

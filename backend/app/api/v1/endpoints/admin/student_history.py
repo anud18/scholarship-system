@@ -1,7 +1,6 @@
 """Admin endpoint: GET /admin/student-history/{student_number}."""
 
 import logging
-import re
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import require_admin
 from app.db.deps import get_db
 from app.models.user import User
+from app.schemas.student_scholarship_history import STUDENT_NUMBER_PATTERN
 from app.services.student_scholarship_history_service import (
     StudentScholarshipHistoryService,
 )
@@ -16,8 +16,6 @@ from app.services.student_scholarship_history_service import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-_STUDENT_NUMBER_PATTERN = re.compile(r"^[A-Za-z0-9]{4,15}$")
 
 
 @router.get("/{student_number}")
@@ -31,7 +29,7 @@ async def get_student_scholarship_history(
     NotFoundError (and any ScholarshipException) is mapped to its HTTP status by
     the global handler in app.main; no per-endpoint try/except needed.
     """
-    if not _STUDENT_NUMBER_PATTERN.match(student_number):
+    if not STUDENT_NUMBER_PATTERN.match(student_number):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="學號格式不正確",

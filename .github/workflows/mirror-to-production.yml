@@ -18,6 +18,18 @@ on:
         required: false
         type: string
 
+      freeze_workflows:
+        description: '凍結 prod repo 的 workflows：跳過「pristine 舊模板自動更新」（例如 prod 端剛刻意 rollback 某個 workflow 時使用）'
+        required: false
+        type: boolean
+        default: false
+
+      security_reports:
+        description: '產生本次版本的資安報告（ZAP baseline + CodeQL PDF）並附到 production PR'
+        required: false
+        type: boolean
+        default: true
+
 # SECURITY: Limit GITHUB_TOKEN permissions to minimum required
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
@@ -26,6 +38,39 @@ permissions:
   contents: write  # Need write for creating/updating production branch
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Security evidence for the exact commit being shipped.
+  #
+  # The reports are published as ARTIFACTS ON THIS WORKFLOW RUN (each reusable
+  # workflow uploads its own; see the run's Artifacts section). Nothing is
+  # committed into the sync payload and nothing is posted to the production PR —
+  # the production repo's PR content is intentionally unchanged.
+  #
+  # These run IN PARALLEL with sync-to-production rather than gating it: a scan
+  # takes tens of minutes, and blocking the mirror on it would make releases
+  # slow without making them safer. They are also deliberately NOT `needs`-ed by
+  # the sync job, so a scanner hiccup can never block a release.
+  # ---------------------------------------------------------------------------
+  zap-report:
+    name: ZAP baseline report
+    if: github.event_name == 'workflow_dispatch' && inputs.security_reports
+    uses: ./.github/workflows/zap-report.yml
+    with:
+      ref: ${{ github.sha }}
+    permissions:
+      contents: read
+
+  codeql-report:
+    name: CodeQL PDF report
+    if: github.event_name == 'workflow_dispatch' && inputs.security_reports
+    uses: ./.github/workflows/sarif-to-pdf.yml
+    with:
+      # Report on the commit being mirrored, not merely the newest scan.
+      sha: ${{ github.sha }}
+    permissions:
+      actions: read
+      contents: read
+
   sync-to-production:
     name: Sync to Production Repository
     runs-on: ubuntu-latest
@@ -57,6 +102,22 @@ jobs:
             echo "::error::PRODUCTION_REPO secret not configured"
             echo "::error::Please set PRODUCTION_REPO to format: owner/repo-name"
             exit 1
+          fi
+
+          # The mirror pushes .github/workflows/** whenever a template is
+          # installed or a pristine-stale prod copy is auto-updated — a classic
+          # PAT must carry the `workflow` scope or the final push is rejected
+          # with "refusing to allow a Personal Access Token to create or
+          # update workflow". Fail fast HERE with an actionable message.
+          # Fine-grained PATs do not expose x-oauth-scopes; warn instead.
+          SCOPES=$(curl -sI -H "Authorization: token ${{ secrets.GH_PAT }}" https://api.github.com/user | tr -d '\r' | grep -i '^x-oauth-scopes:' || true)
+          if [ -n "$SCOPES" ] && ! echo "$SCOPES" | grep -qw "workflow"; then
+            echo "::error::GH_PAT lacks the 'workflow' scope — pushing .github/workflows/** to the production repo will be rejected."
+            echo "::error::Re-issue the PAT with 'repo' + 'workflow' scopes (see .github/PRODUCTION_SYNC_GUIDE.md)."
+            exit 1
+          fi
+          if [ -z "$SCOPES" ]; then
+            echo "::warning::Could not read x-oauth-scopes (fine-grained PAT?) — ensure the token has the 'Workflows' repository permission (read and write) on the production repo."
           fi
 
           echo "configured=true" >> $GITHUB_OUTPUT
@@ -185,6 +246,63 @@ jobs:
               echo "::notice::No conflicts to resolve (clean state)"
               echo "MAIN_MERGE_COMMITS=No new changes from main" >> $GITHUB_ENV
             fi
+          fi
+
+          echo "::endgroup::"
+
+      - name: Remove files deleted in main
+        run: |
+          echo "::group::Removing files deleted in main"
+
+          # The merge above runs with --allow-unrelated-histories: the
+          # production branch shares no ancestor with main, so a file that
+          # exists only on the production side is silently kept. Files deleted
+          # in development (e.g. frontend/package-lock.json after the bun
+          # migration) therefore survive in production forever and keep feeding
+          # Dependabot alerts from stale manifests. Reconcile by removing every
+          # tracked file that no longer exists in origin/main. Production-only
+          # workflows removed here are re-installed from the production repo by
+          # the "Preserve production workflows" / template steps below.
+          # NUL-delimited listings: -z disables C-quoting entirely, so paths
+          # containing non-ASCII, quotes, backslashes or spaces compare
+          # byte-for-byte and reach git rm as real paths.
+          git ls-files -z > /tmp/production-tracked-files-raw.z
+          git ls-tree -r -z --name-only origin/main > /tmp/main-tracked-files-raw.z
+
+          # Refuse to reconcile against an empty main listing — an empty file
+          # here would classify EVERY production file as stale and wipe the tree.
+          if [ ! -s /tmp/main-tracked-files-raw.z ]; then
+            echo "::error::origin/main file listing is empty; refusing to reconcile deletions"
+            exit 1
+          fi
+
+          LC_ALL=C sort -z /tmp/production-tracked-files-raw.z > /tmp/production-tracked-files.z
+          LC_ALL=C sort -z /tmp/main-tracked-files-raw.z > /tmp/main-tracked-files.z
+          LC_ALL=C comm -z -23 /tmp/production-tracked-files.z /tmp/main-tracked-files.z > /tmp/stale-files.z
+
+          # Newline-delimited copy for logs and release notes (display only —
+          # git rm consumes the NUL-delimited list).
+          tr '\0' '\n' < /tmp/stale-files.z > /tmp/stale-files.txt
+
+          if [ -s /tmp/stale-files.z ]; then
+            STALE_COUNT=$(wc -l < /tmp/stale-files.txt)
+            echo "::notice::Removing ${STALE_COUNT} stale file(s) deleted in main:"
+            cat /tmp/stale-files.txt
+            # :(literal) disables pathspec globbing so a path containing
+            # * ? [ ] cannot over-delete unrelated files.
+            sed -z 's/^/:(literal)/' /tmp/stale-files.z | xargs -0 git rm -f -q --
+
+            git commit -m "chore: remove files deleted in main
+
+            The unrelated-history merge cannot propagate deletions, so files
+            removed from the development repository are reconciled explicitly.
+
+            Removed files: ${STALE_COUNT}
+            Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+            "
+            echo "::notice::✅ Removed ${STALE_COUNT} stale file(s)"
+          else
+            echo "::notice::No stale files to remove"
           fi
 
           echo "::endgroup::"
@@ -330,9 +448,10 @@ jobs:
           git rm -rf frontend/lib/api/__tests__/ 2>/dev/null || true
           git rm -rf frontend/lib/utils/__tests__/ 2>/dev/null || true
           git rm -rf backend/app/tests/ 2>/dev/null || true
+          git rm -rf frontend/e2e/ 2>/dev/null || true
 
           if git diff --cached --quiet --name-only | grep -q "__tests__\|/tests/"; then
-            REMOVED_DIRS="${REMOVED_DIRS}- Test directories (__tests__/, tests/)\n"
+            REMOVED_DIRS="${REMOVED_DIRS}- Test directories (__tests__/, tests/, e2e/)\n"
           fi
 
           # Remove test files
@@ -349,11 +468,20 @@ jobs:
           git rm -f frontend/jest.config.js 2>/dev/null || true
           git rm -f frontend/jest.config.standalone.js 2>/dev/null || true
           git rm -f frontend/tsconfig.test.json 2>/dev/null || true
+          git rm -f frontend/playwright.config.ts 2>/dev/null || true
           git rm -f backend/pytest.ini 2>/dev/null || true
           git rm -f backend/.coverage 2>/dev/null || true
 
           if git diff --cached --quiet --name-only | grep -q "jest.config\|pytest.ini\|\.coverage"; then
             REMOVED_DIRS="${REMOVED_DIRS}- Test configuration files\n"
+          fi
+
+          # Remove dev-only environment bootstrap script (writes local-dev .env
+          # files; useless in production, and its dev DB/S3 defaults trip
+          # credential scanners run against the production repo)
+          echo "::notice::Removing dev-only scripts"
+          if git rm -f scripts/write_dev_env.sh 2>/dev/null; then
+            REMOVED_DIRS="${REMOVED_DIRS}- scripts/write_dev_env.sh (dev-only .env bootstrap)\n"
           fi
 
           # Remove all markdown documentation files
@@ -453,29 +581,37 @@ jobs:
         id: install-workflows
         env:
           PRESERVED_COUNT: ${{ steps.preserve-workflows.outputs.preserved_count }}
+          FREEZE_WORKFLOWS: ${{ inputs.freeze_workflows }}
         run: |
           echo "::group::Installing production workflows from templates"
 
           # Bootstrap + drift policy:
-          #   - A workflow file the prod repo ALREADY has (just preserved from
-          #     prod-repo/main) wins — prod-side customizations are never
-          #     overwritten by the mirror.
           #   - A workflow file the prod repo does NOT have yet is installed
           #     from the staged templates (first mirror seeds the whole CI/CD).
-          #   - When a template differs from the preserved prod copy we only
-          #     surface a notice so the diff can be ported deliberately.
+          #   - A preserved prod copy that is byte-identical to SOME historical
+          #     revision of its template (checked against the dev history at
+          #     GITHUB_SHA) was never customized on the prod side — it is just
+          #     a stale template, so it IS updated to the current template.
+          #     This is what lets template fixes (e.g. the permissions blocks
+          #     from #1282) actually reach production through the mirror.
+          #   - A preserved prod copy matching NO template revision carries
+          #     prod-side customizations — never overwritten; we only surface
+          #     a notice so the diff can be ported deliberately.
           #
           # NOTE: pushing .github/workflows/** to the prod repo requires the
           # GH_PAT to carry the `workflow` scope — without it the push step
           # fails with "refusing to allow a Personal Access Token to create or
           # update workflow".
           INSTALLED=""
+          UPDATED=""
           SKIPPED=""
           DIFFERS=""
 
           if [ ! -d /tmp/prod-workflow-templates ]; then
             echo "::warning::No staged templates — skipping install"
             echo "installed=" >> $GITHUB_OUTPUT
+            echo "updated=" >> $GITHUB_OUTPUT
+            echo "customized=" >> $GITHUB_OUTPUT
             echo "::endgroup::"
             exit 0
           fi
@@ -489,7 +625,10 @@ jobs:
           # scanners). Operators read those guides in the DEV repo's
           # .github/production-workflows-examples/ — they already have access
           # there since they dispatch this mirror.
-          for f in deploy.yml health-check.yml backup.yml auto-tag-on-merge.yml setting-env.yml; do
+          # deploy-stack.yml is the reusable stage body deploy.yml calls with
+          # `uses: ./.github/workflows/deploy-stack.yml` — shipping deploy.yml
+          # without it leaves the prod repo with an unresolvable workflow.
+          for f in deploy.yml deploy-stack.yml health-check.yml backup.yml auto-tag-on-merge.yml setting-env.yml; do
             src="/tmp/prod-workflow-templates/$f"
             [ -f "$src" ] || continue
             dest=".github/workflows/$f"
@@ -497,8 +636,35 @@ jobs:
               if cmp -s "$src" "$dest"; then
                 SKIPPED="$SKIPPED $f"
               else
-                DIFFERS="$DIFFERS $f"
-                echo "::notice::$f: prod repo has a customized copy — template differs, NOT overwriting (port changes manually if intended)"
+                # Provenance check: does the preserved prod copy match ANY
+                # historical revision of the template? Byte-identical to one
+                # → never customized on the prod side → safe to update.
+                # CAVEAT: a deliberate prod-side rollback TO a historical
+                # template revision is indistinguishable from staleness — it
+                # would be re-upgraded here. Dispatch with
+                # freeze_workflows=true to hold workflows back in that window.
+                tpl=".github/production-workflows-examples/$f"
+                dest_blob=$(git hash-object "$dest" 2>/dev/null || true)
+                pristine=""
+                if [ -n "$dest_blob" ]; then
+                  for c in $(git rev-list "$GITHUB_SHA" -- "$tpl"); do
+                    if [ "$(git rev-parse --verify --quiet "$c:$tpl" || true)" = "$dest_blob" ]; then
+                      pristine="$c"
+                      break
+                    fi
+                  done
+                fi
+                if [ -n "$pristine" ] && [ "$FREEZE_WORKFLOWS" != "true" ]; then
+                  cp "$src" "$dest"
+                  UPDATED="$UPDATED $f"
+                  echo "::notice::$f: prod copy is a pristine template from ${pristine:0:8} — updated to current template"
+                elif [ -n "$pristine" ]; then
+                  DIFFERS="$DIFFERS $f"
+                  echo "::notice::$f: pristine stale template, but freeze_workflows=true — NOT updating this run"
+                else
+                  DIFFERS="$DIFFERS $f"
+                  echo "::notice::$f: prod repo has a customized copy — template differs, NOT overwriting (port changes manually if intended)"
+                fi
               fi
             else
               cp "$src" "$dest"
@@ -512,8 +678,9 @@ jobs:
             git commit -m "chore: install/update production CI-CD from templates
 
           Installed:${INSTALLED:- (none)}
+          Updated (pristine stale template):${UPDATED:- (none)}
           Already present (identical):${SKIPPED:- (none)}
-          Present but template differs (NOT overwritten):${DIFFERS:- (none)}
+          Customized on prod side (NOT overwritten):${DIFFERS:- (none)}
 
           Seeded from dev-repo .github/production-workflows-examples/ — this
           mirror is the only channel into this repository, so its CI/CD is
@@ -528,10 +695,13 @@ jobs:
           {
             echo "## Production CI/CD install"
             echo "- Installed:${INSTALLED:- (none)}"
+            echo "- Updated (pristine stale template):${UPDATED:- (none)}"
             echo "- Already present:${SKIPPED:- (none)}"
-            echo "- Differs (not overwritten):${DIFFERS:- (none)}"
+            echo "- Customized (not overwritten):${DIFFERS:- (none)}"
           } >> $GITHUB_STEP_SUMMARY
           echo "installed=${INSTALLED}" >> $GITHUB_OUTPUT
+          echo "updated=${UPDATED}" >> $GITHUB_OUTPUT
+          echo "customized=${DIFFERS}" >> $GITHUB_OUTPUT
           echo "::endgroup::"
 
       - name: Calculate next version
@@ -629,7 +799,7 @@ jobs:
           echo "\`\`\`" >> /tmp/release-notes.md
 
           # Add excluded/removed development files information
-          cat >> /tmp/release-notes.md <<REMOVED_FILES_EOF
+          cat >> /tmp/release-notes.md <<'REMOVED_FILES_EOF'
 
           ## 🚫 Excluded Development Files
 
@@ -638,6 +808,20 @@ jobs:
 
           ### Directories Removed
           ${{ env.REMOVED_DIRS }}
+
+          ### Stale Files Removed (deleted in development)
+          REMOVED_FILES_EOF
+
+          # Append the reconciled stale-file list from disk rather than
+          # interpolating it into the heredoc: file names must never be
+          # shell-expanded (they could contain $ or backticks).
+          if [ -s /tmp/stale-files.txt ]; then
+            sed 's/^/- /' /tmp/stale-files.txt >> /tmp/release-notes.md
+          else
+            echo "- None" >> /tmp/release-notes.md
+          fi
+
+          cat >> /tmp/release-notes.md <<'REMOVED_FILES_EOF'
 
           ### Files Excluded from Sync (Not Deleted)
           - All test directories: `frontend/__tests__/`, `frontend/*/__tests__/`, `backend/app/tests/`
@@ -655,7 +839,9 @@ jobs:
 
           - This is a production-ready snapshot with development files excluded or removed
           - Test files remain in development repository but are excluded from production sync
-          - Production workflows have been preserved: ${{ steps.preserve-workflows.outputs.preserved_count || '0' }} workflow(s)
+          - Production workflows preserved: ${{ steps.preserve-workflows.outputs.preserved_count || '0' }} workflow(s)
+          - Workflows updated from templates (pristine stale copies):${{ steps.install-workflows.outputs.updated || ' (none)' }}
+          - Workflows customized on prod side (NOT overwritten):${{ steps.install-workflows.outputs.customized || ' (none)' }}
           - All changes squashed into a single clean commit for production
 
           ___
@@ -936,3 +1122,96 @@ jobs:
           git remote remove prod-repo 2>/dev/null || true
 
           echo "::notice::Cleanup completed"
+
+  # ---------------------------------------------------------------------------
+  # Consolidated security summary — written to THIS RUN's job summary only.
+  #
+  # The two reusable workflows each upload their own PDF/HTML/JSON artifact to
+  # this run. This job adds a single overview (which scanner produced what, with
+  # download hints) to the run page, so a reader doesn't have to open each job.
+  #
+  # It deliberately does NOT touch the production repo: no PR comment, no commit
+  # into the sync payload. The production PR content is unchanged — the reports
+  # live as artifacts on this workflow run.
+  #
+  # `always()` on purpose: a scan that failed or was skipped is stated
+  # explicitly here rather than silently omitted (silence reads as "clean").
+  # ---------------------------------------------------------------------------
+  security-report-summary:
+    name: Security report summary (run artifacts)
+    runs-on: ubuntu-latest
+    needs: [zap-report, codeql-report]
+    if: always() && github.event_name == 'workflow_dispatch' && inputs.security_reports
+    permissions:
+      contents: read
+
+    steps:
+      - name: Write run summary
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT_SHA: ${{ github.sha }}
+
+          ZAP_RESULT: ${{ needs.zap-report.result }}
+          ZAP_HIGH: ${{ needs.zap-report.outputs.high }}
+          ZAP_MEDIUM: ${{ needs.zap-report.outputs.medium }}
+          ZAP_LOW: ${{ needs.zap-report.outputs.low }}
+          ZAP_ARTIFACT: ${{ needs.zap-report.outputs.artifact }}
+
+          CODEQL_RESULT: ${{ needs.codeql-report.result }}
+          CODEQL_TOTAL: ${{ needs.codeql-report.outputs.total }}
+          CODEQL_CRITICAL: ${{ needs.codeql-report.outputs.critical }}
+          CODEQL_HIGH: ${{ needs.codeql-report.outputs.high }}
+          CODEQL_MEDIUM: ${{ needs.codeql-report.outputs.medium }}
+          CODEQL_ARTIFACT: ${{ needs.codeql-report.outputs.artifact }}
+          CODEQL_SHA_MATCHED: ${{ needs.codeql-report.outputs.sha_matched }}
+          CODEQL_RESOLVED_SHA: ${{ needs.codeql-report.outputs.resolved_sha }}
+        run: |
+          set -euo pipefail
+
+          # One row per scanner. A non-success result becomes a visible row
+          # rather than a missing one.
+          row() {  # $1 name, $2 result, $3 detail
+            case "$2" in
+              success) echo "| $1 | ✅ 已產出 | $3 |" ;;
+              skipped) echo "| $1 | ⏭️ 已略過 | 本次未執行 |" ;;
+              *)       echo "| $1 | ❌ 未產出（\`$2\`）| 請查看對應 job 的 log |" ;;
+            esac
+          }
+
+          {
+            echo "## 🔐 本版本資安報告"
+            echo ""
+            echo "受測 commit：\`${COMMIT_SHA}\`"
+            echo ""
+            echo "報告以 **artifact** 形式附在本次 workflow run（保留 90 天），"
+            echo "**不會**寫入 production repo 的 PR 內容。"
+            echo ""
+            echo "| 報告 | 狀態 | 結果 |"
+            echo "|---|---|---|"
+            row "OWASP ZAP (baseline)" "${ZAP_RESULT}" \
+                "High **${ZAP_HIGH:-?}** / Medium **${ZAP_MEDIUM:-?}** / Low ${ZAP_LOW:-?}"
+            row "CodeQL" "${CODEQL_RESULT}" \
+                "Critical **${CODEQL_CRITICAL:-?}** / High **${CODEQL_HIGH:-?}** / Medium ${CODEQL_MEDIUM:-?}（共 ${CODEQL_TOTAL:-?}）"
+            echo ""
+            echo "📥 **下載**（本次 run 頁面下方 Artifacts 區）：[${RUN_URL}](${RUN_URL})"
+            if [ "${ZAP_RESULT}" = "success" ]; then
+              echo "- \`${ZAP_ARTIFACT}\` — ZAP：PDF / HTML / JSON / MD"
+            fi
+            if [ "${CODEQL_RESULT}" = "success" ]; then
+              echo "- \`${CODEQL_ARTIFACT}\` — CodeQL：PDF"
+            fi
+            echo ""
+
+            if [ "${CODEQL_RESULT}" = "success" ] && [ "${CODEQL_SHA_MATCHED}" != "true" ]; then
+              echo "> ⚠️ **CodeQL 報告並非本 commit**：找不到 \`${COMMIT_SHA}\` 的成功 CodeQL run，"
+              echo "> 報告內容對應的是 \`${CODEQL_RESOLVED_SHA}\`。請勿直接當作本版本的佐證。"
+              echo ""
+            fi
+
+            echo "### 判讀須知"
+            echo ""
+            echo "ZAP 為 **baseline（被動）** 掃描：**不送攻擊 payload、未認證**，"
+            echo "因此不涵蓋 SQLi／XSS／指令注入，也未涵蓋登入後的功能。"
+            echo "**「0 findings」代表「被動掃描未發現」，不等於「已完整測試且安全」。**"
+            echo "完整限制說明在 PDF 內；認證後的主動掃描見 \`security/zap/\`。"
+          } >> "$GITHUB_STEP_SUMMARY"
