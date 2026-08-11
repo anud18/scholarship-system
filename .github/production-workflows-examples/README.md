@@ -51,7 +51,7 @@ warning: here-document at line 10 delimited by end-of-file (wanted `FOOTER_EOF')
 | `deploy-stack.yml` | `deploy.yml` 兩個階段共用的 reusable workflow（實際的部署腳本本體） | 由 `deploy.yml` 呼叫，不單獨觸發 | **必要**（與 deploy.yml 成對） |
 | `health-check.yml` | 監控應用程式健康狀態 | 每 15 分鐘 / 手動觸發 | 選用 |
 | `backup.yml` | 備份資料庫和檔案 | 每日 2AM UTC / 手動觸發 | 選用 |
-| `fortify-scan.yml` | Fortify SAST 掃描（Python + JS/TS + config），產出 `.fpr` 與 BIRT PDF 報告 | Push to main / PR to main / 手動觸發 | 選用 |
+| `fortify-scan.yml` | Fortify SAST 掃描（Python + JS/TS + config），產出 `.fpr` 與 BIRT PDF 報告。掃描約 2.5 小時且獨佔共用 Fortify runner，故只在 push to main 觸發 | Push to main / 手動觸發 | 選用 |
 
 ### 🅾️ 步驟 0：bare VM 的 bootstrap（雞生蛋問題）
 

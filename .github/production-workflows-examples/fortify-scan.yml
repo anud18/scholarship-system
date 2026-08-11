@@ -28,7 +28,8 @@
 #
 # Runtime: translation takes ~5 minutes, but the -scan dataflow analysis takes
 # ~2.5 hours on this codebase and holds the shared org Fortify runner for the
-# duration.
+# duration. That is why this runs on pushes to main only -- a pull_request
+# trigger would spend 2.5 hours of the shared runner on every mirrored sync PR.
 #
 # Requires the self-hosted Windows Fortify runner (sourceanalyzer and
 # BIRTReportGenerator on PATH).
@@ -41,8 +42,6 @@ permissions:
 
 on:
   push:
-    branches: ["main"]
-  pull_request:
     branches: ["main"]
   workflow_dispatch:
 
@@ -57,19 +56,13 @@ jobs:
         shell: powershell
         env:
           PROJECT_NAME: ${{ github.event.repository.name }}
-          EVENT_NAME: ${{ github.event_name }}
-          PR_NUMBER: ${{ github.event.number }}
         run: |
           $ErrorActionPreference = "Stop"
 
           $PROJECT_NAME = $env:PROJECT_NAME
           $BUILD_ID = "${PROJECT_NAME}_build"
 
-          if ($env:EVENT_NAME -eq "pull_request") {
-              $SUFFIX = "PR_$($env:PR_NUMBER)"
-          } else {
-              $SUFFIX = "main"
-          }
+          $SUFFIX = "main"
 
           $FPR_NAME = "${PROJECT_NAME}_${SUFFIX}.fpr"
           $DEV_WORKBOOK_PDF = "${PROJECT_NAME}_${SUFFIX}_DeveloperWorkbook_BIRT.pdf"
