@@ -107,8 +107,12 @@ class Settings(BaseSettings):
     pii_encryption_keys: str = ""
     pii_encryption_active_version: str = "v1"
 
-    # Mock SSO for development
-    enable_mock_sso: bool = True
+    # Mock SSO for development. Defaults to OFF so that dropping the env var
+    # fails safe: this flag alone gates /mock-sso/* and /auth/dev-profiles/*,
+    # which mint arbitrary accounts (including admins) without credentials.
+    # Every environment that wants it sets ENABLE_MOCK_SSO=true explicitly
+    # (docker-compose.dev.yml, docker-compose.staging-e2e.yml, write_dev_env.sh).
+    enable_mock_sso: bool = False
     mock_sso_domain: str = "dev.university.edu"
 
     # Portal SSO Configuration

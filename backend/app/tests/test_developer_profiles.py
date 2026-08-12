@@ -13,10 +13,19 @@ from app.main import app
 from app.models.user import UserRole
 from app.services.developer_profile_service import DeveloperProfile, DeveloperProfileManager, DeveloperProfileService
 
-# Enable mock SSO for testing
-settings.enable_mock_sso = True
-
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def enable_mock_sso(monkeypatch):
+    """Every endpoint in this module is gated on enable_mock_sso.
+
+    Set it per-test instead of assigning to the global settings at import time:
+    that leaked into every module collected afterwards, so test_mock_sso.py
+    silently inherited the flag and its own missing precondition went unnoticed
+    until CI's smoke lane (which does not collect this module) failed.
+    """
+    monkeypatch.setattr(settings, "enable_mock_sso", True)
 
 
 class TestDeveloperProfileService:

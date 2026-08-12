@@ -13,6 +13,15 @@ from app.models.user import User, UserRole, UserType
 class TestMockSSO:
     """Test mock SSO functionality"""
 
+    @pytest.fixture(autouse=True)
+    def enable_mock_sso(self, monkeypatch):
+        """The /mock-sso/* endpoints 404 unless this flag is on, and it defaults
+        to off so a dropped env var fails safe. State the precondition here
+        rather than inheriting it from the ambient environment."""
+        from app.core import config
+
+        monkeypatch.setattr(config.settings, "enable_mock_sso", True)
+
     @pytest.fixture
     async def student001(self, db: AsyncSession) -> User:
         """Seed student001 user required by smoke SSO tests.
