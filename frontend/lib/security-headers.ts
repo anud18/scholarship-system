@@ -85,19 +85,20 @@ export const PERMISSIONS_POLICY = [
  * Severs `window.opener` between this app and cross-origin documents (XS-Leaks /
  * tabnabbing defence).
  *
- * `same-origin-allow-popups` rather than the stricter `same-origin` because
- * components/react-email-template-viewer.tsx opens `window.open("", "_blank")`
- * and then writes into `sourceWindow.document` — the admin "view email template
- * source" flow. Per spec an about:blank popup inherits its opener's COOP and
- * stays in the same browsing-context group, so `same-origin` *should* also work,
- * but `-allow-popups` makes that flow correct by construction while still
- * blocking every cross-origin document from retaining a handle on us.
+ * `same-origin` — tightened from `same-origin-allow-popups`, which the
+ * 2026-08-13 AppScan run filed as a MEDIUM finding. The one popup flow in the
+ * app still works: components/react-email-template-viewer.tsx opens
+ * `window.open("", "_blank")` and writes into `sourceWindow.document`, and per
+ * spec an about:blank popup inherits its opener's COOP and origin, so it stays
+ * in the same browsing-context group. No other code calls window.open or reads
+ * window.opener (verified 2026-08-13), so nothing relied on the -allow-popups
+ * carve-out.
  *
  * NYCU Portal SSO is unaffected either way: both legs are top-level redirects
  * (components/sso-login-page.tsx -> Portal form POST -> backend RedirectResponse
  * -> /auth/sso-callback?token=), never a popup with an opener callback.
  */
-export const CROSS_ORIGIN_OPENER_POLICY = "same-origin-allow-popups";
+export const CROSS_ORIGIN_OPENER_POLICY = "same-origin";
 
 /**
  * Blocks foreign origins from embedding our responses as no-cors subresources
@@ -106,13 +107,27 @@ export const CROSS_ORIGIN_OPENER_POLICY = "same-origin-allow-popups";
  * Safe for the file-preview chain: CORP governs no-cors SUBRESOURCE fetches, not
  * iframe navigations, so the same-origin `/api/v1/preview*` iframes are outside
  * its scope entirely.
- *
- * Cross-Origin-Embedder-Policy is deliberately NOT set — see the note in
- * middleware.ts. COEP `require-corp` would demand a CORP header on every
- * subresource the preview iframes pull, and buys nothing here because the app
- * uses no SharedArrayBuffer and never needs `crossOriginIsolated`.
  */
 export const CROSS_ORIGIN_RESOURCE_POLICY = "same-origin";
+
+/**
+ * Requires every resource this document embeds to be same-origin or to opt in
+ * via CORS/CORP — added for the 2026-08-13 AppScan MEDIUM finding (the header
+ * was previously omitted on purpose; see git history of this comment).
+ *
+ * Safe here because every embed in the app is same-origin, data: or blob:
+ * (the CSP already pins img-src/font-src/frame-src to exactly those sources)
+ * — nothing loads a cross-origin subresource that would now be blocked.
+ *
+ * THE SHARP EDGE IS NESTED DOCUMENTS: a `require-corp` parent refuses any
+ * iframe whose response does not itself declare COEP. That is why
+ * middleware.ts emits this header on every matched route — pages AND the
+ * framed `/api/v1/preview*` / `/api/email/*` responses — and why the nginx
+ * preview/email blocks re-declare it. Dropping it from a framed response
+ * breaks every file preview with a silent blank iframe; blob: iframes are
+ * fine (they inherit the creator document's policy container).
+ */
+export const CROSS_ORIGIN_EMBEDDER_POLICY = "require-corp";
 
 /**
  * CSP hashes for the two `<style>` elements sonner (the `<Toaster />` in
