@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import {
+  CROSS_ORIGIN_EMBEDDER_POLICY,
   CROSS_ORIGIN_OPENER_POLICY,
   CROSS_ORIGIN_RESOURCE_POLICY,
   PERMISSIONS_POLICY,
@@ -159,11 +160,20 @@ export function middleware(request: NextRequest) {
   response.headers.set("Permissions-Policy", PERMISSIONS_POLICY);
   response.headers.set("Cross-Origin-Opener-Policy", CROSS_ORIGIN_OPENER_POLICY);
   response.headers.set("Cross-Origin-Resource-Policy", CROSS_ORIGIN_RESOURCE_POLICY);
-  // Cross-Origin-Embedder-Policy is DELIBERATELY NOT SET. `require-corp` would
-  // demand a CORP header on every subresource the same-origin /api/v1/preview
-  // iframes pull, breaking file preview — the exact caveat raised in #1223 — and
-  // it buys nothing: nothing in this app uses SharedArrayBuffer or needs
-  // `crossOriginIsolated`. Do not add it without re-testing every preview route.
+  // COEP on EVERY matched route, framed proxies included: a require-corp parent
+  // page refuses any nested document that does not itself declare COEP, so the
+  // /api/v1/preview* and /api/email/* responses need this header just as much
+  // as the pages that frame them — see lib/security-headers.ts.
+  response.headers.set("Cross-Origin-Embedder-Policy", CROSS_ORIGIN_EMBEDDER_POLICY);
+
+  // AppScan 2026-08-13 "Cacheable SSL Page Found": every /api response carries
+  // authenticated, per-user data — forbid browsers and shared caches from
+  // storing any of it. Pages are deliberately NOT covered (Next.js manages its
+  // own page caching, and no page response was flagged).
+  if (pathname === "/api" || pathname.startsWith("/api/")) {
+    response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    response.headers.set("Pragma", "no-cache");
+  }
 
   // Expose nonce to response headers for Nginx to read (if needed)
   response.headers.set("X-CSP-Nonce", nonce);

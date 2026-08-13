@@ -12,7 +12,7 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import DBAPIError, OperationalError
 from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -20,6 +20,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.api.v1.api import api_router
 from app.core.config import settings
 from app.core.database_health import check_database_health
+from app.core.db_errors import is_constraint_violation_error, is_invalid_input_error, sqlstate_of
 from app.core.exceptions import ScholarshipException, scholarship_exception_handler
 from app.core.security import require_admin
 from app.models.user import User
@@ -28,6 +29,7 @@ from app.models.user import User
 from app.core.metrics import CONTENT_TYPE_LATEST, generate_latest, set_app_info, update_db_pool_metrics
 from app.db.session import async_engine, sync_engine
 from app.middleware.metrics_middleware import MetricsMiddleware
+from app.middleware.security_headers_middleware import SecurityHeadersMiddleware
 
 # Import scheduler
 from app.services.roster_scheduler_service import init_scheduler, shutdown_scheduler
@@ -162,6 +164,10 @@ app.add_middleware(
 if settings.enable_metrics:
     app.add_middleware(MetricsMiddleware)
 
+# Cache-Control / CSP hardening on every response (AppScan 2026-08-13) — see
+# the module docstring for why this cannot live in nginx.
+app.add_middleware(SecurityHeadersMiddleware)
+
 # Add schema validation middleware (development only)
 # Temporarily disabled due to logger scoping issue
 # if settings.debug:
@@ -258,6 +264,84 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
                 "trace_id": getattr(request.state, "trace_id", None),
             },
         )
+
+
+@app.exception_handler(DBAPIError)
+async def dbapi_exception_handler(request: Request, exc: DBAPIError):
+    """Map database driver errors to the status code they actually describe.
+
+    Registered on DBAPIError rather than folded into the generic ``Exception``
+    handler on purpose. Starlette wires the ``Exception`` handler into
+    ``ServerErrorMiddleware``, which sits OUTSIDE the middleware stack and
+    re-raises after sending its response — so a 422 returned from there would
+    still be counted as a 500 by MetricsMiddleware and still escape the ASGI
+    app. Handlers for concrete classes are dispatched by ``ExceptionMiddleware``
+    *inside* the stack, which keeps metrics, logs and the response in agreement.
+    """
+    db_logger = logging.getLogger(__name__)
+    trace_id = getattr(request.state, "trace_id", "unknown")
+    sqlstate = sqlstate_of(exc)
+
+    def _log(level: int, outcome: str) -> None:
+        db_logger.log(
+            level,
+            "Database error -> %s - Trace ID: %s, Path: %s, Method: %s, SQLSTATE: %s, Exception: %s",
+            outcome,
+            trace_id,
+            request.url.path,
+            request.method,
+            sqlstate,
+            type(exc).__name__,
+            exc_info=True,
+        )
+
+    # A client error, but keep the traceback: a backend defect can land here too
+    # (e.g. a service writing a wrong-case enum label). WARNING rather than ERROR
+    # so a 4xx does not page anyone while staying diagnosable.
+    if is_invalid_input_error(exc):
+        _log(logging.WARNING, "422 invalid input")
+        return JSONResponse(
+            status_code=422,
+            content={
+                "success": False,
+                "message": "Invalid request parameters. Please check your input and try again.",
+                "trace_id": trace_id,
+            },
+        )
+
+    if is_constraint_violation_error(exc):
+        _log(logging.WARNING, "409 conflict")
+        return JSONResponse(
+            status_code=409,
+            content={
+                "success": False,
+                "message": "The request conflicts with existing data.",
+                "trace_id": trace_id,
+            },
+        )
+
+    if isinstance(exc, OperationalError):
+        _log(logging.ERROR, "503 unavailable")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "success": False,
+                "message": "Service temporarily unavailable - database connection issue",
+                "trace_id": trace_id,
+            },
+        )
+
+    # Anything else (a not-null/check violation, bad SQL, a programming error)
+    # is a server fault and must stay a 500 so it keeps showing up in alerting.
+    _log(logging.ERROR, "500 unhandled")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "success": False,
+            "message": "Internal server error",
+            "trace_id": trace_id,
+        },
+    )
 
 
 @app.exception_handler(Exception)

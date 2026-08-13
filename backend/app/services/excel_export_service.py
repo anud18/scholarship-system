@@ -6,6 +6,7 @@ Excel export service for payment roster generation
 import hashlib
 import logging
 import os
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -61,6 +62,13 @@ class ExcelExportService:
     # 不符合 → 紅底（FFC7CE）；警告 → 琥珀底（FFEB9C），Excel 標準條件格式色。
     RED_FILL = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
     AMBER_FILL = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
+
+    # Excel 工作表名稱不允許的字元（openpyxl 會直接 raise）
+    _SHEET_TITLE_INVALID_CHARS = re.compile(r"[\[\]:*?/\\]")
+
+    # 統計資訊工作表名稱 — 保留字：獎學金分頁不得占用（否則 openpyxl 會默默把
+    # 統計頁改名成「造冊資訊1」，兩頁身分互換造成混淆）。
+    STATISTICS_SHEET_TITLE = "造冊資訊"
 
     # 需千分位數字格式的欄位（皆為金額欄）
     NUMERIC_FORMAT_COLUMNS = frozenset({"單價", "免稅給付"})
@@ -270,6 +278,16 @@ class ExcelExportService:
             # 準備Excel資料 + 上色 metadata
             excel_data, cell_fills = self._prepare_excel_data(roster, roster_items, rule_columns)
 
+            # 每列所屬獎學金分頁標籤（與 excel_data 平行；同一筆略過條件）。
+            # 年度後備取 roster.academic_year — 未快照 allocation_year 的列
+            # 才能標上年度、與 prior-year 配額列分開成頁。
+            roster_year = getattr(roster, "academic_year", None)
+            scholarship_labels = [
+                self._get_scholarship_sheet_label(item, roster_year)
+                for item in roster_items
+                if self._has_required_export_fields(item)
+            ]
+
             # 驗證資料品質
             validation_result = self._validate_export_data(excel_data)
             if validation_result["warnings"]:
@@ -291,6 +309,7 @@ class ExcelExportService:
                 columns=export_columns,
                 include_header=include_header,
                 include_statistics=include_statistics,
+                scholarship_labels=scholarship_labels,
             )
 
             # 計算檔案資訊
@@ -482,14 +501,40 @@ class ExcelExportService:
         return self.template_path
 
     @staticmethod
-    def _format_allocation_display(item: PaymentRosterItem) -> str:
-        """Format allocated sub-type + year for Excel display"""
+    def _format_allocation_display(item: PaymentRosterItem, fallback_year: Optional[int] = None) -> str:
+        """Format allocated sub-type + year for Excel display.
+
+        fallback_year：item.allocation_year 只有手動分發路徑會快照（記錄消耗的
+        prior-year 配額）；月結/一般產生路徑為 NULL。傳入 roster.academic_year
+        作為後備，讓每列都標得出消耗的是哪個年度的配額 — 與 查看名單 的
+        `_roster_item_dict_with_display_year` 同一套語意。
+        """
         if not item.allocated_sub_type:
             return ""
         display = SUB_TYPE_SHORT_LABELS.get(item.allocated_sub_type, item.allocated_sub_type)
-        if item.allocation_year:
-            return f"{item.allocation_year}年 {display}"
+        year = item.allocation_year or fallback_year
+        if year:
+            return f"{year}年 {display}"
         return display
+
+    @staticmethod
+    def _has_required_export_fields(item: PaymentRosterItem) -> bool:
+        """身分證字號/姓名缺一即整列不匯出 — 與 _prepare_excel_data 的略過條件
+        共用，確保分頁標籤列表與 excel_data 保持平行。"""
+        return bool(item.student_id_number and item.student_name)
+
+    def _get_scholarship_sheet_label(self, item: PaymentRosterItem, fallback_year: Optional[int] = None) -> str:
+        """該列所屬的獎學金分頁標籤。
+
+        有分發快照時用「{年度}年 {子類型}」（與「分發獎學金」欄同字串，
+        e.g.「114年 國科會」）；年度取 allocation_year，未快照時退回
+        fallback_year（roster.academic_year），確保各年度各自成頁
+        （「113年 國科會」與「114年 國科會」是不同分頁）。
+        無分發子類型的獎學金退回 scholarship_name。
+        """
+        if item.allocated_sub_type:
+            return self._format_allocation_display(item, fallback_year)
+        return item.scholarship_name or "未分類"
 
     def _get_filtered_roster_items(self, roster: PaymentRoster, include_excluded: bool) -> List[PaymentRosterItem]:
         """Compatibility helper for legacy calls that expect filtered roster items"""
@@ -510,6 +555,8 @@ class ExcelExportService:
         rule_columns = rule_columns or []
         # 預先算好每欄的快照鍵，避免逐列重建 f"rule_{rid}"
         rule_lookup = [(header, f"rule_{rid}") for rid, header in rule_columns]
+        # 分發年度顯示後備（與分頁標籤、查看名單同語意）
+        roster_year = getattr(roster, "academic_year", None)
         excel_data: List[Dict] = []
         cell_fills: List[Dict[str, str]] = []
 
@@ -517,7 +564,7 @@ class ExcelExportService:
             # 取得學生相關資訊
 
             # 驗證必填欄位
-            if not item.student_id_number or not item.student_name:
+            if not self._has_required_export_fields(item):
                 logger.warning(
                     f"Skipping item {idx} due to missing required fields: "
                     f"ID={item.student_id_number}, Name={item.student_name}"
@@ -533,7 +580,7 @@ class ExcelExportService:
             if item.application_identity:
                 remarks_parts.append(f"身分:{item.application_identity}")
             if item.allocated_sub_type:
-                remarks_parts.append(f"分發:{self._format_allocation_display(item)}")
+                remarks_parts.append(f"分發:{self._format_allocation_display(item, roster_year)}")
             if not item.is_included:
                 remarks_parts.append("狀態:不合格")
             if not item.bank_account:
@@ -590,8 +637,8 @@ class ExcelExportService:
                 "居留天數是否滿183天(是/否)": "是",
                 # 29. 申請身分 (快照欄位)
                 "申請身分": item.application_identity or "",
-                # 30. 分發獎學金 (快照欄位)
-                "分發獎學金": self._format_allocation_display(item),
+                # 30. 分發獎學金 (快照欄位；年度未快照時以 roster 年度顯示)
+                "分發獎學金": self._format_allocation_display(item, roster_year),
             }
 
             fills: Dict[str, str] = {}
@@ -750,8 +797,14 @@ class ExcelExportService:
         columns: List[str],
         include_header: bool,
         include_statistics: bool,
+        scholarship_labels: Optional[List[str]] = None,
     ):
-        """建立 Excel 檔案 — 依 columns 寫表頭/資料並套用紅/琥珀底。"""
+        """建立 Excel 檔案 — 依 columns 寫表頭/資料並套用紅/琥珀底。
+
+        scholarship_labels 為與 excel_data 平行的每列獎學金標籤；提供時，
+        主表（全名單）之後會為每個獎學金各建一個分頁（e.g.「114年 國科會」、
+        「113年 國科會」、「114年 教育部(5000)」），內容為該獎學金的名單。
+        """
         try:
             use_template = include_header and os.path.exists(template_path)
 
@@ -769,38 +822,18 @@ class ExcelExportService:
             if ws.max_row >= 1:
                 ws.delete_rows(1, ws.max_row)
 
-            if include_header:
-                for col_idx, column_name in enumerate(columns, start=1):
-                    cell = ws.cell(row=1, column=col_idx, value=column_name)
-                    cell.font = Font(bold=True)
-                    cell.alignment = Alignment(horizontal="center", vertical="center")
-                    cell.fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
-                start_row = 2
-            else:
-                start_row = 1
+            self._write_sheet(ws, excel_data, cell_fills, columns, include_header)
 
-            # strict=True：excel_data 與 cell_fills 由 _prepare_excel_data 同步建構，
-            # 若長度不一致代表上游 bug — 寧可大聲 raise，也不要靜默截斷成局部匯出。
-            for row_idx, (row_data, fills) in enumerate(zip(excel_data, cell_fills, strict=True), start=start_row):
-                for col_idx, column_name in enumerate(columns, start=1):
-                    value = row_data.get(column_name, "")
-                    # SECURITY (#1081 G): neutralize spreadsheet formula injection
-                    # from student-derived free-text (name, bank, address, dynamic
-                    # fields) before writing. Numeric formatting below still keys
-                    # off the original numeric `value`.
-                    cell = ws.cell(row=row_idx, column=col_idx, value=sanitize_excel_cell(value))
-
-                    if column_name in self.NUMERIC_FORMAT_COLUMNS and isinstance(value, (int, float)):
-                        cell.number_format = "#,##0"
-
-                    kind = fills.get(column_name)
-                    if kind == "red":
-                        cell.fill = self.RED_FILL
-                    elif kind == "amber":
-                        cell.fill = self.AMBER_FILL
-
-            total_rows = max(len(excel_data) + (1 if include_header else 0), 1)
-            self._apply_excel_styling(ws, total_rows, include_header, columns)
+            if scholarship_labels is not None:
+                self._add_scholarship_sheets(
+                    wb,
+                    excel_data,
+                    cell_fills,
+                    scholarship_labels,
+                    columns,
+                    include_header,
+                    reserve_statistics_title=include_statistics,
+                )
 
             if include_statistics:
                 self._add_worksheet_info(wb, roster)
@@ -814,6 +847,108 @@ class ExcelExportService:
                 f"Failed to create Excel file: {e}",
                 file_name=os.path.basename(file_path),
             ) from e
+
+    def _write_sheet(
+        self,
+        ws,
+        excel_data: List[Dict],
+        cell_fills: List[Dict[str, str]],
+        columns: List[str],
+        include_header: bool,
+    ):
+        """把表頭+資料列寫進單一工作表並套樣式（主表與各獎學金分頁共用）。"""
+        if include_header:
+            for col_idx, column_name in enumerate(columns, start=1):
+                cell = ws.cell(row=1, column=col_idx, value=column_name)
+                cell.font = Font(bold=True)
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+                cell.fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
+            start_row = 2
+        else:
+            start_row = 1
+
+        # strict=True：excel_data 與 cell_fills 由 _prepare_excel_data 同步建構，
+        # 若長度不一致代表上游 bug — 寧可大聲 raise，也不要靜默截斷成局部匯出。
+        for row_idx, (row_data, fills) in enumerate(zip(excel_data, cell_fills, strict=True), start=start_row):
+            for col_idx, column_name in enumerate(columns, start=1):
+                value = row_data.get(column_name, "")
+                # SECURITY (#1081 G): neutralize spreadsheet formula injection
+                # from student-derived free-text (name, bank, address, dynamic
+                # fields) before writing. Numeric formatting below still keys
+                # off the original numeric `value`.
+                cell = ws.cell(row=row_idx, column=col_idx, value=sanitize_excel_cell(value))
+
+                if column_name in self.NUMERIC_FORMAT_COLUMNS and isinstance(value, (int, float)):
+                    cell.number_format = "#,##0"
+
+                kind = fills.get(column_name)
+                if kind == "red":
+                    cell.fill = self.RED_FILL
+                elif kind == "amber":
+                    cell.fill = self.AMBER_FILL
+
+        total_rows = max(len(excel_data) + (1 if include_header else 0), 1)
+        self._apply_excel_styling(ws, total_rows, include_header, columns)
+
+    def _add_scholarship_sheets(
+        self,
+        wb: Workbook,
+        excel_data: List[Dict],
+        cell_fills: List[Dict[str, str]],
+        scholarship_labels: List[str],
+        columns: List[str],
+        include_header: bool,
+        *,
+        reserve_statistics_title: bool = True,
+    ):
+        """每個獎學金各建一個分頁，內容為該獎學金的名單。
+
+        分頁順序：有分發年度者在前、年度大者優先（114 → 113 → …），
+        再依標籤排序；欄位/上色與主表完全一致。
+        """
+        groups: Dict[str, Tuple[List[Dict], List[Dict[str, str]]]] = {}
+        for label, row_data, fills in zip(scholarship_labels, excel_data, cell_fills, strict=True):
+            rows, row_fills = groups.setdefault(label, ([], []))
+            rows.append(row_data)
+            row_fills.append(fills)
+
+        # 現有工作表 + 統計頁保留字 — 統計頁在此之後才建立，先占住名稱，
+        # 避免同名獎學金分頁把它擠成「造冊資訊1」。統計頁被關掉
+        # （include_statistics=False）時不保留，否則會產生沒有 (1) 的 (2) 分頁。
+        used_titles = {sheet.title for sheet in wb.worksheets}
+        if reserve_statistics_title:
+            used_titles.add(self.STATISTICS_SHEET_TITLE)
+        for label in sorted(groups, key=self._scholarship_sheet_order):
+            rows, row_fills = groups[label]
+            ws = wb.create_sheet(self._safe_sheet_title(label, used_titles))
+            self._write_sheet(ws, rows, row_fills, columns, include_header)
+
+        logger.info("Added %d per-scholarship sheets to roster workbook", len(groups))
+
+    @staticmethod
+    def _scholarship_sheet_order(label: str) -> Tuple[int, int, str]:
+        """分頁排序鍵：帶「{年度}年」前綴者在前且年度遞減，其餘依標籤字典序。"""
+        match = re.match(r"^(\d+)年", label)
+        if match:
+            return (0, -int(match.group(1)), label)
+        return (1, 0, label)
+
+    @classmethod
+    def _safe_sheet_title(cls, label: str, used_titles: set) -> str:
+        """轉成合法且不重複的工作表名稱（去非法字元、截 31 字、去重）。
+
+        呼叫端傳入的 used_titles 會被就地更新，跨多次呼叫維持唯一性。
+        """
+        title = cls._SHEET_TITLE_INVALID_CHARS.sub("_", (label or "").strip()) or "未分類"
+        title = title[:31]
+        base = title
+        counter = 2
+        while title in used_titles:
+            suffix = f"({counter})"
+            title = f"{base[: 31 - len(suffix)]}{suffix}"
+            counter += 1
+        used_titles.add(title)
+        return title
 
     def _apply_excel_styling(self, ws, max_row: int, include_header: bool, columns: List[str]):
         """應用Excel樣式"""
@@ -888,7 +1023,7 @@ class ExcelExportService:
 
     def _add_worksheet_info(self, wb: Workbook, roster: PaymentRoster):
         """加入工作表資訊"""
-        info_ws = wb.create_sheet("造冊資訊")
+        info_ws = wb.create_sheet(self.STATISTICS_SHEET_TITLE)
 
         info_data = [
             ["造冊代碼", roster.roster_code],
@@ -925,8 +1060,6 @@ class ExcelExportService:
             return ""
 
         # 簡單的郵遞區號提取邏輯
-        import re
-
         match = re.match(r"^(\d{3,5})", address.strip())
         return match.group(1) if match else ""
 

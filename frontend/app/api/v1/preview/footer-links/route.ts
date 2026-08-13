@@ -83,7 +83,9 @@ export async function GET(request: NextRequest) {
         // stream and reports a bogus "password protected" error.
         "Content-Length": fileBuffer.byteLength.toString(),
         "Accept-Ranges": "bytes",
-        "Cache-Control": "private, max-age=3600",
+        // no-store: authenticated document content must never land in a
+        // browser/shared cache (AppScan 2026-08-13 "Cacheable SSL Page Found")
+        "Cache-Control": "no-store, no-cache, must-revalidate",
         "X-Content-Type-Options": "nosniff",
         "Referrer-Policy": "no-referrer",
       },

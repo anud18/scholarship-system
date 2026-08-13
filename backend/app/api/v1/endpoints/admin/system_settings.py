@@ -22,7 +22,9 @@ router = APIRouter()
 
 @router.get("/system-setting")
 async def get_system_setting(
-    key: str = Query(..., description="Setting key"),
+    # Capped at the system_settings.key column width: a miss echoes the key
+    # straight back through SystemSettingSchema, which enforces the same limit.
+    key: str = Query(..., max_length=100, description="Setting key"),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
