@@ -29,6 +29,7 @@ from app.models.user import User
 from app.core.metrics import CONTENT_TYPE_LATEST, generate_latest, set_app_info, update_db_pool_metrics
 from app.db.session import async_engine, sync_engine
 from app.middleware.metrics_middleware import MetricsMiddleware
+from app.middleware.security_headers_middleware import SecurityHeadersMiddleware
 
 # Import scheduler
 from app.services.roster_scheduler_service import init_scheduler, shutdown_scheduler
@@ -162,6 +163,10 @@ app.add_middleware(
 # Add Prometheus metrics middleware
 if settings.enable_metrics:
     app.add_middleware(MetricsMiddleware)
+
+# Cache-Control / CSP hardening on every response (AppScan 2026-08-13) — see
+# the module docstring for why this cannot live in nginx.
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Add schema validation middleware (development only)
 # Temporarily disabled due to logger scoping issue
