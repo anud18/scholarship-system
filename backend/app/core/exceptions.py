@@ -200,10 +200,16 @@ class FileSizeExceededError(FileUploadError):
 
 # Roster-specific exceptions
 class RosterGenerationError(ScholarshipException):
-    """Raised when roster generation fails"""
+    """Raised when roster generation fails.
 
-    def __init__(self, message: str):
+    roster_id: 產生失敗前已建立（且可能已被 audit commit 持久化）的造冊 id。
+    端點層的 FAILED 標記依賴它 — 服務內部 raise 時端點拿不到 roster 物件，
+    沒有這個 id 該筆造冊會永遠卡在 processing。
+    """
+
+    def __init__(self, message: str, roster_id: Optional[int] = None):
         super().__init__(message=message, status_code=500, error_code="ROSTER_GENERATION_ERROR")
+        self.roster_id = roster_id
 
 
 class RosterNotFoundError(NotFoundError):

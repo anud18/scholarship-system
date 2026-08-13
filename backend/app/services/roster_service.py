@@ -161,8 +161,12 @@ class RosterService:
 
         Raises:
             RosterAlreadyExistsError: 造冊已存在且未強制重新產生
-            RosterGenerationError: 造冊產生過程中發生錯誤
+            RosterGenerationError: 造冊產生過程中發生錯誤（帶 roster_id 供端點標記 FAILED）
         """
+        # 先宣告：except 需要判斷造冊 row 是否已建立（audit log 的 commit 會把它
+        # 持久化），把 id 掛上 RosterGenerationError 讓端點標 FAILED，
+        # 否則該筆造冊會永遠卡在 processing。
+        roster: Optional[PaymentRoster] = None
         try:
             # 強化的冪等性檢查
             existing_roster = self.check_roster_exists(scholarship_configuration_id, period_label)
@@ -515,7 +519,10 @@ class RosterService:
             # 不在此處執行 rollback，讓調用者決定如何處理事務
             # 這避免了與 API 端點的 rollback 重複執行
             logger.exception("Error generating roster")
-            raise RosterGenerationError(f"Failed to generate roster: {e}") from e
+            raise RosterGenerationError(
+                f"Failed to generate roster: {e}",
+                roster_id=getattr(roster, "id", None),
+            ) from e
 
     def validate_roster_consistency(self, roster: PaymentRoster) -> Dict[str, Any]:
         """
@@ -921,6 +928,9 @@ class RosterService:
         # 查詢 CollegeRankingItem 以取得備取資訊與分發子類型
         backup_info = None
         allocated_sub_type = None
+        # 提供子類型的那筆排名項 — 其 allocation_config_id 記錄消耗的是哪個
+        # 年度的配額（借用前年度配額時 ≠ 申請本身的配置）。
+        alloc_ranking_item = None
         from app.models.college_review import CollegeRanking, CollegeRankingItem
 
         if roster.ranking_id:
@@ -940,6 +950,8 @@ class RosterService:
                     backup_info = ranking_item.backup_allocations
                     logger.info(f"Application {application.id} has backup allocations: {len(backup_info)} positions")
                 allocated_sub_type = ranking_item.allocated_sub_type
+                if allocated_sub_type:
+                    alloc_ranking_item = ranking_item
 
         # 若無 ranking_id（月份造冊），從同學年度已分發排名中查詢子類型。
         # 此處僅 gate 在 is_allocated + academic_year（未含 is_finalized /
@@ -961,20 +973,31 @@ class RosterService:
             )
             if alloc_item:
                 allocated_sub_type = alloc_item.allocated_sub_type
+                alloc_ranking_item = alloc_item
 
         # 續領申請沒有 CollegeRankingItem；子類型直接取自申請本身。
         if not allocated_sub_type and application.is_renewal:
             allocated_sub_type = application.sub_scholarship_type
 
+        # 消耗配置 id：roster 層級快照優先（分發矩陣路徑，一冊一組），
+        # 否則退回排名項的 allocation_config_id（一般/月結路徑 — 借用
+        # 前年度配額的年度資訊只存在這裡）。
+        allocation_config_id = roster.allocation_config_id
+        if allocation_config_id is None and alloc_ranking_item is not None:
+            allocation_config_id = alloc_ranking_item.allocation_config_id
+
         # 載入消耗配置 (consumed config) — 借用前年度配額時不同於發放配置。
         # allocation_config_id NULL ⇒ 全期 sentinel，退回造冊自身的發放配置。
         consumed_config = None
-        if roster.allocation_config_id is not None:
-            consumed_config = self.db.get(ScholarshipConfiguration, roster.allocation_config_id)
+        if allocation_config_id is not None:
+            consumed_config = self.db.get(ScholarshipConfiguration, allocation_config_id)
         if consumed_config is None:
             consumed_config = application.scholarship_configuration
-        # allocation_year 顯示快照取自造冊（= 消耗配置學年度）
+        # allocation_year 顯示快照：造冊層級優先，否則取消耗配置的學年度 —
+        # 沒有這個後備，113 年度配額的學生會在 Excel/查看名單被誤標成造冊年度。
         allocation_year = roster.allocation_year
+        if allocation_year is None and allocation_config_id is not None and consumed_config is not None:
+            allocation_year = consumed_config.academic_year
 
         # 計算申請身分別
         application_identity = None
@@ -994,7 +1017,7 @@ class RosterService:
             scholarship_name=application.scholarship_configuration.scholarship_type.name,
             scholarship_amount=application.amount or consumed_config.amount,
             scholarship_subtype=application.sub_scholarship_type,
-            allocation_config_id=roster.allocation_config_id,  # 消耗配置 id 快照
+            allocation_config_id=allocation_config_id,  # 消耗配置 id 快照（roster 優先，退排名項）
             allocation_year=allocation_year,  # 消耗配置學年度顯示快照
             allocated_sub_type=allocated_sub_type,  # 分發到的子類型快照
             application_identity=application_identity,  # 申請身分快照
