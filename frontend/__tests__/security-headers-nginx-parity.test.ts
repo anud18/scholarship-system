@@ -81,21 +81,12 @@ describe("nginx <-> middleware security-header parity (issue #1223 B)", () => {
       expect(monitoringBlocks).toBe(1);
       expect(healthBlocks).toBe(1);
 
-      // server level + each SAMEORIGIN block + /monitoring + /health
-      for (const [header] of ["Permissions-Policy", "Cross-Origin-Opener-Policy"].map(
-        (h) => [h] as const
-      )) {
-        expect(declaredValues(conf, header)).toHaveLength(
-          1 + sameOriginBlocks + monitoringBlocks + healthBlocks
-        );
-      }
-
-      // COEP is deliberately ABSENT from /monitoring: Grafana loads
-      // cross-origin no-cors images (gravatars, grafana.com panels) that an
-      // enforced require-corp would block, and it is the one document prefix
-      // where nginx's COEP is not deduplicated against the Next.js middleware.
-      expect(declaredValues(conf, "Cross-Origin-Embedder-Policy")).toHaveLength(
-        1 + sameOriginBlocks + healthBlocks
+      // server level + each SAMEORIGIN block + /monitoring + /health.
+      // Permissions-Policy stays document-only: AppScan never flagged it on
+      // asset URLs, unlike COOP/COEP (counted with the subresource blocks
+      // below, because the scanner's medium checks are per-URL presence tests).
+      expect(declaredValues(conf, "Permissions-Policy")).toHaveLength(
+        1 + sameOriginBlocks + monitoringBlocks + healthBlocks
       );
     });
 
@@ -134,6 +125,19 @@ describe("nginx <-> middleware security-header parity (issue #1223 B)", () => {
       expect(declaredValues(conf, "Cross-Origin-Resource-Policy")).toHaveLength(expected);
       expect(declaredValues(conf, "Strict-Transport-Security")).toHaveLength(expected);
       expect(declaredValues(conf, "Referrer-Policy")).toHaveLength(expected);
+
+      // COOP/COEP ride every asset block too — inert on subresources per spec,
+      // but AppScan's medium checks are per-URL presence tests, so a re-scan
+      // that samples /_next/static/... re-files the finding otherwise. On
+      // /pdf.worker.min.mjs COEP is load-bearing: a require-corp owner blocks
+      // dedicated-worker scripts whose response lacks a compatible COEP.
+      expect(declaredValues(conf, "Cross-Origin-Opener-Policy")).toHaveLength(expected);
+      // COEP is deliberately ABSENT from /monitoring only: Grafana loads
+      // cross-origin no-cors images (gravatars, grafana.com panels) that an
+      // enforced require-corp would block.
+      expect(declaredValues(conf, "Cross-Origin-Embedder-Policy")).toHaveLength(
+        expected - monitoringBlocks
+      );
     });
 
     /**
