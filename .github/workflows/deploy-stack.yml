@@ -1,14 +1,27 @@
-# Reusable deployment stage — the body of the two-stage promotion pipeline.
+# Reusable deployment stage — the body shared by BOTH deploy workflows.
 # Copy this file to the PRIVATE production repository at
-# .github/workflows/deploy-stack.yml (deploy.yml calls it twice).
+# .github/workflows/deploy-stack.yml.
 #
-# ONE definition, TWO stages. deploy.yml promotes the same GHCR image first to
-# the TEST AP VM and then, only if that succeeded, to the PRODUCTION AP VM:
+# ONE definition, TWO callers. Each stage is its own workflow, and both fire on
+# the same trigger (push to main):
 #
-#     resolve-images ──▶ deploy (stage: test)       ──▶ deploy (stage: production)
-#                        runner [self-hosted,linux,test]  runner [self-hosted,linux,production]
-#                        environment: test                environment: production
-#                        ▲ 1 reviewer must approve        ▲ 1 reviewer must approve
+#     deploy-test.yml ────────▶ this file (stage: test)
+#                               resolve-images ──▶ deploy
+#                               ubuntu-latest      runner [self-hosted,linux,test]
+#                                                  environment: test
+#                                                  ▲ 1 reviewer must approve
+#
+#     deploy-production.yml ──▶ this file (stage: production)
+#                               resolve-images ──▶ deploy
+#                               ubuntu-latest      runner [self-hosted,linux,production]
+#                                                  environment: production
+#                                                  ▲ 1 reviewer must approve
+#
+# The two workflows are INDEPENDENT: neither waits on nor vetoes the other.
+# That is deliberate — the test tier has its own ways to fail (its DB down, its
+# certificate expired, its portal unreachable) and none of those should hold a
+# production hotfix hostage. What sequences them is the human at each approval
+# gate, who can read the test run before approving production.
 #
 # The stage is selected entirely by inputs, so the two runs are bit-identical
 # in behaviour and differ ONLY in (a) which runner they land on and (b) which
@@ -45,9 +58,10 @@ on:
         required: true
         type: string
       tag:
-        description: 'Upstream image tag to deploy (already verified by resolve-images)'
-        required: true
+        description: 'Upstream image tag to deploy (e.g. main-2c2b89d6 or v1.2.3). Empty = latest.'
+        required: false
         type: string
+        default: ''
       deploy_dir:
         description: 'Deploy directory on the AP VM. Defaults to ~/scholarship-<stage>.'
         required: false
@@ -58,8 +72,80 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
+  # ── Gate 1: the requested images must already exist upstream ──────────────
+  # This repository does NOT build. Images are produced once by the development
+  # repository's pipeline and promoted here unchanged, so what production runs
+  # is bit-identical to what was tested — rebuilding from mirrored source would
+  # produce a different artifact from the one that was verified.
+  #
+  # Runs BEFORE the approval gate on purpose (no `environment:` here): a
+  # reviewer should never be asked to approve a deploy of a tag that does not
+  # exist. It also runs on ubuntu-latest, so a misconfigured tag is caught
+  # without ever waking the stage's self-hosted runner.
+  resolve-images:
+    name: Resolve Upstream Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read # ghcr.io login + docker manifest inspect (GITHUB_TOKEN fallback when GH_PAT is unset)
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Resolve tag and verify images exist
+        id: version
+        env:
+          IMAGE_OWNER: ${{ vars.IMAGE_OWNER }}
+          # A PAT with read:packages, needed when the upstream packages are
+          # private. GITHUB_TOKEN is scoped to THIS repo and cannot read
+          # another namespace's packages.
+          GHCR_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+          REQUESTED_TAG: ${{ inputs.tag }}
+          STAGE: ${{ inputs.stage }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${IMAGE_OWNER}" ]; then
+            echo "::error::Repository variable IMAGE_OWNER is not set."
+            echo "::error::Set it to the GHCR namespace that publishes the images"
+            echo "::error::(the development repository's owner), e.g. 'anud18'."
+            exit 1
+          fi
+
+          # `latest` follows the dev repo's main branch. The test and the
+          # production workflow resolve it INDEPENDENTLY, so between the two
+          # runs it can move — pin an immutable tag (main-<sha> or a release
+          # version) whenever the test run has to be evidence about the
+          # production one.
+          VERSION="${REQUESTED_TAG:-latest}"
+          [ "$VERSION" = "latest" ] && echo "::warning::Deploying the mutable 'latest' tag — pin a tag so test and production promote the same image."
+
+          echo "Resolving ghcr.io/${IMAGE_OWNER}/scholarship-system-{backend,frontend}:${VERSION}"
+          echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+          fail=0
+          for comp in backend frontend; do
+            REF="ghcr.io/${IMAGE_OWNER}/scholarship-system-${comp}:${VERSION}"
+            # manifest inspect fails fast without downloading layers, so a bad
+            # tag is caught here instead of half-way through the deploy.
+            if docker manifest inspect "$REF" >/dev/null 2>&1; then
+              echo "  ✅ $REF"
+            else
+              echo "::error::Image not found or not readable: $REF"
+              fail=1
+            fi
+          done
+          [ "$fail" -eq 0 ] || {
+            echo "::error::Ensure the development pipeline published this tag, and that"
+            echo "::error::secrets.GH_PAT (read:packages) can read the ${IMAGE_OWNER} namespace."
+            exit 1
+          }
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Deploying version '$VERSION' to ${STAGE}"
+
   deploy:
     name: Deploy to ${{ inputs.stage }}
+    needs: resolve-images
     # Labels are resolved from the caller so ONE definition can target both VMs.
     # Both VMs answer to [self-hosted, linux]; the stage label is what makes the
     # targeting deterministic. Never drop it — without it a job would land on
@@ -87,12 +173,12 @@ jobs:
     # (IMAGE_OWNER is validated in resolve-images), so overriding is intended:
     # the workflow decides which image was pulled and therefore which runs.
     env:
-      TAG: ${{ inputs.tag }}
+      TAG: ${{ needs.resolve-images.outputs.version }}
       IMAGE_OWNER: ${{ vars.IMAGE_OWNER }}
       STAGE: ${{ inputs.stage }}
 
     steps:
-      # ── Gate 0: is this environment really the environment we think it is? ──
+      # ── Gate 2: is this environment really the environment we think it is? ──
       # Runs FIRST, before checkout, before any container is touched. Catches
       # the inheritance trap described in the header: an environment that was
       # never created, or created without its own secrets, resolves to the
@@ -145,7 +231,7 @@ jobs:
           fi
           echo "✅ Stage identity confirmed: ${STAGE} → ${DOMAIN:-${EXPECT_DOMAIN:-(from env file)}}"
 
-      # ── Gate 1: fail fast on misconfigured secrets BEFORE touching anything ─
+      # ── Gate 3: fail fast on misconfigured secrets BEFORE touching anything ─
       # Closes go-live blockers P3/P4/P7/P8: config.py ships staging/dev
       # defaults for auth, the student API and the mail sender, so a missing
       # secret would not crash — it would silently run against the wrong
