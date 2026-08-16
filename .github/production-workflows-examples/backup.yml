@@ -5,7 +5,7 @@
 # The previous version could not work as written:
 #   - `runs-on: ubuntu-latest` + `ssh $PRODUCTION_USER@$PRODUCTION_SERVER`:
 #     GitHub-hosted runners cannot route to the campus VMs (the same constraint
-#     that forced deploy.yml onto a self-hosted runner).
+#     that forced deploy-stack.yml onto a self-hosted runner).
 #   - `docker compose exec -T postgres pg_dump` assumed PostgreSQL sits next to
 #     the app. It does not — the AP VM runs app+nginx+redis, while PostgreSQL
 #     and object storage live on the DB VM. There is no `postgres` container to
@@ -15,7 +15,7 @@
 #     so GitHub rejected it on every push.
 #
 # Now: the job runs ON the AP VM and reaches PostgreSQL over TCP with the same
-# DB_* secrets deploy.yml already uses. No SSH, no PRODUCTION_SSH_KEY.
+# DB_* secrets deploy-stack.yml already uses. No SSH, no PRODUCTION_SSH_KEY.
 #
 # The DB VM has no internet access, so backups stay on disk for IT to collect —
 # see the manifest written by the verify job.
@@ -28,7 +28,7 @@
 #     Scheduled, so deliberately NOT behind the `production` environment's
 #     approval gate — a nightly backup that waits for a reviewer never runs.
 #   - Secrets: DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME.
-#   - Passwordless sudo for the runner user (already required by deploy.yml).
+#   - Passwordless sudo for the runner user (already required by deploy-stack.yml).
 
 name: Backup Production Data
 

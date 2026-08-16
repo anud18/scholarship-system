@@ -1184,7 +1184,7 @@ jobs:
 
           echo "🔍 Verifying BOTH required images are present on the DB VM..."
           # Query image IDs directly (exit-code based) — a missing image here
-          # means deploy.yml would later fail with "image not found", so it
+          # means deploy-stack.yml would later fail with "image not found", so it
           # must stop the setup now, not pass with a warning.
           PG_ID=$(ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$DB_VM_USER@$DB_HOST" "sudo docker images -q $POSTGRES_IMAGE" 2>/dev/null || echo "")
           MN_ID=$(ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$DB_VM_USER@$DB_HOST" "sudo docker images -q $MINIO_IMAGE" 2>/dev/null || echo "")
@@ -1384,7 +1384,7 @@ jobs:
       #########################################################################
       # STEP 8.5: Create the deploy working directory + volume mounts
       # docker-compose.prod.yml has RELATIVE bind mounts (./backend/uploads,
-      # ./logs/backend, ./logs/nginx). deploy.yml runs compose from
+      # ./logs/backend, ./logs/nginx). deploy-stack.yml runs compose from
       # ~/scholarship-production, so those dirs must exist there or Docker
       # creates them root-owned and the backend can't write uploads/logs.
       #########################################################################
@@ -1416,7 +1416,7 @@ jobs:
           sudo chown -R 999:999 /opt/scholarship/app/redis
           echo "   ✅ /opt/scholarship/app/redis/data ($(stat -c '%U:%G' /opt/scholarship/app/redis/data))"
 
-          # deploy.yml hard-fails if these are absent, rather than letting
+          # deploy-stack.yml hard-fails if these are absent, rather than letting
           # nginx crash-loop on a missing certificate. The repo ships nginx
           # configs but no keys — drop the certificate here, or set the
           # SSL_CERT_DIR repository variable to a path outside the deploy dir.
@@ -1433,7 +1433,7 @@ jobs:
           echo "   ✅ Created:"
           find "$DEPLOY_DIR" -maxdepth 2 -type d | sed 's/^/      /'
           echo ""
-          echo "ℹ️  deploy.yml copies docker-compose.prod.yml here as docker-compose.yml at deploy time."
+          echo "ℹ️  deploy-stack.yml copies docker-compose.prod.yml here as docker-compose.yml at deploy time."
 
       #########################################################################
       # STEP 9: Final Summary

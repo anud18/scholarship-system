@@ -15,7 +15,7 @@ The `setting-env.yml` workflow now **focuses on system prerequisites and Docker 
 
 ## 📋 Table of Contents
 
-- [Environments：兩階段部署與核准閘門](#environments兩階段部署與核准閘門) ⭐ **先讀這個**
+- [Environments：兩個部署 workflow 與核准閘門](#environments兩個部署-workflow-與核准閘門) ⭐ **先讀這個**
 - [Quick Start](#quick-start)
 - [Required Secrets](#required-secrets)
   - [Database VM SSH Access](#database-vm-ssh-access-secrets) ⭐ **Required for Docker setup**
@@ -33,26 +33,37 @@ The `setting-env.yml` workflow now **focuses on system prerequisites and Docker 
 
 ---
 
-## Environments：兩階段部署與核准閘門
+## Environments：兩個部署 workflow 與核准閘門
 
-`deploy.yml` 不再直接部署 production。它是一條**兩階段的 promotion pipeline**：
+部署拆成**兩個各自獨立的 workflow**，觸發條件相同（push to main）：
 
 ```
-resolve-images ──▶ deploy-test ────────▶ deploy-production
- (ubuntu-latest)   runner: [self-hosted,   runner: [self-hosted,
-                            linux, test]            linux, production]
-                   environment: test      environment: production
-                   🔒 需 1 位 reviewer 核准  🔒 需 1 位 reviewer 核准
+push to main ─┬─▶ deploy-test.yml ──────▶ deploy-stack.yml (stage: test)
+              │                            resolve-images ──▶ deploy
+              │                            (ubuntu-latest)    runner: [self-hosted, linux, test]
+              │                                               environment: test
+              │                                               🔒 需 1 位 reviewer 核准
+              │
+              └─▶ deploy-production.yml ▶ deploy-stack.yml (stage: production)
+                                           resolve-images ──▶ deploy
+                                           (ubuntu-latest)    runner: [self-hosted, linux, production]
+                                                              environment: production
+                                                              🔒 需 1 位 reviewer 核准
 ```
 
-- 同一個 GHCR image 一律先上 **test AP VM**，跑完 migration + health + smoke，
-  才輪到 **production AP VM**。順序是結構性的（`needs: deploy-test`）。
-- **但 test 失敗不會否決 production**：production 段仍然會跳出自己的核准要求，
-  reviewer 看著 test 的結果自行判斷要不要放行。test tier 有它自己會壞的理由
-  （它的 DB、憑證、portal），那些不該卡住 production 的 hotfix。真正會否決的只有
-  `resolve-images` —— 沒解析出 tag 就沒東西可部署。
-- 兩階段共用同一份腳本（`deploy-stack.yml`），差別只有 **runner label** 與
+- 兩者**互不等待、互不否決**：test 失敗不會擋下 production，production 卡在核准
+  也不會擋下 test。test tier 有它自己會壞的理由（它的 DB、憑證、portal），那些
+  不該卡住 production 的 hotfix。
+- **順序由人決定**：production 的 reviewer 在 Actions 頁面看得到同一個 push
+  觸發的 test run，可以先看結果再決定核准或 Reject。
+- 唯一會自動否決的是各自的 `resolve-images` —— 沒解析出 tag 就沒東西可部署。
+- 兩者共用同一份腳本（`deploy-stack.yml`），差別只有 **runner label** 與
   **GitHub Environment**。test 因此是 production 的彩排，不是另一套流程。
+- ⚠️ 因為 production 前面不再有 test 階段擋著，`production` environment 的
+  required reviewer 就是 push to main 與正式機之間**唯一**的關卡。
+
+> `latest`（不帶 tag 觸發）時兩個 workflow 各自解析一次，中間 tag 可能移動 ——
+> 要讓 test 真的能當 production 的證據，就用 `-f tag=<明確 tag>` 手動觸發兩者。
 
 ### 1. 建立兩個 Environment 並設定 reviewer（核准閘門）
 
@@ -80,8 +91,10 @@ for ENV in test production; do
 done
 ```
 
-核准流程：run 開始後停在 "Review deployments"，指定的 reviewer 在 Actions 頁面
-按 **Approve and deploy** 才會繼續。test 核准 → 跑完 → production 再要一次核准。
+核准流程：兩個 workflow 各自 run，各自停在 "Review deployments"，指定的 reviewer
+在 Actions 頁面按 **Approve and deploy** 才會繼續。兩個核准彼此獨立、沒有先後
+強制關係 —— 想維持「先 test 再 production」就先核准 test run、看完結果再回頭核准
+production run。
 
 `setting-env.yml` 也掛了同樣的 environment（它會改機器、寫 `.env`），
 所以它也要先被核准；`backup.yml` / `health-check.yml` 是排程執行、只讀或只寫備份，
@@ -94,8 +107,8 @@ done
 | 放在哪 | 內容 | 誰讀得到 |
 |--------|------|----------|
 | Repository secrets | **production 的值** | 所有 workflow（含沒掛 environment 的 `backup.yml`、`health-check.yml`） |
-| Environment `production` | 可留空，fallback 到 repository 層 | `deploy.yml` 的 production 階段、`setting-env.yml`(production) |
-| Environment `test` | **測試環境的值，下面清單要全部各設一份** | `deploy.yml` 的 test 階段、`setting-env.yml`(test) |
+| Environment `production` | 可留空，fallback 到 repository 層 | `deploy-production.yml`、`setting-env.yml`(production) |
+| Environment `test` | **測試環境的值，下面清單要全部各設一份** | `deploy-test.yml`、`setting-env.yml`(test) |
 
 > ⚠️ **fallback 陷阱**：environment 沒定義的 secret 會自動往上抓 repository 層的值。
 > 也就是說 `test` environment 少設一個 `DB_HOST`，test 部署就會連上 **production 的
@@ -1043,5 +1056,7 @@ For assistance with secrets configuration:
 **Related Documentation**:
 - [Installation Manual](./IT-BACKUP-TRANSFER-GUIDE.md)
 - [Production Workflows README](./README.md)
-- [Deployment Workflow](./deploy.yml)
+- [Deploy to Test Workflow](./deploy-test.yml)
+- [Deploy to Production Workflow](./deploy-production.yml)
+- [Deploy Stack (reusable)](./deploy-stack.yml)
 - [GitHub Actions Secrets Documentation](https://docs.github.com/en/actions/security-guides/encrypted-secrets)

@@ -1,0 +1,99 @@
+# TEST deployment workflow (issue #74 / go-live blocker P5)
+# Copy this file to the PRIVATE production repository at
+# .github/workflows/deploy-test.yml (it calls deploy-stack.yml, which must be
+# copied alongside it).
+#
+# ONE STAGE PER WORKFLOW
+# ----------------------
+# This workflow deploys the TEST AP VM. Its sibling, deploy-production.yml,
+# deploys the production one. Both fire on the SAME trigger — a push to main —
+# and run INDEPENDENTLY: neither waits on nor vetoes the other.
+#
+#   push to main ─┬─▶ deploy-test.yml        → [self-hosted, linux, test]
+#                 │                            environment: test        🔒 1 approval
+#                 └─▶ deploy-production.yml  → [self-hosted, linux, production]
+#                                              environment: production  🔒 1 approval
+#
+# Splitting them is deliberate. A red test tier says nothing about production
+# (its own DB, certificate or portal can fail on their own) and must not be
+# able to hold a hotfix hostage; conversely a production deploy that is being
+# held at its gate must not stall the test rehearsal. What sequences the two is
+# the human at each approval gate, who can read the test run before approving
+# production — not a machine deciding for them.
+#
+# The approval gate is a GitHub *Environment protection rule*, not YAML. It has
+# to be configured once, in the production repository:
+#
+#   Settings → Environments → `test` → Required reviewers: 1 person
+#
+# Without that configuration this job runs unattended — the `environment:` key
+# alone gates nothing. See SECRETS-SETUP-GUIDE.md § Environments.
+#
+# This repository does NOT build images. The development repository's pipeline
+# publishes them to GHCR once; both workflows promote that exact artifact.
+#
+# Prerequisites (one-time, see SECRETS-SETUP-GUIDE.md):
+#   - A self-hosted runner on the test AP VM, labelled
+#     [self-hosted, linux, test]. The stage label is mandatory: both VMs answer
+#     to [self-hosted, linux], so without it a job lands on whichever runner is
+#     idle — here, possibly the production one.
+#   - GitHub Environment `test`, with 1 required reviewer and its OWN secrets
+#     and variables (a secret it does not define falls back to the
+#     repository-level — i.e. PRODUCTION — value; see the guide).
+#   - Repository variable IMAGE_OWNER = GHCR namespace publishing the images
+#     (the dev repo's owner, e.g. anud18) — required, shared by both workflows.
+#   - Variables on the `test` environment:
+#       DEPLOY_STAGE   = test   (stage-identity guard, required)
+#       EXPECT_DOMAIN  = the domain this stage may touch (required)
+#       EXPECT_DB_HOST = the DB host this stage may touch (required)
+#       DEPLOY_URL     = the test site URL (shown on the Environments page)
+#       SSL_CERT_DIR   = optional; absolute path to the TLS certificate
+#                        directory on that VM (e.g. /home/<user>/ssl).
+#                        Defaults to ./nginx/ssl/prod in the deploy directory.
+#       ENV_FILE       = optional; path to an operator-managed .env on that VM.
+#   - secrets.GH_PAT with read:packages, if the upstream packages are private.
+#   - docker-compose.prod-db.yml stack already running on the test DB VM.
+
+name: Deploy to Test
+
+on:
+  # NOTE: a code push alone does not produce a new image here — pushing to main
+  # deploys whatever the upstream `latest` tag currently points at. For a
+  # reproducible release, dispatch manually with an explicit tag.
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Upstream image tag to deploy (e.g. main-2c2b89d6 or v1.2.3). Defaults to latest.'
+        required: false
+        type: string
+
+concurrency:
+  # Scoped to the test stage ONLY, so a production deploy queued behind its
+  # approval gate never blocks the test rehearsal (and vice versa). Two
+  # overlapping test runs would race to deploy different tags onto one VM.
+  group: deploy-test
+  cancel-in-progress: false
+
+# Least privilege: nothing in this workflow writes via GITHUB_TOKEN. The called
+# workflow elevates to packages: read where it pulls from ghcr.io.
+permissions:
+  contents: read
+
+jobs:
+  deploy-test:
+    name: Deploy to test
+    uses: ./.github/workflows/deploy-stack.yml
+    with:
+      stage: test
+      runner_labels: '["self-hosted","linux","test"]'
+      tag: ${{ inputs.tag }}
+    # The called workflow reads secrets from the `test` ENVIRONMENT, which
+    # overrides the repository-level (production) values. `inherit` is what
+    # passes GH_PAT and the rest down; the environment scoping happens inside.
+    secrets: inherit
+    permissions:
+      contents: read
+      packages: read

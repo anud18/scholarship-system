@@ -47,8 +47,9 @@ warning: here-document at line 10 delimited by end-of-file (wanted `FOOTER_EOF')
 | `bootstrap-ap-runner.sh` 🅾️ | **兩台空 VM 的步驟 0** — 把 bare AP VM 變成可跑 action 的 self-hosted runner | 在 AP VM 手動執行一次 | **必要(前置)** |
 | `setting-env.yml` | 在 AP VM 裝 Docker、SSH 到 DB VM 裝 Docker+傳 image、建部署目錄 | runner 就緒後手動觸發 | **必要** |
 | `auto-tag-on-merge.yml` ⭐ | 自動建立 Git tag 和 Release | PR merge 到 main | **必要** |
-| `deploy.yml` | **兩階段部署編排**：一律先 test AP VM 再 production AP VM，兩階段各需一位 reviewer 核准（test 失敗不否決 production，由 reviewer 判斷） | Push to main / 手動觸發 | **必要** |
-| `deploy-stack.yml` | `deploy.yml` 兩個階段共用的 reusable workflow（實際的部署腳本本體） | 由 `deploy.yml` 呼叫，不單獨觸發 | **必要**（與 deploy.yml 成對） |
+| `deploy-test.yml` | 部署 **test AP VM**，需一位 reviewer 核准 | Push to main / 手動觸發 | **必要** |
+| `deploy-production.yml` | 部署 **production AP VM**，需一位 reviewer 核准 | Push to main / 手動觸發 | **必要** |
+| `deploy-stack.yml` | 上面兩個 workflow 共用的 reusable workflow（實際的部署腳本本體） | 由兩個 deploy workflow 呼叫，不單獨觸發 | **必要**（三個要一起複製） |
 | `health-check.yml` | 監控應用程式健康狀態 | 每 15 分鐘 / 手動觸發 | 選用 |
 | `backup.yml` | 備份資料庫和檔案 | 每日 2AM UTC / 手動觸發 | 選用 |
 | `fortify-scan.yml` | Fortify SAST 掃描（Python + JS/TS + config），產出 `.fpr` 與 BIRT PDF 報告。掃描約 2.5 小時且獨佔共用 Fortify runner，故只在 push to main 觸發 | Push to main / 手動觸發 | 選用 |
@@ -59,8 +60,8 @@ warning: here-document at line 10 delimited by end-of-file (wanted `FOOTER_EOF')
 
 | VM | labels | 由誰使用 |
 |----|--------|----------|
-| test AP VM | `[self-hosted, linux, test]` | `deploy.yml` 的 test 階段、`setting-env.yml`(stage=test) |
-| production AP VM | `[self-hosted, linux, production]` | `deploy.yml` 的 production 階段、`backup.yml`、`health-check.yml`、`setting-env.yml`(stage=production) |
+| test AP VM | `[self-hosted, linux, test]` | `deploy-test.yml`、`setting-env.yml`(stage=test) |
+| production AP VM | `[self-hosted, linux, production]` | `deploy-production.yml`、`backup.yml`、`health-check.yml`、`setting-env.yml`(stage=production) |
 
 **沒有 stage label 的 runner 收不到任何 job**(workflow 指定的是三個 label 的組合);label 貼錯則會把 production 的部署跑到 test VM 上。
 
@@ -147,10 +148,14 @@ cd scholarship-production
 mkdir -p .github/workflows
 
 # Copy optional workflows
-# deploy.yml 與 deploy-stack.yml 必須成對複製 —— deploy.yml 用
-# `uses: ./.github/workflows/deploy-stack.yml` 呼叫後者，少一個就無法解析。
-cp /path/to/development-repo/.github/production-workflows-examples/deploy.yml \
-   .github/workflows/deploy.yml
+# 三個 deploy 檔必須一起複製 —— 兩個 caller 都用
+# `uses: ./.github/workflows/deploy-stack.yml` 呼叫同一份 reusable workflow，
+# 少了它任一個 caller 都無法解析。
+cp /path/to/development-repo/.github/production-workflows-examples/deploy-test.yml \
+   .github/workflows/deploy-test.yml
+
+cp /path/to/development-repo/.github/production-workflows-examples/deploy-production.yml \
+   .github/workflows/deploy-production.yml
 
 cp /path/to/development-repo/.github/production-workflows-examples/deploy-stack.yml \
    .github/workflows/deploy-stack.yml
@@ -166,7 +171,7 @@ cp /path/to/development-repo/.github/production-workflows-examples/backup.yml \
 
 在 production repository 設定以下 secrets（Settings → Secrets and variables → Actions）：
 
-> 沒有任何 workflow 使用 SSH。deploy.yml / backup.yml / health-check.yml 都跑在
+> 沒有任何 workflow 使用 SSH。deploy-test.yml / deploy-production.yml / backup.yml / health-check.yml 都跑在
 > AP VM 上的 self-hosted runner（labels `[self-hosted, linux, <stage>]`），
 > 直接操作本機 docker 與 DB VM 的 5432 埠。GitHub-hosted runner 連不到校內 VM。
 >
@@ -201,7 +206,7 @@ cp /path/to/development-repo/.github/production-workflows-examples/backup.yml \
 `DEPLOY_STAGE` / `EXPECT_DOMAIN` / `EXPECT_DB_HOST` 是防呆用的：deploy 一開始就會比對「這個 environment 宣告自己是哪個 stage」與「secret 解析出來的 DOMAIN / DB_HOST」，對不上就直接失敗，避免 test 部署因為漏設 secret 而打到 production 的資料庫。
 | `SSL_CERT_DIR` | — | TLS 憑證資料夾的絕對路徑（例：`/home/<user>/ssl`）。留空則用 repo `nginx/ssl/prod`。兩種 `ENV_FILE` 模式下都以這個變數優先。資料夾內需有 `fullchain.pem`、`privkey.pem`、`chain.pem`。 |
 
-#### 部署相關 (deploy.yml)
+#### 部署相關 (deploy-stack.yml)
 
 **設了 `ENV_FILE` 就不需要下面這些 secrets** — 值放在 AP VM 的 `.env` 裡，
 deploy 時會直接驗證該檔案（缺 key、`portal.test`、`ss-test`、`測試` 等都會擋下）。
@@ -255,7 +260,7 @@ production 只是把同一份 artifact 拉下來跑，確保上線的東西跟 s
 
 #### 修改部署目標
 
-編輯 `deploy.yml`:
+編輯 `deploy-stack.yml`（兩個 stage 共用的腳本本體）:
 
 ```yaml
 # 修改 Docker image 名稱
@@ -302,7 +307,7 @@ sudo ./svc.sh install
 sudo ./svc.sh start
 ```
 
-runner 使用者需要 passwordless sudo（deploy.yml 與 backup.yml 都會用到）。
+runner 使用者需要 passwordless sudo（deploy-stack.yml 與 backup.yml 都會用到）。
 
 ### Container Registry
 
@@ -340,7 +345,7 @@ runner 使用者需要 passwordless sudo（deploy.yml 與 backup.yml 都會用�
 
 ### Deploy Workflow
 
-- [ ] `deploy.yml` 與 `deploy-stack.yml` 都已複製到 prod repo
+- [ ] `deploy-test.yml`、`deploy-production.yml`、`deploy-stack.yml` 三個都已複製到 prod repo
 - [ ] test AP VM 的 runner labels 含 `test`；production AP VM 含 `production`
 - [ ] GitHub Environments `test` 與 `production` 都已建立
 - [ ] 兩個 environment 都設了 **Required reviewers（1 人）**
@@ -371,21 +376,27 @@ runner 使用者需要 passwordless sudo（deploy.yml 與 backup.yml 都會用�
 ### 手動測試部署
 
 ```bash
-# In production repo；建議帶明確 tag，兩個 stage 才會部署到同一份 image
-gh workflow run deploy.yml -f tag=v1.2.3
+# In production repo；建議帶明確 tag，兩個 workflow 才會部署到同一份 image
+gh workflow run deploy-test.yml -f tag=v1.2.3
+gh workflow run deploy-production.yml -f tag=v1.2.3
 
-# Monitor progress（會先停在 test 階段等核准）
+# Monitor progress（會停在各自的核准）
 gh run watch
 
 # Check logs
 gh run view --log
 ```
 
-run 會停兩次：先是 `test` 環境的 "Review deployments"，reviewer 按下
-**Approve and deploy** 後才跑 test AP VM；test 跑完再停一次等 `production` 的核准。
+兩個 workflow 各自獨立：push to main 會同時觸發，各自停在自己 environment 的
+"Review deployments" 等核准，reviewer 按下 **Approve and deploy** 才會跑到對應
+的 AP VM。
 
-test **失敗**時 production 仍然會要求核准 —— reviewer 看得到 test 的失敗結果，
-再決定放行或 Reject。要停下整條 promotion 就按 Reject。
+**沒有誰否決誰**：test 失敗不會擋下 production，production 卡在核准也不會擋下
+test。順序完全由人決定 —— reviewer 可以先放行 test、看完結果再回來核准
+production，要停就按 Reject。
+
+> ⚠️ `production` environment 的 required reviewer 是唯一擋在 push to main 與
+> 正式機之間的關卡（不再有前置的 test 階段），上線前務必先設好。
 
 ### 測試健康檢查
 
@@ -410,7 +421,8 @@ aws s3 ls s3://your-backup-bucket/files/
 
 ```bash
 # List recent workflow runs
-gh run list --workflow=deploy.yml --limit=10
+gh run list --workflow=deploy-test.yml --limit=10
+gh run list --workflow=deploy-production.yml --limit=10
 
 # View specific run
 gh run view <run-id>
@@ -472,12 +484,20 @@ docker compose logs --tail=100
 ```bash
 # In production repo
 # Review changes first
-diff .github/workflows/deploy.yml \
-     /path/to/dev-repo/.github/production-workflows-examples/deploy.yml
+for f in deploy-test.yml deploy-production.yml deploy-stack.yml; do
+  diff ".github/workflows/$f" \
+       "/path/to/dev-repo/.github/production-workflows-examples/$f"
+done
 
 # Update if needed
-cp /path/to/dev-repo/.github/production-workflows-examples/deploy.yml \
-   .github/workflows/deploy.yml
+for f in deploy-test.yml deploy-production.yml deploy-stack.yml; do
+  cp "/path/to/dev-repo/.github/production-workflows-examples/$f" \
+     ".github/workflows/$f"
+done
+
+# 舊版單一檔 deploy.yml 已拆成上面兩個 caller —— prod repo 若還留著它，
+# 刪掉，否則 push to main 會多跑一條舊的 promotion。
+git rm -f .github/workflows/deploy.yml 2>/dev/null || true
 
 # Commit
 git add .github/workflows/

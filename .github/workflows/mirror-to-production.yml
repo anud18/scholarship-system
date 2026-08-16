@@ -625,10 +625,11 @@ jobs:
           # scanners). Operators read those guides in the DEV repo's
           # .github/production-workflows-examples/ — they already have access
           # there since they dispatch this mirror.
-          # deploy-stack.yml is the reusable stage body deploy.yml calls with
-          # `uses: ./.github/workflows/deploy-stack.yml` — shipping deploy.yml
-          # without it leaves the prod repo with an unresolvable workflow.
-          for f in deploy.yml deploy-stack.yml health-check.yml backup.yml auto-tag-on-merge.yml setting-env.yml; do
+          # deploy-stack.yml is the reusable stage body that BOTH deploy-test.yml
+          # and deploy-production.yml call with
+          # `uses: ./.github/workflows/deploy-stack.yml` — shipping either
+          # caller without it leaves the prod repo with an unresolvable workflow.
+          for f in deploy-test.yml deploy-production.yml deploy-stack.yml health-check.yml backup.yml auto-tag-on-merge.yml setting-env.yml; do
             src="/tmp/prod-workflow-templates/$f"
             [ -f "$src" ] || continue
             dest=".github/workflows/$f"

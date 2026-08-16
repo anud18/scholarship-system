@@ -6,16 +6,16 @@
 # https://api.production.example.com/health (a domain that does not exist, so
 # every run reported the backend down) and reached the DB/Redis by SSHing from
 # a `ubuntu-latest` runner — which cannot route to the campus VMs at all, the
-# same constraint that forced deploy.yml onto a self-hosted runner.
+# same constraint that forced the deploy workflows onto self-hosted runners.
 #
 # Prerequisites:
 #   - The self-hosted runner registered on the production AP VM, labels
-#     [self-hosted, linux, production] (the same runner deploy.yml's production
-#     stage uses). The `production` label is mandatory — the test AP VM also
+#     [self-hosted, linux, production] (the same runner deploy-production.yml
+#     uses). The `production` label is mandatory — the test AP VM also
 #     answers to [self-hosted, linux], and probes that landed there would
 #     report on the wrong stack. Scheduled, so deliberately NOT behind the
 #     `production` environment's approval gate: it only reads.
-#   - Secrets: DOMAIN, REDIS_PASSWORD (already required by deploy.yml).
+#   - Secrets: DOMAIN, REDIS_PASSWORD (already required by deploy-stack.yml).
 
 name: Production Health Check
 

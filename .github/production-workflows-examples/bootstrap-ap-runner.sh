@@ -2,7 +2,7 @@
 #
 # bootstrap-ap-runner.sh — turn a COMPLETELY EMPTY production AP VM into a
 # machine that can run the GitHub Actions workflows (setting-env.yml,
-# deploy.yml, ...).
+# deploy-test.yml, deploy-production.yml, ...).
 #
 # WHY THIS EXISTS (the chicken-and-egg):
 #   Every production workflow has `runs-on: [self-hosted, linux]`. A bare VM
@@ -32,9 +32,9 @@
 #
 #   --stage IS MANDATORY. There are two AP VMs and both register as
 #   [self-hosted, linux]; the stage label is the ONLY thing that tells the
-#   workflows apart. deploy.yml targets ["self-hosted","linux","test"] and
-#   ["self-hosted","linux","production"] explicitly — a runner without its
-#   stage label is invisible to them, and a runner with the WRONG one will
+#   workflows apart. deploy-test.yml targets ["self-hosted","linux","test"] and
+#   deploy-production.yml ["self-hosted","linux","production"] explicitly — a
+#   runner without its stage label is invisible to them, and one with the WRONG one will
 #   happily accept a production deploy on the test VM. Run this script once
 #   per VM with the matching --stage.
 #
@@ -103,7 +103,7 @@ esac
 # "queued" jobs.
 case ",$LABELS," in
   *",$STAGE,"*) : ;;
-  *) die "--labels ($LABELS) does not contain the stage label '$STAGE' — deploy.yml would never dispatch to this runner." ;;
+  *) die "--labels ($LABELS) does not contain the stage label '$STAGE' — the deploy workflows would never dispatch to this runner." ;;
 esac
 
 RUN_USER="$(id -un)"
@@ -225,7 +225,7 @@ Next steps:
   2. Run the "Setup Production Environment" action (setting-env.yml) with
      action=full-check — it installs Docker on the DB VM over SSH and
      transfers the postgres/minio images.
-  3. Then deploy via deploy.yml.
+  3. Then deploy via deploy-test.yml / deploy-production.yml.
 
 If the runner ever needs re-registering, re-run this script with a fresh
 --token; it reconfigures in place.
