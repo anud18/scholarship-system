@@ -69,10 +69,32 @@ SIS API ──┐
   | 環境 | 金鑰來源 |
   |---|---|
   | 本機 dev | 由固定種子推導的 **dev key**(僅供開發,會 log 警告) |
-  | **staging / production** | **GitHub Actions secret** 注入,部署時帶入容器 |
+  | **test**(正式 repo 的測試部署) | 正式 repo `test` **GitHub Environment** 的 secret |
+  | **production** | 同一支 workflow、`production` Environment 的 secret |
 
-- **Production 安全閥**:正式環境若沒給金鑰,系統與加密遷移會**直接失敗**(而非
-  退回 dev key)。staging 因此在結構上不可能誤用 dev key——缺金鑰部署就 fail。
+  部署鏈:開發 repo(`anud18/scholarship-system`)只負責建置 image;正式 repo
+  (`NYCUITSC/naass`,private)鏡像原始碼但**不重建**,由 `deploy-test.yml` /
+  `deploy-production.yml` 各自呼叫同一支 `deploy-stack.yml`。stage 只決定
+  ①落在哪台 self-hosted runner ②由哪個 GitHub Environment 供 secret,其餘完全
+  相同——**test 部署就是 production 部署的排練**,金鑰注入路徑一模一樣。
+
+- **注入方式(兩種,由 Environment 變數 `ENV_FILE` 決定)**:
+
+  | 模式 | 金鑰所在 |
+  |---|---|
+  | 預設 | 部署時由 Environment secret 產生 AP VM 上的 `.env`(mode 600),再 `--env-file` 餵給 compose |
+  | `ENV_FILE` 有設 | 使用 VM 上維運人員自管的 .env,**金鑰完全不經過 GitHub** |
+
+- **test 與 production 的金鑰必須不同**。GitHub 的 fallback 是這裡最危險的一點:
+  environment 沒定義的 secret 會自動往上抓 **repository 層(= production 值)**,
+  test 部署因此可能拿到 production 金鑰——那等於「測試資料庫的備份足以解開正式
+  個資」。防呆是 `deploy-stack.yml` 的 *Assert stage identity*:每個 environment
+  自報 `DEPLOY_STAGE` / `EXPECT_DOMAIN` / `EXPECT_DB_HOST`,對不上就拒絕部署。
+
+- **安全閥(兩層)**:部署前 workflow 會檢查 `PII_ENCRYPTION_KEYS` 有值且為合法
+  JSON,缺漏或壞掉就中止;容器內兩個 tier 都是 `ENVIRONMENT=production`,所以
+  執行期缺金鑰時後端與加密遷移**直接失敗**,不會退回 dev key。test tier 因此在
+  結構上不可能誤用 dev key——缺金鑰部署就 fail。
 - 輪替/保存/汰除舊金鑰的程序見
   [runbook](./pii-key-retention-runbook.md)(核心鐵律:**舊金鑰在其加密資料超過
   保存年限前絕不移除**,否則含備份在內的舊資料等同銷毀)。
@@ -108,9 +130,13 @@ SIS API ──┐
 
 ## 7. 信任邊界與待強化點
 
-- **信任邊界**:能存取 GitHub Actions secret 或能修改部署流程者,即可取得金鑰。
-  > 📌 部署設定註解寫「由 KMS sidecar 注入」,**目前實作其實是 GitHub Actions
-  > secret**,非真 KMS。若日後升級 KMS,只需替換金鑰注入方式,加解密程式不需動。
+- **信任邊界**:能存取正式 repo(`NYCUITSC/naass`)`test` / `production`
+  Environment secret 的人、能修改或核准部署 workflow 的人(每個 stage 的
+  environment 都設有 required reviewer),即可取得對應 tier 的金鑰。改用
+  `ENV_FILE` 模式時金鑰只存在 AP VM 上,信任邊界收斂成「能登入該 VM 的人」。
+  > 📌 部署設定註解寫「由 KMS sidecar 注入」,**目前實作其實是 GitHub
+  > Environment secret(或 VM 上的 .env)**,非真 KMS。若日後升級 KMS,只需
+  > 替換金鑰注入方式,加解密程式不需動。
 - **待強化:審查預覽端點**。審查對話框目前把**明文**身分證字號送到瀏覽器、由
   前端遮罩;若要落實「全碼不離開伺服器」,應改成該 API 回應就先遮罩。
 
@@ -128,19 +154,40 @@ SIS API ──┐
 | `backend/alembic/versions/20260529_backfill_roster_national_id.py` | 造冊欄位 backfill |
 | `backend/scripts/rotate_pii_keys.py` | 金鑰輪替 / re-encrypt |
 | `docs/security/pii-key-retention-runbook.md` | 金鑰保存與輪替程序 |
+| `docs/architecture/pii-encryption.md` | 金鑰產生方式(部署失敗訊息會指向這裡) |
+| `.github/production-workflows-examples/deploy-stack.yml` | 兩個 stage 共用的部署腳本(金鑰驗證、`.env` 產生、stage 防呆) |
+| `.github/production-workflows-examples/SECRETS-SETUP-GUIDE.md` | `test` / `production` Environment 的 secret 設定清單 |
 
-## 附錄 B — staging 驗證指令（read-only）
+## 附錄 B — test 部署驗證指令（read-only）
 
-確認已加密(只看前綴,不外洩全碼):
+> ⚠️ 兩個 tier 都是用 `docker-compose.prod.yml` 部署的,容器名稱**都是
+> `scholarship_*_prod`**,差別只在跑在哪台 AP VM(部署目錄預設
+> `~/scholarship-test` / `~/scholarship-production`)。下指令前先確認自己登在哪台。
+> DB 不在 AP VM 上,是獨立的 DB VM(`docker-compose.prod-db.yml`,容器
+> `scholarship_postgres_prod`)。
+
+確認已加密(在 AP VM,透過 backend 容器連該 tier 的 DB;只看前綴,不外洩全碼):
 ```bash
-docker exec scholarship_postgres_staging psql -U scholarship_user -d scholarship_db -c "
+docker exec -i scholarship_backend_prod python - <<'PY'
+from app.db.session import sync_engine
+from sqlalchemy import text
+with sync_engine.connect() as conn:
+    print(conn.execute(text("""
+        SELECT count(*) FILTER (WHERE student_data->>'std_pid' LIKE 'pii:%')            AS encrypted,
+               count(*) FILTER (WHERE student_data->>'std_pid' NOT LIKE 'pii:%')        AS plaintext
+        FROM applications WHERE student_data->>'std_pid' IS NOT NULL""")).one())
+PY
+```
+若人已經在 DB VM 上,同一件事也可以直接查(帳密取自該 tier 的 `.env`):
+```bash
+docker exec scholarship_postgres_prod psql -U "$DB_USER" -d "$DB_NAME" -c "
 SELECT count(*) FILTER (WHERE student_data->>'std_pid' LIKE 'pii:%')                                              AS encrypted,
        count(*) FILTER (WHERE student_data->>'std_pid' IS NOT NULL AND student_data->>'std_pid' NOT LIKE 'pii:%') AS plaintext
 FROM applications WHERE student_data->>'std_pid' IS NOT NULL;"
 ```
 驗證可解密 round-trip(backend 容器,輸出遮罩):
 ```bash
-docker exec -i scholarship_backend_staging python - <<'PY'
+docker exec -i scholarship_backend_prod python - <<'PY'
 from app.db.session import sync_engine
 from app.core.pii_crypto import decrypt_pii
 from sqlalchemy import text
@@ -152,3 +199,13 @@ for app_id, ct in rows:
     print(f"app#{app_id}: {ct[:18]}... -> {pt[0]}{'*'*(len(pt)-3)}{pt[-2:]}")
 PY
 ```
+確認這個 tier 用的**不是** production 金鑰(比對 active version / 金鑰指紋,不印金鑰本身):
+```bash
+docker exec -i scholarship_backend_prod python - <<'PY'
+import hashlib, os
+print("active:", os.getenv("PII_ENCRYPTION_ACTIVE_VERSION"))
+print("keys sha256[:8]:", hashlib.sha256(os.getenv("PII_ENCRYPTION_KEYS","").encode()).hexdigest()[:8])
+PY
+```
+兩個 tier 跑出來的指紋**必須不同**;相同就代表 `test` environment 漏設 secret、
+fallback 到了 repository 層的 production 值(§4)。
