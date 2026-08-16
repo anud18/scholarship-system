@@ -1,191 +1,239 @@
-# PII 加密與遮罩架構（身分證字號）
+# 身分證字號的加密、遮罩與金鑰管理
 
-> 本文說明系統如何保護**身分證字號**:靜態加密(at rest)與顯示遮罩(masking)
-> 的**設計原則與資料流**。金鑰輪替/保存的操作程序見
-> [`pii-key-retention-runbook.md`](./pii-key-retention-runbook.md)。
-> 實作檔案與驗證指令見文末附錄。源頭:issue #73。
+**這套獎學金系統怎麼保護身分證字號:存進資料庫前先加密,給人看時只顯示頭尾,
+只有撥款造冊需要全碼。** 這份文件說明加密流程、金鑰怎麼管、遮罩用在哪裡,
+以及維運人員要照著做的標準程序。
 
----
-
-## 1. 目標與原則
-
-- **保護對象:身分證字號(`std_pid`,含居留證號)。** 其餘欄位如**學號**
-  (`std_stdcode`)是系統學生主鍵、非敏感 PII,不加密。
-- **靜態加密**:身分證字號寫進資料庫前一律加密,DB 落地永遠是密文。
-- **最小外洩**:只供顯示的資料一律**遮罩**;只有合法需要全碼的流程(撥款造冊)才讀全碼。
-- **無 fallback**:解密失敗就明確報錯,絕不回傳假資料或部分明文
-  (遵守 CLAUDE.md 錯誤處理原則)。
-- **單一整合點**:加解密在「儲存邊界」自動發生,應用層程式碼無需各自處理。
+適用對象:資安檢測人員、系統維運人員。
+保護的欄位:**身分證字號**(含居留證號),資料庫欄位名稱 `std_pid`。
+不加密的欄位:學號(`std_stdcode`)。學號是系統識別學生用的主鍵,不是個資。
 
 ---
 
-## 2. 資料流(high level)
+## 一、四個重點,先看這裡
 
-```
-SIS API ──┐
-          ▼
-   寫入 applications.student_data
-          │   ← 儲存邊界自動「加密」身分證字號
-          ▼
-   DB 落地：身分證字號為密文  pii:v1:<…>
-          │   ← 讀取時儲存邊界自動「解密」
-          ▼
-   應用層拿到明文身分證字號
-          ├──► 顯示用 API / 前端  →  遮罩  A******789
-          └──► 撥款造冊 Excel      →  全碼（合法需求）
-```
-
-三個關鍵分界:
-
-1. **儲存邊界**:加解密只發生在這裡(寫入加密、讀取解密),其餘程式碼讀到的都是明文。
-2. **顯示邊界**:資料離開伺服器給人看之前,身分證字號遮罩成「首碼 + ***  + 末三碼」。
-3. **匯出邊界**:付款造冊明確保留全碼——這是刻意的例外,不套遮罩。
-
----
-
-## 3. 靜態加密設計
-
-| 面向 | 設計 |
+| 問題 | 答案 |
 |---|---|
-| 演算法 | **AES-256-GCM**(authenticated encryption,可偵測竄改) |
-| 落地格式 | 信封字串 `pii:<版本>:<base64url(nonce+密文+tag)>` |
-| 為何用 `pii:` 前綴 | ① 可存進 JSON ② 永不與合法身分證(開頭字母)碰撞 ③ O(1) 判斷「是否已加密」→ 加密冪等、遷移可重跑 |
-| 整合方式 | 套在 `applications.student_data` 欄位上的儲存型別,**自動**加解密身分證字號;30+ 處讀寫無需改動 |
-| 冪等性 | 已加密的值再寫不重複加密;遷移可安全重跑 |
-| 失敗行為 | 金鑰錯/竄改/信封壞 → 直接拋錯,無 fallback |
-
-> 既有資料由一支批次遷移從明文轉成信封(冪等);稽核軌跡內的歷史殘留另有一支
-> 遷移清成 `[REDACTED]`(見 §6)。
+| 身分證字號存在資料庫裡是明文嗎? | 申請資料裡是**密文**;撥款造冊明細是**明文**,因為撥款 Excel 需要全碼(見第五節) |
+| 用什麼加密? | AES-256-GCM(業界標準加密法,可偵測資料被竄改) |
+| 金鑰放哪裡? | 不在程式碼裡。由部署時的環境變數帶入,測試環境與正式環境各一把,不共用 |
+| 畫面上看得到全碼嗎? | 看不到。顯示用的資料一律遮成 `A******789` |
 
 ---
 
-## 4. 金鑰模型
+## 二、加密流程
 
-- **金鑰由環境變數提供**,與程式碼分離;系統本身不內嵌任何 production 金鑰。
-- **版本化**:金鑰是「版本 → 金鑰」的對應表,信封內嵌版本號。可同時保留多版本
-  → **支援輪替**(新資料用新版本、舊資料用舊版本解),不需一次性全量重加密。
-- **環境差異**:
+### 資料怎麼流動
 
-  | 環境 | 金鑰來源 |
-  |---|---|
-  | 本機 dev | 由固定種子推導的 **dev key**(僅供開發,會 log 警告) |
-  | **test**(正式 repo 的測試部署) | 正式 repo `test` **GitHub Environment** 的 secret |
-  | **production** | 同一支 workflow、`production` Environment 的 secret |
+```
+校務系統 API 回傳學生資料
+        │
+        ▼
+   寫入 applications.student_data 欄位
+        │   ← 這一層自動「加密」身分證字號
+        ▼
+   資料庫存的是密文  pii:v1:xxxxx…
+        │   ← 讀出來時這一層自動「解密」
+        ▼
+   程式拿到的是明文
+        ├──► 要給人看的畫面與 API  → 遮罩成 A******789
+        └──► 撥款造冊 Excel        → 保留全碼(業務必要)
+```
 
-  部署鏈:開發 repo(`anud18/scholarship-system`)只負責建置 image;正式 repo
-  (`NYCUITSC/naass`,private)鏡像原始碼但**不重建**,由 `deploy-test.yml` /
-  `deploy-production.yml` 各自呼叫同一支 `deploy-stack.yml`。stage 只決定
-  ①落在哪台 self-hosted runner ②由哪個 GitHub Environment 供 secret,其餘完全
-  相同——**test 部署就是 production 部署的排練**,金鑰注入路徑一模一樣。
+只有一個地方會做加解密:**資料庫欄位的存取層**。程式其他地方讀到的都是明文,
+不必自己處理加解密,也就不會有人漏做。
 
-- **注入方式(兩種,由 Environment 變數 `ENV_FILE` 決定)**:
+### 加密怎麼做
 
-  | 模式 | 金鑰所在 |
-  |---|---|
-  | 預設 | 部署時由 Environment secret 產生 AP VM 上的 `.env`(mode 600),再 `--env-file` 餵給 compose |
-  | `ENV_FILE` 有設 | 使用 VM 上維運人員自管的 .env,**金鑰完全不經過 GitHub** |
+1. 系統取出目前啟用的金鑰版本(例如 `v1`)。
+2. 產生一組 12 位元組的隨機值(nonce,確保同一組身分證字號每次加密結果都不同)。
+3. 用 AES-256-GCM 把身分證字號加密,同時產生 16 位元組的驗證標籤
+   (資料被改過就驗不過)。
+4. 組成一串信封字串存進資料庫:
 
-- **test 與 production 的金鑰必須不同**。GitHub 的 fallback 是這裡最危險的一點:
-  environment 沒定義的 secret 會自動往上抓 **repository 層(= production 值)**,
-  test 部署因此可能拿到 production 金鑰——那等於「測試資料庫的備份足以解開正式
-  個資」。防呆是 `deploy-stack.yml` 的 *Assert stage identity*:每個 environment
-  自報 `DEPLOY_STAGE` / `EXPECT_DOMAIN` / `EXPECT_DB_HOST`,對不上就拒絕部署。
+   ```
+   pii:v1:<把 nonce、密文、驗證標籤接起來後做 base64url 編碼>
+   ```
 
-- **安全閥(兩層)**:部署前 workflow 會檢查 `PII_ENCRYPTION_KEYS` 有值且為合法
-  JSON,缺漏或壞掉就中止;容器內兩個 tier 都是 `ENVIRONMENT=production`,所以
-  執行期缺金鑰時後端與加密遷移**直接失敗**,不會退回 dev key。test tier 因此在
-  結構上不可能誤用 dev key——缺金鑰部署就 fail。
-- 輪替/保存/汰除舊金鑰的程序見
-  [runbook](./pii-key-retention-runbook.md)(核心鐵律:**舊金鑰在其加密資料超過
-  保存年限前絕不移除**,否則含備份在內的舊資料等同銷毀)。
+信封開頭固定是 `pii:`。這個前綴有三個用途:
+
+- 它是純英數字元,可以直接存進 JSON 欄位。
+- 真正的身分證字號一定是英文字母開頭,永遠不會長得像 `pii:`,不會誤判。
+- 程式看開頭就知道「這筆已經加密過了」,所以**重複執行加密不會加密兩次**,
+  資料轉換腳本可以安全地重跑。
+
+### 解密怎麼做
+
+系統讀出信封,取出裡面標示的金鑰版本,用對應的金鑰解開,並驗證標籤。
+
+**解密失敗時,系統直接報錯,不會回傳假資料、也不會回傳半截明文。** 金鑰設錯、
+資料被竄改、信封壞掉,都會讓該次操作明確失敗。這是刻意的設計:寧可壞得明顯,
+也不要默默用錯金鑰繼續跑。
 
 ---
 
-## 5. 兩個落地位置(重要區別)
+## 三、遮罩用在哪裡
 
-身分證字號在 DB 有兩處,加密狀態**刻意不同**:
+### 遮罩規則
 
-| 位置 | 用途 | 狀態 |
+保留**第一個字**和**最後三個字**,中間換成星號。長度四個字以內時只留第一個字。
+
+- `A123456789` → `A******789`
+- `ABCD` → `A***`
+
+遮罩過的字串再遮一次結果相同,所以前端重複遮罩也不會出錯。
+後端與前端各有一份遮罩函式,規則必須一致,同一筆資料在 API 回應與畫面上才會長得一樣。
+
+### 遮罩在哪裡發生
+
+**遮罩發生在後端送出 API 回應時**,不是等到前端才處理。也就是說,只給人看的
+畫面,全碼根本沒有離開伺服器。
+
+| 使用情境 | 後端回應 | 前端畫面 |
 |---|---|---|
-| 申請資料快照(`applications.student_data`) | 系統內部主要來源 | **加密** |
-| 造冊明細(`payment_roster_items`) | 撥款 Excel 直接讀 | **明文(設計如此)** |
-
-造冊明細存全碼,是因為付款流程的 Excel「身分證字號」欄需要完整值;對外顯示時
-才透過遮罩處理。**這不是漏洞**,但屬於需要存取控制保護的敏感資料表。
-
----
-
-## 6. 顯示遮罩與稽核
-
-- **遮罩規則**:保留**首碼 + 末三碼**,中間以 `*` 取代(長度 ≤ 4 只留首碼)。
-  例:`A123456789 → A******789`。冪等。
-- **前後端一致**:後端與前端各有一份遮罩函式,**必須同步**,確保同一筆 ID 在
-  API 回應與畫面上長相一致。
-- **套用原則**:顯示端遮罩、匯出端保留全碼(§2 的兩個邊界)。
-- **稽核軌跡**:稽核 log 是獨立的 JSON 複本,身分證字號在**寫入時**即被換成
-  `[REDACTED]`,歷史殘留也已由遷移清除。因此**金鑰遺失只影響申請資料的可讀性,
-  不影響稽核軌跡**。
+| 學院審查時預覽學生資料 | 遮罩 | 再遮一次(結果相同) |
+| 撥款造冊預覽名單 | 遮罩 | 遮罩 |
+| 造冊的「已撤銷/已暫停」名單 | 遮罩 | 遮罩 |
+| 稽核紀錄(audit_logs) | 寫入時就換成 `[REDACTED]`,不存原值 | — |
 
 ---
 
-## 7. 信任邊界與待強化點
+## 四、哪些地方會出現全碼
 
-- **信任邊界**:能存取正式 repo(`NYCUITSC/naass`)`test` / `production`
-  Environment secret 的人、能修改或核准部署 workflow 的人(每個 stage 的
-  environment 都設有 required reviewer),即可取得對應 tier 的金鑰。改用
-  `ENV_FILE` 模式時金鑰只存在 AP VM 上,信任邊界收斂成「能登入該 VM 的人」。
-  > 📌 部署設定註解寫「由 KMS sidecar 注入」,**目前實作其實是 GitHub
-  > Environment secret(或 VM 上的 .env)**,非真 KMS。若日後升級 KMS,只需
-  > 替換金鑰注入方式,加解密程式不需動。
-- **待強化:審查預覽端點**。審查對話框目前把**明文**身分證字號送到瀏覽器、由
-  前端遮罩;若要落實「全碼不離開伺服器」,應改成該 API 回應就先遮罩。
+這幾條路徑刻意保留全碼,因為業務上需要。它們靠權限控管保護,不靠遮罩:
+
+| 情境 | 誰能取得 | 為什麼需要全碼 |
+|---|---|---|
+| 撥款造冊 Excel | 承辦人員 | 匯款作業要求填寫完整身分證字號 |
+| 學院排序名冊 Excel | 學院承辦人員 | 校內核定名冊格式要求 |
+| 學生查詢自己的基本資料 | 學生本人 | 只看得到自己的資料 |
 
 ---
 
-## 附錄 A — 實作檔案索引
+## 五、身分證字號在資料庫的兩個位置
 
-| 檔案 | 角色 |
+| 資料表與欄位 | 用途 | 存的是 |
+|---|---|---|
+| `applications.student_data` 裡的 `std_pid` | 系統主要來源 | **密文** |
+| `payment_roster_items.student_id_number` | 撥款 Excel 直接讀取 | **明文(設計如此)** |
+
+造冊明細存全碼,是因為撥款流程的 Excel 需要完整值。這一張表要靠資料庫存取權限
+與應用層權限保護;對外顯示時一律走上一節的遮罩。
+
+---
+
+## 六、金鑰管理
+
+### 金鑰長什麼樣
+
+| 項目 | 內容 |
 |---|---|
-| `backend/app/core/pii_crypto.py` | 加解密 + 稽核 redaction 核心 |
-| `backend/app/core/encrypted_json.py` | 儲存邊界自動加解密的型別(`StudentDataJSON`) |
-| `backend/app/utils/pii_masking.py` / `frontend/lib/utils/mask.ts` | 後端 / 前端遮罩(必須一致) |
-| `backend/alembic/versions/20260512_encrypt_std_pid.py` | 既有資料加密遷移 |
-| `backend/alembic/versions/20260513_scrub_pii_from_audit_logs.py` | 清稽核歷史殘留 |
-| `backend/alembic/versions/20260529_backfill_roster_national_id.py` | 造冊欄位 backfill |
-| `backend/scripts/rotate_pii_keys.py` | 金鑰輪替 / re-encrypt |
-| `docs/security/pii-key-retention-runbook.md` | 金鑰保存與輪替程序 |
-| `docs/architecture/pii-encryption.md` | 金鑰產生方式(部署失敗訊息會指向這裡) |
-| `.github/production-workflows-examples/deploy-stack.yml` | 兩個 stage 共用的部署腳本(金鑰驗證、`.env` 產生、stage 防呆) |
-| `.github/production-workflows-examples/SECRETS-SETUP-GUIDE.md` | `test` / `production` Environment 的 secret 設定清單 |
+| 金鑰本體 | 32 位元組隨機值,以 base64url 編碼 |
+| 設定方式 | 環境變數 `PII_ENCRYPTION_KEYS`,內容是 JSON:`{"v1":"<金鑰>","v2":"<金鑰>"}` |
+| 啟用版本 | 環境變數 `PII_ENCRYPTION_ACTIVE_VERSION`,例如 `v2`。新資料一律用這一版加密 |
+| 保留舊版本 | 舊版本金鑰留在同一份 JSON 裡,舊資料才解得開 |
 
-## 附錄 B — test 部署驗證指令（read-only）
+金鑰不寫在程式碼裡,程式碼裡沒有任何一把正式環境的金鑰。
 
-> ⚠️ 兩個 tier 都是用 `docker-compose.prod.yml` 部署的,容器名稱**都是
-> `scholarship_*_prod`**,差別只在跑在哪台 AP VM(部署目錄預設
-> `~/scholarship-test` / `~/scholarship-production`)。下指令前先確認自己登在哪台。
-> DB 不在 AP VM 上,是獨立的 DB VM(`docker-compose.prod-db.yml`,容器
-> `scholarship_postgres_prod`)。
+### 各環境的金鑰來源
 
-確認已加密(在 AP VM,透過 backend 容器連該 tier 的 DB;只看前綴,不外洩全碼):
+| 環境 | 金鑰來源 |
+|---|---|
+| 開發人員本機 | 由固定字串推導出的開發用金鑰,啟動時會記錄警告訊息。只用於本機 |
+| 測試部署(test) | 正式版本庫 `test` 環境設定的加密金鑰 |
+| 正式部署(production) | 正式版本庫 `production` 環境設定的加密金鑰 |
+
+測試與正式是同一支部署腳本、兩組設定,差別只在跑在哪一台主機、讀哪一組金鑰。
+金鑰在部署時寫進主機上的環境設定檔(權限 600),或改用維運人員自行維護的設定檔
+(此時金鑰完全不經過版本控制平台)。
+
+### 三條不能違反的規則
+
+1. **測試環境與正式環境的金鑰必須不同。** 兩邊共用等於「測試資料庫的備份就能
+   解開正式個資」。設定平台有一個陷阱:某一組環境沒設的值會自動沿用上層的值,
+   也就是正式環境的值。部署腳本因此會比對每個環境自報的身分(環境代號、網域、
+   資料庫位址),對不上就中止部署。
+2. **舊版本金鑰,在用它加密的資料超過保存年限前絕不刪除。** 刪掉舊金鑰,那些
+   資料(包含異地備份裡的資料)就永久打不開。
+3. **金鑰只能新增版本或切換啟用版本,不可以就地改值。** 就地改值會讓已經加密
+   的資料再也解不開。
+
+### 缺金鑰時會怎樣
+
+- 部署前:系統檢查金鑰有沒有設、格式是不是合法 JSON,不合格就中止部署。
+- 執行中:正式與測試部署都不允許使用開發用金鑰。缺金鑰時,後端與資料加密腳本
+  會直接失敗,不會退回開發用金鑰繼續跑。
+
+---
+
+## 七、標準作業程序
+
+### SOP 1:設定一個新環境的金鑰
+
+1. 產生一把新金鑰:
+
+   ```bash
+   python -c 'import os,base64;print(base64.urlsafe_b64encode(os.urandom(32)).rstrip(b"=").decode())'
+   ```
+2. 在該環境設定兩個值:`PII_ENCRYPTION_KEYS` 設成 `{"v1":"<剛產生的金鑰>"}`,
+   `PII_ENCRYPTION_ACTIVE_VERSION` 設成 `v1`。
+3. 確認這把金鑰和其他環境的不一樣。
+4. 部署,並用 SOP 4 的指令確認資料寫入後是密文。
+
+### SOP 2:輪替金鑰(換成新的一把)
+
+先讀第六節的三條規則,再照以下順序做。每一步做完確認結果再進下一步。
+
+1. 產生新金鑰(指令同 SOP 1)。
+2. 設定成**新舊並存**:`PII_ENCRYPTION_KEYS={"v1":"<舊>","v2":"<新>"}`,
+   `PII_ENCRYPTION_ACTIVE_VERSION=v2`,然後重新部署。
+   此時新資料用 v2 加密,舊資料仍用 v1 解密,系統正常運作。
+3. 先試跑,確認現有資料全部解得開:
+
+   ```bash
+   docker exec <後端容器> python scripts/rotate_pii_keys.py --dry-run
+   ```
+
+   **只要有一筆解不開就停下來調查**,代表資料庫裡有用未知金鑰加密的資料。
+4. 執行重新加密(可重複執行):
+
+   ```bash
+   docker exec <後端容器> python scripts/rotate_pii_keys.py
+   ```
+5. 再試跑一次 `--dry-run`,確認所有資料的版本都等於啟用版本。
+6. 第 5 步全部通過,**而且**確認備份檔(資料庫匯出檔、異地備份)裡用舊金鑰加密的
+   資料也已超過保存年限或已重新加密之後,才可以把舊金鑰從設定中移除。
+   備份保存年限還沒到,舊金鑰就必須留著。
+
+要退回舊版本時,把 `PII_ENCRYPTION_ACTIVE_VERSION` 設回前一版,再執行一次
+`rotate_pii_keys.py`。腳本依信封裡標示的版本判斷來源,重複執行不會出錯。
+
+### SOP 3:金鑰變更的紀錄要求
+
+每一次變更金鑰,都要留下**誰改的、什麼時候改的、為什麼改**。紀錄放在金鑰設定
+平台的變更紀錄與對應的部署紀錄。
+
+### SOP 4:確認某個環境的資料真的有加密(唯讀,可隨時執行)
+
+以下指令都是唯讀,不會改到資料。測試與正式部署的容器名稱相同
+(`scholarship_backend_prod`),差別在跑在哪一台主機,下指令前先確認登入的是哪一台。
+
+確認資料庫裡是密文(只看開頭,不會印出全碼):
+
 ```bash
 docker exec -i scholarship_backend_prod python - <<'PY'
 from app.db.session import sync_engine
 from sqlalchemy import text
 with sync_engine.connect() as conn:
     print(conn.execute(text("""
-        SELECT count(*) FILTER (WHERE student_data->>'std_pid' LIKE 'pii:%')            AS encrypted,
-               count(*) FILTER (WHERE student_data->>'std_pid' NOT LIKE 'pii:%')        AS plaintext
+        SELECT count(*) FILTER (WHERE student_data->>'std_pid' LIKE 'pii:%')     AS encrypted,
+               count(*) FILTER (WHERE student_data->>'std_pid' NOT LIKE 'pii:%') AS plaintext
         FROM applications WHERE student_data->>'std_pid' IS NOT NULL""")).one())
 PY
 ```
-若人已經在 DB VM 上,同一件事也可以直接查(帳密取自該 tier 的 `.env`):
-```bash
-docker exec scholarship_postgres_prod psql -U "$DB_USER" -d "$DB_NAME" -c "
-SELECT count(*) FILTER (WHERE student_data->>'std_pid' LIKE 'pii:%')                                              AS encrypted,
-       count(*) FILTER (WHERE student_data->>'std_pid' IS NOT NULL AND student_data->>'std_pid' NOT LIKE 'pii:%') AS plaintext
-FROM applications WHERE student_data->>'std_pid' IS NOT NULL;"
-```
-驗證可解密 round-trip(backend 容器,輸出遮罩):
+
+確認解得開(輸出經過遮罩):
+
 ```bash
 docker exec -i scholarship_backend_prod python - <<'PY'
 from app.db.session import sync_engine
@@ -199,13 +247,72 @@ for app_id, ct in rows:
     print(f"app#{app_id}: {ct[:18]}... -> {pt[0]}{'*'*(len(pt)-3)}{pt[-2:]}")
 PY
 ```
-確認這個 tier 用的**不是** production 金鑰(比對 active version / 金鑰指紋,不印金鑰本身):
+
+確認這個環境用的**不是**正式環境的金鑰(只印指紋,不印金鑰):
+
 ```bash
 docker exec -i scholarship_backend_prod python - <<'PY'
 import hashlib, os
-print("active:", os.getenv("PII_ENCRYPTION_ACTIVE_VERSION"))
-print("keys sha256[:8]:", hashlib.sha256(os.getenv("PII_ENCRYPTION_KEYS","").encode()).hexdigest()[:8])
+print("啟用版本:", os.getenv("PII_ENCRYPTION_ACTIVE_VERSION"))
+print("金鑰指紋:", hashlib.sha256(os.getenv("PII_ENCRYPTION_KEYS","").encode()).hexdigest()[:8])
 PY
 ```
-兩個 tier 跑出來的指紋**必須不同**;相同就代表 `test` environment 漏設 secret、
-fallback 到了 repository 層的 production 值(§4)。
+
+測試環境與正式環境跑出來的指紋**必須不同**。相同就代表測試環境漏設金鑰、
+沿用到了正式環境的值,要立刻補設。
+
+### SOP 5:懷疑金鑰外洩時
+
+1. 依 SOP 2 產生新版本金鑰並完成重新加密,讓新舊資料都改用新金鑰。
+2. 檢查外洩的金鑰能解開哪些備份檔;這些備份等同於已外洩的個資,依校內個資
+   事故程序通報與處理。
+3. 舊金鑰仍不可立即刪除,除非確認沒有任何資料或備份還在用它(見第六節規則 2)。
+
+---
+
+## 八、注意事項與已知限制
+
+1. **誰拿得到金鑰。** 能存取正式版本庫環境設定的人、能核准或修改部署流程的人,
+   就能取得對應環境的金鑰。每個環境的部署都設有指定審核人。改用主機上自管
+   設定檔時,範圍縮小為能登入該主機的人。
+2. **目前不是硬體金鑰管理服務(KMS)。** 部署設定的註解提到 KMS,實際上金鑰
+   來自部署平台的環境設定或主機上的設定檔。日後若改接 KMS,只需要換掉金鑰
+   注入方式,加解密程式不必改。
+3. **撥款造冊明細是明文。** 這是刻意的(第五節),但代表這張表與它的備份需要
+   與正式資料庫同等級的存取控管。
+4. **申請資料的 API 回應中有一個 `student_pid` 欄位帶全碼。** 目前前端畫面沒有
+   使用它;若要收斂「全碼不離開伺服器」的範圍,這是下一個要處理的地方。
+5. **金鑰遺失只影響申請資料,不影響稽核軌跡。** 稽核紀錄在寫入時就把身分證
+   字號換成 `[REDACTED]`,不含密文。
+6. **年度稽核若要調閱三年以上的舊申請資料**,前提是第六節規則 2 有被遵守
+   (舊金鑰還留著)。
+
+---
+
+## 附錄 A — 對應的程式檔案(供查驗)
+
+| 檔案 | 作用 |
+|---|---|
+| `backend/app/core/pii_crypto.py` | 加解密與稽核遮蔽的核心 |
+| `backend/app/core/encrypted_json.py` | 資料庫欄位的自動加解密層 |
+| `backend/app/utils/pii_masking.py` | 後端遮罩 |
+| `frontend/lib/utils/mask.ts` | 前端遮罩(規則需與後端一致) |
+| `backend/app/api/v1/endpoints/college_review/application_review.py` | 學院審查預覽,回應前遮罩 |
+| `backend/app/api/v1/endpoints/payment_rosters.py` | 造冊預覽,回應前遮罩 |
+| `backend/app/services/roster_service.py` | 造冊清單遮罩;稽核紀錄寫入前遮蔽 |
+| `backend/app/services/college_ranking_export_service.py` | 學院排序名冊 Excel(全碼) |
+| `backend/alembic/versions/20260512_encrypt_std_pid.py` | 既有資料加密的轉換腳本 |
+| `backend/alembic/versions/20260513_scrub_pii_from_audit_logs.py` | 清除稽核紀錄中的歷史殘留 |
+| `backend/scripts/rotate_pii_keys.py` | 金鑰輪替與重新加密 |
+| `docs/security/pii-key-retention-runbook.md` | 金鑰保存年限與輪替的詳細程序 |
+
+## 附錄 B — 名詞說明
+
+| 名詞 | 說明 |
+|---|---|
+| AES-256-GCM | 業界標準的對稱式加密法,除了加密還會產生驗證標籤,資料被改過就驗不過 |
+| nonce | 每次加密都重新產生的隨機值,讓同一筆資料每次加密的結果都不同 |
+| base64url | 把二進位資料轉成純英數字元的編碼方式,方便存進文字欄位 |
+| 信封(envelope) | 這裡指 `pii:版本:編碼後的密文` 這一整串存進資料庫的字串 |
+| 遮罩(masking) | 顯示時只留頭尾、其餘以星號取代 |
+| 金鑰版本 | 用來標示「這筆資料是用哪一把金鑰加密的」,讓系統可以同時支援新舊金鑰 |
