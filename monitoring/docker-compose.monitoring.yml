@@ -171,7 +171,11 @@ services:
       - monitoring_network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget --spider -q http://localhost:8080/healthz || exit 1"]
+      # 127.0.0.1, NOT localhost: uvicorn binds IPv4 only, while `localhost`
+      # inside this image resolves to ::1 first — so the probe connected to an
+      # address nothing listens on and the container reported `unhealthy`
+      # permanently, while /grafana was in fact serving requests the whole time.
+      test: ["CMD-SHELL", "wget --spider -q http://127.0.0.1:8080/healthz || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3

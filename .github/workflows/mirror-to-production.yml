@@ -631,7 +631,16 @@ jobs:
           # caller without it leaves the prod repo with an unresolvable workflow.
           # stop-test.yml / stop-production.yml / stop-stack.yml are the same
           # arrangement for taking a stage OFFLINE, and ship as their own trio.
-          for f in deploy-test.yml deploy-production.yml deploy-stack.yml stop-test.yml stop-production.yml stop-stack.yml health-check.yml backup.yml auto-tag-on-merge.yml setting-env.yml; do
+          # deploy-monitoring-{test,production,stack}.yml is a third trio, for
+          # the observability stack: docker-compose.prod.yml ships only the
+          # COLLECTORS (Alloy + exporters), which push to monitoring_loki /
+          # monitoring_prometheus — Docker DNS names that resolve only once
+          # monitoring/docker-compose.monitoring.yml is up on that same VM. That
+          # compose file is mirrored (see the docker-compose strip step, which
+          # exempts ./monitoring/), but nothing in the prod repo ever started it,
+          # so prod Alloy dropped every batch and nginx's /monitoring proxy had
+          # no upstream. These three workflows are what start it.
+          for f in deploy-test.yml deploy-production.yml deploy-stack.yml stop-test.yml stop-production.yml stop-stack.yml deploy-monitoring-test.yml deploy-monitoring-production.yml deploy-monitoring-stack.yml health-check.yml backup.yml auto-tag-on-merge.yml setting-env.yml; do
             src="/tmp/prod-workflow-templates/$f"
             [ -f "$src" ] || continue
             dest=".github/workflows/$f"

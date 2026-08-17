@@ -1,0 +1,77 @@
+# TEST monitoring workflow — brings up Grafana/Loki/Prometheus on the TEST AP VM.
+# Copy this file to the PRIVATE production repository at
+# .github/workflows/deploy-monitoring-test.yml (it calls
+# deploy-monitoring-stack.yml, which must be copied alongside it).
+#
+# ONE STAGE PER WORKFLOW, the same shape as deploy-test.yml. This workflow
+# touches the TEST AP VM only; deploy-monitoring-production.yml is its sibling.
+#
+#   deploy-test.yml             ──▶ the site        (app + collectors)
+#   deploy-monitoring-test.yml  ──▶ the dashboard   (Grafana/Loki/Prometheus)
+#
+# WHY THE TRIGGERS DIFFER FROM deploy-test.yml
+# --------------------------------------------
+# The app stack redeploys on every push to main. The monitoring stack has no
+# image to promote — it changes only when monitoring/** changes — and every
+# deploy costs a ~30 s Grafana restart. So this fires on a push ONLY when the
+# mirrored commit actually touched monitoring content, plus on manual dispatch.
+#
+# It still passes through the `test` environment's approval gate, because the
+# monitoring stack holds the credentials to a dashboard published on the public
+# site. Configure that gate once:
+#
+#   Settings → Environments → `test` → Required reviewers: 1 person
+#
+# The `environment:` key alone gates nothing. See SECRETS-SETUP-GUIDE.md.
+#
+# Prerequisites: those deploy-test.yml already needs, plus the `test`
+# environment secrets GRAFANA_ADMIN_USER / GRAFANA_ADMIN_PASSWORD. See the
+# header of deploy-monitoring-stack.yml for the full list.
+
+name: Deploy Monitoring to Test
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      # Everything the stack is built from. docker-compose.prod.yml is included
+      # because it owns the Alloy collector and the app network the monitoring
+      # containers attach to — a change there can require re-attaching them.
+      - 'monitoring/**'
+      - 'docker-compose.prod.yml'
+      - '.github/workflows/deploy-monitoring-test.yml'
+      - '.github/workflows/deploy-monitoring-stack.yml'
+  workflow_dispatch:
+    inputs:
+      reset_grafana_volume:
+        description: 'DESTRUCTIVE: wipe grafana_data first (loses manually saved dashboards, annotations and silences). Provisioned content is re-created.'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  # Scoped to test monitoring alone. NOT shared with deploy-test: a run waiting
+  # at the approval gate holds its group, and every merge to main leaves one
+  # pending — sharing would make a monitoring fix wait for an unrelated app
+  # deploy to be reviewed.
+  group: deploy-monitoring-test
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-monitoring-test:
+    name: Deploy monitoring to test
+    uses: ./.github/workflows/deploy-monitoring-stack.yml
+    with:
+      stage: test
+      runner_labels: '["self-hosted","linux","test"]'
+      reset_grafana_volume: ${{ inputs.reset_grafana_volume || false }}
+    # Reads secrets from the `test` ENVIRONMENT, which overrides the
+    # repository-level (production) values. The environment scoping happens
+    # inside the called workflow.
+    secrets: inherit
+    permissions:
+      contents: read

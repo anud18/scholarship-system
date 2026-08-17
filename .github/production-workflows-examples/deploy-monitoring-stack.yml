@@ -1,0 +1,699 @@
+# Reusable MONITORING stage — the body shared by BOTH monitoring workflows.
+# Copy this file to the PRIVATE production repository at
+# .github/workflows/deploy-monitoring-stack.yml.
+#
+# WHAT THIS DEPLOYS, AND WHY IT IS A SEPARATE WORKFLOW
+# ---------------------------------------------------
+# docker-compose.prod.yml — the file deploy-stack.yml brings up — ships only the
+# COLLECTORS: Grafana Alloy, node-exporter, cAdvisor, nginx-exporter and
+# redis-exporter. Nothing in it stores or displays anything. Alloy's config
+# (monitoring/config/alloy/prod-ap-vm.alloy) pushes to
+#
+#     http://monitoring_loki:3100/loki/api/v1/push
+#     http://monitoring_prometheus:9090/api/v1/write
+#
+# which are DOCKER DNS names, not hostnames — they only resolve if Loki and
+# Prometheus are containers on this same Docker host, attached to the app
+# network. Until that is true, Alloy retries and then drops every batch
+# ("no retries left, dropping data") and nginx's `location ^~ /monitoring`
+# proxy (nginx/nginx.prod.conf) has no upstream to reach, so the dashboard
+# 502s. This workflow is what makes those two names resolve: it brings up
+# monitoring/docker-compose.monitoring.yml — Grafana, Loki, Prometheus and the
+# webhook-bridge — on the AP VM and attaches them to scholarship_prod_network.
+#
+# It is deliberately NOT part of deploy-stack.yml:
+#   - The app stack is redeployed on every push to main; the monitoring stack
+#     changes only when monitoring/** changes, and restarting Grafana on every
+#     app deploy would drop ~30 s of dashboards for no reason.
+#   - Grafana holds STATE the app stack does not (grafana_data: manually saved
+#     dashboards, annotations, alert silences). It must be possible to redeploy
+#     the site without touching it — and to redeploy monitoring without
+#     restarting the site.
+#   - A failed monitoring deploy must never roll back or hold up the site.
+#
+# ONE definition, TWO callers — the same shape as deploy-stack.yml:
+#
+#     deploy-monitoring-test.yml ───────▶ this file (stage: test)
+#                                         runner [self-hosted,linux,test]
+#                                         environment: test  ▲ 1 reviewer
+#
+#     deploy-monitoring-production.yml ─▶ this file (stage: production)
+#                                         runner [self-hosted,linux,production]
+#                                         environment: production  ▲ 1 reviewer
+#
+# EACH STAGE GETS ITS OWN MONITORING STACK, on its own VM, reading its own
+# Docker socket. There is no cross-VM stack to share: the collectors reach the
+# store over Docker DNS, which does not leave the host. That also means the test
+# stage is a real rehearsal of the production one — same compose file, same
+# provisioning, same guards.
+#
+# NO IMAGES ARE PROMOTED HERE. Unlike deploy-stack.yml, this workflow deploys no
+# artifact built by the development repository: every image is a pinned upstream
+# one (grafana/grafana-enterprise, grafana/loki, prom/prometheus) except the
+# webhook-bridge, which is built from mirrored source on the VM. There is
+# therefore no `tag` input and no resolve-images gate.
+#
+# WHAT IT DOES NOT DO
+#   - The DB VM's collectors (docker-compose.prod-db-monitoring.yml: alloy,
+#     node-exporter, postgres-exporter) are NOT deployed from here. They need
+#     SSH from this runner to the DB VM; deploy them there, and point their
+#     MONITORING_SERVER_URL at this AP VM (see README § DB VM collectors).
+#   - It never touches the app stack's containers, beyond restarting Alloy so it
+#     re-resolves the Loki/Prometheus DNS names it failed on before this ran.
+#
+# Prerequisites (one-time, see SECRETS-SETUP-GUIDE.md § Monitoring):
+#   - The stage's app stack has been deployed at least once by deploy-stack.yml
+#     (this workflow needs scholarship_prod_network and, for the end-to-end
+#     dashboard check, the nginx container).
+#   - Environment secrets on the stage: GRAFANA_ADMIN_USER,
+#     GRAFANA_ADMIN_PASSWORD (both required), GRAFANA_SECRET_KEY (recommended),
+#     GH_PAT (optional — only for alert → GitHub issue delivery).
+#   - Environment variables on the stage: DEPLOY_STAGE (already required by
+#     deploy-stack.yml) and either GRAFANA_ROOT_URL or EXPECT_DOMAIN.
+#   - Passwordless sudo on the AP VM, OR /opt/scholarship/{monitoring,secrets}
+#     pre-created and owned by the runner user (see "Prepare monitoring
+#     directories"). The gh_pat mount path is hardcoded in the shared compose
+#     file, so it cannot be relocated per stage.
+#   - Host ports 3100 (Loki) and 9090 (Prometheus) are published by the shared
+#     compose file so the DB VM's Alloy can push to them. They carry NO
+#     authentication — firewall them to the DB VM only. See README § Firewall.
+
+name: Deploy monitoring stack (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      stage:
+        description: 'test | production — selects the GitHub Environment and the guard set'
+        required: true
+        type: string
+      runner_labels:
+        description: 'JSON array of runner labels, e.g. ''["self-hosted","linux","test"]'''
+        required: true
+        type: string
+      reset_grafana_volume:
+        description: 'DESTRUCTIVE: remove grafana_data before deploying (loses manually saved dashboards, annotations and silences). Provisioned dashboards/datasources/alerts are re-created from disk.'
+        required: false
+        type: boolean
+        default: false
+      monitoring_dir:
+        description: 'Directory on the AP VM holding the monitoring stack. Defaults to vars.MONITORING_DIR, then /opt/scholarship/monitoring.'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  deploy-monitoring:
+    name: Deploy monitoring to ${{ inputs.stage }}
+    # Labels come from the caller so ONE definition can target both VMs. Both
+    # answer to [self-hosted, linux]; the stage label is what makes the
+    # targeting deterministic — never drop it.
+    runs-on: ${{ fromJSON(inputs.runner_labels) }}
+    # The approval gate — the same one deploys pass through. GitHub blocks the
+    # job here, before the runner picks it up, until a reviewer approves.
+    environment:
+      name: ${{ inputs.stage }}
+      url: ${{ vars.DEPLOY_URL }}
+    permissions:
+      contents: read # actions/checkout
+
+    # DELIBERATELY MINIMAL, for the same reason as deploy-stack.yml: everything
+    # the monitoring compose file interpolates is exported inside the deploy
+    # step, where an unset value can be caught, rather than leaking into every
+    # step as an empty string.
+    env:
+      STAGE: ${{ inputs.stage }}
+      # Pinning the compose project name keeps the container and network names
+      # stable no matter which directory the stack is deployed from. The
+      # container names in the shared compose file are fixed (monitoring_*), but
+      # the compose-owned network name is derived from the project name, and the
+      # dev repo's equivalent workflow hardcodes `monitoring_monitoring_network`
+      # in a few places. Same project name, same names, everywhere.
+      COMPOSE_PROJECT_NAME: monitoring
+      # Both stage VMs run docker-compose.prod.yml, whose app network is
+      # `scholarship_prod_network` on BOTH — the stage is separated by VM, not by
+      # network name. The shared monitoring compose declares two external app
+      # networks (it was written for a host that served staging and production
+      # side by side); pointing both at the same name is supported by compose
+      # and attaches the container once. Verified on the test AP VM.
+      APP_NETWORK_NAME: scholarship_prod_network
+      PROD_APP_NETWORK_NAME: scholarship_prod_network
+
+    steps:
+      # ── Gate 1: is this environment really the environment we think it is? ──
+      # The inheritance trap from deploy-stack.yml's header applies here too: an
+      # environment that does not define its own secrets resolves to the
+      # repository-level (production) ones, and a "test" monitoring deploy would
+      # then publish the production Grafana under the production root URL.
+      - name: Assert stage identity
+        env:
+          DEPLOY_STAGE: ${{ vars.DEPLOY_STAGE }}
+          EXPECT_DOMAIN: ${{ vars.EXPECT_DOMAIN }}
+          GRAFANA_ROOT_URL: ${{ vars.GRAFANA_ROOT_URL }}
+        run: |
+          fail=0
+          err() { echo "::error::$1"; fail=1; }
+
+          if [ "${DEPLOY_STAGE}" != "${STAGE}" ]; then
+            err "Environment '${STAGE}' declares DEPLOY_STAGE='${DEPLOY_STAGE}' (expected '${STAGE}')."
+            echo "::error::Create the '${STAGE}' environment (Settings → Environments) and set the"
+            echo "::error::variable DEPLOY_STAGE=${STAGE}. Without it this job would run against"
+            echo "::error::repository-level (production) secrets."
+          fi
+
+          # Grafana serves from a sub-path and needs to know its own absolute
+          # URL, or every generated link (alert links, share URLs, the login
+          # redirect) points at the wrong host. Derive it from the stage's
+          # domain when GRAFANA_ROOT_URL is not set explicitly.
+          ROOT_URL="${GRAFANA_ROOT_URL}"
+          if [ -z "${ROOT_URL}" ]; then
+            [ -n "${EXPECT_DOMAIN}" ] || \
+              err "Set either GRAFANA_ROOT_URL or EXPECT_DOMAIN on the '${STAGE}' environment — Grafana cannot serve from /monitoring without its own absolute URL."
+            ROOT_URL="https://${EXPECT_DOMAIN}/monitoring"
+            echo "::notice::GRAFANA_ROOT_URL not set — derived '${ROOT_URL}' from EXPECT_DOMAIN."
+          fi
+
+          # A root URL pointing at the OTHER stage's domain is the mistake this
+          # catches: it survives every health check below and only shows up as
+          # broken links and a login loop for whoever opens the dashboard.
+          if [ -n "${EXPECT_DOMAIN}" ]; then
+            case "${ROOT_URL}" in
+              *"${EXPECT_DOMAIN}"*) : ;;
+              *) err "GRAFANA_ROOT_URL='${ROOT_URL}' does not contain the domain '${STAGE}' expects (EXPECT_DOMAIN=${EXPECT_DOMAIN})." ;;
+            esac
+          fi
+
+          if [ "$fail" -ne 0 ]; then
+            echo "::error::Refusing to deploy — see SECRETS-SETUP-GUIDE.md § Monitoring."
+            exit 1
+          fi
+          echo "GRAFANA_ROOT_URL=${ROOT_URL}" >> "$GITHUB_ENV"
+          echo "✅ Stage identity confirmed: ${STAGE} → ${ROOT_URL}"
+
+      # ── Gate 2: fail fast on missing credentials BEFORE touching anything ───
+      # GF_SECURITY_ADMIN_USER / _PASSWORD are interpolated with no default. An
+      # empty password makes Grafana fall back to its built-in `admin` — an
+      # internet-reachable dashboard with a guessable login.
+      - name: Validate monitoring secrets
+        env:
+          GRAFANA_ADMIN_USER: ${{ secrets.GRAFANA_ADMIN_USER }}
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          GRAFANA_SECRET_KEY: ${{ secrets.GRAFANA_SECRET_KEY }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          fail=0
+          err() { echo "::error::$1"; fail=1; }
+
+          [ -n "${GRAFANA_ADMIN_USER}" ] || err "GRAFANA_ADMIN_USER is not set on the '${STAGE}' environment"
+          [ -n "${GRAFANA_ADMIN_PASSWORD}" ] || err "GRAFANA_ADMIN_PASSWORD is not set on the '${STAGE}' environment"
+          [ "${#GRAFANA_ADMIN_PASSWORD}" -ge 12 ] || err "GRAFANA_ADMIN_PASSWORD must be >= 12 chars — this dashboard is reachable from the public site"
+
+          if [ "${STAGE}" = "production" ] && [ "${GRAFANA_ADMIN_USER}" = "admin" ]; then
+            # Not fatal: it is a real deployment's real choice. But the default
+            # username halves the work of a credential-stuffing attempt.
+            echo "::warning::GRAFANA_ADMIN_USER is 'admin' on production — prefer a non-default username."
+          fi
+
+          # Without a secret key Grafana generates one per container start, and
+          # every stored datasource password / alert secret encrypted with the
+          # previous key becomes undecryptable after a restart.
+          [ -n "${GRAFANA_SECRET_KEY}" ] || \
+            echo "::warning::GRAFANA_SECRET_KEY is not set — Grafana will use its built-in default key. Set a per-stage random value."
+
+          # Optional. The alert → GitHub issue path needs it; everything else
+          # (dashboards, datasources, alert evaluation) works without it.
+          [ -n "${GH_PAT}" ] || \
+            echo "::warning::GH_PAT is not set — alerts will still fire and show in Grafana, but the webhook-bridge cannot open GitHub issues."
+
+          [ "$fail" -eq 0 ] || exit 1
+          echo "✅ Monitoring secrets validated"
+
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Prepare monitoring directories
+        env:
+          MONITORING_DIR_INPUT: ${{ inputs.monitoring_dir }}
+          MONITORING_DIR_VAR: ${{ vars.MONITORING_DIR }}
+        run: |
+          set -euo pipefail
+
+          DIR="${MONITORING_DIR_INPUT:-${MONITORING_DIR_VAR:-/opt/scholarship/monitoring}}"
+
+          # Two paths matter and only one of them is relocatable:
+          #   $DIR                      — where this workflow puts the stack
+          #   /opt/scholarship/secrets  — hardcoded as the gh_pat bind-mount
+          #                               source in the SHARED compose file
+          #                               (monitoring/docker-compose.monitoring.yml,
+          #                               used by both repositories), so it
+          #                               cannot be moved per stage.
+          # Both live under /opt, which the runner user does not own. Try
+          # unprivileged first, fall back to `sudo -n` (never plain sudo — a VM
+          # without passwordless sudo must fail here with the message below
+          # instead of blocking forever on a password prompt no one can answer).
+          ensure_dir() {
+            mkdir -p "$1" 2>/dev/null && return 0
+            sudo -n mkdir -p "$1" 2>/dev/null || {
+              echo "::error::Cannot create $1 — this runner has no passwordless sudo."
+              echo "::error::Create it once on the VM, owned by the runner user:"
+              echo "::error::  sudo mkdir -p $1 && sudo chown -R \$USER:\$USER $1"
+              return 1
+            }
+            sudo -n chown -R "$USER:$USER" "$1" 2>/dev/null || true
+          }
+
+          ensure_dir "${DIR}"
+          [ -w "${DIR}" ] || sudo -n chown -R "$USER:$USER" "${DIR}" 2>/dev/null || {
+            echo "::error::${DIR} exists but is not writable by the runner user."
+            echo "::error::Fix once on the VM: sudo chown -R \$USER:\$USER ${DIR}"
+            exit 1
+          }
+
+          echo "MONITORING_DIR=${DIR}" >> "$GITHUB_ENV"
+          echo "Monitoring directory: ${DIR}"
+
+      - name: Deploy monitoring configuration
+        run: |
+          set -euo pipefail
+
+          # The provisioning tree is REPLACED, not merged. A plain `cp -r`
+          # leaves deleted files behind forever, and Grafana provisions whatever
+          # is on disk — a dashboard or alert rule removed from the repository
+          # months ago keeps being served, querying datasources that may no
+          # longer exist. (Observed on the test AP VM: a removed
+          # application-logs.json plus two .pre-rustfs/.removed backups were
+          # still being provisioned.) Everything under provisioning/ is
+          # repository-owned, so nothing local is lost.
+          PROV="${MONITORING_DIR}/config/grafana/provisioning"
+          if [ -d "${PROV}" ]; then
+            rm -rf "${PROV}" 2>/dev/null || sudo -n rm -rf "${PROV}" 2>/dev/null || {
+              echo "::error::Cannot replace ${PROV} — it is owned by another user"
+              echo "::error::and this runner has no passwordless sudo."
+              echo "::error::Clear it once on the VM: sudo rm -rf ${PROV}"
+              exit 1; }
+          fi
+
+          cp -r ./monitoring/* "${MONITORING_DIR}/"
+
+          # grafana.ini is always rewritten from the example so improvements to
+          # the example actually reach the VM. No secret is read from it —
+          # credentials arrive as GF_SECURITY_* environment variables in compose.
+          cp "${MONITORING_DIR}/config/grafana/grafana.ini.example" \
+             "${MONITORING_DIR}/config/grafana/grafana.ini"
+          echo "✅ Configuration written (grafana.ini regenerated from example)"
+
+      - name: Write the alert-dispatch PAT file
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          set -euo pipefail
+
+          # This file MUST exist as a file before `up`. Both Grafana and the
+          # webhook-bridge bind-mount it; when the source is missing Docker
+          # materialises it as a DIRECTORY, and from then on the mount fails
+          # in a way that reads like a Grafana bug.
+          SECRETS_DIR=/opt/scholarship/secrets
+          PAT_FILE="${SECRETS_DIR}/gh_pat"
+
+          sudo -n mkdir -p "${SECRETS_DIR}" 2>/dev/null || mkdir -p "${SECRETS_DIR}" || {
+            echo "::error::Cannot create ${SECRETS_DIR} (no passwordless sudo)."
+            echo "::error::Create it once on the VM: sudo mkdir -p ${SECRETS_DIR} && sudo chmod 700 ${SECRETS_DIR}"
+            exit 1
+          }
+          sudo -n chmod 700 "${SECRETS_DIR}" 2>/dev/null || true
+
+          # An empty PAT is written deliberately rather than skipped: the mount
+          # has to resolve to a file either way. The bridge reads it only when
+          # an alert fires, so an empty value costs a failed dispatch at alert
+          # time, not a failed deploy now (warned about in "Validate monitoring
+          # secrets").
+          printf '%s' "${GH_PAT}" | sudo -n tee "${PAT_FILE}" > /dev/null 2>&1 \
+            || printf '%s' "${GH_PAT}" > "${PAT_FILE}"
+
+          # Two containers with different UIDs read this (Grafana 472,
+          # webhook-bridge 1100). The file sits behind a 0700 root-owned
+          # directory that only bind mounts traverse, so 0444 on the file is not
+          # host-readable by other users.
+          sudo -n chown root:root "${PAT_FILE}" 2>/dev/null || true
+          sudo -n chmod 0444 "${PAT_FILE}" 2>/dev/null || chmod 0444 "${PAT_FILE}"
+          echo "✅ ${PAT_FILE} written ($([ -n "${GH_PAT}" ] && echo 'PAT present' || echo 'EMPTY — issue dispatch disabled'))"
+
+      - name: Pull and build monitoring images
+        run: |
+          set -euo pipefail
+          cd "${MONITORING_DIR}"
+          # `pull` fails outright on webhook-bridge (built locally, no registry),
+          # so pull only what has a registry and build the bridge from the
+          # mirrored source. --ignore-pull-failures keeps a transient registry
+          # hiccup from failing the deploy when the image is already local.
+          docker compose -f docker-compose.monitoring.yml pull \
+            --ignore-buildable --ignore-pull-failures || true
+          docker compose -f docker-compose.monitoring.yml build webhook-bridge
+
+      - name: Deploy monitoring stack
+        env:
+          GRAFANA_ADMIN_USER: ${{ secrets.GRAFANA_ADMIN_USER }}
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          GRAFANA_SECRET_KEY: ${{ secrets.GRAFANA_SECRET_KEY }}
+          # Where the webhook-bridge opens alert issues. Defaults to THIS
+          # repository — the private one — because that is where whoever
+          # operates this deployment reads issues; the shared compose file's own
+          # default points at the development repository.
+          GH_REPO: ${{ vars.MONITORING_ALERT_REPO || github.repository }}
+          RESET_VOLUME: ${{ inputs.reset_grafana_volume }}
+        run: |
+          set -euo pipefail
+          cd "${MONITORING_DIR}"
+
+          # scholarship_prod_network is declared external in BOTH compose files,
+          # and compose never creates an external network. deploy-stack.yml
+          # creates it with this subnet; create it the same way here so
+          # whichever of the two runs first wins and the other simply finds it.
+          docker network inspect "${APP_NETWORK_NAME}" >/dev/null 2>&1 || \
+            docker network create --subnet 172.24.0.0/16 "${APP_NETWORK_NAME}"
+
+          if [ "${RESET_VOLUME}" = "true" ]; then
+            echo "::warning::reset_grafana_volume=true — removing grafana_data. Manually saved dashboards, annotations and silences are lost; provisioned content is re-created from disk."
+            docker compose -f docker-compose.monitoring.yml down -v
+          fi
+
+          docker compose -f docker-compose.monitoring.yml up -d
+
+      # Everything below reads Grafana through `docker exec`, not through a
+      # published port or a throwaway curl container: it needs no host port, no
+      # compose-network name, and works identically on both stages.
+      - name: Wait for Grafana
+        run: |
+          for i in $(seq 1 24); do
+            if docker exec monitoring_grafana wget --spider -q http://localhost:3000/api/health 2>/dev/null; then
+              echo "✅ Grafana answering after $((i*5))s"
+              exit 0
+            fi
+            echo "Waiting for Grafana... ($i/24)"
+            sleep 5
+          done
+          echo "::error::Grafana did not become healthy within 120s"
+          docker logs --tail 100 monitoring_grafana
+          exit 1
+
+      # GF_SECURITY_ADMIN_USER / _PASSWORD are applied ONLY when Grafana creates
+      # its database. On a volume that already exists — a hand-started stack, or
+      # any earlier deploy with different credentials — they are silently
+      # ignored, and every authenticated call below returns
+      #   401 … "no user found: user not found"
+      # which reads like a broken workflow rather than a stale volume. (Hit on
+      # the test AP VM: grafana_data held a single `admin` user from a manual
+      # deploy months earlier, so the declared login did not exist at all.)
+      #
+      # Reconcile before authenticating, and only when needed: the declared
+      # credentials are probed first, so a correctly provisioned stack — the
+      # normal case, and the only case on a fresh VM — is left untouched.
+      - name: Reconcile the Grafana admin account
+        env:
+          ADMIN_USER: ${{ secrets.GRAFANA_ADMIN_USER }}
+          ADMIN_PASS: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+        run: |
+          # 200 = these credentials work. Any authenticated endpoint would do;
+          # /api/org/users needs an org admin, which is what every later step
+          # needs too, so a 200 here proves the identity is usable.
+          probe() {
+            docker exec monitoring_grafana wget -qO- --server-response \
+              --header "Authorization: Basic $(printf '%s' "$1:${ADMIN_PASS}" | base64 -w0)" \
+              http://localhost:3000/api/org/users 2>&1 \
+              | awk '/^  HTTP/{c=$2} END{print c+0}'
+          }
+
+          if [ "$(probe "${ADMIN_USER}")" = "200" ]; then
+            echo "GRAFANA_API_USER=${ADMIN_USER}" >> "$GITHUB_ENV"
+            echo "✅ Declared admin credentials accepted"
+            exit 0
+          fi
+
+          echo "::warning::The declared GRAFANA_ADMIN_USER cannot authenticate — grafana_data predates this configuration. Reconciling."
+          # Operates directly on grafana.db and takes effect live (no restart).
+          # It resets the BUILT-IN admin user, whatever GF_SECURITY_ADMIN_USER
+          # says — which is precisely why the second probe below is needed.
+          docker exec monitoring_grafana grafana cli --homepath /usr/share/grafana \
+            admin reset-admin-password "${ADMIN_PASS}" 2>&1 | tail -2
+
+          if [ "$(probe "${ADMIN_USER}")" = "200" ]; then
+            echo "GRAFANA_API_USER=${ADMIN_USER}" >> "$GITHUB_ENV"
+            echo "✅ Password reset — declared credentials now accepted"
+            exit 0
+          fi
+
+          if [ "$(probe admin)" = "200" ]; then
+            # Deliberately NOT renaming or deleting the existing account: this
+            # workflow will not mutate an identity someone may be logging in
+            # with. The deploy proceeds under the login that exists, and says so.
+            echo "GRAFANA_API_USER=admin" >> "$GITHUB_ENV"
+            echo "::warning::This volume's only admin login is 'admin', not '${ADMIN_USER}'. Its password is now GRAFANA_ADMIN_PASSWORD and the deploy continues under it."
+            echo "::warning::To make '${ADMIN_USER}' the real admin login: create it in Grafana (Administration → Users), or re-run with reset_grafana_volume=true to rebuild from provisioning (DESTROYS manually saved dashboards)."
+            exit 0
+          fi
+
+          echo "::error::Cannot authenticate to Grafana as '${ADMIN_USER}' or as 'admin' even after a password reset."
+          echo "::error::Inspect the volume, or re-run with reset_grafana_volume=true to rebuild it from provisioning (DESTRUCTIVE)."
+          docker logs --tail 50 monitoring_grafana
+          exit 1
+
+      - name: Reload provisioning
+        env:
+          ADMIN_USER: ${{ env.GRAFANA_API_USER }}
+          ADMIN_PASS: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+        run: |
+          # The /api/admin/provisioning/*/reload endpoints work for datasources,
+          # alerting and plugins. Dashboards are the exception: Grafana compares
+          # the file's `version` field against the stored row and skips the
+          # update once they match, even when the panel queries changed. A
+          # container restart is the only reliable way to land in-place
+          # dashboard edits — ~30 s, and nothing else depends on Grafana.
+          AUTH_HDR="Authorization: Basic $(printf '%s' "${ADMIN_USER}:${ADMIN_PASS}" | base64 -w0)"
+          for path in datasources alerting plugins; do
+            STATUS=$(docker exec monitoring_grafana wget -qO- --server-response \
+              --header "$AUTH_HDR" --post-data '' \
+              "http://localhost:3000/api/admin/provisioning/${path}/reload" 2>&1 \
+              | awk '/^  HTTP/{code=$2} END{print code+0}')
+            case "$STATUS" in
+              200) echo "✅ reloaded ${path}" ;;
+              404) echo "(no ${path} reload endpoint on this Grafana version)" ;;
+              *)   echo "::warning::${path} reload returned ${STATUS}" ;;
+            esac
+          done
+
+          docker restart monitoring_grafana >/dev/null
+          for i in $(seq 1 24); do
+            docker exec monitoring_grafana wget --spider -q http://localhost:3000/api/health 2>/dev/null && break
+            sleep 5
+          done
+          docker exec monitoring_grafana wget --spider -q http://localhost:3000/api/health || {
+            echo "::error::Grafana did not come back after the provisioning restart"
+            docker logs --tail 100 monitoring_grafana
+            exit 1
+          }
+          echo "✅ Grafana back up after restart"
+
+      - name: Health check monitoring stack
+        env:
+          # Resolved by "Reconcile the Grafana admin account" — not read from
+          # secrets directly, because on a pre-existing volume the login that
+          # actually authenticates may not be the declared one.
+          ADMIN_USER: ${{ env.GRAFANA_API_USER }}
+          ADMIN_PASS: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          AUTH_HDR="Authorization: Basic $(printf '%s' "${ADMIN_USER}:${ADMIN_PASS}" | base64 -w0)"
+          # `|| true`: wget exits non-zero AND prints nothing on a 4xx, and a
+          # datasource health endpoint answering 400 is a result to report, not
+          # a reason to abort the step under `set -e`.
+          gf() { docker exec monitoring_grafana wget -qO- --header "$AUTH_HDR" "http://localhost:3000$1" 2>/dev/null || true; }
+
+          # 1. Container liveness. webhook-bridge is intentionally not in this
+          #    list: it is only in the alert delivery path, and a build/runtime
+          #    problem there must not fail a deploy that fixed dashboards.
+          for service in grafana prometheus loki; do
+            container="monitoring_${service}"
+            docker ps --filter "name=^/${container}$" --filter "status=running" --format '{{.Names}}' \
+              | grep -q "${container}" || {
+                echo "::error::${container} is not running"
+                docker logs --tail 50 "${container}" 2>&1 || true
+                exit 1; }
+          done
+          echo "✅ grafana, prometheus and loki are running"
+
+          # 2. Datasource health. An HTTP 200 from /api/health proves only that
+          #    Grafana is up — a datasource pointing at a dead URL fails
+          #    silently, one panel at a time, which is exactly the failure this
+          #    whole stack exists to prevent.
+          #
+          #    Only the datasources THIS stage reads are gating. The shared
+          #    provisioning ships one Loki datasource per tenant (prod, staging,
+          #    dev) because one Grafana used to serve several environments; on a
+          #    per-stage VM the other tenants are empty by design and must not
+          #    be able to fail the deploy.
+          REQUIRED_DS="prometheus-uid loki-prod-uid"
+          ds_fail=0
+          for uid in $(gf /api/datasources | jq -r '.[].uid'); do
+            STATUS=$(gf "/api/datasources/uid/${uid}/health" | jq -r '.status // "unreachable"')
+            case " ${REQUIRED_DS} " in
+              *" ${uid} "*)
+                if [ "$STATUS" = "OK" ]; then
+                  echo "  ✅ datasource ${uid}"
+                else
+                  echo "::error::Datasource ${uid} is not OK (status=${STATUS})"
+                  ds_fail=1
+                fi
+                ;;
+              *)
+                [ "$STATUS" = "OK" ] && echo "  ✅ datasource ${uid} (not gating)" \
+                  || echo "::warning::Datasource ${uid} is ${STATUS} — not gating on this stage."
+                ;;
+            esac
+          done
+
+          if [ "$ds_fail" -ne 0 ]; then
+            # Grafana answers a broken datasource with a generic "Unable to
+            # connect"; the actual reason is only in its own log.
+            echo "Grafana's own diagnosis:"
+            docker logs monitoring_grafana 2>&1 | grep -E 'logger=tsdb.*level=error' | tail -5
+            # The failure mode that costs the most time to identify. Grafana
+            # encrypts secureJsonData (here: the X-Scope-OrgID tenant header)
+            # with GF_SECURITY_SECRET_KEY. Setting or changing that secret
+            # against a volume encrypted under a DIFFERENT key — including
+            # Grafana's built-in default, which is what a stack started without
+            # the secret uses — decrypts every stored secret to garbage.
+            # Provisioning does not repair it: the datasource already exists, so
+            # its secure fields are never rewritten. Observed on the test AP VM,
+            # where it surfaced only as "Unable to connect with Loki".
+            if docker logs monitoring_grafana 2>&1 | grep -q 'invalid header field value'; then
+              echo "::error::'invalid header field value' means the stored tenant header cannot be decrypted:"
+              echo "::error::GRAFANA_SECRET_KEY does not match the key this grafana_data volume was encrypted with."
+              echo "::error::Either restore the previous key (a stack started WITHOUT the secret used Grafana's default),"
+              echo "::error::or re-run this workflow with reset_grafana_volume=true to rebuild the volume from provisioning."
+            fi
+            exit 1
+          fi
+
+          # 3. Provisioned dashboards and alert rules. The expected counts are
+          #    derived from the files that were just copied, not hardcoded, so
+          #    they cannot drift as monitoring/** grows.
+          EXPECT_DASH=$(find "${MONITORING_DIR}/config/grafana/provisioning/dashboards" -name '*.json' | wc -l)
+          GOT_DASH=$(gf '/api/search?type=dash-db' | jq 'length')
+          if [ "${GOT_DASH:-0}" -lt "${EXPECT_DASH}" ]; then
+            echo "::error::Expected ${EXPECT_DASH} provisioned dashboards, got ${GOT_DASH}"
+            docker logs monitoring_grafana 2>&1 | grep -E 'provisioning.dashboard.*level=error' | tail -20
+            exit 1
+          fi
+          echo "✅ ${GOT_DASH}/${EXPECT_DASH} dashboards provisioned"
+
+          EXPECT_RULES=$(cat "${MONITORING_DIR}"/config/grafana/provisioning/alerting/rules-*.yml \
+            | grep -c '^[[:space:]]*- uid:')
+          GOT_RULES=$(gf /api/v1/provisioning/alert-rules | jq 'length')
+          if [ "${GOT_RULES:-0}" -lt "${EXPECT_RULES}" ]; then
+            echo "::error::Expected ${EXPECT_RULES} provisioned alert rules, got ${GOT_RULES}"
+            docker logs monitoring_grafana 2>&1 | grep -E 'provisioning.alerting.*level=error' | tail -20
+            exit 1
+          fi
+          echo "✅ ${GOT_RULES}/${EXPECT_RULES} alert rules provisioned"
+
+      # The reason the app stack ships Alloy at all. Alloy resolves
+      # monitoring_loki / monitoring_prometheus once per push attempt and, on a
+      # host where they did not exist, has been dropping every batch. Restarting
+      # it here is what turns this deploy into live data.
+      - name: Restart Alloy so it re-resolves the store
+        run: |
+          ALLOY_CIDS=$(docker ps -q -f name=alloy)
+          if [ -n "$ALLOY_CIDS" ]; then
+            echo "Restarting Alloy: $ALLOY_CIDS"
+            docker restart $ALLOY_CIDS >/dev/null
+            echo "✅ Alloy restarted"
+          else
+            # `docker ps -q` exits 0 with empty output when nothing matches, so
+            # this has to test the output, not the exit code.
+            echo "::warning::No Alloy container on this VM — deploy the app stack (deploy-${STAGE}.yml) to start collecting."
+          fi
+
+      - name: Verify data is actually arriving
+        run: |
+          # Deploy honesty: a green stack that receives nothing looks identical
+          # to a working one on every check above. Give Alloy a scrape interval
+          # or two, then ask the store what it has.
+          sleep 45
+
+          fail=0
+
+          # Prometheus: remote-write from Alloy plus Prometheus's own scrapes.
+          UP=$(docker exec monitoring_prometheus wget -qO- \
+            'http://localhost:9090/api/v1/query?query=count(up)' \
+            | jq -r '.data.result[0].value[1] // "0"')
+          if [ "${UP%%.*}" -lt 1 ]; then
+            echo "::error::Prometheus knows no targets — Alloy is not writing metrics."
+            docker logs --tail 30 $(docker ps -q -f name=alloy | head -1) 2>&1 | tail -30 || true
+            fail=1
+          else
+            echo "✅ Prometheus has ${UP%%.*} up-series"
+          fi
+
+          # Loki, prod tenant. Alloy labels this stage's logs environment=prod
+          # and pushes with X-Scope-OrgID: prod (config/alloy/prod-ap-vm.alloy);
+          # an empty label set here means the push path is broken.
+          LABELS=$(docker exec monitoring_loki wget -qO- \
+            --header 'X-Scope-OrgID: prod' \
+            'http://localhost:3100/loki/api/v1/label/container/values' \
+            | jq -r '.data | length // 0')
+          if [ "${LABELS:-0}" -lt 1 ]; then
+            echo "::warning::Loki has no container labels for tenant 'prod' yet. Logs can lag a cold start; re-check the Application Logs dashboard in a few minutes."
+          else
+            echo "✅ Loki has logs from ${LABELS} containers (tenant: prod)"
+          fi
+
+          [ "$fail" -eq 0 ] || exit 1
+
+      - name: Verify the dashboard is reachable through nginx
+        run: |
+          # Grafana publishes NO host port — `location ^~ /monitoring` in
+          # nginx.prod.conf is the only way in. That block reaches
+          # monitoring_grafana:3000 over the app network, so this is the check
+          # that the network attachment actually worked end to end.
+          if ! docker ps --format '{{.Names}}' | grep -q '^scholarship_nginx_prod$'; then
+            echo "::warning::nginx is not running on this VM — cannot verify the /monitoring route. Deploy the app stack first."
+            exit 0
+          fi
+
+          CODE=$(curl -sk -o /dev/null -w '%{http_code}' https://localhost/monitoring/api/health || echo 000)
+          case "$CODE" in
+            200)
+              echo "✅ /monitoring/api/health returned 200 through nginx"
+              ;;
+            502|504)
+              echo "::error::nginx cannot reach Grafana (HTTP ${CODE}). The monitoring containers are up, so this is the app network attachment:"
+              echo "::error::  docker inspect monitoring_grafana --format '{{json .NetworkSettings.Networks}}'"
+              echo "::error::must list ${APP_NETWORK_NAME}."
+              exit 1
+              ;;
+            404)
+              echo "::error::nginx returned 404 for /monitoring — the running config predates the Grafana proxy block."
+              echo "::error::Redeploy the app stack (deploy-${STAGE}.yml) to install the current nginx.prod.conf."
+              exit 1
+              ;;
+            *)
+              echo "::error::/monitoring/api/health returned HTTP ${CODE}"
+              exit 1
+              ;;
+          esac
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          {
+            echo "## Monitoring stack — ${STAGE}"
+            echo ""
+            echo "**Grafana URL**: ${GRAFANA_ROOT_URL:-unresolved}"
+            echo "**Directory**: ${MONITORING_DIR:-unresolved}"
+            echo "**App network**: ${APP_NETWORK_NAME}"
+            echo ""
+            echo "| Container | Image | Status |"
+            echo "|---|---|---|"
+            docker ps -a --filter 'name=monitoring_' \
+              --format '| {{.Names}} | {{.Image}} | {{.Status}} |' || true
+          } >> "$GITHUB_STEP_SUMMARY"
