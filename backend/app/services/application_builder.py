@@ -10,12 +10,13 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ValidationError
+from app.models.application import Application
 from app.models.application_sequence import ApplicationSequence
-from app.models.enums import ApplicationStatus, ReviewStage
+from app.models.enums import REVIEWABLE_APPLICATION_STATUSES, ApplicationStatus, ReviewStage
 from app.models.user import User, UserRole
 from app.models.user_profile import UserProfile
 from app.utils.i18n import ScholarshipI18n
@@ -164,3 +165,74 @@ async def assign_professor_from_profile(
             getattr(application, "app_id", "?"),
         )
     return professor
+
+
+async def backfill_professor_assignments(db: AsyncSession, professor: Optional[User]) -> int:
+    """Claim applications left unassigned because this professor had no account yet.
+
+    :func:`assign_professor_from_profile` runs at submission time and can only
+    match an advisor who ALREADY exists as a ``role=professor`` User. When a
+    student names an advisor who has never signed in, the application is stored
+    with ``professor_id IS NULL`` and never reaches anybody's review queue.
+
+    This repairs those rows the moment the advisor does get an account. It is
+    idempotent (already-assigned rows are excluded by ``professor_id IS NULL``),
+    so it is safe to run on every professor login and on every professor queue
+    load — see the two call sites:
+
+    - :meth:`PortalSSOService.process_portal_login` — first SSO login / any
+      later login, right after the account is created or its role is updated.
+    - :meth:`ApplicationService.get_professor_applications_paginated` and
+      :meth:`ApplicationService.get_professor_review_stats` — fallback for
+      professor accounts created outside the SSO path (admin-created,
+      pre-authorized) and for advisors named AFTER the professor's first login.
+
+    Assignment (rather than a read-only ``advisor_nycu_id`` join in the queue
+    query) is deliberate: every downstream authorization check — opening the
+    application, submitting a review, updating it — compares
+    ``application.professor_id`` against the caller. A row merely *shown* in the
+    queue without being assigned would 403 on the very next click.
+
+    Only :data:`REVIEWABLE_APPLICATION_STATUSES` rows are claimed. Drafts are
+    excluded on purpose: they get their professor at submission time from the
+    profile as it reads *then*, so pre-assigning one would pin a stale advisor
+    if the student edits their profile before submitting.
+
+    Returns the number of applications claimed.
+    """
+    if professor is None or not professor.id or not professor.nycu_id:
+        return 0
+
+    # Compare against enum AND its .value: a SQLite-loaded (or hand-built) User
+    # can carry the raw string, and a bare `!= UserRole.professor` would then
+    # silently skip a real professor.
+    if professor.role not in (UserRole.professor, UserRole.professor.value):
+        return 0
+
+    advisee_user_ids = select(UserProfile.user_id).where(UserProfile.advisor_nycu_id == professor.nycu_id)
+
+    # synchronize_session=False: both call sites run this before loading any
+    # Application into the session, so there is nothing in the identity map to
+    # go stale, and skipping the sync avoids an extra round trip.
+    stmt = (
+        update(Application)
+        .where(
+            Application.professor_id.is_(None),
+            Application.deleted_at.is_(None),  # never resurface a soft-deleted application
+            Application.status.in_(REVIEWABLE_APPLICATION_STATUSES),
+            Application.user_id.in_(advisee_user_ids),
+        )
+        .values(professor_id=professor.id)
+        .execution_options(synchronize_session=False)
+    )
+    result = await db.execute(stmt)
+    claimed = result.rowcount or 0
+
+    if claimed:
+        logger.info(
+            "Backfilled %s unassigned application(s) to professor %s (nycu_id=%s)",
+            claimed,
+            professor.id,
+            professor.nycu_id,
+        )
+    return claimed
