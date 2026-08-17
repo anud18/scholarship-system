@@ -223,8 +223,18 @@ volumes:
       device: /opt/scholarship/minio/config
 
 networks:
+  # `name:` pins the real network name. Without it Compose prefixes the
+  # project name (naass_scholarship_prod_db_network), and
+  # docker-compose.prod-db-monitoring.yml — which joins this network as
+  # `external: true, name: scholarship_prod_db_network` — cannot find it, so
+  # the whole monitoring stack fails to start. Creating the bare-named network
+  # by hand does not help either: postgres would still sit on the prefixed one,
+  # and postgres-exporter resolves it by the service name `postgres`.
+  # docker-compose.staging-db.yml already pins its name the same way, and
+  # scripts/migrate_storage_to_rustfs.sh likewise defaults to the bare name.
   scholarship_prod_db_network:
     driver: bridge
+    name: scholarship_prod_db_network
     ipam:
       driver: default
       config:
