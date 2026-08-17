@@ -629,7 +629,9 @@ jobs:
           # and deploy-production.yml call with
           # `uses: ./.github/workflows/deploy-stack.yml` — shipping either
           # caller without it leaves the prod repo with an unresolvable workflow.
-          for f in deploy-test.yml deploy-production.yml deploy-stack.yml health-check.yml backup.yml auto-tag-on-merge.yml setting-env.yml; do
+          # stop-test.yml / stop-production.yml / stop-stack.yml are the same
+          # arrangement for taking a stage OFFLINE, and ship as their own trio.
+          for f in deploy-test.yml deploy-production.yml deploy-stack.yml stop-test.yml stop-production.yml stop-stack.yml health-check.yml backup.yml auto-tag-on-merge.yml setting-env.yml; do
             src="/tmp/prod-workflow-templates/$f"
             [ -f "$src" ] || continue
             dest=".github/workflows/$f"

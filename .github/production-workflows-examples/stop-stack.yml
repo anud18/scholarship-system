@@ -1,0 +1,347 @@
+# Reusable STOP stage — the body shared by BOTH stop workflows.
+# Copy this file to the PRIVATE production repository at
+# .github/workflows/stop-stack.yml.
+#
+# ONE definition, TWO callers — the exact mirror image of deploy-stack.yml:
+#
+#     stop-test.yml ────────▶ this file (stage: test)
+#                             runner [self-hosted,linux,test]
+#                             environment: test        ▲ 1 reviewer must approve
+#
+#     stop-production.yml ──▶ this file (stage: production)
+#                             runner [self-hosted,linux,production]
+#                             environment: production  ▲ 1 reviewer must approve
+#
+# WHAT THIS DOES — AND WHAT IT DELIBERATELY DOES NOT
+# --------------------------------------------------
+#   mode=stop  → `docker compose stop`. Containers are stopped but kept, so the
+#                stack resumes in seconds. This is the default: it is the least
+#                destructive way to take the site offline.
+#   mode=down  → `docker compose down --remove-orphans`. Containers and the
+#                compose-owned networks are removed. Use it when the next start
+#                must be a clean one (changed compose topology, stale orphans).
+#
+# NO VOLUME IS EVER REMOVED. `-v` / `--volumes` appears nowhere in this file,
+# on purpose: the redis volume and the operator's nginx certificate directory
+# live in the deploy directory, and a "stop" that silently discarded state
+# would be indistinguishable from data loss. The PostgreSQL and MinIO stacks
+# are on the DB VM entirely — this workflow cannot reach them at all, which is
+# exactly the blast radius we want. Nothing here touches the database.
+#
+# A STOP IS NOT A HOLD. This workflow stops what is running right now, and
+# nothing more — it leaves no marker behind. deploy-test.yml and
+# deploy-production.yml still fire on every push to main, so the next merge
+# redeploys and restarts the stage. If the stage has to STAY down (a
+# maintenance window, an incident), keep it down the same way you would keep
+# any deploy from landing: hold the merge, or disable the deploy workflow in
+# the Actions tab for as long as it needs to stay off.
+#
+# Prerequisites — the same ones deploy-stack.yml already requires:
+#   - A self-hosted runner on the stage's AP VM, labelled
+#     [self-hosted, linux, <stage>]. The stage label is mandatory: both VMs
+#     answer to [self-hosted, linux], and a stop that landed on the wrong
+#     runner would take down the wrong site.
+#   - GitHub Environment `<stage>` with 1 required reviewer and the variable
+#     DEPLOY_STAGE=<stage> (the stage-identity guard below reads it).
+#   - The stage has been deployed at least once, so <deploy dir> holds the
+#     docker-compose.yml that deploy-stack.yml copied there.
+
+name: Stop stack (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      stage:
+        description: 'test | production — selects the GitHub Environment and the guard set'
+        required: true
+        type: string
+      runner_labels:
+        description: 'JSON array of runner labels, e.g. ''["self-hosted","linux","test"]'''
+        required: true
+        type: string
+      confirm:
+        description: 'Typed confirmation — must equal the stage name exactly'
+        required: true
+        type: string
+      mode:
+        description: 'stop (keep containers, fastest resume) | down (remove containers + compose networks). Volumes are never removed.'
+        required: false
+        type: string
+        default: 'stop'
+      reason:
+        description: 'Why the stack is being stopped — recorded in the run summary'
+        required: false
+        type: string
+        default: ''
+      deploy_dir:
+        description: 'Deploy directory on the AP VM. Defaults to ~/scholarship-<stage>.'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  stop:
+    name: Stop ${{ inputs.stage }}
+    # Resolved from the caller so ONE definition can target both VMs — see the
+    # header: dropping the stage label would let this land on whichever runner
+    # is idle, i.e. possibly the production one.
+    runs-on: ${{ fromJSON(inputs.runner_labels) }}
+    # The approval gate. GitHub blocks the job here, before the runner picks it
+    # up, until a required reviewer approves. Taking a site offline is exactly
+    # as consequential as deploying to it, so it is gated identically.
+    environment:
+      name: ${{ inputs.stage }}
+      url: ${{ vars.DEPLOY_URL }}
+    # Nothing here writes via GITHUB_TOKEN, and nothing is pulled from GHCR —
+    # this workflow only talks to the local Docker daemon. No checkout either:
+    # the compose file it acts on is the one already in the deploy directory,
+    # placed there by the deploy that is being stopped.
+    permissions:
+      contents: read
+
+    env:
+      STAGE: ${{ inputs.stage }}
+      MODE: ${{ inputs.mode }}
+
+    steps:
+      # ── Gate 1: did a human really mean this stage? ────────────────────────
+      # `workflow_dispatch` remembers the last-used inputs per workflow, so the
+      # cheapest way to stop the wrong site is to dispatch the wrong file out of
+      # habit. Typing the stage name is the one thing muscle memory does not do.
+      - name: Confirm intent
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          case "${MODE}" in
+            stop|down) : ;;
+            *) echo "::error::mode must be 'stop' or 'down' (got '${MODE}')."; exit 1 ;;
+          esac
+
+          if [ "${CONFIRM}" != "${STAGE}" ]; then
+            echo "::error::Confirmation mismatch: typed '${CONFIRM}', expected '${STAGE}'."
+            echo "::error::Re-dispatch and type the stage name exactly to confirm you are"
+            echo "::error::stopping the ${STAGE} site."
+            exit 1
+          fi
+          echo "✅ Confirmed: stopping ${STAGE} (mode=${MODE})"
+
+      # ── Gate 2: is this environment really the environment we think it is? ─
+      # Same guard as deploy-stack.yml, for the same reason: an environment that
+      # was never created — or created without its own variables — resolves to
+      # the repository-level (production) values, and a "stop test" dispatched
+      # against it would take production offline.
+      - name: Assert stage identity
+        env:
+          DEPLOY_STAGE: ${{ vars.DEPLOY_STAGE }}
+        run: |
+          if [ "${DEPLOY_STAGE}" != "${STAGE}" ]; then
+            echo "::error::Environment '${STAGE}' declares DEPLOY_STAGE='${DEPLOY_STAGE}' (expected '${STAGE}')."
+            echo "::error::Create the '${STAGE}' environment (Settings → Environments) and set the"
+            echo "::error::variable DEPLOY_STAGE=${STAGE}. Refusing to stop anything until then."
+            exit 1
+          fi
+          echo "✅ Stage identity confirmed: ${STAGE}"
+
+      - name: Resolve deploy directory
+        env:
+          DEPLOY_DIR_INPUT: ${{ inputs.deploy_dir }}
+        run: |
+          set -euo pipefail
+          DIR="${DEPLOY_DIR_INPUT}"
+          [ -n "$DIR" ] || DIR="$HOME/scholarship-${STAGE}"
+
+          # Unlike deploy-stack.yml this does NOT mkdir: an absent directory
+          # means nothing was ever deployed here, and creating it would let the
+          # run report a green "stopped" for a stack that does not exist.
+          [ -d "$DIR" ] || {
+            echo "::error::Deploy directory ${DIR} does not exist on this runner."
+            echo "::error::Nothing has been deployed here — check you dispatched the right stage,"
+            echo "::error::or pass deploy_dir explicitly if this stage uses a non-default path."
+            exit 1
+          }
+          [ -f "$DIR/docker-compose.yml" ] || {
+            echo "::error::${DIR}/docker-compose.yml not found — this directory holds no stack."
+            echo "::error::deploy-stack.yml writes it on every deploy; its absence means this stage"
+            echo "::error::has never been deployed (or the directory was cleared by hand)."
+            exit 1
+          }
+          echo "DEPLOY_DIR=${DIR}" >> "$GITHUB_ENV"
+          echo "Deploy directory: ${DIR}"
+
+      # Compose interpolates the file while tearing the stack down too. Nothing
+      # that IDENTIFIES a container is interpolated in docker-compose.prod.yml
+      # (container_name is literal, the project name comes from the directory),
+      # so a teardown without the env file still matches the right containers —
+      # but it prints a warning per unset variable and resolves path-bearing
+      # values (SSL_CERT_DIR) to their defaults, which is exactly the kind of
+      # noise that makes a stop log unreadable when someone re-reads it during
+      # an incident. Passing the deploy's own env file keeps stop and up
+      # symmetric, and gives the target guard below something to check.
+      - name: Resolve environment file
+        env:
+          ENV_FILE_VAR: ${{ vars.ENV_FILE }}
+          EXPECT_DOMAIN: ${{ vars.EXPECT_DOMAIN }}
+        run: |
+          set -euo pipefail
+          if [ -n "${ENV_FILE_VAR}" ]; then
+            ENV_FILE="${ENV_FILE_VAR}"      # operator-managed file on the VM
+          else
+            ENV_FILE="${DEPLOY_DIR}/.env"   # generated by deploy-stack.yml
+          fi
+
+          if [ -f "${ENV_FILE}" ] && [ -r "${ENV_FILE}" ]; then
+            echo "ENV_FILE=${ENV_FILE}" >> "$GITHUB_ENV"
+            echo "Using env file: ${ENV_FILE}"
+
+            # Third target guard: the env file names the domain this directory
+            # actually serves. If it disagrees with what the environment
+            # expects, the runner label, the environment and the VM have drifted
+            # apart — stop before taking down a site nobody asked about.
+            if [ -n "${EXPECT_DOMAIN}" ]; then
+              FILE_DOMAIN="$(sed -n 's/^[[:space:]]*DOMAIN=//p' "${ENV_FILE}" | tail -1)"
+              if [ -n "${FILE_DOMAIN}" ] && [ "${FILE_DOMAIN}" != "${EXPECT_DOMAIN}" ]; then
+                echo "::error::${ENV_FILE} serves DOMAIN=${FILE_DOMAIN} but the '${STAGE}' environment expects ${EXPECT_DOMAIN}."
+                echo "::error::Refusing to stop — this runner appears to host a different stage."
+                exit 1
+              fi
+              echo "✅ Target confirmed: ${FILE_DOMAIN:-${EXPECT_DOMAIN}}"
+            fi
+          else
+            # Not fatal: compose still matches containers by project name, and
+            # every value it needs here has a default. Worth a warning though —
+            # the deploy directory should always hold the file the deploy used,
+            # so its absence means something else already went wrong on this VM.
+            echo "::warning::No readable env file at ${ENV_FILE} — compose will run without --env-file."
+            echo "::warning::Expect 'variable is not set' warnings below; the post-stop check is what confirms the result."
+            echo "ENV_FILE=" >> "$GITHUB_ENV"
+          fi
+
+      - name: Record current state
+        id: before
+        run: |
+          set -euo pipefail
+          cd "${DEPLOY_DIR}"
+          ARGS=""
+          if [ -n "${ENV_FILE}" ]; then ARGS="--env-file ${ENV_FILE}"; fi
+
+          echo "::group::Containers before stop"
+          # shellcheck disable=SC2086
+          docker compose $ARGS ps || true
+          echo "::endgroup::"
+
+          # shellcheck disable=SC2086
+          RUNNING=$(docker compose $ARGS ps --status running -q 2>/dev/null | grep -c . || true)
+          echo "running_before=${RUNNING:-0}" >> "$GITHUB_OUTPUT"
+          echo "Running containers before stop: ${RUNNING:-0}"
+
+          if [ "${RUNNING:-0}" = "0" ]; then
+            # Not an error — re-running a stop on an already-stopped stack is a
+            # legitimate no-op, and the verification below still confirms it.
+            echo "::notice::Stack is already stopped; continuing to the post-stop checks."
+          fi
+
+      - name: Stop the stack
+        run: |
+          set -euo pipefail
+          cd "${DEPLOY_DIR}"
+          ARGS=""
+          if [ -n "${ENV_FILE}" ]; then ARGS="--env-file ${ENV_FILE}"; fi
+
+          if [ "${MODE}" = "down" ]; then
+            # --remove-orphans clears containers left by an older compose file.
+            # NO -v: named volumes (redis data) and bind mounts survive.
+            echo "Running: docker compose down --remove-orphans"
+            # shellcheck disable=SC2086
+            docker compose $ARGS down --remove-orphans
+          else
+            # Containers keep their filesystem and identity, so a later
+            # `compose up -d` restarts them without re-creating anything.
+            echo "Running: docker compose stop"
+            # shellcheck disable=SC2086
+            docker compose $ARGS stop
+          fi
+          echo "✅ compose ${MODE} completed"
+
+      - name: Verify the stack is down
+        run: |
+          set -euo pipefail
+          cd "${DEPLOY_DIR}"
+          ARGS=""
+          if [ -n "${ENV_FILE}" ]; then ARGS="--env-file ${ENV_FILE}"; fi
+
+          echo "::group::Containers after stop"
+          # shellcheck disable=SC2086
+          docker compose $ARGS ps -a || true
+          echo "::endgroup::"
+
+          # shellcheck disable=SC2086
+          STILL=$(docker compose $ARGS ps --status running -q 2>/dev/null | grep -c . || true)
+          if [ "${STILL:-0}" != "0" ]; then
+            echo "::error::${STILL} container(s) are still running after compose ${MODE}."
+            # shellcheck disable=SC2086
+            docker compose $ARGS ps --status running || true
+            echo "::error::A container with restart: always can come back if the daemon restarts it;"
+            echo "::error::re-run with mode=down, or investigate on the VM before declaring the stage stopped."
+            exit 1
+          fi
+          echo "✅ No running containers left in ${DEPLOY_DIR}"
+
+          # The site must actually be unreachable. An empty container list is
+          # not the same claim: a stale nginx on the host, or a container
+          # started outside this compose project, would keep serving applicants
+          # while the run reported "stopped". That false green is worth failing
+          # over — the operator asked for the site to be offline, and it isn't.
+          #
+          # Retried, because docker-proxy can hold the published port for a
+          # moment after the container exits; a single probe would flag that
+          # normal teardown lag as a live server.
+          probe() { curl -fsk --max-time 10 https://localhost/health >/dev/null 2>&1; }
+          attempt=0
+          while probe; do
+            attempt=$((attempt + 1))
+            if [ "$attempt" -ge 5 ]; then
+              echo "::error::https://localhost/health still answers after compose ${MODE}."
+              echo "::error::Every container in ${DEPLOY_DIR} is stopped, so something OUTSIDE this"
+              echo "::error::compose project is serving on 443 — a host nginx, a hand-started"
+              echo "::error::container, or a second compose project on this VM."
+              echo "::error::${STAGE} is NOT offline; investigate on the VM before announcing it is."
+              docker ps --format '  {{.Names}}\t{{.Image}}\t{{.Ports}}' || true
+              exit 1
+            fi
+            echo "Port still answering, waiting for teardown... ($attempt/5)"
+            sleep 3
+          done
+          echo "✅ https://localhost/health no longer answers"
+
+      - name: Summary
+        if: always()
+        env:
+          REASON: ${{ inputs.reason }}
+          DEPLOY_URL: ${{ vars.DEPLOY_URL }}
+          RUNNING_BEFORE: ${{ steps.before.outputs.running_before }}
+          RESULT: ${{ job.status }}
+        run: |
+          {
+            echo "## 🛑 ${STAGE} stop — ${RESULT}"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| **Stage** | ${STAGE} |"
+            echo "| **Mode** | \`${MODE}\` (volumes untouched) |"
+            echo "| **Directory** | ${DEPLOY_DIR:-(unresolved)} |"
+            echo "| **URL now offline** | ${DEPLOY_URL:-n/a} |"
+            echo "| **Containers running before** | ${RUNNING_BEFORE:-unknown} |"
+            echo "| **Requested by** | @${{ github.actor }} |"
+            echo "| **Reason** | ${REASON:-(not given)} |"
+            echo ""
+            echo "**To bring ${STAGE} back:**"
+            echo ""
+            echo '```bash'
+            echo "gh workflow run deploy-${STAGE}.yml -f tag=<tag>"
+            echo '```'
+            echo ""
+            echo "It redeploys and verifies with the usual health and smoke checks."
+            echo ""
+            echo "> ⚠️ Nothing holds ${STAGE} down: the next push to main redeploys and restarts it."
+          } >> "$GITHUB_STEP_SUMMARY"

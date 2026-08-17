@@ -1,0 +1,104 @@
+# PRODUCTION stop workflow — take the PRODUCTION site offline.
+# Copy this file to the PRIVATE production repository at
+# .github/workflows/stop-production.yml (it calls stop-stack.yml, which must be
+# copied alongside it).
+#
+# ⚠️  THIS TAKES THE LIVE SITE DOWN FOR REAL APPLICANTS. Every applicant,
+# professor and college reviewer loses access the moment this run passes its
+# approval gate. Run it during an announced maintenance window, or when an
+# incident makes serving worse than not serving.
+#
+# ONE STAGE PER WORKFLOW — the mirror image of deploy-production.yml. This
+# workflow stops the PRODUCTION AP VM only; its sibling, stop-test.yml, stops
+# the test one. There is no combined "stop everything" entry point on purpose:
+# a single dispatch must never be able to take both tiers down.
+#
+#   deploy-production.yml  ──▶ starts production  (push to main / dispatch)
+#   stop-production.yml    ──▶ stops  production  (dispatch ONLY)
+#
+# MANUAL DISPATCH ONLY. Nothing about a code push implies the site should go
+# offline, so there is no `push:` trigger here.
+#
+# Two things gate this run, and both are deliberate:
+#   1. `confirm` — you must type `production`. workflow_dispatch remembers the
+#      last inputs per workflow, so typing the stage name is the check that
+#      survives muscle memory and the "wrong tab" mistake.
+#   2. The `production` environment's required reviewer — the SAME gate deploys
+#      pass through, and here it is the control, not a convenience:
+#        Settings → Environments → `production` → Required reviewers: 1 person
+#      The `environment:` key alone gates nothing; without that configuration
+#      one dispatch takes production down unattended. See SECRETS-SETUP-GUIDE.md
+#      § Environments.
+#
+# ⚠️  A STOP IS NOT A HOLD. This run stops what is currently up and leaves no
+# marker behind, so the NEXT PUSH TO MAIN redeploys and restarts production —
+# possibly mid-incident, before anyone decided it was safe. If production has
+# to stay down, hold the merges or disable deploy-production.yml in the Actions
+# tab for that window. To restore service deliberately:
+#
+#   gh workflow run deploy-production.yml -f tag=v1.2.3
+#
+# It re-runs the migration, health and smoke checks, so "production is back" is
+# verified rather than assumed. Pin the tag — with the default `latest` you may
+# restore a different image from the one that was running.
+#
+# NO DATA IS DESTROYED. Volumes are never removed, and PostgreSQL/MinIO live on
+# the DB VM which this workflow cannot reach — stopping the AP tier leaves every
+# application, review and uploaded document exactly where it was. See
+# stop-stack.yml's header.
+#
+# Prerequisites: exactly those deploy-production.yml already needs — a
+# self-hosted runner labelled [self-hosted, linux, production] and the
+# `production` environment with DEPLOY_STAGE=production.
+
+name: Stop Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "production" to confirm you are taking the LIVE site offline'
+        required: true
+        type: string
+      mode:
+        description: 'stop = keep containers (seconds to resume) · down = remove containers + compose networks (volumes kept either way)'
+        required: false
+        type: choice
+        options:
+          - stop
+          - down
+        default: stop
+      reason:
+        description: 'Why (recorded in the run summary) — e.g. incident number or maintenance window'
+        required: false
+        type: string
+
+concurrency:
+  # DELIBERATELY NOT shared with deploy-production. A run waiting at its approval
+  # gate still holds its concurrency group, and every merge to main leaves such
+  # a run pending — sharing the group would make "stop the site" unavailable for
+  # exactly as long as nobody gets round to approving a deploy. The stop control
+  # has to work when it is needed: an incident stop must never queue behind a
+  # deploy that is sitting unapproved at its gate.
+  #
+  # What sequences a stop against a deploy instead is the human at the
+  # `production` environment's approval gate, which both of them pass through.
+  group: stop-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  stop-production:
+    name: Stop production
+    uses: ./.github/workflows/stop-stack.yml
+    with:
+      stage: production
+      runner_labels: '["self-hosted","linux","production"]'
+      confirm: ${{ inputs.confirm }}
+      mode: ${{ inputs.mode }}
+      reason: ${{ inputs.reason }}
+    secrets: inherit
+    permissions:
+      contents: read

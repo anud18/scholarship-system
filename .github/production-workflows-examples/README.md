@@ -50,6 +50,9 @@ warning: here-document at line 10 delimited by end-of-file (wanted `FOOTER_EOF')
 | `deploy-test.yml` | 部署 **test AP VM**，需一位 reviewer 核准 | Push to main / 手動觸發 | **必要** |
 | `deploy-production.yml` | 部署 **production AP VM**，需一位 reviewer 核准 | Push to main / 手動觸發 | **必要** |
 | `deploy-stack.yml` | 上面兩個 workflow 共用的 reusable workflow（實際的部署腳本本體） | 由兩個 deploy workflow 呼叫，不單獨觸發 | **必要**（三個要一起複製） |
+| `stop-test.yml` | **停掉 test AP VM** 的站台，需一位 reviewer 核准 | 只能手動觸發 | **必要** |
+| `stop-production.yml` | **停掉 production AP VM** 的站台（正式站會離線），需一位 reviewer 核准 | 只能手動觸發 | **必要** |
+| `stop-stack.yml` | 上面兩個 stop workflow 共用的 reusable workflow（實際的停機腳本本體） | 由兩個 stop workflow 呼叫，不單獨觸發 | **必要**（三個要一起複製） |
 | `health-check.yml` | 監控應用程式健康狀態 | 每 15 分鐘 / 手動觸發 | 選用 |
 | `backup.yml` | 備份資料庫和檔案 | 每日 2AM UTC / 手動觸發 | 選用 |
 | `fortify-scan.yml` | Fortify SAST 掃描（Python + JS/TS + config），產出 `.fpr` 與 BIRT PDF 報告。掃描約 2.5 小時且獨佔共用 Fortify runner，故只在 push to main 觸發 | Push to main / 手動觸發 | 選用 |
@@ -60,8 +63,8 @@ warning: here-document at line 10 delimited by end-of-file (wanted `FOOTER_EOF')
 
 | VM | labels | 由誰使用 |
 |----|--------|----------|
-| test AP VM | `[self-hosted, linux, test]` | `deploy-test.yml`、`setting-env.yml`(stage=test) |
-| production AP VM | `[self-hosted, linux, production]` | `deploy-production.yml`、`backup.yml`、`health-check.yml`、`setting-env.yml`(stage=production) |
+| test AP VM | `[self-hosted, linux, test]` | `deploy-test.yml`、`stop-test.yml`、`setting-env.yml`(stage=test) |
+| production AP VM | `[self-hosted, linux, production]` | `deploy-production.yml`、`stop-production.yml`、`backup.yml`、`health-check.yml`、`setting-env.yml`(stage=production) |
 
 **沒有 stage label 的 runner 收不到任何 job**(workflow 指定的是三個 label 的組合);label 貼錯則會把 production 的部署跑到 test VM 上。
 
@@ -159,6 +162,17 @@ cp /path/to/development-repo/.github/production-workflows-examples/deploy-produc
 
 cp /path/to/development-repo/.github/production-workflows-examples/deploy-stack.yml \
    .github/workflows/deploy-stack.yml
+
+# stop 三件組同理：兩個 caller 都用
+# `uses: ./.github/workflows/stop-stack.yml`，少了它一樣無法解析。
+cp /path/to/development-repo/.github/production-workflows-examples/stop-test.yml \
+   .github/workflows/stop-test.yml
+
+cp /path/to/development-repo/.github/production-workflows-examples/stop-production.yml \
+   .github/workflows/stop-production.yml
+
+cp /path/to/development-repo/.github/production-workflows-examples/stop-stack.yml \
+   .github/workflows/stop-stack.yml
 
 cp /path/to/development-repo/.github/production-workflows-examples/health-check.yml \
    .github/workflows/health-check.yml
@@ -356,6 +370,13 @@ runner 使用者需要 passwordless sudo（deploy-stack.yml 與 backup.yml 都�
 - [ ] 兩台 VM 都有 TLS 憑證（`fullchain.pem` / `privkey.pem` / `chain.pem`）
 - [ ] 兩台 VM 都有足夠的磁碟空間，且 runner 使用者有 passwordless sudo
 
+### Stop Workflow
+
+- [ ] `stop-test.yml`、`stop-production.yml`、`stop-stack.yml` 三個都已複製到 prod repo
+- [ ] 兩個 environment 的 **Required reviewers** 已設定（stop 與 deploy 共用同一道關卡）
+- [ ] 已知道恢復方式：`gh workflow run deploy-<stage>.yml -f tag=<tag>`
+- [ ] 已知道 stop **不會**阻止下一次 push to main 把站台開回來（需要持續離線時另外擋 merge / disable deploy workflow）
+
 ### Health Check Workflow
 
 - [ ] API 和 Frontend URL 正確
@@ -397,6 +418,34 @@ production，要停就按 Reject。
 
 > ⚠️ `production` environment 的 required reviewer 是唯一擋在 push to main 與
 > 正式機之間的關卡（不再有前置的 test 階段），上線前務必先設好。
+
+### 停止站台（stop-test.yml / stop-production.yml）
+
+deploy 的反向操作，兩個 stage 各一個 workflow，共用 `stop-stack.yml`：
+
+```bash
+# 停 test（confirm 必須逐字打 stage 名稱）
+gh workflow run stop-test.yml -f confirm=test -f mode=stop -f reason="maintenance window"
+
+# 停 production（正式站會離線！）
+gh workflow run stop-production.yml -f confirm=production -f mode=stop -f reason="incident #123"
+```
+
+| 項目 | 說明 |
+|------|------|
+| 觸發方式 | **只有手動 dispatch**，沒有 `push:` —— 「有人 push code」從來不代表「該關站」 |
+| 兩道關卡 | ① `confirm` 必須逐字等於 stage 名稱（dispatch 會記住上次輸入，打字才擋得住手殘）② 該 environment 的 required reviewer，跟 deploy 同一道 |
+| `mode=stop`（預設） | `docker compose stop`，容器保留，之後幾秒就能恢復 |
+| `mode=down` | `docker compose down --remove-orphans`，移除容器與 compose 網路 |
+| 資料 | **兩種模式都不會刪 volume**（檔案裡沒有任何 `-v`）。PostgreSQL / MinIO 在 DB VM，這個 workflow 根本碰不到 |
+| concurrency | 自己的 group（`stop-test` / `stop-production`），**不與 deploy 共用**：等待核准中的 deploy 會佔住它自己的 group，共用的話「關站」會被卡到有人去審那個 deploy 為止。stop 與 deploy 的先後由人（同一道核准關卡）決定 |
+| 恢復 | `gh workflow run deploy-<stage>.yml -f tag=<tag>`，會照常跑 migration + health + smoke checks |
+
+> ⚠️ **stop 不等於 hold。** 這兩個 workflow 只是把「當下正在跑的」關掉，不會在
+> VM 上留下任何標記；`deploy-test.yml` / `deploy-production.yml` 仍然是 push to
+> main 觸發的，所以**下一次 merge 就會把站台重新部署開回來**。若該 stage 必須
+> 持續離線（維護時段、incident 處理中），就用擋 merge，或到 Actions 頁面暫時
+> disable 對應的 deploy workflow。
 
 ### 測試健康檢查
 
