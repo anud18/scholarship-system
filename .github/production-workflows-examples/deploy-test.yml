@@ -32,10 +32,6 @@
 # This repository does NOT build images. The development repository's pipeline
 # publishes them to GHCR once; both workflows promote that exact artifact.
 #
-# STOPPING THE STAGE is the sibling workflow stop-test.yml. It only stops what
-# is running at that moment and leaves nothing behind, so this workflow will
-# start test again on the next push to main.
-#
 # Prerequisites (one-time, see SECRETS-SETUP-GUIDE.md):
 #   - A self-hosted runner on the test AP VM, labelled
 #     [self-hosted, linux, test]. The stage label is mandatory: both VMs answer

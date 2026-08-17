@@ -40,11 +40,6 @@
 # the two workflows resolve independently and can land on different images:
 # dispatch manually with a pinned tag whenever that matters.
 #
-# STOPPING THE STAGE is the sibling workflow stop-production.yml. It only stops
-# what is running at that moment and leaves nothing behind, so this workflow
-# brings production back up on the next push to main — keep that in mind when
-# production is stopped during an incident.
-#
 # Prerequisites (one-time, see SECRETS-SETUP-GUIDE.md):
 #   - A self-hosted runner on the production AP VM, labelled
 #     [self-hosted, linux, production]. The stage label is mandatory: both VMs
