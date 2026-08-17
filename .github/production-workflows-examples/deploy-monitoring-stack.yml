@@ -341,6 +341,16 @@ jobs:
             jq --arg env "${METRICS_ENV}" --argjson v "${STAMP}" '
               ((.templating.list[]? | select(.name == "environment") | .current)
                  |= {selected: true, text: $env, value: $env})
+              # Every OTHER query variable ships with a value saved from the
+              # staging server — `container: scholarship_backend_staging`, for
+              # one, while this deployment labels its containers
+              # `/scholarship_backend_prod`. A saved value is a property of the
+              # deployment it was saved on, and a stale one is not merely
+              # cosmetic: with it selected, the log panels query a stream that
+              # does not exist. Cleared, so Grafana resolves each from live data
+              # on load (every one of them has refresh enabled).
+              | ((.templating.list[]? | select(.type == "query" and .name != "environment") | .current)
+                 |= {})
               | .version = $v
             ' "$f" > "$tmp"
             mv "$tmp" "$f"
