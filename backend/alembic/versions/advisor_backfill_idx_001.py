@@ -21,10 +21,15 @@ load. This migration:
    auto-index foreign keys).
 
 The row filter mirrors application_builder.backfill_professor_assignments:
-statuses from REVIEWABLE_APPLICATION_STATUSES (app/models/enums.py) and
-deleted_at IS NULL. Drafts are deliberately excluded — they get their professor
-at submission time from the profile as it reads then — and soft-deleted rows are
-never resurfaced.
+statuses from PROFESSOR_ACTIONABLE_APPLICATION_STATUSES (app/models/enums.py)
+and deleted_at IS NULL. Three exclusions, all deliberate:
+
+- Drafts get their professor at submission time from the profile as it reads
+  then.
+- Already-decided applications (approved / partial_approved / rejected) would
+  land in the professor's 待審核 bucket — which has no status gate — while the
+  review endpoint refuses them, stranding the row with a permanent 403.
+- Soft-deleted rows are never resurfaced.
 """
 
 from typing import Sequence, Union
@@ -42,8 +47,8 @@ depends_on: Union[str, Sequence[str], None] = None
 APPLICATIONS_INDEX = "ix_applications_professor_id"
 USER_PROFILES_INDEX = "ix_user_profiles_advisor_nycu_id"
 
-# Kept in sync with REVIEWABLE_APPLICATION_STATUSES (app/models/enums.py).
-REVIEWABLE_STATUSES = ("submitted", "under_review", "approved", "partial_approved", "rejected")
+# Kept in sync with PROFESSOR_ACTIONABLE_APPLICATION_STATUSES (app/models/enums.py).
+ACTIONABLE_STATUSES = ("submitted", "under_review")
 
 BACKFILL_SQL = """
     UPDATE applications AS a
@@ -73,7 +78,7 @@ def upgrade() -> None:
     if {"applications", "user_profiles", "users"} <= tables:
         result = bind.execute(
             sa.text(BACKFILL_SQL).bindparams(sa.bindparam("statuses", expanding=True)),
-            {"statuses": list(REVIEWABLE_STATUSES)},
+            {"statuses": list(ACTIONABLE_STATUSES)},
         )
         print(f"[advisor_backfill_idx_001] assigned advisor to {result.rowcount} orphaned application(s)")
 

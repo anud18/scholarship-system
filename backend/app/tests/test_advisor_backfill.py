@@ -148,6 +148,32 @@ async def test_skips_drafts(db: AsyncSession):
     assert await _professor_id_of(db, draft) is None
 
 
+@pytest.mark.parametrize(
+    "status",
+    [
+        ApplicationStatus.approved.value,
+        ApplicationStatus.partial_approved.value,
+        ApplicationStatus.rejected.value,
+    ],
+)
+@pytest.mark.asyncio
+async def test_skips_already_decided_applications(db: AsyncSession, status: str):
+    """A decided application would land in the professor's 待審核 bucket — which
+    filters on "not reviewed by me", not on status — while the review endpoint
+    refuses anything outside submitted/under_review. Claiming it would strand
+    the row there with a permanent 403."""
+    student = await _seed_student_with_advisor(db, nycu_id=f"stu_{status}", advisor_nycu_id=PROF_NYCU_ID)
+    cfg = await _seed_config(db, suffix=status)
+    app = await _seed_app(db, student=student, config=cfg, suffix=status, status=status)
+    professor = await _seed_user(db, role=UserRole.professor, nycu_id=PROF_NYCU_ID)
+
+    claimed = await backfill_professor_assignments(db, professor)
+    await db.commit()
+
+    assert claimed == 0
+    assert await _professor_id_of(db, app) is None
+
+
 @pytest.mark.asyncio
 async def test_skips_soft_deleted_applications(db: AsyncSession):
     student = await _seed_student_with_advisor(db, nycu_id="stu_deleted", advisor_nycu_id=PROF_NYCU_ID)

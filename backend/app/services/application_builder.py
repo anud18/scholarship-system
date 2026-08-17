@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import ValidationError
 from app.models.application import Application
 from app.models.application_sequence import ApplicationSequence
-from app.models.enums import REVIEWABLE_APPLICATION_STATUSES, ApplicationStatus, ReviewStage
+from app.models.enums import PROFESSOR_ACTIONABLE_APPLICATION_STATUSES, ApplicationStatus, ReviewStage
 from app.models.user import User, UserRole
 from app.models.user_profile import UserProfile
 from app.utils.i18n import ScholarshipI18n
@@ -193,10 +193,17 @@ async def backfill_professor_assignments(db: AsyncSession, professor: Optional[U
     ``application.professor_id`` against the caller. A row merely *shown* in the
     queue without being assigned would 403 on the very next click.
 
-    Only :data:`REVIEWABLE_APPLICATION_STATUSES` rows are claimed. Drafts are
-    excluded on purpose: they get their professor at submission time from the
-    profile as it reads *then*, so pre-assigning one would pin a stale advisor
-    if the student edits their profile before submitting.
+    Only :data:`PROFESSOR_ACTIONABLE_APPLICATION_STATUSES` rows are claimed —
+    NOT the wider listing set. Two exclusions matter:
+
+    - Drafts: they get their professor at submission time from the profile as it
+      reads *then*, so pre-assigning one would pin a stale advisor if the
+      student edits their profile before submitting.
+    - Already-decided applications (approved / partial_approved / rejected):
+      the queue's 待審核 bucket is "assigned to me and I have not reviewed",
+      with no status gate, while ``can_professor_submit_review`` refuses any
+      status outside submitted/under_review. Claiming a decided row would park
+      it in 待審核 forever with a 403 on every attempt to clear it.
 
     Returns the number of applications claimed.
     """
@@ -219,7 +226,7 @@ async def backfill_professor_assignments(db: AsyncSession, professor: Optional[U
         .where(
             Application.professor_id.is_(None),
             Application.deleted_at.is_(None),  # never resurface a soft-deleted application
-            Application.status.in_(REVIEWABLE_APPLICATION_STATUSES),
+            Application.status.in_(PROFESSOR_ACTIONABLE_APPLICATION_STATUSES),
             Application.user_id.in_(advisee_user_ids),
         )
         .values(professor_id=professor.id)
