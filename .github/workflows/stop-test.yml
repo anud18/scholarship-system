@@ -1,0 +1,93 @@
+# TEST stop workflow — take the TEST site offline.
+# Copy this file to the PRIVATE production repository at
+# .github/workflows/stop-test.yml (it calls stop-stack.yml, which must be
+# copied alongside it).
+#
+# ONE STAGE PER WORKFLOW — the mirror image of deploy-test.yml. This workflow
+# stops the TEST AP VM only; its sibling, stop-production.yml, stops the
+# production one. There is no combined "stop everything" entry point on
+# purpose: a single dispatch must never be able to take both tiers down.
+#
+#   deploy-test.yml  ──▶ starts the test stack   (push to main / dispatch)
+#   stop-test.yml    ──▶ stops  the test stack   (dispatch ONLY)
+#
+# MANUAL DISPATCH ONLY. Nothing about a code push implies the site should go
+# offline, so there is no `push:` trigger here.
+#
+# Two things gate this run, and both are deliberate:
+#   1. `confirm` — you must type `test`. workflow_dispatch remembers the last
+#      inputs per workflow, so typing the stage name is the check that survives
+#      muscle memory.
+#   2. The `test` environment's required reviewer — the SAME gate deploys pass
+#      through. Configure it once:
+#        Settings → Environments → `test` → Required reviewers: 1 person
+#      The `environment:` key alone gates nothing; without that configuration
+#      this runs unattended. See SECRETS-SETUP-GUIDE.md § Environments.
+#
+# A STOP IS NOT A HOLD. It stops what is running now and leaves no marker
+# behind, so the next push to main redeploys and restarts test. If it has to
+# stay down, hold the merge or disable deploy-test.yml in the Actions tab for
+# that window. To bring test back immediately:
+#
+#   gh workflow run deploy-test.yml [-f tag=v1.2.3]
+#
+# NO DATA IS DESTROYED. Volumes are never removed, and PostgreSQL/MinIO live on
+# the DB VM which this workflow cannot reach. See stop-stack.yml's header.
+#
+# Prerequisites: exactly those deploy-test.yml already needs — a self-hosted
+# runner labelled [self-hosted, linux, test] and the `test` environment with
+# DEPLOY_STAGE=test.
+
+name: Stop Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "test" to confirm you are taking the TEST site offline'
+        required: true
+        type: string
+      mode:
+        description: 'stop = keep containers (seconds to resume) · down = remove containers + compose networks (volumes kept either way)'
+        required: false
+        type: choice
+        options:
+          - stop
+          - down
+        default: stop
+      reason:
+        description: 'Why (recorded in the run summary)'
+        required: false
+        type: string
+
+concurrency:
+  # DELIBERATELY NOT shared with deploy-test. A run waiting at its approval
+  # gate still holds its concurrency group, and every merge to main leaves such
+  # a run pending — sharing the group would make "stop the site" unavailable for
+  # exactly as long as nobody gets round to approving a deploy. The stop control
+  # has to work when it is needed: a stop must never queue behind a deploy that
+  # is sitting unapproved at its gate.
+  #
+  # What sequences a stop against a deploy instead is the human at the `test`
+  # environment's approval gate, which both of them pass through.
+  group: stop-test
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  stop-test:
+    name: Stop test
+    uses: ./.github/workflows/stop-stack.yml
+    with:
+      stage: test
+      runner_labels: '["self-hosted","linux","test"]'
+      confirm: ${{ inputs.confirm }}
+      mode: ${{ inputs.mode }}
+      reason: ${{ inputs.reason }}
+    # The called workflow reads variables from the `test` ENVIRONMENT, which
+    # overrides the repository-level (production) values.
+    secrets: inherit
+    permissions:
+      contents: read
