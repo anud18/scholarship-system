@@ -1,0 +1,73 @@
+# PRODUCTION monitoring workflow — brings up Grafana/Loki/Prometheus on the
+# PRODUCTION AP VM.
+# Copy this file to the PRIVATE production repository at
+# .github/workflows/deploy-monitoring-production.yml (it calls
+# deploy-monitoring-stack.yml, which must be copied alongside it).
+#
+# ONE STAGE PER WORKFLOW, the same shape as deploy-production.yml. This workflow
+# touches the PRODUCTION AP VM only; deploy-monitoring-test.yml is its sibling.
+# The two are independent: a monitoring stack that fails to come up on test says
+# nothing about production, and must not block it.
+#
+#   deploy-production.yml             ──▶ the site      (app + collectors)
+#   deploy-monitoring-production.yml  ──▶ the dashboard (Grafana/Loki/Prometheus)
+#
+# ⚠️  THE GATE IS THE ONLY THING BETWEEN A PUSH AND PRODUCTION, and it matters
+# here for a reason of its own: this workflow writes the credentials of a
+# dashboard published on the production domain, and `reset_grafana_volume`
+# can destroy months of manually saved dashboards and annotations. Configure the
+# reviewer BEFORE this file goes live:
+#
+#   Settings → Environments → `production` → Required reviewers: 1 person
+#
+# The `environment:` key alone gates nothing. See SECRETS-SETUP-GUIDE.md.
+#
+# The push trigger is narrow on purpose: monitoring has no image to promote, so
+# a redeploy is only warranted when the mirrored commit actually changed
+# monitoring content. Every run costs a ~30 s Grafana restart (the site is never
+# touched).
+#
+# Prerequisites: those deploy-production.yml already needs, plus the
+# `production` environment secrets GRAFANA_ADMIN_USER / GRAFANA_ADMIN_PASSWORD.
+# See the header of deploy-monitoring-stack.yml for the full list, including the
+# firewall requirement for the Loki/Prometheus host ports.
+
+name: Deploy Monitoring to Production
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'monitoring/**'
+      - 'docker-compose.prod.yml'
+      - '.github/workflows/deploy-monitoring-production.yml'
+      - '.github/workflows/deploy-monitoring-stack.yml'
+  workflow_dispatch:
+    inputs:
+      reset_grafana_volume:
+        description: 'DESTRUCTIVE: wipe grafana_data first (loses manually saved dashboards, annotations and silences). Provisioned content is re-created.'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  # Scoped to production monitoring alone — see the note in
+  # deploy-monitoring-test.yml on why this is not shared with the app deploy.
+  group: deploy-monitoring-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-monitoring-production:
+    name: Deploy monitoring to production
+    uses: ./.github/workflows/deploy-monitoring-stack.yml
+    with:
+      stage: production
+      runner_labels: '["self-hosted","linux","production"]'
+      reset_grafana_volume: ${{ inputs.reset_grafana_volume || false }}
+    secrets: inherit
+    permissions:
+      contents: read

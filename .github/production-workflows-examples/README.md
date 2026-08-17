@@ -53,6 +53,9 @@ warning: here-document at line 10 delimited by end-of-file (wanted `FOOTER_EOF')
 | `stop-test.yml` | **停掉 test AP VM** 的站台，需一位 reviewer 核准 | 只能手動觸發 | **必要** |
 | `stop-production.yml` | **停掉 production AP VM** 的站台（正式站會離線），需一位 reviewer 核准 | 只能手動觸發 | **必要** |
 | `stop-stack.yml` | 上面兩個 stop workflow 共用的 reusable workflow（實際的停機腳本本體） | 由兩個 stop workflow 呼叫，不單獨觸發 | **必要**（三個要一起複製） |
+| `deploy-monitoring-test.yml` | 在 **test AP VM** 起 Grafana/Loki/Prometheus（監控儀表板本體），需一位 reviewer 核准 | push to main 且動到 `monitoring/**` / 手動觸發 | **必要**（要看儀表板就必裝） |
+| `deploy-monitoring-production.yml` | 在 **production AP VM** 起 Grafana/Loki/Prometheus，需一位 reviewer 核准 | push to main 且動到 `monitoring/**` / 手動觸發 | **必要**（同上） |
+| `deploy-monitoring-stack.yml` | 上面兩個 monitoring workflow 共用的 reusable workflow（實際的部署腳本本體） | 由兩個 monitoring workflow 呼叫，不單獨觸發 | **必要**（三個要一起複製） |
 | `health-check.yml` | 監控應用程式健康狀態 | 每 15 分鐘 / 手動觸發 | 選用 |
 | `backup.yml` | 備份資料庫和檔案 | 每日 2AM UTC / 手動觸發 | 選用 |
 | `fortify-scan.yml` | Fortify SAST 掃描（Python + JS/TS + config），產出 `.fpr` 與 BIRT PDF 報告。掃描約 2.5 小時且獨佔共用 Fortify runner，故只在 push to main 觸發 | Push to main / 手動觸發 | 選用 |
@@ -174,6 +177,17 @@ cp /path/to/development-repo/.github/production-workflows-examples/stop-producti
 cp /path/to/development-repo/.github/production-workflows-examples/stop-stack.yml \
    .github/workflows/stop-stack.yml
 
+# monitoring 三件組同理：兩個 caller 都用
+# `uses: ./.github/workflows/deploy-monitoring-stack.yml`，少了它一樣無法解析。
+cp /path/to/development-repo/.github/production-workflows-examples/deploy-monitoring-test.yml \
+   .github/workflows/deploy-monitoring-test.yml
+
+cp /path/to/development-repo/.github/production-workflows-examples/deploy-monitoring-production.yml \
+   .github/workflows/deploy-monitoring-production.yml
+
+cp /path/to/development-repo/.github/production-workflows-examples/deploy-monitoring-stack.yml \
+   .github/workflows/deploy-monitoring-stack.yml
+
 cp /path/to/development-repo/.github/production-workflows-examples/health-check.yml \
    .github/workflows/health-check.yml
 
@@ -269,6 +283,51 @@ production 只是把同一份 artifact 拉下來跑，確保上線的東西跟 s
 #### 健康檢查 (health-check.yml)
 
 重用 `DOMAIN` 與 `REDIS_PASSWORD`；失敗時自動開 issue，恢復後自動關閉。
+
+#### 監控儀表板 (deploy-monitoring-stack.yml)
+
+`docker-compose.prod.yml` 只帶**採集端**（Alloy、node-exporter、cAdvisor、
+nginx-exporter、redis-exporter）。Alloy 把資料推到
+`http://monitoring_loki:3100` 與 `http://monitoring_prometheus:9090` —— 這是
+**docker DNS 名稱**，只有當 Grafana/Loki/Prometheus 也是同一台 VM 上的容器並掛在
+`scholarship_prod_network` 時才解析得到。在那之前 Alloy 會一路重試然後丟掉每一批
+資料（log 裡是 `no retries left, dropping data`），nginx 的
+`location ^~ /monitoring` 也沒有上游可打（502）。這組 workflow 就是負責把
+`monitoring/docker-compose.monitoring.yml` 起起來的那一步。
+
+**每個 stage 各有一份自己的監控堆疊**，跑在自己的 AP VM 上，不共用。
+
+| Secret（Environments → `test` / `production` → Secrets） | 必填 | 說明 |
+|---|---|---|
+| `GRAFANA_ADMIN_USER` | ✅ | Grafana 管理者帳號。正式站請勿用 `admin`。 |
+| `GRAFANA_ADMIN_PASSWORD` | ✅ | ≥ 12 字元。這個儀表板是從正式站網域對外開的，沒設好等於公開。 |
+| `GRAFANA_SECRET_KEY` | 建議 | Grafana 用它加密 `secureJsonData`（這裡就是 Loki 的 `X-Scope-OrgID` tenant header）。**要在第一次部署就設好**：對一個「已經存在、且是用別把 key（含 Grafana 內建預設 key，也就是沒設這個 secret 時用的那把）加密過」的 `grafana_data` volume 換 key，所有存起來的 secret 都會解成亂碼——provisioning 不會修好它（datasource 已存在就不會重寫 secure 欄位），畫面上只會看到 `Unable to connect with Loki`。真的撞到只有兩條路：把舊 key 換回來，或用 `reset_grafana_volume=true` 重建。`openssl rand -base64 32`，每個 stage 一把。 |
+| `GH_PAT` | 選用 | 只給「告警 → 開 GitHub issue」用（webhook-bridge）。沒設也能跑，只是告警只留在 Grafana 裡。 |
+
+| Variable | 必填 | 說明 |
+|---|---|---|
+| `GRAFANA_ROOT_URL` | — | 例 `https://<該 stage 網域>/monitoring`。留空時由 `EXPECT_DOMAIN` 推導；兩者都沒有就直接失敗（Grafana 在 sub-path 下必須知道自己的絕對網址，否則所有連結與登入導向都會指到錯的主機）。 |
+| `MONITORING_DIR` | — | 監控堆疊放在 VM 上的位置，預設 `/opt/scholarship/monitoring`。 |
+| `MONITORING_ALERT_REPO` | — | webhook-bridge 開 issue 的 repo，預設就是 production repo 自己。 |
+
+前置條件與注意事項：
+
+- **先跑過一次 `deploy-<stage>.yml`**。這組 workflow 需要 `scholarship_prod_network`
+  已存在（app stack 建的），最後一步的「透過 nginx 驗證 `/monitoring`」也需要 nginx 在跑。
+- **VM 上需要免密碼 sudo**，或事先把 `/opt/scholarship/monitoring` 與
+  `/opt/scholarship/secrets` 建好並 chown 給 runner 使用者。
+  `/opt/scholarship/secrets/gh_pat` 的路徑寫死在共用的 compose 檔裡（dev/prod 兩邊共用），
+  不能按 stage 搬家。
+- **⚠️ 防火牆**：共用的 compose 檔會把 Loki `3100` 與 Prometheus `9090`
+  publish 到 host（`0.0.0.0`），因為 DB VM 的 Alloy 要跨機推資料進來。**這兩個埠沒有任何
+  認證**，請用防火牆只開給該 stage 的 DB VM。
+- **DB VM 的採集端不在這組 workflow 範圍內**。`docker-compose.prod-db-monitoring.yml`
+  （alloy + node-exporter + postgres-exporter）要在 DB VM 上另外起，並把
+  `MONITORING_SERVER_URL` 指向該 stage 的 AP VM。
+- `reset_grafana_volume=true` 會**刪掉 `grafana_data`**：手動存的 dashboard、annotation、
+  告警靜音全部消失（provisioning 帶的內容會從檔案重建）。平時不要勾。
+- `stop-test.yml` / `stop-production.yml` **不會**停監控堆疊（不同的 compose project）。
+  站台停機期間 Grafana 仍會繼續跑，這是刻意的——正好用來看停機當下的狀況。
 
 ### 3. 自訂配置
 
