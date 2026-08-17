@@ -267,11 +267,26 @@ jobs:
           echo "::notice::Deploy lock written to ${LOCK} — pushes to main will no longer deploy ${STAGE}."
           cat "${LOCK}"
 
+      # lock_deploys=false means "do not ADD a hold", never "clear someone
+      # else's". An earlier stop's lock is still in force, and silently deleting
+      # it here would undo a hold placed during an incident. So report what is
+      # actually true of this VM rather than assuming there is no lock.
       - name: Note that deploys are NOT held
         if: ${{ !inputs.lock_deploys }}
         run: |
-          echo "::warning::lock_deploys=false — the next push to main will redeploy and restart ${STAGE}."
-          echo "::warning::That is only appropriate for a stop you intend to be undone automatically."
+          set -euo pipefail
+          LOCK="${DEPLOY_DIR}/deploy-lock"
+          if [ -f "${LOCK}" ]; then
+            echo "::warning::lock_deploys=false, but ${LOCK} already exists from an EARLIER stop —"
+            echo "::warning::deploys to ${STAGE} stay held, and the next push to main will NOT restart it."
+            echo "::group::Existing deploy lock"
+            cat "${LOCK}" || true
+            echo "::endgroup::"
+            echo "::warning::To actually resume: gh workflow run deploy-${STAGE}.yml -f ignore_deploy_lock=true"
+          else
+            echo "::warning::lock_deploys=false — the next push to main will redeploy and restart ${STAGE}."
+            echo "::warning::That is only appropriate for a stop you intend to be undone automatically."
+          fi
 
       - name: Record current state
         id: before
@@ -343,15 +358,32 @@ jobs:
           fi
           echo "✅ No running containers left in ${DEPLOY_DIR}"
 
-          # The site must actually be unreachable — a stale nginx on the host,
-          # or a container started outside compose, would keep serving traffic
-          # while this workflow reported success.
-          if curl -fsk --max-time 10 https://localhost/health >/dev/null 2>&1; then
-            echo "::warning::https://localhost/health still answers on this VM."
-            echo "::warning::Something outside this compose project is still serving — investigate."
-          else
-            echo "✅ https://localhost/health no longer answers"
-          fi
+          # The site must actually be unreachable. An empty container list is
+          # not the same claim: a stale nginx on the host, or a container
+          # started outside this compose project, would keep serving applicants
+          # while the run reported "stopped". That false green is worth failing
+          # over — the operator asked for the site to be offline, and it isn't.
+          #
+          # Retried, because docker-proxy can hold the published port for a
+          # moment after the container exits; a single probe would flag that
+          # normal teardown lag as a live server.
+          probe() { curl -fsk --max-time 10 https://localhost/health >/dev/null 2>&1; }
+          attempt=0
+          while probe; do
+            attempt=$((attempt + 1))
+            if [ "$attempt" -ge 5 ]; then
+              echo "::error::https://localhost/health still answers after compose ${MODE}."
+              echo "::error::Every container in ${DEPLOY_DIR} is stopped, so something OUTSIDE this"
+              echo "::error::compose project is serving on 443 — a host nginx, a hand-started"
+              echo "::error::container, or a second compose project on this VM."
+              echo "::error::${STAGE} is NOT offline; investigate on the VM before announcing it is."
+              docker ps --format '  {{.Names}}\t{{.Image}}\t{{.Ports}}' || true
+              exit 1
+            fi
+            echo "Port still answering, waiting for teardown... ($attempt/5)"
+            sleep 3
+          done
+          echo "✅ https://localhost/health no longer answers"
 
       - name: Summary
         if: always()
