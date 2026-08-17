@@ -368,6 +368,28 @@ jobs:
 
           echo "✅ ${patched} dashboards retargeted to environment=${METRICS_ENV} (${retargeted_ds} also re-bound to ${LOKI_DS_UID})"
 
+          # Datasources are gated the same way, and the consequences are worse.
+          # Grafana's datasource provisioner applies a file only when its
+          # `version` exceeds the stored row, so on any VM that already has a
+          # grafana_data volume EVERY edit to datasources.yml is silently
+          # ignored — verified here by shipping cacheLevel: None and reading
+          # back `High` from the API after a restart. The same gate is why a
+          # rotated GRAFANA_SECRET_KEY leaves the encrypted tenant header
+          # unrepaired: provisioning never rewrites the secure fields of a
+          # datasource it decides is up to date.
+          #
+          # Stamping the version on every deploy makes provisioning declarative
+          # again: what the file says is what Grafana runs, and secure fields are
+          # re-encrypted with the key currently in use.
+          DS="${MONITORING_DIR}/config/grafana/provisioning/datasources"
+          for f in "${DS}"/*.yml; do
+            [ -f "$f" ] || continue
+            # Anchored on `version:` so the file-format key `apiVersion: 1` is
+            # left alone.
+            sed -i -E "s/^([[:space:]]*)version:[[:space:]]*[0-9]+[[:space:]]*$/\1version: ${STAMP}/" "$f"
+          done
+          echo "✅ datasource provisioning stamped version=${STAMP} so edits actually apply"
+
       - name: Write the alert-dispatch PAT file
         env:
           GH_PAT: ${{ secrets.GH_PAT }}

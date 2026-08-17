@@ -19,8 +19,24 @@ datasources:
       httpMethod: POST
       timeInterval: 15s
       queryTimeout: 60s
-      # Cache settings for better performance
-      cacheLevel: High
+      # cacheLevel rounds the time range of METADATA queries (label and series
+      # lookups — i.e. every dashboard variable dropdown) to a coarse boundary so
+      # repeated lookups hit a cache. At `High` that boundary is one hour, and
+      # the rounded window ENDS at the last boundary rather than at now: on
+      # 2026-08-17 a freshly deployed stack asked for 11:00→12:00 while the clock
+      # said 12:52 and Prometheus had been up for 23 minutes. The response was an
+      # empty list, so every `environment` / `vm` / `instance` dropdown on every
+      # dashboard was empty, panels resolved to `environment=""`, and Loki
+      # rejected the resulting selector outright. The stack looked broken for up
+      # to an hour after each first deploy — exactly when someone is looking at
+      # it to confirm the deploy worked.
+      #
+      # `None` means dropdowns always reflect now. What that costs is a cache hit
+      # on label lookups for a handful of operators, which is nothing; what it
+      # buys is that a correct deployment never looks like a broken one.
+      cacheLevel: 'None'
+      # Unrelated to the above: this one applies to range queries in panels, and
+      # only ever extends an existing series, so it cannot hide fresh data.
       incrementalQuerying: true
       incrementalQueryOverlapWindow: 10m
       # Enable exemplars for tracing (if used in future)
