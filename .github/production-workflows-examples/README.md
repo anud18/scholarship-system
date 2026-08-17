@@ -374,8 +374,8 @@ runner 使用者需要 passwordless sudo（deploy-stack.yml 與 backup.yml 都�
 
 - [ ] `stop-test.yml`、`stop-production.yml`、`stop-stack.yml` 三個都已複製到 prod repo
 - [ ] 兩個 environment 的 **Required reviewers** 已設定（stop 與 deploy 共用同一道關卡）
-- [ ] 已知道恢復方式：`gh workflow run deploy-<stage>.yml -f ignore_deploy_lock=true -f tag=<tag>`
-- [ ] `deploy-stack.yml` 是含 "Check deploy lock" 步驟的版本（舊版會忽略 lock，照樣把站台開回來）
+- [ ] 已知道恢復方式：`gh workflow run deploy-<stage>.yml -f tag=<tag>`
+- [ ] 已知道 stop **不會**阻止下一次 push to main 把站台開回來（需要持續離線時另外擋 merge / disable deploy workflow）
 
 ### Health Check Workflow
 
@@ -438,30 +438,14 @@ gh workflow run stop-production.yml -f confirm=production -f mode=stop -f reason
 | `mode=stop`（預設） | `docker compose stop`，容器保留，之後幾秒就能恢復 |
 | `mode=down` | `docker compose down --remove-orphans`，移除容器與 compose 網路 |
 | 資料 | **兩種模式都不會刪 volume**（檔案裡沒有任何 `-v`）。PostgreSQL / MinIO 在 DB VM，這個 workflow 根本碰不到 |
-| concurrency | 自己的 group（`stop-test` / `stop-production`），**不與 deploy 共用**：等待核准中的 deploy 會佔住它自己的 group，共用的話「關站」會被卡到有人去審那個 deploy 為止。stop 與 deploy 的先後由人（同一道核准關卡）與 deploy lock 決定 |
+| concurrency | 自己的 group（`stop-test` / `stop-production`），**不與 deploy 共用**：等待核准中的 deploy 會佔住它自己的 group，共用的話「關站」會被卡到有人去審那個 deploy 為止。stop 與 deploy 的先後由人（同一道核准關卡）決定 |
+| 恢復 | `gh workflow run deploy-<stage>.yml -f tag=<tag>`，會照常跑 migration + health + smoke checks |
 
-#### Deploy lock：停了就不會被下一次 merge 偷偷開回來
-
-`deploy-test.yml` / `deploy-production.yml` 是 push to main 觸發的。若沒有任何
-標記，停機後的下一次 merge 就會把人家刻意停掉的站台又叫起來，而且沒人會被通知。
-
-因此 stop workflow 預設（`lock_deploys=true`）會在 AP VM 上寫下：
-
-```
-<deploy dir>/deploy-lock      # 預設 ~/scholarship-<stage>/deploy-lock
-```
-
-`deploy-stack.yml` 的 "Check deploy lock" 步驟看到這個檔案就會直接失敗，並在
-log 印出是誰、什麼時候、為什麼停的。恢復服務是一個明確、需核准的動作：
-
-```bash
-# 清掉 lock 並重新部署（會照常跑 migration + health + smoke checks）
-gh workflow run deploy-production.yml -f ignore_deploy_lock=true -f tag=v1.2.3
-```
-
-> 比起直接到 VM 上 `rm deploy-lock`，請優先用上面這條指令：它會重跑健康檢查，
-> 「站台回來了」是驗證過的，不是用猜的。tag 建議指名，用預設的 `latest` 可能
-> 會拉到跟停機前不同的 image。
+> ⚠️ **stop 不等於 hold。** 這兩個 workflow 只是把「當下正在跑的」關掉，不會在
+> VM 上留下任何標記；`deploy-test.yml` / `deploy-production.yml` 仍然是 push to
+> main 觸發的，所以**下一次 merge 就會把站台重新部署開回來**。若該 stage 必須
+> 持續離線（維護時段、incident 處理中），就用擋 merge，或到 Actions 頁面暫時
+> disable 對應的 deploy workflow。
 
 ### 測試健康檢查
 

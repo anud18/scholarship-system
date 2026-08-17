@@ -32,10 +32,9 @@
 # This repository does NOT build images. The development repository's pipeline
 # publishes them to GHCR once; both workflows promote that exact artifact.
 #
-# STOPPING THE STAGE is the sibling workflow stop-test.yml. Once it has run,
-# this workflow refuses to deploy while <deploy dir>/deploy-lock exists — a
-# push to main cannot silently restart a stack somebody stopped on purpose.
-# Dispatch with `ignore_deploy_lock: true` to clear the lock and resume.
+# STOPPING THE STAGE is the sibling workflow stop-test.yml. It only stops what
+# is running at that moment and leaves nothing behind, so this workflow will
+# start test again on the next push to main.
 #
 # Prerequisites (one-time, see SECRETS-SETUP-GUIDE.md):
 #   - A self-hosted runner on the test AP VM, labelled
@@ -74,11 +73,6 @@ on:
         description: 'Upstream image tag to deploy (e.g. main-2c2b89d6 or v1.2.3). Defaults to latest.'
         required: false
         type: string
-      ignore_deploy_lock:
-        description: 'Resume a stage stopped by stop-test.yml: clear its deploy lock and deploy anyway'
-        required: false
-        type: boolean
-        default: false
 
 concurrency:
   # Scoped to the test stage ONLY, so a production deploy queued behind its
@@ -100,10 +94,6 @@ jobs:
       stage: test
       runner_labels: '["self-hosted","linux","test"]'
       tag: ${{ inputs.tag }}
-      # Push-triggered runs send `false` (inputs are empty outside dispatch),
-      # so a stage stopped by stop-test.yml stays stopped until someone
-      # dispatches this workflow with the box checked.
-      ignore_deploy_lock: ${{ inputs.ignore_deploy_lock == true }}
     # The called workflow reads secrets from the `test` ENVIRONMENT, which
     # overrides the repository-level (production) values. `inherit` is what
     # passes GH_PAT and the rest down; the environment scoping happens inside.

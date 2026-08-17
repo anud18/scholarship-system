@@ -28,25 +28,13 @@
 # are on the DB VM entirely — this workflow cannot reach them at all, which is
 # exactly the blast radius we want. Nothing here touches the database.
 #
-# WHY A DEPLOY LOCK
-# -----------------
-# deploy-test.yml and deploy-production.yml fire on every push to main. Without
-# a marker on the VM, the next merge would silently restart a stack that was
-# stopped on purpose (during an incident, a maintenance window, or an audit),
-# and the operator who stopped it would never be told. So, unless the caller
-# opts out, this workflow writes:
-#
-#     <deploy dir>/deploy-lock
-#
-# and deploy-stack.yml refuses to deploy while it exists. Resuming is therefore
-# always an explicit, reviewed act:
-#
-#     gh workflow run deploy-<stage>.yml -f ignore_deploy_lock=true [-f tag=...]
-#
-# That path is preferred over deleting the file by hand because it re-runs the
-# health and smoke checks, so "the site is back" is verified rather than
-# assumed. mode=stop still needs it: `compose stop` leaves the containers in
-# place, but a subsequent `compose up -d` would start them again.
+# A STOP IS NOT A HOLD. This workflow stops what is running right now, and
+# nothing more — it leaves no marker behind. deploy-test.yml and
+# deploy-production.yml still fire on every push to main, so the next merge
+# redeploys and restarts the stage. If the stage has to STAY down (a
+# maintenance window, an incident), keep it down the same way you would keep
+# any deploy from landing: hold the merge, or disable the deploy workflow in
+# the Actions tab for as long as it needs to stay off.
 #
 # Prerequisites — the same ones deploy-stack.yml already requires:
 #   - A self-hosted runner on the stage's AP VM, labelled
@@ -81,15 +69,10 @@ on:
         type: string
         default: 'stop'
       reason:
-        description: 'Why the stack is being stopped — recorded in the lock file and the run summary'
+        description: 'Why the stack is being stopped — recorded in the run summary'
         required: false
         type: string
         default: ''
-      lock_deploys:
-        description: 'Write <deploy dir>/deploy-lock so a push to main cannot silently restart this stage'
-        required: false
-        type: boolean
-        default: true
       deploy_dir:
         description: 'Deploy directory on the AP VM. Defaults to ~/scholarship-<stage>.'
         required: false
@@ -234,60 +217,6 @@ jobs:
             echo "ENV_FILE=" >> "$GITHUB_ENV"
           fi
 
-      # Written BEFORE anything is torn down, on purpose. Two orders were
-      # possible and this one fails safe:
-      #   lock first  → a stop that dies half-way leaves deploys HELD on a stack
-      #                 that may still be up. The operator is watching a red run
-      #                 and clears it deliberately.
-      #   lock last   → a stop that dies half-way leaves the site DOWN with
-      #                 deploys unheld, so the next merge to main restarts it
-      #                 unattended — the exact outcome this lock exists to stop.
-      # It also closes the race with a deploy already past its own lock check:
-      # whichever wrote the lock first, the deploy fails at its next run.
-      - name: Hold further deploys
-        if: inputs.lock_deploys
-        env:
-          REASON: ${{ inputs.reason }}
-          ACTOR: ${{ github.actor }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          LOCK="${DEPLOY_DIR}/deploy-lock"
-          {
-            echo "# Deploys to ${STAGE} are HELD. Written by stop-${STAGE}.yml."
-            echo "# deploy-stack.yml refuses to deploy while this file exists."
-            echo "# To resume (re-runs health + smoke checks and clears this file):"
-            echo "#   gh workflow run deploy-${STAGE}.yml -f ignore_deploy_lock=true"
-            echo "locked_at=$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-            echo "locked_by=${ACTOR}"
-            echo "mode=${MODE}"
-            echo "run=${RUN_URL}"
-            echo "reason=${REASON:-(not given)}"
-          } > "${LOCK}"
-          echo "::notice::Deploy lock written to ${LOCK} — pushes to main will no longer deploy ${STAGE}."
-          cat "${LOCK}"
-
-      # lock_deploys=false means "do not ADD a hold", never "clear someone
-      # else's". An earlier stop's lock is still in force, and silently deleting
-      # it here would undo a hold placed during an incident. So report what is
-      # actually true of this VM rather than assuming there is no lock.
-      - name: Note that deploys are NOT held
-        if: ${{ !inputs.lock_deploys }}
-        run: |
-          set -euo pipefail
-          LOCK="${DEPLOY_DIR}/deploy-lock"
-          if [ -f "${LOCK}" ]; then
-            echo "::warning::lock_deploys=false, but ${LOCK} already exists from an EARLIER stop —"
-            echo "::warning::deploys to ${STAGE} stay held, and the next push to main will NOT restart it."
-            echo "::group::Existing deploy lock"
-            cat "${LOCK}" || true
-            echo "::endgroup::"
-            echo "::warning::To actually resume: gh workflow run deploy-${STAGE}.yml -f ignore_deploy_lock=true"
-          else
-            echo "::warning::lock_deploys=false — the next push to main will redeploy and restart ${STAGE}."
-            echo "::warning::That is only appropriate for a stop you intend to be undone automatically."
-          fi
-
       - name: Record current state
         id: before
         run: |
@@ -307,9 +236,9 @@ jobs:
           echo "Running containers before stop: ${RUNNING:-0}"
 
           if [ "${RUNNING:-0}" = "0" ]; then
-            # Not an error — stopping an already-stopped stack is a legitimate
-            # no-op, and the lock step above is often the real reason to run it.
-            echo "::notice::Stack is already stopped; continuing (the deploy lock is still applied)."
+            # Not an error — re-running a stop on an already-stopped stack is a
+            # legitimate no-op, and the verification below still confirms it.
+            echo "::notice::Stack is already stopped; continuing to the post-stop checks."
           fi
 
       - name: Stop the stack
@@ -403,15 +332,16 @@ jobs:
             echo "| **Directory** | ${DEPLOY_DIR:-(unresolved)} |"
             echo "| **URL now offline** | ${DEPLOY_URL:-n/a} |"
             echo "| **Containers running before** | ${RUNNING_BEFORE:-unknown} |"
-            echo "| **Deploys held** | ${{ inputs.lock_deploys && 'yes — deploy-lock written' || 'NO — next push to main redeploys' }} |"
             echo "| **Requested by** | @${{ github.actor }} |"
             echo "| **Reason** | ${REASON:-(not given)} |"
             echo ""
             echo "**To bring ${STAGE} back:**"
             echo ""
             echo '```bash'
-            echo "gh workflow run deploy-${STAGE}.yml -f ignore_deploy_lock=true -f tag=<tag>"
+            echo "gh workflow run deploy-${STAGE}.yml -f tag=<tag>"
             echo '```'
             echo ""
-            echo "It clears the lock, redeploys, and verifies with the usual health and smoke checks."
+            echo "It redeploys and verifies with the usual health and smoke checks."
+            echo ""
+            echo "> ⚠️ Nothing holds ${STAGE} down: the next push to main redeploys and restarts it."
           } >> "$GITHUB_STEP_SUMMARY"

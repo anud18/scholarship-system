@@ -24,12 +24,12 @@
 #      The `environment:` key alone gates nothing; without that configuration
 #      this runs unattended. See SECRETS-SETUP-GUIDE.md § Environments.
 #
-# AFTER A STOP, DEPLOYS ARE HELD. Unless you clear `lock_deploys`, the run
-# writes <deploy dir>/deploy-lock and deploy-test.yml refuses to deploy while
-# it exists — otherwise the next merge to main would quietly restart a stack
-# somebody stopped on purpose. To bring test back:
+# A STOP IS NOT A HOLD. It stops what is running now and leaves no marker
+# behind, so the next push to main redeploys and restarts test. If it has to
+# stay down, hold the merge or disable deploy-test.yml in the Actions tab for
+# that window. To bring test back immediately:
 #
-#   gh workflow run deploy-test.yml -f ignore_deploy_lock=true [-f tag=v1.2.3]
+#   gh workflow run deploy-test.yml [-f tag=v1.2.3]
 #
 # NO DATA IS DESTROYED. Volumes are never removed, and PostgreSQL/MinIO live on
 # the DB VM which this workflow cannot reach. See stop-stack.yml's header.
@@ -56,14 +56,9 @@ on:
           - down
         default: stop
       reason:
-        description: 'Why (recorded in the deploy lock and the run summary)'
+        description: 'Why (recorded in the run summary)'
         required: false
         type: string
-      lock_deploys:
-        description: 'Hold deploys until someone explicitly resumes (uncheck only if the next push to main SHOULD restart it)'
-        required: false
-        type: boolean
-        default: true
 
 concurrency:
   # DELIBERATELY NOT shared with deploy-test. A run waiting at its approval
@@ -73,9 +68,8 @@ concurrency:
   # has to work when it is needed: a stop must never queue behind a deploy that
   # is sitting unapproved at its gate.
   #
-  # What sequences a stop against a deploy instead: both pass the same human
-  # approval gate on the `test` environment, and the deploy lock this stop
-  # writes (see stop-stack.yml) makes any later deploy fail closed.
+  # What sequences a stop against a deploy instead is the human at the `test`
+  # environment's approval gate, which both of them pass through.
   group: stop-test
   cancel-in-progress: false
 
@@ -92,7 +86,6 @@ jobs:
       confirm: ${{ inputs.confirm }}
       mode: ${{ inputs.mode }}
       reason: ${{ inputs.reason }}
-      lock_deploys: ${{ inputs.lock_deploys }}
     # The called workflow reads variables from the `test` ENVIRONMENT, which
     # overrides the repository-level (production) values.
     secrets: inherit
