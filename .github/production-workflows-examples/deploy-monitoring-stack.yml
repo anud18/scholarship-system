@@ -302,6 +302,62 @@ jobs:
              "${MONITORING_DIR}/config/grafana/grafana.ini"
           echo "✅ Configuration written (grafana.ini regenerated from example)"
 
+      # Without this every panel on every dashboard is empty, and the stack looks
+      # broken while it is in fact collecting perfectly.
+      #
+      # The dashboards are shared with the development repository, whose Grafana
+      # serves the staging monitoring server, so all eight ship with the
+      # `environment` template variable defaulting to `staging` and the log
+      # dashboard bound to the `loki-staging-uid` datasource. This VM's Alloy
+      # labels everything `environment="prod"` and pushes logs to Loki tenant
+      # `prod` (monitoring/config/alloy/prod-ap-vm.alloy), so those queries match
+      # nothing here. A viewer has to know to change a dropdown before seeing a
+      # single number — and concludes the deploy failed when they don't.
+      #
+      # Retarget at deploy time rather than in the repository: the correct value
+      # is a property of the DEPLOYMENT, and the same files have to keep working
+      # on the staging server.
+      - name: Retarget dashboards at this deployment
+        env:
+          # Both stages of this repository run docker-compose.prod.yml, which
+          # mounts prod-ap-vm.alloy on both — so the test stage's data is also
+          # labelled `prod`. What separates the stages is one Grafana per VM, not
+          # the label. Override per environment only if that ever changes.
+          METRICS_ENV: ${{ vars.METRICS_ENVIRONMENT || 'prod' }}
+          LOKI_DS_UID: ${{ vars.LOKI_DATASOURCE_UID || 'loki-prod-uid' }}
+        run: |
+          set -euo pipefail
+          DASH="${MONITORING_DIR}/config/grafana/provisioning/dashboards"
+
+          # Grafana's dashboard provisioner compares the file's `version` against
+          # the stored row and skips the import when they match — even though the
+          # queries changed. Stamping a monotonic version guarantees the retarget
+          # actually lands on a volume that already holds these dashboards.
+          STAMP=$(date +%s)
+
+          patched=0
+          while IFS= read -r f; do
+            tmp="${f}.retarget"
+            jq --arg env "${METRICS_ENV}" --argjson v "${STAMP}" '
+              ((.templating.list[]? | select(.name == "environment") | .current)
+                 |= {selected: true, text: $env, value: $env})
+              | .version = $v
+            ' "$f" > "$tmp"
+            mv "$tmp" "$f"
+            patched=$((patched + 1))
+          done < <(find "${DASH}" -name '*.json')
+
+          # The log dashboard names its datasource by uid. All three Loki
+          # datasources point at the same Loki and differ only by tenant header,
+          # so this is a one-token substitution.
+          retargeted_ds=$(grep -rl 'loki-staging-uid' "${DASH}" 2>/dev/null | wc -l)
+          if [ "${retargeted_ds}" -gt 0 ]; then
+            grep -rl 'loki-staging-uid' "${DASH}" \
+              | xargs sed -i "s/loki-staging-uid/${LOKI_DS_UID}/g"
+          fi
+
+          echo "✅ ${patched} dashboards retargeted to environment=${METRICS_ENV} (${retargeted_ds} also re-bound to ${LOKI_DS_UID})"
+
       - name: Write the alert-dispatch PAT file
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
