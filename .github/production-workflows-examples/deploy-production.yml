@@ -40,6 +40,12 @@
 # the two workflows resolve independently and can land on different images:
 # dispatch manually with a pinned tag whenever that matters.
 #
+# STOPPING THE STAGE is the sibling workflow stop-production.yml. Once it has
+# run, this workflow refuses to deploy while <deploy dir>/deploy-lock exists —
+# a merge to main cannot bring production back up mid-incident before anyone
+# decided it was safe. Dispatch with `ignore_deploy_lock: true` to clear the
+# lock and restore service (it re-runs the health and smoke checks).
+#
 # Prerequisites (one-time, see SECRETS-SETUP-GUIDE.md):
 #   - A self-hosted runner on the production AP VM, labelled
 #     [self-hosted, linux, production]. The stage label is mandatory: both VMs
@@ -82,6 +88,11 @@ on:
         description: 'Upstream image tag to deploy (e.g. main-2c2b89d6 or v1.2.3). Defaults to latest.'
         required: false
         type: string
+      ignore_deploy_lock:
+        description: 'Resume a stage stopped by stop-production.yml: clear its deploy lock and deploy anyway'
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   # Scoped to the production stage ONLY, so the test rehearsal never blocks a
@@ -103,6 +114,11 @@ jobs:
       stage: production
       runner_labels: '["self-hosted","linux","production"]'
       tag: ${{ inputs.tag }}
+      # Push-triggered runs send `false` (inputs are empty outside dispatch), so
+      # production stopped during an incident stays down until someone
+      # dispatches this workflow with the box checked — a merge cannot bring it
+      # back on its own.
+      ignore_deploy_lock: ${{ inputs.ignore_deploy_lock == true }}
     secrets: inherit
     permissions:
       contents: read

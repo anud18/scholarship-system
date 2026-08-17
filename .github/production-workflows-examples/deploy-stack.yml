@@ -67,6 +67,11 @@ on:
         required: false
         type: string
         default: ''
+      ignore_deploy_lock:
+        description: 'Clear <deploy dir>/deploy-lock (written by stop-<stage>.yml) and deploy anyway. This is how a stopped stage is resumed.'
+        required: false
+        type: boolean
+        default: false
 
 env:
   REGISTRY: ghcr.io
@@ -339,6 +344,43 @@ jobs:
           mkdir -p "$DIR"
           echo "DEPLOY_DIR=${DIR}" >> "$GITHUB_ENV"
           echo "Deploy directory: ${DIR}"
+
+      # ── Gate 4: was this stage deliberately stopped? ───────────────────────
+      # stop-<stage>.yml writes <deploy dir>/deploy-lock when it takes the site
+      # offline. Both deploy workflows fire on every push to main, so without
+      # this check the next merge would silently restart a stack that a human
+      # stopped during a maintenance window or an incident — and nobody would
+      # be told. Runs before the pull, so a held stage costs nothing.
+      #
+      # Resuming is therefore always explicit: dispatching with
+      # ignore_deploy_lock=true clears the lock AND re-runs the migration,
+      # health and smoke checks below, so "the site is back" is verified.
+      - name: Check deploy lock
+        env:
+          IGNORE_DEPLOY_LOCK: ${{ inputs.ignore_deploy_lock }}
+        run: |
+          set -euo pipefail
+          LOCK="${DEPLOY_DIR}/deploy-lock"
+          if [ ! -f "${LOCK}" ]; then
+            echo "No deploy lock in ${DEPLOY_DIR} — proceeding."
+            exit 0
+          fi
+
+          echo "::group::Deploy lock (${LOCK})"
+          cat "${LOCK}" || true
+          echo "::endgroup::"
+
+          if [ "${IGNORE_DEPLOY_LOCK}" = "true" ]; then
+            rm -f "${LOCK}"
+            echo "::warning::Deploy lock cleared by an explicit dispatch — resuming deploys to ${STAGE}."
+          else
+            echo "::error::Deploys to ${STAGE} are HELD: ${LOCK} exists (written by stop-${STAGE}.yml)."
+            echo "::error::This stage was stopped deliberately; deploying now would restart it."
+            echo "::error::To resume: dispatch deploy-${STAGE}.yml with ignore_deploy_lock=true"
+            echo "::error::(it clears the lock and re-runs the health + smoke checks),"
+            echo "::error::or remove ${LOCK} on the VM if the lock is stale."
+            exit 1
+          fi
 
       # Authenticate against the UPSTREAM namespace. GITHUB_TOKEN is scoped to
       # this repository and cannot read another owner's packages, so a PAT with
