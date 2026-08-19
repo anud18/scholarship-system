@@ -3,23 +3,29 @@
 # .github/workflows/deploy-test.yml (it calls deploy-stack.yml, which must be
 # copied alongside it).
 #
-# ONE STAGE PER WORKFLOW
-# ----------------------
+# ONE STAGE PER WORKFLOW, MANUAL DISPATCH ONLY
+# -------------------------------------------
 # This workflow deploys the TEST AP VM. Its sibling, deploy-production.yml,
-# deploys the production one. Both fire on the SAME trigger — a push to main —
-# and run INDEPENDENTLY: neither waits on nor vetoes the other.
+# deploys the production one. Neither has a `push:` trigger: a merge to main
+# deploys NOTHING by itself. Each tier is released by dispatching its own
+# workflow, and the two run INDEPENDENTLY — neither waits on nor vetoes the
+# other.
 #
-#   push to main ─┬─▶ deploy-test.yml        → [self-hosted, linux, test]
-#                 │                            environment: test        🔒 1 approval
-#                 └─▶ deploy-production.yml  → [self-hosted, linux, production]
-#                                              environment: production  🔒 1 approval
+#   gh workflow run deploy-test.yml       → [self-hosted, linux, test]
+#                                           environment: test        🔒 1 approval
+#   gh workflow run deploy-production.yml → [self-hosted, linux, production]
+#                                           environment: production  🔒 1 approval
 #
 # Splitting them is deliberate. A red test tier says nothing about production
 # (its own DB, certificate or portal can fail on their own) and must not be
 # able to hold a hotfix hostage; conversely a production deploy that is being
 # held at its gate must not stall the test rehearsal. What sequences the two is
-# the human at each approval gate, who can read the test run before approving
-# production — not a machine deciding for them.
+# the human who dispatches them and approves at each gate — they can read the
+# test run before dispatching production, rather than a machine deciding.
+#
+# Dropping the push trigger also removes the last way a mirror sync could reach
+# a VM on its own: mirroring updates main, and nothing more happens until
+# someone dispatches a deploy.
 #
 # The approval gate is a GitHub *Environment protection rule*, not YAML. It has
 # to be configured once, in the production repository:
@@ -59,12 +65,10 @@
 name: Deploy to Test
 
 on:
-  # NOTE: a code push alone does not produce a new image here — pushing to main
-  # deploys whatever the upstream `latest` tag currently points at. For a
-  # reproducible release, dispatch manually with an explicit tag.
-  push:
-    branches:
-      - main
+  # Dispatch only. This repository builds no image — the deploy promotes an
+  # artifact the development repository already published to GHCR, so leaving
+  # `tag` empty deploys whatever `latest` points at RIGHT NOW. For a
+  # reproducible release, always pass the explicit tag.
   workflow_dispatch:
     inputs:
       tag:
@@ -75,7 +79,7 @@ on:
 concurrency:
   # Scoped to the test stage ONLY, so a production deploy queued behind its
   # approval gate never blocks the test rehearsal (and vice versa). Two
-  # overlapping test runs would race to deploy different tags onto one VM.
+  # overlapping test dispatches would race to deploy different tags onto one VM.
   group: deploy-test
   cancel-in-progress: false
 

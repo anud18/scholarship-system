@@ -1106,6 +1106,16 @@ jobs:
           1. Review the Pull Request in the production repository
           2. Merge the PR (using squash merge) when ready to deploy
           3. **The version tag will be created automatically** after PR merge (requires auto-tag workflow in production repo)
+          4. **Merging deploys nothing.** The production repo's deploy workflows are
+             dispatch-only — run them yourself, in this order, approving at each
+             environment gate:
+             \`\`\`bash
+             gh workflow run deploy-test.yml       -f tag=<image tag>
+             gh workflow run deploy-production.yml -f tag=<same tag>
+             # only when monitoring/** changed in this sync:
+             gh workflow run deploy-monitoring-test.yml
+             gh workflow run deploy-monitoring-production.yml
+             \`\`\`
 
           ## 🏷️ Auto-Tagging Information
 

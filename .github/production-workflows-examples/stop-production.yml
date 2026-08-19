@@ -13,11 +13,12 @@
 # the test one. There is no combined "stop everything" entry point on purpose:
 # a single dispatch must never be able to take both tiers down.
 #
-#   deploy-production.yml  ──▶ starts production  (push to main / dispatch)
+#   deploy-production.yml  ──▶ starts production  (dispatch ONLY)
 #   stop-production.yml    ──▶ stops  production  (dispatch ONLY)
 #
 # MANUAL DISPATCH ONLY. Nothing about a code push implies the site should go
-# offline, so there is no `push:` trigger here.
+# offline, so there is no `push:` trigger here — as of the dispatch-only
+# release flow, its sibling has none either.
 #
 # Two things gate this run, and both are deliberate:
 #   1. `confirm` — you must type `production`. workflow_dispatch remembers the
@@ -31,10 +32,11 @@
 #      § Environments.
 #
 # ⚠️  A STOP IS NOT A HOLD. This run stops what is currently up and leaves no
-# marker behind, so the NEXT PUSH TO MAIN redeploys and restarts production —
-# possibly mid-incident, before anyone decided it was safe. If production has
-# to stay down, hold the merges or disable deploy-production.yml in the Actions
-# tab for that window. To restore service deliberately:
+# marker behind. Merging to main no longer restarts production by itself, but
+# ANY DISPATCH OF deploy-production.yml does — possibly mid-incident, before
+# anyone decided it was safe. If production has to stay down, say so where the
+# operators look, and disable deploy-production.yml in the Actions tab for that
+# window. To restore service deliberately:
 #
 #   gh workflow run deploy-production.yml -f tag=v1.2.3
 #

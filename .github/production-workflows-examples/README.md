@@ -47,18 +47,18 @@ warning: here-document at line 10 delimited by end-of-file (wanted `FOOTER_EOF')
 | `bootstrap-ap-runner.sh` 🅾️ | **兩台空 VM 的步驟 0** — 把 bare AP VM 變成可跑 action 的 self-hosted runner | 在 AP VM 手動執行一次 | **必要(前置)** |
 | `setting-env.yml` | 在 AP VM 裝 Docker、SSH 到 DB VM 裝 Docker+傳 image、建部署目錄 | runner 就緒後手動觸發 | **必要** |
 | `auto-tag-on-merge.yml` ⭐ | 自動建立 Git tag 和 Release | PR merge 到 main | **必要** |
-| `deploy-test.yml` | 部署 **test AP VM**，需一位 reviewer 核准 | Push to main / 手動觸發 | **必要** |
-| `deploy-production.yml` | 部署 **production AP VM**，需一位 reviewer 核准 | Push to main / 手動觸發 | **必要** |
+| `deploy-test.yml` | 部署 **test AP VM**，需一位 reviewer 核准 | **只能手動觸發**（push to main 不會部署） | **必要** |
+| `deploy-production.yml` | 部署 **production AP VM**，需一位 reviewer 核准 | **只能手動觸發**（push to main 不會部署） | **必要** |
 | `deploy-stack.yml` | 上面兩個 workflow 共用的 reusable workflow（實際的部署腳本本體） | 由兩個 deploy workflow 呼叫，不單獨觸發 | **必要**（三個要一起複製） |
 | `stop-test.yml` | **停掉 test AP VM** 的站台，需一位 reviewer 核准 | 只能手動觸發 | **必要** |
 | `stop-production.yml` | **停掉 production AP VM** 的站台（正式站會離線），需一位 reviewer 核准 | 只能手動觸發 | **必要** |
 | `stop-stack.yml` | 上面兩個 stop workflow 共用的 reusable workflow（實際的停機腳本本體） | 由兩個 stop workflow 呼叫，不單獨觸發 | **必要**（三個要一起複製） |
-| `deploy-monitoring-test.yml` | 在 **test AP VM** 起 Grafana/Loki/Prometheus（監控儀表板本體），需一位 reviewer 核准 | push to main 且動到 `monitoring/**` / 手動觸發 | **必要**（要看儀表板就必裝） |
-| `deploy-monitoring-production.yml` | 在 **production AP VM** 起 Grafana/Loki/Prometheus，需一位 reviewer 核准 | push to main 且動到 `monitoring/**` / 手動觸發 | **必要**（同上） |
+| `deploy-monitoring-test.yml` | 在 **test AP VM** 起 Grafana/Loki/Prometheus（監控儀表板本體），需一位 reviewer 核准 | **只能手動觸發**（同步進 `monitoring/**` 的變更後自己跑） | **必要**（要看儀表板就必裝） |
+| `deploy-monitoring-production.yml` | 在 **production AP VM** 起 Grafana/Loki/Prometheus，需一位 reviewer 核准 | **只能手動觸發**（同上） | **必要**（同上） |
 | `deploy-monitoring-stack.yml` | 上面兩個 monitoring workflow 共用的 reusable workflow（實際的部署腳本本體） | 由兩個 monitoring workflow 呼叫，不單獨觸發 | **必要**（三個要一起複製） |
 | `health-check.yml` | 監控應用程式健康狀態 | 每 15 分鐘 / 手動觸發 | 選用 |
 | `backup.yml` | 備份資料庫和檔案 | 每日 2AM UTC / 手動觸發 | 選用 |
-| `fortify-scan.yml` | Fortify SAST 掃描（Python + JS/TS + config），產出 `.fpr` 與 BIRT PDF 報告。掃描約 2.5 小時且獨佔共用 Fortify runner，故只在 push to main 觸發 | Push to main / 手動觸發 | 選用 |
+| `fortify-scan.yml` | Fortify SAST 掃描（Python + JS/TS + config），產出 `.fpr` 與 BIRT PDF 報告。掃描約 2.5 小時且獨佔共用 Fortify runner，故**只能手動觸發**——要交報告時才跑，不隨 push/PR 啟動 | **只能手動觸發** | 選用 |
 
 ### 🅾️ 步驟 0：bare VM 的 bootstrap（雞生蛋問題）
 
@@ -310,6 +310,9 @@ nginx-exporter、redis-exporter）。Alloy 把資料推到
 
 前置條件與注意事項：
 
+- **只能手動 dispatch**。這兩個 caller 已移除 `push:` 觸發：mirror 同步進
+  `monitoring/**` 的變更後，自己跑 `gh workflow run deploy-monitoring-<stage>.yml`
+  才會重新部署（每次都會重啟 Grafana 約 30 秒，站台不受影響）。
 - **先跑過一次 `deploy-<stage>.yml`**。這組 workflow 需要 `scholarship_prod_network`
   已存在（app stack 建的），最後一步的「透過 nginx 驗證 `/monitoring`」也需要 nginx 在跑。
 - **VM 上需要免密碼 sudo**，或事先把 `/opt/scholarship/monitoring` 與
@@ -417,6 +420,7 @@ runner 使用者需要 passwordless sudo（deploy-stack.yml 與 backup.yml 都�
 ### Deploy Workflow
 
 - [ ] `deploy-test.yml`、`deploy-production.yml`、`deploy-stack.yml` 三個都已複製到 prod repo
+- [ ] 已知道 deploy **只能手動 dispatch**：merge 到 main 不會部署，release 要自己跑 `gh workflow run deploy-<stage>.yml -f tag=<tag>`
 - [ ] test AP VM 的 runner labels 含 `test`；production AP VM 含 `production`
 - [ ] GitHub Environments `test` 與 `production` 都已建立
 - [ ] 兩個 environment 都設了 **Required reviewers（1 人）**
@@ -432,7 +436,7 @@ runner 使用者需要 passwordless sudo（deploy-stack.yml 與 backup.yml 都�
 - [ ] `stop-test.yml`、`stop-production.yml`、`stop-stack.yml` 三個都已複製到 prod repo
 - [ ] 兩個 environment 的 **Required reviewers** 已設定（stop 與 deploy 共用同一道關卡）
 - [ ] 已知道恢復方式：`gh workflow run deploy-<stage>.yml -f tag=<tag>`
-- [ ] 已知道 stop **不會**阻止下一次 push to main 把站台開回來（需要持續離線時另外擋 merge / disable deploy workflow）
+- [ ] 已知道 stop **不會**阻止任何人 dispatch deploy 把站台開回來（push to main 本身已不會部署；需要持續離線時，在 Actions 頁把該 stage 的 deploy workflow disable 掉）
 
 ### Health Check Workflow
 
@@ -453,6 +457,10 @@ runner 使用者需要 passwordless sudo（deploy-stack.yml 與 backup.yml 都�
 
 ### 手動測試部署
 
+> ⚠️ **部署只能手動 dispatch**：`deploy-test.yml` / `deploy-production.yml` 都
+> 已移除 `push:` 觸發，merge 到 main（含 mirror 同步的 release PR）**不會**部署
+> 任何東西。要上線就自己跑下面的指令。
+
 ```bash
 # In production repo；建議帶明確 tag，兩個 workflow 才會部署到同一份 image
 gh workflow run deploy-test.yml -f tag=v1.2.3
@@ -465,16 +473,20 @@ gh run watch
 gh run view --log
 ```
 
-兩個 workflow 各自獨立：push to main 會同時觸發，各自停在自己 environment 的
+`tag` 留空會部署 GHCR 上當下的 `latest`，兩次 dispatch 各自解析、可能拿到不同
+image；要可重現就一定帶明確 tag。
+
+兩個 workflow 各自獨立：各自 dispatch、各自停在自己 environment 的
 "Review deployments" 等核准，reviewer 按下 **Approve and deploy** 才會跑到對應
 的 AP VM。
 
 **沒有誰否決誰**：test 失敗不會擋下 production，production 卡在核准也不會擋下
-test。順序完全由人決定 —— reviewer 可以先放行 test、看完結果再回來核准
-production，要停就按 Reject。
+test。順序完全由人決定 —— 先放行 test、看完結果再 dispatch production，要停就
+按 Reject 或乾脆不 dispatch。
 
-> ⚠️ `production` environment 的 required reviewer 是唯一擋在 push to main 與
-> 正式機之間的關卡（不再有前置的 test 階段），上線前務必先設好。
+> ⚠️ 現在擋在 merge 與正式機之間的有兩道，兩道都是人：① 有人手動 dispatch
+> `deploy-production.yml`；② `production` environment 的 required reviewer（不再
+> 有前置的 test 階段）。上線前務必先把 reviewer 設好。
 
 ### 停止站台（stop-test.yml / stop-production.yml）
 
@@ -499,10 +511,10 @@ gh workflow run stop-production.yml -f confirm=production -f mode=stop -f reason
 | 恢復 | `gh workflow run deploy-<stage>.yml -f tag=<tag>`，會照常跑 migration + health + smoke checks |
 
 > ⚠️ **stop 不等於 hold。** 這兩個 workflow 只是把「當下正在跑的」關掉，不會在
-> VM 上留下任何標記；`deploy-test.yml` / `deploy-production.yml` 仍然是 push to
-> main 觸發的，所以**下一次 merge 就會把站台重新部署開回來**。若該 stage 必須
-> 持續離線（維護時段、incident 處理中），就用擋 merge，或到 Actions 頁面暫時
-> disable 對應的 deploy workflow。
+> VM 上留下任何標記。merge 到 main 已經不會自動把站台開回來（deploy 已改成
+> 只能手動 dispatch），但**任何人 dispatch 一次 deploy 就會開回來**。若該 stage
+> 必須持續離線（維護時段、incident 處理中），除了公告之外，請到 Actions 頁面把
+> 對應的 deploy workflow 暫時 disable 掉。
 
 ### 測試健康檢查
 
@@ -602,7 +614,7 @@ for f in deploy-test.yml deploy-production.yml deploy-stack.yml; do
 done
 
 # 舊版單一檔 deploy.yml 已拆成上面兩個 caller —— prod repo 若還留著它，
-# 刪掉，否則 push to main 會多跑一條舊的 promotion。
+# 刪掉，否則它自己的 push to main 觸發還會多跑一條舊的 promotion。
 git rm -f .github/workflows/deploy.yml 2>/dev/null || true
 
 # Commit

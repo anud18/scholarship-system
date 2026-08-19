@@ -29,12 +29,13 @@
 # exactly the blast radius we want. Nothing here touches the database.
 #
 # A STOP IS NOT A HOLD. This workflow stops what is running right now, and
-# nothing more — it leaves no marker behind. deploy-test.yml and
-# deploy-production.yml still fire on every push to main, so the next merge
-# redeploys and restarts the stage. If the stage has to STAY down (a
-# maintenance window, an incident), keep it down the same way you would keep
-# any deploy from landing: hold the merge, or disable the deploy workflow in
-# the Actions tab for as long as it needs to stay off.
+# nothing more — it leaves no marker behind. Nothing restarts the stage on its
+# own (deploy-test.yml and deploy-production.yml are dispatch-only, so a merge
+# to main no longer redeploys), but equally nothing prevents someone from
+# dispatching a deploy during the window and bringing the stage straight back
+# up. If the stage has to STAY down (a maintenance window, an incident), say so
+# where the operators look — and, for a hard stop, disable the stage's deploy
+# workflow in the Actions tab for as long as it needs to stay off.
 #
 # Prerequisites — the same ones deploy-stack.yml already requires:
 #   - A self-hosted runner on the stage's AP VM, labelled
@@ -342,5 +343,5 @@ jobs:
             echo ""
             echo "It redeploys and verifies with the usual health and smoke checks."
             echo ""
-            echo "> ⚠️ Nothing holds ${STAGE} down: the next push to main redeploys and restarts it."
+            echo "> ⚠️ Nothing holds ${STAGE} down: a deploy dispatch restarts it at any time."
           } >> "$GITHUB_STEP_SUMMARY"

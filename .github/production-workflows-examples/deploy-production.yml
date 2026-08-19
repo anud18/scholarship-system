@@ -3,42 +3,42 @@
 # .github/workflows/deploy-production.yml (it calls deploy-stack.yml, which
 # must be copied alongside it).
 #
-# ONE STAGE PER WORKFLOW
-# ----------------------
+# ONE STAGE PER WORKFLOW, MANUAL DISPATCH ONLY
+# -------------------------------------------
 # This workflow deploys the PRODUCTION AP VM. Its sibling, deploy-test.yml,
-# deploys the test one. Both fire on the SAME trigger — a push to main — and
-# run INDEPENDENTLY: neither waits on nor vetoes the other.
+# deploys the test one. Neither has a `push:` trigger: a merge to main deploys
+# NOTHING by itself. Each tier is released by dispatching its own workflow, and
+# the two run INDEPENDENTLY — neither waits on nor vetoes the other.
 #
-#   push to main ─┬─▶ deploy-test.yml        → [self-hosted, linux, test]
-#                 │                            environment: test        🔒 1 approval
-#                 └─▶ deploy-production.yml  → [self-hosted, linux, production]
-#                                              environment: production  🔒 1 approval
+#   gh workflow run deploy-test.yml       → [self-hosted, linux, test]
+#                                           environment: test        🔒 1 approval
+#   gh workflow run deploy-production.yml → [self-hosted, linux, production]
+#                                           environment: production  🔒 1 approval
 #
 # Splitting them is deliberate. A red test tier says nothing about production
 # (its own DB, certificate or portal can fail on their own) and must not be
-# able to hold a hotfix hostage. What sequences the two is the human at this
-# workflow's approval gate: the test run is already visible in the Actions tab
-# when they decide, so they can read it and then approve — or reject and stop
-# the promotion here.
+# able to hold a hotfix hostage. What sequences the two is the human who
+# dispatches them: the test run is already visible in the Actions tab when they
+# decide, so they can read it and then dispatch production — or not.
 #
-# ⚠️  THE GATE IS THE ONLY THING BETWEEN A PUSH AND PRODUCTION. Because this
-# workflow no longer sits behind the test stage, the required reviewer on the
-# `production` environment is not a convenience — it is the control. Configure
-# it BEFORE this file goes live:
+# ⚠️  TWO THINGS STAND BETWEEN A MERGE AND PRODUCTION, and both are human. The
+# first is the dispatch itself — nothing here fires on a push, so a mirror sync
+# can no longer reach this VM on its own. The second is the required reviewer on
+# the `production` environment, which still gates the run once dispatched.
+# Configure it BEFORE this file goes live:
 #
 #   Settings → Environments → `production` → Required reviewers: 1 person
 #
 # The gate is a GitHub *Environment protection rule*, not YAML; without that
-# configuration this job runs unattended on every push to main — the
-# `environment:` key alone gates nothing. See SECRETS-SETUP-GUIDE.md
-# § Environments.
+# configuration a dispatched job runs unattended — the `environment:` key alone
+# gates nothing. See SECRETS-SETUP-GUIDE.md § Environments.
 #
 # This repository does NOT build images. The development repository's pipeline
 # publishes them to GHCR once; both workflows promote that exact artifact, so
 # what runs in production is bit-identical to what the test stage verified —
-# provided both were given the same explicit tag. With the default `latest`,
-# the two workflows resolve independently and can land on different images:
-# dispatch manually with a pinned tag whenever that matters.
+# provided both were given the same explicit tag. With `tag` left empty, the two
+# dispatches resolve `latest` independently and can land on different images:
+# pass a pinned tag whenever that matters.
 #
 # Prerequisites (one-time, see SECRETS-SETUP-GUIDE.md):
 #   - A self-hosted runner on the production AP VM, labelled
@@ -71,12 +71,10 @@
 name: Deploy to Production
 
 on:
-  # NOTE: a code push alone does not produce a new image here — pushing to main
-  # deploys whatever the upstream `latest` tag currently points at. For a
-  # reproducible release, dispatch manually with an explicit tag.
-  push:
-    branches:
-      - main
+  # Dispatch only. This repository builds no image — the deploy promotes an
+  # artifact the development repository already published to GHCR, so leaving
+  # `tag` empty deploys whatever `latest` points at RIGHT NOW. For a
+  # reproducible release, always pass the explicit tag the test stage verified.
   workflow_dispatch:
     inputs:
       tag:
@@ -86,8 +84,8 @@ on:
 
 concurrency:
   # Scoped to the production stage ONLY, so the test rehearsal never blocks a
-  # production deploy (and vice versa). Two overlapping production runs would
-  # race to deploy different tags onto one VM.
+  # production deploy (and vice versa). Two overlapping production dispatches
+  # would race to deploy different tags onto one VM.
   group: deploy-production
   cancel-in-progress: false
 
