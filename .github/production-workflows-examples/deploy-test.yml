@@ -47,10 +47,12 @@
 #       EXPECT_DOMAIN  = the domain this stage may touch (required)
 #       EXPECT_DB_HOST = the DB host this stage may touch (required)
 #       DEPLOY_URL     = the test site URL (shown on the Environments page)
-#       SSL_CERT_DIR   = optional; absolute path to the TLS certificate
-#                        directory on that VM (e.g. /home/<user>/ssl).
-#                        Defaults to ./nginx/ssl/prod in the deploy directory.
 #       ENV_FILE       = optional; path to an operator-managed .env on that VM.
+#   - Secrets on the `test` environment (MUST be set there — a missing one
+#     would fall back to the production certificate):
+#       SSL_FULLCHAIN_PEM / SSL_PRIVKEY_PEM / SSL_CHAIN_PEM = the test-site
+#                        TLS certificate as PEM text; written to
+#                        <deploy dir>/nginx/ssl/prod on every deploy.
 #   - secrets.GH_PAT with read:packages, if the upstream packages are private.
 #   - docker-compose.prod-db.yml stack already running on the test DB VM.
 

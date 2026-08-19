@@ -173,10 +173,9 @@ jobs:
       # that IDENTIFIES a container is interpolated in docker-compose.prod.yml
       # (container_name is literal, the project name comes from the directory),
       # so a teardown without the env file still matches the right containers —
-      # but it prints a warning per unset variable and resolves path-bearing
-      # values (SSL_CERT_DIR) to their defaults, which is exactly the kind of
-      # noise that makes a stop log unreadable when someone re-reads it during
-      # an incident. Passing the deploy's own env file keeps stop and up
+      # but it prints a warning per unset variable, which is exactly the kind
+      # of noise that makes a stop log unreadable when someone re-reads it
+      # during an incident. Passing the deploy's own env file keeps stop and up
       # symmetric, and gives the target guard below something to check.
       - name: Resolve environment file
         env:

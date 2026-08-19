@@ -228,11 +228,9 @@ cp /path/to/development-repo/.github/production-workflows-examples/backup.yml \
 | `EXPECT_DOMAIN` | test 必填 | 測試站網域 | 正式站網域 |
 | `EXPECT_DB_HOST` | test 必填 | test DB VM 的位址 | production DB VM 的位址 |
 | `DEPLOY_URL` | ✅ | `https://<測試站網域>` | `https://<正式站網域>` |
-| `SSL_CERT_DIR` | — | 該台 VM 上憑證目錄的絕對路徑 | 同左 |
 | `ENV_FILE` | — | 該台 VM 上既有 `.env` 的絕對路徑（安裝手冊 5.1）。**設了就用它**，GitHub 完全不存這些值。留空則由 deploy-stack.yml 依下方 secrets 產生 `~/scholarship-<stage>/.env`（權限 600）。 | 同左 |
 
 `DEPLOY_STAGE` / `EXPECT_DOMAIN` / `EXPECT_DB_HOST` 是防呆用的：deploy 一開始就會比對「這個 environment 宣告自己是哪個 stage」與「secret 解析出來的 DOMAIN / DB_HOST」，對不上就直接失敗，避免 test 部署因為漏設 secret 而打到 production 的資料庫。
-| `SSL_CERT_DIR` | — | TLS 憑證資料夾的絕對路徑（例：`/home/<user>/ssl`）。留空則用 repo `nginx/ssl/prod`。兩種 `ENV_FILE` 模式下都以這個變數優先。資料夾內需有 `fullchain.pem`、`privkey.pem`、`chain.pem`。 |
 
 #### 部署相關 (deploy-stack.yml)
 
