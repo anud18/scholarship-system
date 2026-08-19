@@ -22,9 +22,9 @@
 # webhook-bridge — on the AP VM and attaches them to scholarship_prod_network.
 #
 # It is deliberately NOT part of deploy-stack.yml:
-#   - The app stack is redeployed on every push to main; the monitoring stack
-#     changes only when monitoring/** changes, and restarting Grafana on every
-#     app deploy would drop ~30 s of dashboards for no reason.
+#   - The app stack is redeployed on every release dispatch; the monitoring
+#     stack changes only when monitoring/** changes, and restarting Grafana on
+#     every app deploy would drop ~30 s of dashboards for no reason.
 #   - Grafana holds STATE the app stack does not (grafana_data: manually saved
 #     dashboards, annotations, alert silences). It must be possible to redeploy
 #     the site without touching it — and to redeploy monitoring without

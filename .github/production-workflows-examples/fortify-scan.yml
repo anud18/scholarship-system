@@ -28,8 +28,13 @@
 #
 # Runtime: translation takes ~5 minutes, but the -scan dataflow analysis takes
 # ~2.5 hours on this codebase and holds the shared org Fortify runner for the
-# duration. That is why this runs on pushes to main only -- a pull_request
-# trigger would spend 2.5 hours of the shared runner on every mirrored sync PR.
+# duration. That is why this is MANUAL DISPATCH ONLY: neither a push to main nor
+# a pull_request may start it. Every mirrored sync would otherwise spend 2.5
+# hours of the shared runner on a release nobody asked to scan -- the scan is
+# tied to a release decision, not to a commit, so a human starts it.
+#
+#   gh workflow run fortify-scan.yml            # scans the current main
+#   gh workflow run fortify-scan.yml --ref <branch|tag>
 #
 # Requires the self-hosted Windows Fortify runner (sourceanalyzer and
 # BIRTReportGenerator on PATH).
@@ -41,8 +46,9 @@ permissions:
   actions: read
 
 on:
-  push:
-    branches: ["main"]
+  # Dispatch only -- see the runtime note above. The ref chosen at dispatch time
+  # is what gets scanned; the artifact name is suffixed `main` regardless, since
+  # that is the branch a release is cut from.
   workflow_dispatch:
 
 jobs:

@@ -35,16 +35,17 @@ The `setting-env.yml` workflow now **focuses on system prerequisites and Docker 
 
 ## Environments：兩個部署 workflow 與核准閘門
 
-部署拆成**兩個各自獨立的 workflow**，觸發條件相同（push to main）：
+部署拆成**兩個各自獨立的 workflow**，而且**都只能手動 dispatch**——兩者皆已移除
+`push:` 觸發，merge 到 main（含 mirror 同步的 release PR）不會部署任何東西：
 
 ```
-push to main ─┬─▶ deploy-test.yml ──────▶ deploy-stack.yml (stage: test)
-              │                            resolve-images ──▶ deploy
-              │                            (ubuntu-latest)    runner: [self-hosted, linux, test]
-              │                                               environment: test
-              │                                               🔒 需 1 位 reviewer 核准
-              │
-              └─▶ deploy-production.yml ▶ deploy-stack.yml (stage: production)
+gh workflow run deploy-test.yml ────────▶ deploy-stack.yml (stage: test)
+                                           resolve-images ──▶ deploy
+                                           (ubuntu-latest)    runner: [self-hosted, linux, test]
+                                                              environment: test
+                                                              🔒 需 1 位 reviewer 核准
+
+gh workflow run deploy-production.yml ──▶ deploy-stack.yml (stage: production)
                                            resolve-images ──▶ deploy
                                            (ubuntu-latest)    runner: [self-hosted, linux, production]
                                                               environment: production
@@ -54,16 +55,16 @@ push to main ─┬─▶ deploy-test.yml ──────▶ deploy-stack.yml
 - 兩者**互不等待、互不否決**：test 失敗不會擋下 production，production 卡在核准
   也不會擋下 test。test tier 有它自己會壞的理由（它的 DB、憑證、portal），那些
   不該卡住 production 的 hotfix。
-- **順序由人決定**：production 的 reviewer 在 Actions 頁面看得到同一個 push
-  觸發的 test run，可以先看結果再決定核准或 Reject。
+- **順序由人決定**：先 dispatch test、在 Actions 頁面看完結果，再決定要不要
+  dispatch production（或在核准頁按 Reject）。
 - 唯一會自動否決的是各自的 `resolve-images` —— 沒解析出 tag 就沒東西可部署。
 - 兩者共用同一份腳本（`deploy-stack.yml`），差別只有 **runner label** 與
   **GitHub Environment**。test 因此是 production 的彩排，不是另一套流程。
-- ⚠️ 因為 production 前面不再有 test 階段擋著，`production` environment 的
-  required reviewer 就是 push to main 與正式機之間**唯一**的關卡。
+- ⚠️ 擋在 merge 與正式機之間的有兩道，兩道都是人：**有人手動 dispatch** 與
+  `production` environment 的 **required reviewer**。前面不再有 test 階段自動擋著。
 
-> `latest`（不帶 tag 觸發）時兩個 workflow 各自解析一次，中間 tag 可能移動 ——
-> 要讓 test 真的能當 production 的證據，就用 `-f tag=<明確 tag>` 手動觸發兩者。
+> `tag` 留空時兩次 dispatch 各自解析一次 `latest`，中間 tag 可能移動 ——
+> 要讓 test 真的能當 production 的證據，兩邊都用 `-f tag=<明確 tag>`。
 
 ### 1. 建立兩個 Environment 並設定 reviewer（核准閘門）
 
