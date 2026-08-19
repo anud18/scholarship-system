@@ -125,6 +125,7 @@ PII_ENCRYPTION_KEYS  PII_ENCRYPTION_ACTIVE_VERSION
 SMTP_HOST  SMTP_PORT  SMTP_USER  SMTP_PASSWORD  EMAIL_FROM  EMAIL_FROM_NAME
 PORTAL_JWT_SERVER_URL  STUDENT_API_BASE_URL  NEXT_PUBLIC_NYCU_PORTAL_URL
 SUPER_ADMIN_NYCU_ID
+SSL_FULLCHAIN_PEM  SSL_PRIVKEY_PEM  SSL_CHAIN_PEM
 ```
 
 `SECRET_KEY` 與 `PII_ENCRYPTION_KEYS` **絕對不要兩邊共用**：共用的 `SECRET_KEY`
@@ -139,7 +140,6 @@ SUPER_ADMIN_NYCU_ID
 | `EXPECT_DOMAIN` | 測試網域 | 正式網域 | 防呆：比對 `secrets.DOMAIN`，抓漏設的 fallback |
 | `EXPECT_DB_HOST` | 測試 DB 位址 | 正式 DB 位址 | 防呆：比對 `secrets.DB_HOST` |
 | `DEPLOY_URL` | `https://<測試站網域>` | `https://<正式站網域>` | Environment 頁面顯示的連結 |
-| `SSL_CERT_DIR` | 選填 | 選填 | 該台 VM 上的憑證目錄 |
 | `ENV_FILE` | 選填 | 選填 | 該台 VM 上 operator 自管的 `.env` 路徑 |
 | `FORBIDDEN_MARKERS` | 選填（設在 repository 層即可） | 同左 | 空白分隔的字串清單，只會出現在非正式值裡（測試網域、測試寄件者……）。production 段只要有任一 secret 命中就拒絕部署；不設就跳過這項檢查 |
 
@@ -450,6 +450,35 @@ openssl rand -base64 24
 - 🔐 `SECRET_KEY` is used for JWT token signing - **NEVER expose or reuse**
 - 🔐 If `SECRET_KEY` is compromised, all existing JWT tokens will be invalidated when changed
 - 🔐 Rotate `SECRET_KEY` every 90 days (will require all users to re-login)
+
+---
+
+### TLS certificate（必填，兩個 environment 各一份）
+
+`deploy-stack.yml` 每次部署都會把這三個 secret 寫成 AP VM 上
+`~/scholarship-<stage>/nginx/ssl/prod/{fullchain,privkey,chain}.pem`
+（privkey 600），nginx 容器再以唯讀方式掛到 `/etc/nginx/ssl`。
+**兩種 `ENV_FILE` 模式都一樣**：憑證不是 compose 變數，不放 `.env`。
+換憑證只要更新 secret 再重新部署，不必登入 VM。
+
+| Secret | Description | Required |
+|--------|-------------|----------|
+| `SSL_FULLCHAIN_PEM` | 站台憑證 + 中繼憑證（`fullchain.pem` 全文，`-----BEGIN CERTIFICATE-----` 開頭） | ✅ Yes |
+| `SSL_PRIVKEY_PEM` | 私鑰（`privkey.pem` 全文，PKCS#8 或 RSA/EC 皆可） | ✅ Yes |
+| `SSL_CHAIN_PEM` | 中繼憑證鏈（`chain.pem` 全文，供 OCSP stapling 的 `ssl_trusted_certificate`） | ✅ Yes |
+
+```bash
+# 直接用檔案內容設定；-e 指定 environment，test / production 各設一次
+gh secret set SSL_FULLCHAIN_PEM -e production < /path/to/fullchain.pem
+gh secret set SSL_PRIVKEY_PEM   -e production < /path/to/privkey.pem
+gh secret set SSL_CHAIN_PEM     -e production < /path/to/chain.pem
+```
+
+部署時會檢查：三個都有設、看起來是 PEM、私鑰與憑證配對、憑證尚未過期；
+任一項不符就在 `docker compose up` 之前失敗。
+
+> ⚠️ `test` environment **一定要**自己設這三個 secret —— 漏設會 fallback 到
+> repository 層的正式憑證，測試站就會拿著正式站的憑證起來。
 
 ---
 

@@ -1416,19 +1416,14 @@ jobs:
           sudo chown -R 999:999 /opt/scholarship/app/redis
           echo "   ✅ /opt/scholarship/app/redis/data ($(stat -c '%U:%G' /opt/scholarship/app/redis/data))"
 
-          # deploy-stack.yml hard-fails if these are absent, rather than letting
-          # nginx crash-loop on a missing certificate. The repo ships nginx
-          # configs but no keys — drop the certificate here, or set the
-          # SSL_CERT_DIR repository variable to a path outside the deploy dir.
+          # deploy-stack.yml writes fullchain.pem / privkey.pem / chain.pem
+          # here from the SSL_FULLCHAIN_PEM / SSL_PRIVKEY_PEM / SSL_CHAIN_PEM
+          # secrets on every deploy (and hard-fails if they are unset), so
+          # nothing needs to be placed here by hand. Files already present
+          # are simply overwritten by the next deploy.
           echo ""
           echo "🔐 TLS certificate directory: $DEPLOY_DIR/nginx/ssl/prod"
-          for f in fullchain.pem privkey.pem chain.pem; do
-            if [ -f "$DEPLOY_DIR/nginx/ssl/prod/$f" ]; then
-              echo "   ✅ $f"
-            else
-              echo "   ⚠️  missing $f — deployment will fail until it is placed here"
-            fi
-          done
+          echo "   (populated from the SSL_*_PEM secrets by deploy-stack.yml)"
 
           echo "   ✅ Created:"
           find "$DEPLOY_DIR" -maxdepth 2 -type d | sed 's/^/      /'
