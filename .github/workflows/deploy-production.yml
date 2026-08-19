@@ -55,15 +55,16 @@
 #       EXPECT_DOMAIN  = the domain this stage may touch (advisory here)
 #       EXPECT_DB_HOST = the DB host this stage may touch (advisory here)
 #       DEPLOY_URL     = the production site URL (shown on the Environments page)
-#       SSL_CERT_DIR   = optional; absolute path to the TLS certificate
-#                        directory on that VM (e.g. /home/<user>/ssl).
-#                        Defaults to ./nginx/ssl/prod in the deploy directory.
 #       ENV_FILE       = optional; path to an operator-managed .env on that VM.
 #       FORBIDDEN_MARKERS = optional (repo-level is fine); space-separated
 #                        substrings that only ever appear in non-production
 #                        values (test hostnames, test mail sender, ...). This
 #                        stage refuses to deploy if a secret contains one.
 #                        Unset = that check is skipped.
+#   - Secrets on the `production` environment (or repository level):
+#       SSL_FULLCHAIN_PEM / SSL_PRIVKEY_PEM / SSL_CHAIN_PEM = the TLS
+#                        certificate as PEM text; written to
+#                        <deploy dir>/nginx/ssl/prod on every deploy.
 #   - secrets.GH_PAT with read:packages, if the upstream packages are private.
 #   - docker-compose.prod-db.yml stack already running on the production DB VM.
 

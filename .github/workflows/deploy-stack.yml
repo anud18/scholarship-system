@@ -35,7 +35,9 @@
 #      Settings → Environments, NOT in YAML — see SECRETS-SETUP-GUIDE.md).
 #   2. Environment secrets → the TEST stage resolves the TEST database, portal,
 #      SMTP relay and PII keys; the PRODUCTION stage resolves the real ones.
-#   3. Environment variables → per-stage URL, ENV_FILE, SSL_CERT_DIR.
+#   3. Environment variables → per-stage URL, ENV_FILE. The TLS certificate
+#      is an environment SECRET too (SSL_FULLCHAIN_PEM / SSL_PRIVKEY_PEM /
+#      SSL_CHAIN_PEM), written to the deploy dir on every run.
 #
 # ⚠️  INHERITANCE TRAP: a secret that the `test` environment does NOT define
 # falls back to the REPOSITORY-level secret — i.e. to the PRODUCTION value.
@@ -359,9 +361,9 @@ jobs:
         run: |
           mkdir -p "${DEPLOY_DIR}/logs/nginx"
           cp docker-compose.prod.yml "${DEPLOY_DIR}/docker-compose.yml"
-          # Merge (not replace): a certificate directory placed under
-          # <deploy dir>/nginx/ssl/prod by the operator must survive, since the
-          # repo ships nginx configs but no keys.
+          # Merge (not replace): the repo ships nginx configs but no keys — the
+          # certificate under <deploy dir>/nginx/ssl/prod is written from
+          # secrets by the "Install TLS certificate" step below.
           if [ -d nginx ]; then cp -r nginx "${DEPLOY_DIR}/"; fi
           # Everything below is copied as the runner user and therefore owned by
           # it, so a plain rm is enough to replace it. sudo -n is only a fallback
@@ -408,7 +410,6 @@ jobs:
       - name: Resolve environment file
         env:
           ENV_FILE_VAR: ${{ vars.ENV_FILE }}
-          SSL_CERT_DIR_VAR: ${{ vars.SSL_CERT_DIR }}
           EXPECT_DOMAIN: ${{ vars.EXPECT_DOMAIN }}
           EXPECT_DB_HOST: ${{ vars.EXPECT_DB_HOST }}
           FORBIDDEN_MARKERS: ${{ vars.FORBIDDEN_MARKERS }}
@@ -547,7 +548,6 @@ jobs:
               echo "STUDENT_API_BASE_URL=${STUDENT_API_BASE_URL}"
               echo "SUPER_ADMIN_NYCU_ID=${SUPER_ADMIN_NYCU_ID}"
               echo "NEXT_PUBLIC_NYCU_PORTAL_URL=${NEXT_PUBLIC_NYCU_PORTAL_URL}"
-              [ -n "${SSL_CERT_DIR_VAR}" ] && echo "SSL_CERT_DIR=${SSL_CERT_DIR_VAR}"
             } > "${ENV_FILE}"
             chmod 600 "${ENV_FILE}"
             echo "✅ Wrote $(grep -c '=' "${ENV_FILE}") entries (mode 600)"
@@ -560,44 +560,96 @@ jobs:
           envget() { sed -n "s/^[[:space:]]*$1=//p" "${ENV_FILE}" | tail -1; }
           echo "DOMAIN=$(envget DOMAIN)" >> "$GITHUB_ENV"
 
-          # Certificate location precedence: the SSL_CERT_DIR environment
-          # variable wins in BOTH modes (it describes where the operator put
-          # the certificate on this host, not a secret), then the env file,
-          # then compose's ./nginx/ssl/prod default.
-          CERT_DIR="${SSL_CERT_DIR_VAR:-$(envget SSL_CERT_DIR)}"
-          echo "CERT_DIR=${CERT_DIR}" >> "$GITHUB_ENV"
-          # Export to compose ONLY when non-empty: an exported empty string
-          # would shadow the env file's value instead of deferring to it.
-          if [ -n "${CERT_DIR}" ]; then
-            echo "SSL_CERT_DIR=${CERT_DIR}" >> "$GITHUB_ENV"
-            echo "Certificate directory (SSL_CERT_DIR): ${CERT_DIR}"
-          else
-            echo "Certificate directory: compose default (./nginx/ssl/prod)"
-          fi
-
-      - name: Verify TLS certificates are present
+      # The TLS certificate comes from GitHub Secrets on the stage's
+      # environment, in BOTH ENV_FILE modes — a certificate is not a compose
+      # interpolation value, so it never belongs in .env. The three PEM files
+      # are (re)written on every deploy into <deploy dir>/nginx/ssl/prod, the
+      # directory docker-compose.prod.yml bind-mounts at /etc/nginx/ssl, so a
+      # renewed certificate ships by updating the secrets and redeploying —
+      # nothing has to be copied onto the VM by hand.
+      #
+      # nginx.prod.conf references all three files; a missing one puts nginx
+      # in a crash loop and the deploy would only fail later, at `nginx -t`,
+      # with a far less obvious message — so their presence and shape are
+      # checked here first.
+      - name: Install TLS certificate from secrets
+        env:
+          SSL_FULLCHAIN_PEM: ${{ secrets.SSL_FULLCHAIN_PEM }}
+          SSL_PRIVKEY_PEM: ${{ secrets.SSL_PRIVKEY_PEM }}
+          SSL_CHAIN_PEM: ${{ secrets.SSL_CHAIN_PEM }}
         run: |
-          cd "${DEPLOY_DIR}"
-          CERT_DIR="${CERT_DIR:-./nginx/ssl/prod}"
-          echo "Certificate directory: $CERT_DIR"
-          missing=0
-          # nginx.prod.conf references all three; a missing file puts nginx in
-          # a crash loop and the deploy would only fail later, at `nginx -t`,
-          # with a far less obvious message.
-          for f in fullchain.pem privkey.pem chain.pem; do
-            if [ -f "${CERT_DIR}/${f}" ]; then
-              echo "  ✅ ${f}"
-            else
-              echo "::error::Missing certificate file: ${CERT_DIR}/${f}"
-              missing=1
+          set -euo pipefail
+          CERT_DIR="${DEPLOY_DIR}/nginx/ssl/prod"
+          fail=0
+          err() { echo "::error::$1"; fail=1; }
+
+          # Presence + shape. `printf '%s'` (not echo) so a value that happens
+          # to start with "-n"/"-e" is not mangled, and so nothing is echoed
+          # to the log — the secret masking only protects the exact string.
+          check_pem() {
+            local name="$1" value="$2" pattern="$3"
+            if [ -z "${value}" ]; then
+              err "${name} is not set on the '${STAGE}' environment (paste the PEM file's full contents)"
+            elif ! printf '%s' "${value}" | grep -qE -- "${pattern}"; then
+              err "${name} does not look like a PEM block (expected a '${pattern}' line)"
             fi
-          done
-          [ "$missing" -eq 0 ] || {
-            echo "::error::Place the TLS certificate in ${CERT_DIR}, or set the"
-            echo "::error::SSL_CERT_DIR variable on the '${STAGE}' environment to an absolute"
-            echo "::error::path on this VM (e.g. /home/<user>/ssl) so private keys stay out of git."
+          }
+          check_pem SSL_FULLCHAIN_PEM "${SSL_FULLCHAIN_PEM}" '^-----BEGIN CERTIFICATE-----'
+          check_pem SSL_CHAIN_PEM     "${SSL_CHAIN_PEM}"     '^-----BEGIN CERTIFICATE-----'
+          # PKCS#8 ("BEGIN PRIVATE KEY") and PKCS#1/SEC1 ("BEGIN RSA/EC PRIVATE KEY")
+          check_pem SSL_PRIVKEY_PEM   "${SSL_PRIVKEY_PEM}"   '^-----BEGIN (RSA |EC )?PRIVATE KEY-----'
+          [ "$fail" -eq 0 ] || {
+            echo "::error::Set SSL_FULLCHAIN_PEM, SSL_PRIVKEY_PEM and SSL_CHAIN_PEM as secrets on the"
+            echo "::error::'${STAGE}' environment (see SECRETS-SETUP-GUIDE.md § TLS certificate)."
             exit 1
           }
+
+          # Write atomically-ish: into a temp dir first, then swap, so a failed
+          # write cannot leave nginx with a half-updated pair.
+          TMP_DIR="$(mktemp -d "${DEPLOY_DIR}/.ssl.XXXXXX")"
+          umask 077
+          # A trailing newline is appended in case the pasted secret lost it —
+          # OpenSSL's PEM parser wants the END line terminated.
+          printf '%s\n' "${SSL_FULLCHAIN_PEM}" > "${TMP_DIR}/fullchain.pem"
+          printf '%s\n' "${SSL_PRIVKEY_PEM}"   > "${TMP_DIR}/privkey.pem"
+          printf '%s\n' "${SSL_CHAIN_PEM}"     > "${TMP_DIR}/chain.pem"
+          # Public halves are world-readable (they are public); the key is
+          # 0600. nginx:alpine's master process runs as root and reads the
+          # bind mount fine regardless of the host uid that owns it.
+          chmod 644 "${TMP_DIR}/fullchain.pem" "${TMP_DIR}/chain.pem"
+          chmod 600 "${TMP_DIR}/privkey.pem"
+
+          # Semantic checks, when openssl is on the runner: parseable, the key
+          # matches the certificate, and it is not already expired. A mismatch
+          # here would otherwise surface as `nginx -t` failing after `up`.
+          if command -v openssl >/dev/null 2>&1; then
+            openssl x509 -noout -in "${TMP_DIR}/fullchain.pem" 2>/dev/null \
+              || err "SSL_FULLCHAIN_PEM is not a parseable X.509 certificate"
+            openssl pkey -noout -in "${TMP_DIR}/privkey.pem" 2>/dev/null \
+              || err "SSL_PRIVKEY_PEM is not a parseable private key"
+            if [ "$fail" -eq 0 ]; then
+              cert_pub="$(openssl x509 -noout -pubkey -in "${TMP_DIR}/fullchain.pem" | openssl sha256)"
+              key_pub="$(openssl pkey -pubout -in "${TMP_DIR}/privkey.pem" 2>/dev/null | openssl sha256)"
+              [ "${cert_pub}" = "${key_pub}" ] \
+                || err "SSL_PRIVKEY_PEM does not match SSL_FULLCHAIN_PEM (public keys differ)"
+              openssl x509 -noout -checkend 0 -in "${TMP_DIR}/fullchain.pem" >/dev/null \
+                || err "SSL_FULLCHAIN_PEM has already EXPIRED — renew it before deploying"
+              echo "Certificate: $(openssl x509 -noout -subject -enddate -in "${TMP_DIR}/fullchain.pem" | tr '\n' ' ')"
+            fi
+            [ "$fail" -eq 0 ] || { rm -rf "${TMP_DIR}"; exit 1; }
+          else
+            echo "::warning::openssl not found on this runner — skipping key/cert match check"
+          fi
+
+          umask 022
+          mkdir -p "$(dirname "${CERT_DIR}")"
+          rm -rf "${CERT_DIR}"
+          mv "${TMP_DIR}" "${CERT_DIR}"
+          chmod 755 "${CERT_DIR}"
+          for f in fullchain.pem privkey.pem chain.pem; do
+            echo "  ✅ ${f} ($(stat -c '%a %s bytes' "${CERT_DIR}/${f}"))"
+          done
+          echo "Certificate directory: ${CERT_DIR} → /etc/nginx/ssl"
 
       - name: Start new containers
         run: |
