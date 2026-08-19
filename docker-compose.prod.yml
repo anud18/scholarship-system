@@ -171,12 +171,11 @@ services:
       - "443:443"
     volumes:
       - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
-      # Certificate directory. Defaults to the repo's own nginx/ssl/prod (which
-      # deploy.yml copies into the deploy dir), but can be pointed anywhere on
-      # the AP VM — e.g. SSL_CERT_DIR=/home/<user>/ssl per the install manual —
-      # so private keys never have to live in git. Must contain fullchain.pem,
-      # privkey.pem and chain.pem (nginx.prod.conf references all three).
-      - ${SSL_CERT_DIR:-./nginx/ssl/prod}:/etc/nginx/ssl:ro
+      # Certificate directory. deploy-stack.yml writes fullchain.pem,
+      # privkey.pem and chain.pem here from the GitHub Environment secrets
+      # (SSL_FULLCHAIN_PEM / SSL_PRIVKEY_PEM / SSL_CHAIN_PEM) on every deploy;
+      # nginx.prod.conf references all three. Keys never live in git.
+      - ./nginx/ssl/prod:/etc/nginx/ssl:ro
       - ./logs/nginx:/var/log/nginx
     depends_on:
       - backend
