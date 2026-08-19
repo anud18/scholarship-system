@@ -278,7 +278,15 @@ jobs:
 
           LC_ALL=C sort -z /tmp/production-tracked-files-raw.z > /tmp/production-tracked-files.z
           LC_ALL=C sort -z /tmp/main-tracked-files-raw.z > /tmp/main-tracked-files.z
-          LC_ALL=C comm -z -23 /tmp/production-tracked-files.z /tmp/main-tracked-files.z > /tmp/stale-files.z
+          LC_ALL=C comm -z -23 /tmp/production-tracked-files.z /tmp/main-tracked-files.z > /tmp/stale-files-all.z
+
+          # docs/ belongs to the production repository — the "Preserve
+          # production docs" step below restores it verbatim, so a file living
+          # only under production's docs/ is production-owned content, not the
+          # leftover of a deletion in main. Without this filter every sync
+          # deletes the ops handbooks and their screenshots. grep exits 1 when
+          # all stale paths were under docs/, which is not an error here.
+          grep -z -v '^docs/' /tmp/stale-files-all.z > /tmp/stale-files.z || true
 
           # Newline-delimited copy for logs and release notes (display only —
           # git rm consumes the NUL-delimited list).
@@ -513,6 +521,49 @@ jobs:
             Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
             "
             echo "::notice::✅ Committed development directories removal"
+          fi
+
+          echo "::endgroup::"
+
+      - name: Preserve production docs
+        env:
+          PRODUCTION_BRANCH: ${{ secrets.PRODUCTION_BRANCH || 'main' }}
+        run: |
+          echo "::group::Preserving production docs/"
+
+          # docs/ is owned by the production repository, not mirrored from the
+          # development one. The ops handbooks under docs/ (installation, stop,
+          # restore, update) are written for whoever runs the production site
+          # and have no counterpart in main, so the mirror must neither push
+          # development docs over them nor delete them. Drop whatever the merge
+          # from main brought in, then restore production's own docs/ tree
+          # verbatim, which makes this directory a no-op in every sync PR.
+          if [ -d "docs" ]; then
+            git rm -rq --ignore-unmatch -- docs/ || true
+            rm -rf docs
+          fi
+
+          if git rev-parse --verify --quiet "prod-repo/${PRODUCTION_BRANCH}:docs" >/dev/null; then
+            git archive "prod-repo/${PRODUCTION_BRANCH}" docs | tar -x
+            git add -- docs/
+            DOC_COUNT=$(git ls-files -- docs/ | wc -l)
+            echo "::notice::Restored ${DOC_COUNT} file(s) under docs/ from the production repository"
+          else
+            echo "::notice::Production repository has no docs/ directory — nothing to restore"
+          fi
+
+          if git diff --cached --quiet; then
+            echo "::notice::docs/ already matches the production repository"
+          else
+            git commit -m "chore: keep docs/ owned by the production repository
+
+            docs/ is maintained in the production repository and is not
+            mirrored from development. Development docs are dropped and the
+            production tree is restored unchanged.
+
+            Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+            "
+            echo "::notice::✅ docs/ restored from the production repository"
           fi
 
           echo "::endgroup::"
