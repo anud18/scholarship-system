@@ -77,6 +77,11 @@ jobs:
     # Only run if secrets are configured
     if: github.event_name == 'workflow_dispatch'
 
+    # Directory owned by the production repository. The mirror neither pushes
+    # development content into it nor deletes what production keeps there.
+    env:
+      PROTECTED_DOCS_DIR: docs/資訊中心文件
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -278,7 +283,15 @@ jobs:
 
           LC_ALL=C sort -z /tmp/production-tracked-files-raw.z > /tmp/production-tracked-files.z
           LC_ALL=C sort -z /tmp/main-tracked-files-raw.z > /tmp/main-tracked-files.z
-          LC_ALL=C comm -z -23 /tmp/production-tracked-files.z /tmp/main-tracked-files.z > /tmp/stale-files.z
+          LC_ALL=C comm -z -23 /tmp/production-tracked-files.z /tmp/main-tracked-files.z > /tmp/stale-files-all.z
+
+          # $PROTECTED_DOCS_DIR belongs to the production repository — the
+          # "Preserve production docs" step below restores it verbatim, so a
+          # file living only under it is production-owned content, not the
+          # leftover of a deletion in main. Without this filter every sync
+          # deletes the ops handbooks and their screenshots. grep exits 1 when
+          # every stale path was protected, which is not an error here.
+          grep -z -v "^${PROTECTED_DOCS_DIR}/" /tmp/stale-files-all.z > /tmp/stale-files.z || true
 
           # Newline-delimited copy for logs and release notes (display only —
           # git rm consumes the NUL-delimited list).
@@ -513,6 +526,50 @@ jobs:
             Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
             "
             echo "::notice::✅ Committed development directories removal"
+          fi
+
+          echo "::endgroup::"
+
+      - name: Preserve production docs
+        env:
+          PRODUCTION_BRANCH: ${{ secrets.PRODUCTION_BRANCH || 'main' }}
+        run: |
+          echo "::group::Preserving ${PROTECTED_DOCS_DIR}/"
+
+          # The ops handbooks under $PROTECTED_DOCS_DIR (installation, stop,
+          # restore, update) plus their screenshots are written for whoever runs
+          # the production site and have no counterpart in main, so the mirror
+          # must neither push development content over them nor delete them.
+          # The rest of docs/ keeps syncing from main as before. Drop whatever
+          # the merge brought into this one directory, then restore
+          # production's own tree verbatim, which makes it a no-op in every
+          # sync PR.
+          if [ -d "${PROTECTED_DOCS_DIR}" ]; then
+            git rm -rq --ignore-unmatch -- "${PROTECTED_DOCS_DIR}/" || true
+            rm -rf "${PROTECTED_DOCS_DIR}"
+          fi
+
+          if git rev-parse --verify --quiet "prod-repo/${PRODUCTION_BRANCH}:${PROTECTED_DOCS_DIR}" >/dev/null; then
+            git archive "prod-repo/${PRODUCTION_BRANCH}" "${PROTECTED_DOCS_DIR}" | tar -x
+            git add -- "${PROTECTED_DOCS_DIR}/"
+            DOC_COUNT=$(git ls-files -- "${PROTECTED_DOCS_DIR}/" | wc -l)
+            echo "::notice::Restored ${DOC_COUNT} file(s) under ${PROTECTED_DOCS_DIR}/ from the production repository"
+          else
+            echo "::notice::Production repository has no ${PROTECTED_DOCS_DIR}/ — nothing to restore"
+          fi
+
+          if git diff --cached --quiet; then
+            echo "::notice::${PROTECTED_DOCS_DIR}/ already matches the production repository"
+          else
+            git commit -m "chore: keep the ops handbooks owned by production
+
+            ${PROTECTED_DOCS_DIR}/ is maintained in the production repository
+            and is not mirrored from development. Anything the merge brought
+            into it is dropped and the production tree is restored unchanged.
+
+            Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+            "
+            echo "::notice::✅ ${PROTECTED_DOCS_DIR}/ restored from the production repository"
           fi
 
           echo "::endgroup::"
