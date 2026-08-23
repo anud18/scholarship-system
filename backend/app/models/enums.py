@@ -55,6 +55,19 @@ REVIEWABLE_APPLICATION_STATUSES = [
 ]
 
 
+# The strict subset of the above on which a professor can still ACT — the
+# statuses `can_professor_submit_review` accepts. The listing set above is
+# deliberately wider (it also surfaces decided applications for reference), so
+# anything that grants or counts pending professor work must use this set
+# instead: the professor queue's 待審核 bucket is "assigned to me and I have not
+# reviewed", with no status gate, so a decided application that lands in it can
+# never be cleared — submitting a review on it is rejected.
+PROFESSOR_ACTIONABLE_APPLICATION_STATUSES = [
+    ApplicationStatus.submitted.value,  # 已送出
+    ApplicationStatus.under_review.value,  # 審批中
+]
+
+
 # ── Apply-flow visibility sets ───────────────────────────────────────
 # Partition every ApplicationStatus value into three buckets that decide
 # whether a scholarship is shown in the STUDENT APPLY FLOW.

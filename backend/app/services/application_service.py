@@ -20,7 +20,12 @@ from app.core.metrics import scholarship_applications_total
 from app.core.schema_validation import serialize_value
 from app.models.audit_log import AuditAction, AuditLog
 from app.models.application import Application, ApplicationStatus
-from app.models.enums import REVIEWABLE_APPLICATION_STATUSES, ReviewStage, Semester
+from app.models.enums import (
+    PROFESSOR_ACTIONABLE_APPLICATION_STATUSES,
+    REVIEWABLE_APPLICATION_STATUSES,
+    ReviewStage,
+    Semester,
+)
 from app.models.review import ApplicationReview, ApplicationReviewItem
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType, SubTypeSelectionMode
 from app.models.user import User, UserRole
@@ -34,6 +39,7 @@ from app.schemas.application import (
     ApplicationUpdate,
     StudentDataSchema,
 )
+from app.services.application_builder import backfill_professor_assignments
 from app.services.eligibility_service import EligibilityService
 from app.services.email_automation_service import email_automation_service
 from app.services.email_service import EmailService
@@ -2446,6 +2452,36 @@ class ApplicationService:
         return document_type_names.get(file_type, file_type)
 
     # Professor Review Methods
+    async def _claim_unassigned_advisee_applications(self, professor_id: int) -> int:
+        """Fallback advisor match for the professor-facing queries.
+
+        A submitted application only carries ``professor_id`` when the named
+        advisor already had an account at submission time; otherwise the row is
+        orphaned. :func:`backfill_professor_assignments` normally repairs it on
+        the professor's SSO login, but that hook cannot cover every route into a
+        professor account (admin-created / pre-authorized accounts) nor advisees
+        who named the professor after that login. Running the same idempotent
+        claim here makes the queue and the dashboard badge self-healing.
+
+        Does NOT commit: the claim joins the caller's transaction and is
+        persisted by the request-scoped session (``get_db``), so the commit
+        boundary stays with the request instead of being owned by a read helper.
+        The caller's own query runs afterwards in that same transaction and
+        therefore sees the claimed rows.
+
+        Never raises: a failed repair must not take down the queue the professor
+        came to read. Both callers invoke this as their FIRST statement, so the
+        rollback discards nothing but the failed UPDATE and leaves the session
+        usable — the claim is simply retried on the next request.
+        """
+        try:
+            professor = await self.db.get(User, professor_id)
+            return await backfill_professor_assignments(self.db, professor)
+        except Exception:
+            logger.exception("Advisor fallback backfill failed for professor %s", professor_id)
+            await self.db.rollback()
+            return 0
+
     @staticmethod
     def _professor_reviewed(professor_id: int):
         """Correlated predicate: this professor authored an ApplicationReview for the row.
@@ -2469,6 +2505,11 @@ class ApplicationService:
         pass ``page``/``size`` for explicit pagination.
         """
         try:
+            # Fallback advisor match: adopt any application whose student named
+            # this professor as advisor but that was submitted before they had
+            # an account. Runs first so the query below sees the claimed rows.
+            await self._claim_unassigned_advisee_applications(professor_id)
+
             # Build base query with ALL required filters (consistent with what will be returned)
             base_query = (
                 select(Application)
@@ -2758,14 +2799,13 @@ class ApplicationService:
           surfacing it here would require a join on
           ScholarshipConfiguration.professor_review_end_date)
         """
+        # Same fallback advisor match as the queue — otherwise the dashboard
+        # badge would keep under-counting until the professor opens the list.
+        await self._claim_unassigned_advisee_applications(professor_id)
+
         pending_query = select(sa_func.count(Application.id)).where(
             Application.professor_id == professor_id,
-            Application.status.in_(
-                [
-                    ApplicationStatus.submitted.value,
-                    ApplicationStatus.under_review.value,
-                ]
-            ),
+            Application.status.in_(PROFESSOR_ACTIONABLE_APPLICATION_STATUSES),
             ~self._professor_reviewed(professor_id),
         )
 

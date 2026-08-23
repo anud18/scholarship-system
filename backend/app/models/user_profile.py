@@ -27,7 +27,10 @@ class UserProfile(Base):
     # Advisor information (simplified)
     advisor_name = Column(String(100))  # Professor name
     advisor_email = Column(String(100))
-    advisor_nycu_id = Column(String(20))  # NYCU ID of the advisor
+    # Indexed: the professor-side advisor fallback resolves advisees by this
+    # column on every professor login and review-queue load
+    # (application_builder.backfill_professor_assignments).
+    advisor_nycu_id = Column(String(20), index=True)  # NYCU ID of the advisor
 
     # Personal preferences and notes
     preferred_language = Column(String(10), default="zh-TW")  # zh-TW, en-US
