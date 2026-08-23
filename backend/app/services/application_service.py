@@ -2470,16 +2470,20 @@ class ApplicationService:
         therefore sees the claimed rows.
 
         Never raises: a failed repair must not take down the queue the professor
-        came to read. Both callers invoke this as their FIRST statement, so the
-        rollback discards nothing but the failed UPDATE and leaves the session
-        usable — the claim is simply retried on the next request.
+        came to read. The claim runs inside a SAVEPOINT so a failure rolls back
+        only the failed UPDATE — the claim is simply retried on the next request.
+        A session-level ``rollback()`` is NOT an option here: it expires every
+        loaded object (``expire_on_commit=False`` governs commit only), including
+        the ``current_user`` FastAPI loaded in this same request-scoped session,
+        and the endpoint's next ``current_user.id`` would raise MissingGreenlet
+        and turn into the HTTP 500 this helper exists to prevent.
         """
         try:
-            professor = await self.db.get(User, professor_id)
-            return await backfill_professor_assignments(self.db, professor)
+            async with self.db.begin_nested():
+                professor = await self.db.get(User, professor_id)
+                return await backfill_professor_assignments(self.db, professor)
         except Exception:
             logger.exception("Advisor fallback backfill failed for professor %s", professor_id)
-            await self.db.rollback()
             return 0
 
     @staticmethod

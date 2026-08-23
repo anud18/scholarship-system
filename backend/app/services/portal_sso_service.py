@@ -242,14 +242,19 @@ class PortalSSOService:
         # 教授帳號建立（或角色更新為教授）後，回補帳號存在之前就送出的申請：
         # 學生填了 advisor_nycu_id，但提交當下查無此教授，professor_id 留 NULL。
         # 非教授角色由 helper 自行擋掉，這裡不重複判斷。
-        # Best-effort — 回補失敗絕不能擋住登入，所以吞掉例外並回到乾淨的 session。
+        # Best-effort — 回補失敗絕不能擋住登入。The claim runs inside a SAVEPOINT:
+        # a failure rolls back only the savepoint. A session-level rollback()
+        # would expire EVERY loaded object (expire_on_commit=False does not
+        # apply to rollback), and the `user` read by create_tokens() below would
+        # then need a lazy refresh → MissingGreenlet → HTTP 400, i.e. the repair
+        # would be the thing that blocks the login.
         try:
-            claimed = await backfill_professor_assignments(self.db, user)
+            async with self.db.begin_nested():
+                claimed = await backfill_professor_assignments(self.db, user)
             if claimed:
                 await self.db.commit()
                 logger.info(f"Assigned {claimed} pending application(s) to professor {nycu_id} on login")
         except Exception:
-            await self.db.rollback()
             logger.exception(f"Professor application backfill failed for {nycu_id}; login continues")
 
         # Generate system tokens with debug data

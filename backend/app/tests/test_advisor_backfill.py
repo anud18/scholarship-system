@@ -331,3 +331,77 @@ async def test_portal_sso_login_claims_pending_applications(db: AsyncSession, mo
     professor = (await db.execute(select(User).where(User.nycu_id == PROF_NYCU_ID))).scalar_one()
     assert professor.role == UserRole.professor
     assert await _professor_id_of(db, app) == professor.id
+
+
+# --- best-effort contract: a failing claim must not take the caller down ----
+#
+# The claim's failure must roll back ONLY the claim. A session-level rollback()
+# expires every loaded ORM object (expire_on_commit=False governs commit only),
+# and the caller's next attribute read on `user` / `current_user` then needs a
+# lazy refresh → MissingGreenlet under AsyncSession → HTTP 400/500 in exactly
+# the situation the best-effort handlers exist to absorb.
+
+
+async def _failing_backfill(db: AsyncSession, _professor):
+    """Stand-in for a claim that dies mid-transaction (timeout, deadlock...)."""
+    from sqlalchemy import text
+
+    await db.execute(text("UPDATE no_such_table SET x = 1"))
+
+
+@pytest.mark.asyncio
+async def test_failed_claim_does_not_break_the_review_queue(db: AsyncSession, monkeypatch):
+    import app.services.application_service as application_service_module
+
+    professor = await _seed_user(db, role=UserRole.professor, nycu_id=PROF_NYCU_ID)
+    student = await _seed_student_with_advisor(db, nycu_id="stu_qfail", advisor_nycu_id=PROF_NYCU_ID)
+    cfg = await _seed_config(db, suffix="qfail")
+    assigned = await _seed_app(db, student=student, config=cfg, suffix="qfail", professor_id=professor.id)
+    # What the endpoint holds: the current_user loaded in this same session.
+    current_user = await db.get(User, professor.id)
+
+    monkeypatch.setattr(application_service_module, "backfill_professor_assignments", _failing_backfill)
+
+    service = ApplicationService(db)
+    applications, total = await service.get_professor_applications_paginated(professor_id=professor.id)
+    stats = await service.get_professor_review_stats(professor.id)
+
+    assert [a.app_id for a in applications] == [assigned.app_id]
+    assert total == 1
+    assert stats["pending_reviews"] == 1
+    # The endpoint logs / serialises current_user after the call — must not raise.
+    assert (current_user.id, current_user.nycu_id) == (professor.id, PROF_NYCU_ID)
+
+
+@pytest.mark.asyncio
+async def test_failed_claim_does_not_block_portal_sso_login(db: AsyncSession, monkeypatch):
+    import app.services.portal_sso_service as portal_sso_module
+    from app.services.portal_sso_service import PortalSSOService
+
+    monkeypatch.setattr(portal_sso_module, "backfill_professor_assignments", _failing_backfill)
+
+    service = PortalSSOService(db)
+
+    async def _fake_verify(_token: str) -> dict:
+        return {
+            "txtID": PROF_NYCU_ID,
+            "nycuID": PROF_NYCU_ID,
+            "txtName": "王教授",
+            "mail": "prof@nycu.edu.tw",
+            "dept": "資訊工程學系",
+            "deptCode": "5743",
+            "userType": "employee",
+            "employeestatus": "在職",
+        }
+
+    async def _fake_student_status(_nycu_id: str):
+        return False, None
+
+    monkeypatch.setattr(service, "verify_portal_token", _fake_verify)
+    monkeypatch.setattr(service, "_verify_student_status", _fake_student_status)
+
+    result = await service.process_portal_login("irrelevant-token")
+
+    assert result["access_token"]
+    professor = (await db.execute(select(User).where(User.nycu_id == PROF_NYCU_ID))).scalar_one()
+    assert professor.role == UserRole.professor
