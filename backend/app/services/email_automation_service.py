@@ -71,6 +71,32 @@ def bind_placeholders(sql: str, context: Dict[str, Any]) -> str:
     return "".join(result)
 
 
+def dedupe_recipient_rows(rows: List[Any]) -> List[Dict[str, Any]]:
+    """Collapse a recipient query's rows to one entry per address.
+
+    Addresses are compared case-insensitively and whitespace-trimmed; the first
+    spelling seen is the one mailed. The shipped rules UNION addresses that are
+    populated independently (the SIS ``com_email`` vs the SSO ``users.email``
+    for students; the SSO account email vs the student-typed
+    ``user_profiles.advisor_email`` for professors), and SQL UNION only folds
+    byte-identical strings — ``Prof@nycu.edu.tw`` and ``prof@nycu.edu.tw`` would
+    otherwise produce two scheduled_emails rows, two renderer round-trips and
+    two copies in the same inbox. Empty / NULL cells are dropped.
+    """
+    seen: set = set()
+    recipients: List[Dict[str, Any]] = []
+    for row in rows:
+        if not row or not row[0]:
+            continue
+        email = str(row[0]).strip()
+        key = email.lower()
+        if not email or key in seen:
+            continue
+        seen.add(key)
+        recipients.append({"email": email})
+    return recipients
+
+
 class EmailAutomationService:
     """Service for handling automated email sending based on triggers"""
 
@@ -208,7 +234,7 @@ class EmailAutomationService:
 
         rows = await self._execute_read_only(db, parameterized_query, context)
 
-        recipients = [{"email": row[0]} for row in rows if row]
+        recipients = dedupe_recipient_rows(rows)
         logger.info(f"✓ Found {len(recipients)} recipients for rule {rule.template_key}")
         return recipients
 

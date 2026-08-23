@@ -9,12 +9,14 @@
 #   deploy-test.yml             ──▶ the site        (app + collectors)
 #   deploy-monitoring-test.yml  ──▶ the dashboard   (Grafana/Loki/Prometheus)
 #
-# WHY THE TRIGGERS DIFFER FROM deploy-test.yml
-# --------------------------------------------
-# The app stack redeploys on every push to main. The monitoring stack has no
-# image to promote — it changes only when monitoring/** changes — and every
-# deploy costs a ~30 s Grafana restart. So this fires on a push ONLY when the
-# mirrored commit actually touched monitoring content, plus on manual dispatch.
+# MANUAL DISPATCH ONLY
+# --------------------
+# Nothing here fires on a push. The monitoring stack has no image to promote —
+# it changes only when monitoring/** changes — and every deploy costs a ~30 s
+# Grafana restart, so a redeploy is a decision someone makes after mirroring
+# monitoring content, not something a sync triggers:
+#
+#   gh workflow run deploy-monitoring-test.yml
 #
 # It still passes through the `test` environment's approval gate, because the
 # monitoring stack holds the credentials to a dashboard published on the public
@@ -31,17 +33,11 @@
 name: Deploy Monitoring to Test
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      # Everything the stack is built from. docker-compose.prod.yml is included
-      # because it owns the Alloy collector and the app network the monitoring
-      # containers attach to — a change there can require re-attaching them.
-      - 'monitoring/**'
-      - 'docker-compose.prod.yml'
-      - '.github/workflows/deploy-monitoring-test.yml'
-      - '.github/workflows/deploy-monitoring-stack.yml'
+  # Dispatch only — see the header. Redeploy after a mirror sync brought in a
+  # change to any of the files the stack is built from:
+  #   monitoring/**, docker-compose.prod.yml (it owns the Alloy collector and
+  #   the app network the monitoring containers attach to), and these two
+  #   workflow files.
   workflow_dispatch:
     inputs:
       reset_grafana_volume:
@@ -52,9 +48,8 @@ on:
 
 concurrency:
   # Scoped to test monitoring alone. NOT shared with deploy-test: a run waiting
-  # at the approval gate holds its group, and every merge to main leaves one
-  # pending — sharing would make a monitoring fix wait for an unrelated app
-  # deploy to be reviewed.
+  # at the approval gate holds its group, so sharing would make a monitoring fix
+  # wait for an unrelated app deploy to be reviewed first.
   group: deploy-monitoring-test
   cancel-in-progress: false
 

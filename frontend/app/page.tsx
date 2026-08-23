@@ -438,12 +438,12 @@ export default function ScholarshipManagementSystem() {
               <h1 className="text-4xl font-bold tracking-tight text-nycu-navy-800">
                 {user.role === "student"
                   ? t("system.title")
-                  : "獎學金申請與審核系統"}
+                  : "博士生獎學金申請暨審核系統"}
               </h1>
               <p className="text-lg text-nycu-navy-600 mt-1">
                 {user.role === "student"
                   ? t("system.subtitle")
-                  : "NYCU Admissions Scholarship System"}
+                  : "NYCU PhD Scholarship System"}
               </p>
               <p className="text-sm text-nycu-blue-600 font-medium mt-1">
                 國立陽明交通大學教務處 | NYCU Office of Academic Affairs

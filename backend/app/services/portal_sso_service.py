@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.exceptions import AuthenticationError
 from app.models.user import EmployeeStatus, User, UserRole, UserType
+from app.services.application_builder import backfill_professor_assignments
 from app.services.auth_service import AuthService
 from app.services.student_service import StudentService
 
@@ -237,6 +238,24 @@ class PortalSSOService:
         # Update last login time
         user.last_login_at = datetime.now(timezone.utc)
         await self.db.commit()
+
+        # 教授帳號建立（或角色更新為教授）後，回補帳號存在之前就送出的申請：
+        # 學生填了 advisor_nycu_id，但提交當下查無此教授，professor_id 留 NULL。
+        # 非教授角色由 helper 自行擋掉，這裡不重複判斷。
+        # Best-effort — 回補失敗絕不能擋住登入。The claim runs inside a SAVEPOINT:
+        # a failure rolls back only the savepoint. A session-level rollback()
+        # would expire EVERY loaded object (expire_on_commit=False does not
+        # apply to rollback), and the `user` read by create_tokens() below would
+        # then need a lazy refresh → MissingGreenlet → HTTP 400, i.e. the repair
+        # would be the thing that blocks the login.
+        try:
+            async with self.db.begin_nested():
+                claimed = await backfill_professor_assignments(self.db, user)
+            if claimed:
+                await self.db.commit()
+                logger.info(f"Assigned {claimed} pending application(s) to professor {nycu_id} on login")
+        except Exception:
+            logger.exception(f"Professor application backfill failed for {nycu_id}; login continues")
 
         # Generate system tokens with debug data
         logger.info(f"🔍 Creating tokens with debug data - Portal: {bool(portal_data)}, Student: {bool(student_data)}")

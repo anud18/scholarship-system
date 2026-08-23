@@ -2,8 +2,8 @@
 # Copy this file to the PRIVATE production repository at
 # .github/workflows/deploy-stack.yml.
 #
-# ONE definition, TWO callers. Each stage is its own workflow, and both fire on
-# the same trigger (push to main):
+# ONE definition, TWO callers. Each stage is its own workflow, and both are
+# started by MANUAL DISPATCH — nothing deploys on a push to main:
 #
 #     deploy-test.yml ────────▶ this file (stage: test)
 #                               resolve-images ──▶ deploy
@@ -20,8 +20,8 @@
 # The two workflows are INDEPENDENT: neither waits on nor vetoes the other.
 # That is deliberate — the test tier has its own ways to fail (its DB down, its
 # certificate expired, its portal unreachable) and none of those should hold a
-# production hotfix hostage. What sequences them is the human at each approval
-# gate, who can read the test run before approving production.
+# production hotfix hostage. What sequences them is the human who dispatches
+# them and approves at each gate, having read the test run first.
 #
 # The stage is selected entirely by inputs, so the two runs are bit-identical
 # in behaviour and differ ONLY in (a) which runner they land on and (b) which

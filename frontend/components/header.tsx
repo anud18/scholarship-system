@@ -88,13 +88,13 @@ export function Header({
             <div className="hidden md:block border-l border-nycu-blue-200 pl-6">
               <h1 className="font-semibold text-lg text-nycu-navy-800">
                 {locale === "zh"
-                  ? "獎學金申請與審核系統"
-                  : "NYCU Admissions Scholarship System"}
+                  ? "博士生獎學金申請暨審核系統"
+                  : "NYCU PhD Scholarship System"}
               </h1>
               <p className="text-sm text-nycu-navy-600">
                 {locale === "zh"
-                  ? "NYCU Admissions Scholarship System"
-                  : "Admissions Scholarship Management"}
+                  ? "NYCU PhD Scholarship System"
+                  : "PhD Scholarship Management"}
               </p>
             </div>
 
