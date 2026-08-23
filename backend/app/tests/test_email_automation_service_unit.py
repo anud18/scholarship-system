@@ -402,3 +402,35 @@ async def test_process_single_rule_schedules_when_delay_set(monkeypatch):
     assert scheduled["recipient"] == "person@example.com"
     assert scheduled["email_category"] == EmailCategory.application_student
     assert before <= scheduled["scheduled_for"] <= after + timedelta(hours=3, minutes=1)
+
+
+def test_dedupe_recipient_rows_is_case_insensitive_and_drops_blanks():
+    from app.services.email_automation_service import dedupe_recipient_rows
+
+    rows = [
+        ("Prof@nycu.edu.tw",),
+        ("prof@nycu.edu.tw",),  # same inbox, different case → folded
+        ("  prof@nycu.edu.tw  ",),  # whitespace → folded
+        ("other@nycu.edu.tw",),
+        (None,),
+        ("",),
+        None,
+    ]
+
+    assert dedupe_recipient_rows(rows) == [{"email": "Prof@nycu.edu.tw"}, {"email": "other@nycu.edu.tw"}]
+
+
+@pytest.mark.asyncio
+async def test_get_recipients_folds_case_variants_of_the_same_address(monkeypatch):
+    service = EmailAutomationService()
+    rule = EmailAutomationRule(
+        id=1,
+        template_key="professor_review_notification",
+        trigger_event="submit",
+        condition_query="SELECT email FROM users WHERE id = {application_id}",
+    )
+    db = StubAsyncSession(results=[("Prof@nycu.edu.tw",), ("prof@nycu.edu.tw",)])
+
+    recipients = await service._get_recipients(db, rule, {"application_id": 1})
+
+    assert recipients == [{"email": "Prof@nycu.edu.tw"}]
