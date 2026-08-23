@@ -55,6 +55,38 @@ COLLEGE_RANKING_SUBMITTED_CONDITION_QUERY = """
                 AND u.email != ''
             """
 
+# --- 教授審核通知 -------------------------------------------------------------
+# Trigger point 1, professor side. The advisor is reachable through TWO
+# addresses that are populated independently and can disagree:
+#   - users.email            — the professor's SSO account, via applications.professor_id
+#                              (NULL until the professor has an account, see
+#                              application_builder.assign_professor_from_profile)
+#   - user_profiles.advisor_email — typed by the student (profile form / batch import)
+# Both are notified; the UNION folds them when they are the same address.
+# Picking one over the other (the old COALESCE) silently dropped the other
+# channel, e.g. a professor whose account email differs from what the student
+# wrote never heard about the application through the address they actually read.
+PROFESSOR_REVIEW_NOTIFICATION_CONDITION_QUERY = """
+                SELECT email FROM (
+                    SELECT u.email
+                    FROM applications a
+                    JOIN users u ON u.id = a.professor_id
+                    WHERE a.id = {application_id}
+                    AND u.email IS NOT NULL
+                    AND u.email != ''
+
+                    UNION
+
+                    SELECT up.advisor_email
+                    FROM applications a
+                    JOIN user_profiles up ON up.user_id = a.user_id
+                    WHERE a.id = {application_id}
+                    AND up.advisor_email IS NOT NULL
+                    AND up.advisor_email != ''
+                ) emails
+                WHERE email IS NOT NULL
+            """
+
 
 async def seed_scholarship_configurations(session: AsyncSession) -> None:
     """Initialize scholarship configurations with quota and workflow settings"""
@@ -1112,20 +1144,12 @@ async def seed_email_automation_rules(session: AsyncSession) -> None:
         },
         {
             "name": "教授審核通知",
-            "description": "當申請提交後，通知指導教授有新申請待審核",
+            "description": "當申請提交後，通知指導教授有新申請待審核（系統帳號信箱與學生填寫的指導教授信箱皆寄送）",
             "trigger_event": TriggerEvent.application_submitted,
             "template_key": "professor_review_notification",
             "delay_hours": 0,
             "is_active": True,
-            "condition_query": """
-                SELECT COALESCE(u.email, up.advisor_email) AS email
-                FROM applications a
-                LEFT JOIN users u ON u.id = a.professor_id
-                LEFT JOIN user_profiles up ON up.user_id = a.user_id
-                WHERE a.id = {application_id}
-                AND COALESCE(u.email, up.advisor_email) IS NOT NULL
-                AND COALESCE(u.email, up.advisor_email) != ''
-            """,
+            "condition_query": PROFESSOR_REVIEW_NOTIFICATION_CONDITION_QUERY,
         },
         {
             "name": "學院排名送出通知",
