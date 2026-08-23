@@ -14,6 +14,7 @@ from app.core.sql_read_only_guard import (
     assert_read_only_select,
     mask_literals,
 )
+from app.db.seed_scholarship_configs import PROFESSOR_REVIEW_NOTIFICATION_CONDITION_QUERY
 
 # The two condition_query strings that actually ship (db/seed_scholarship_configs.py).
 SEEDED_STUDENT_QUERY = """
@@ -36,15 +37,9 @@ SEEDED_STUDENT_QUERY = """
     WHERE email IS NOT NULL
 """
 
-SEEDED_PROFESSOR_QUERY = """
-    SELECT COALESCE(u.email, up.advisor_email) AS email
-    FROM applications a
-    LEFT JOIN users u ON u.id = a.professor_id
-    LEFT JOIN user_profiles up ON up.user_id = a.user_id
-    WHERE a.id = {application_id}
-    AND COALESCE(u.email, up.advisor_email) IS NOT NULL
-    AND COALESCE(u.email, up.advisor_email) != ''
-"""
+# The professor rule is imported from the seed so this test always checks the
+# query that actually ships (see test_professor_review_notification_recipients).
+SEEDED_PROFESSOR_QUERY = PROFESSOR_REVIEW_NOTIFICATION_CONDITION_QUERY
 
 
 # ---------------------------------------------------------------------------
