@@ -45,7 +45,7 @@ export const Header = () => {
           letterSpacing: '0.3px',
         }}
       >
-        獎學金申請與審核系統
+        博士生獎學金申請暨審核系統
       </Text>
       <Text
         className="text-blue-100 text-xs m-0 mt-1"
@@ -57,7 +57,7 @@ export const Header = () => {
           opacity: '0.9',
         }}
       >
-        NYCU Admissions Scholarship System
+        NYCU PhD Scholarship System
       </Text>
     </Section>
   );
