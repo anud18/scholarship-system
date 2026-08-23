@@ -30,6 +30,9 @@ and deleted_at IS NULL. Three exclusions, all deliberate:
   land in the professor's 待審核 bucket — which has no status gate — while the
   review endpoint refuses them, stranding the row with a permanent 403.
 - Soft-deleted rows are never resurfaced.
+- Configurations without a professor stage, or whose professor review window
+  has closed, are skipped: the badge would count such a row while the list
+  hides it, or the review endpoint would 403 it forever.
 """
 
 from typing import Sequence, Union
@@ -50,19 +53,45 @@ USER_PROFILES_INDEX = "ix_user_profiles_advisor_nycu_id"
 # Kept in sync with PROFESSOR_ACTIONABLE_APPLICATION_STATUSES (app/models/enums.py).
 ACTIONABLE_STATUSES = ("submitted", "under_review")
 
+# The config predicate mirrors application_builder.backfill_professor_assignments:
+# only claim on a configuration that HAS a professor stage for that application
+# kind and whose professor review window has not closed (NULL bounds = no gate,
+# exactly as ApplicationService.can_professor_submit_review treats them).
 BACKFILL_SQL = """
     UPDATE applications AS a
     SET professor_id = u.id
     FROM user_profiles AS p
     JOIN users AS u
       ON u.nycu_id = p.advisor_nycu_id
-     AND u.role = 'professor'
+     AND u.role = 'professor',
+    scholarship_configurations AS c
     WHERE a.user_id = p.user_id
+      AND c.id = a.scholarship_configuration_id
       AND a.professor_id IS NULL
       AND a.deleted_at IS NULL
       AND p.advisor_nycu_id IS NOT NULL
       AND p.advisor_nycu_id <> ''
       AND a.status::text IN :statuses
+      AND (
+            (
+                a.is_renewal IS FALSE
+                AND c.requires_professor_recommendation IS TRUE
+                AND (
+                    c.application_start_date IS NULL
+                    OR c.professor_review_end IS NULL
+                    OR c.professor_review_end >= NOW()
+                )
+            )
+            OR (
+                a.is_renewal IS TRUE
+                AND c.renewal_requires_professor_review IS TRUE
+                AND (
+                    c.renewal_professor_review_start IS NULL
+                    OR c.renewal_professor_review_end IS NULL
+                    OR c.renewal_professor_review_end >= NOW()
+                )
+            )
+      )
 """
 
 
@@ -75,7 +104,7 @@ def upgrade() -> None:
     inspector = sa.inspect(bind)
     tables = set(inspector.get_table_names())
 
-    if {"applications", "user_profiles", "users"} <= tables:
+    if {"applications", "user_profiles", "users", "scholarship_configurations"} <= tables:
         result = bind.execute(
             sa.text(BACKFILL_SQL).bindparams(sa.bindparam("statuses", expanding=True)),
             {"statuses": list(ACTIONABLE_STATUSES)},

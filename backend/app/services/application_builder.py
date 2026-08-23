@@ -10,13 +10,14 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import and_, select, update
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ValidationError
 from app.models.application import Application
 from app.models.application_sequence import ApplicationSequence
 from app.models.enums import PROFESSOR_ACTIONABLE_APPLICATION_STATUSES, ApplicationStatus, ReviewStage
+from app.models.scholarship import ScholarshipConfiguration
 from app.models.user import User, UserRole
 from app.models.user_profile import UserProfile
 from app.utils.i18n import ScholarshipI18n
@@ -193,17 +194,29 @@ async def backfill_professor_assignments(db: AsyncSession, professor: Optional[U
     ``application.professor_id`` against the caller. A row merely *shown* in the
     queue without being assigned would 403 on the very next click.
 
-    Only :data:`PROFESSOR_ACTIONABLE_APPLICATION_STATUSES` rows are claimed —
-    NOT the wider listing set. Two exclusions matter:
+    Only rows the professor can still ACT on are claimed. The queue's 待審核
+    bucket is "assigned to me and I have not reviewed" with no further gate,
+    while ``can_professor_submit_review`` refuses anything outside its status
+    and time window — so every row claimed here that the review endpoint would
+    refuse is a row parked in 待審核 forever with a 403 on every attempt to
+    clear it. Four exclusions, all deliberate:
 
     - Drafts: they get their professor at submission time from the profile as it
       reads *then*, so pre-assigning one would pin a stale advisor if the
       student edits their profile before submitting.
-    - Already-decided applications (approved / partial_approved / rejected):
-      the queue's 待審核 bucket is "assigned to me and I have not reviewed",
-      with no status gate, while ``can_professor_submit_review`` refuses any
-      status outside submitted/under_review. Claiming a decided row would park
-      it in 待審核 forever with a 403 on every attempt to clear it.
+    - Already-decided applications (approved / partial_approved / rejected) —
+      :data:`PROFESSOR_ACTIONABLE_APPLICATION_STATUSES`, not the wider listing
+      set.
+    - Configurations without a professor stage (``requires_professor_recommendation``
+      for initial applications, ``renewal_requires_professor_review`` for
+      renewals — the same predicate the professor queue filters on). The
+      dashboard badge does NOT apply that filter, so a claimed row on such a
+      configuration would count as 1 待審核 that the list never shows.
+    - Configurations whose professor review window has already closed. The
+      window ``can_professor_submit_review`` enforces is application_start_date →
+      professor_review_end (renewal_professor_review_start/_end for renewals),
+      skipped when either bound is NULL; a future start is fine, the row simply
+      becomes actionable later.
 
     Returns the number of applications claimed.
     """
@@ -218,6 +231,29 @@ async def backfill_professor_assignments(db: AsyncSession, professor: Optional[U
 
     advisee_user_ids = select(UserProfile.user_id).where(UserProfile.advisor_nycu_id == professor.nycu_id)
 
+    # Configurations on which an application of each kind is professor-actionable:
+    # the workflow has a professor stage and its review window has not closed.
+    # Mirrors the professor queue's config predicate
+    # (ApplicationService.get_professor_applications_paginated) plus the time
+    # gate of ApplicationService.can_professor_submit_review.
+    now = datetime.now(timezone.utc)
+    initial_actionable_configs = select(ScholarshipConfiguration.id).where(
+        ScholarshipConfiguration.requires_professor_recommendation.is_(True),
+        or_(
+            ScholarshipConfiguration.application_start_date.is_(None),
+            ScholarshipConfiguration.professor_review_end.is_(None),
+            ScholarshipConfiguration.professor_review_end >= now,
+        ),
+    )
+    renewal_actionable_configs = select(ScholarshipConfiguration.id).where(
+        ScholarshipConfiguration.renewal_requires_professor_review.is_(True),
+        or_(
+            ScholarshipConfiguration.renewal_professor_review_start.is_(None),
+            ScholarshipConfiguration.renewal_professor_review_end.is_(None),
+            ScholarshipConfiguration.renewal_professor_review_end >= now,
+        ),
+    )
+
     # synchronize_session=False: both call sites run this before loading any
     # Application into the session, so there is nothing in the identity map to
     # go stale, and skipping the sync avoids an extra round trip.
@@ -228,6 +264,16 @@ async def backfill_professor_assignments(db: AsyncSession, professor: Optional[U
             Application.deleted_at.is_(None),  # never resurface a soft-deleted application
             Application.status.in_(PROFESSOR_ACTIONABLE_APPLICATION_STATUSES),
             Application.user_id.in_(advisee_user_ids),
+            or_(
+                and_(
+                    Application.is_renewal.is_(False),
+                    Application.scholarship_configuration_id.in_(initial_actionable_configs),
+                ),
+                and_(
+                    Application.is_renewal.is_(True),
+                    Application.scholarship_configuration_id.in_(renewal_actionable_configs),
+                ),
+            ),
         )
         .values(professor_id=professor.id)
         .execution_options(synchronize_session=False)

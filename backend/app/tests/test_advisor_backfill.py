@@ -55,7 +55,19 @@ async def _seed_student_with_advisor(db: AsyncSession, *, nycu_id: str, advisor_
     return student
 
 
-async def _seed_config(db: AsyncSession, *, suffix: str, requires_prof: bool = True) -> ScholarshipConfiguration:
+_OPEN_WINDOW_END = datetime(2030, 1, 1, tzinfo=timezone.utc)
+_CLOSED_WINDOW_END = datetime(2020, 1, 1, tzinfo=timezone.utc)
+
+
+async def _seed_config(
+    db: AsyncSession,
+    *,
+    suffix: str,
+    requires_prof: bool = True,
+    professor_review_end: Optional[datetime] = _OPEN_WINDOW_END,
+    renewal_requires_prof: bool = False,
+    renewal_professor_review_end: Optional[datetime] = _OPEN_WINDOW_END,
+) -> ScholarshipConfiguration:
     st = ScholarshipType(code=f"backfill_{suffix}", name=f"Backfill type {suffix}", status="active")
     db.add(st)
     await db.commit()
@@ -69,9 +81,12 @@ async def _seed_config(db: AsyncSession, *, suffix: str, requires_prof: bool = T
         application_start_date=datetime(2025, 1, 1, tzinfo=timezone.utc),
         application_end_date=datetime(2030, 1, 1, tzinfo=timezone.utc),
         professor_review_start=datetime(2025, 1, 1, tzinfo=timezone.utc),
-        professor_review_end=datetime(2030, 1, 1, tzinfo=timezone.utc),
+        professor_review_end=professor_review_end,
         requires_professor_recommendation=requires_prof,
         requires_college_review=False,
+        renewal_requires_professor_review=renewal_requires_prof,
+        renewal_professor_review_start=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        renewal_professor_review_end=renewal_professor_review_end,
         amount=0,
         is_active=True,
     )
@@ -89,6 +104,7 @@ async def _seed_app(
     suffix: str,
     status: str = ApplicationStatus.submitted.value,
     professor_id: Optional[int] = None,
+    is_renewal: bool = False,
 ) -> Application:
     app = Application(
         app_id=f"APP-BACKFILL-{suffix}",
@@ -98,6 +114,7 @@ async def _seed_app(
         academic_year=114,
         sub_type_selection_mode="single",
         status=status,
+        is_renewal=is_renewal,
         professor_id=professor_id,
     )
     db.add(app)
@@ -258,6 +275,81 @@ async def test_no_op_for_non_professor_users(db: AsyncSession):
     assert await backfill_professor_assignments(db, admin) == 0
     assert await backfill_professor_assignments(db, None) == 0
     assert await _professor_id_of(db, app) is None
+
+
+# --- actionability gates: config must have a professor stage, window open ----
+
+
+@pytest.mark.asyncio
+async def test_skips_configs_without_a_professor_stage(db: AsyncSession):
+    """The queue filters on requires_professor_recommendation but the badge
+    does not — claiming here would show 1 待審核 that the list never lists."""
+    student = await _seed_student_with_advisor(db, nycu_id="stu_nostage", advisor_nycu_id=PROF_NYCU_ID)
+    cfg = await _seed_config(db, suffix="nostage", requires_prof=False)
+    app = await _seed_app(db, student=student, config=cfg, suffix="nostage")
+    professor = await _seed_user(db, role=UserRole.professor, nycu_id=PROF_NYCU_ID)
+
+    assert await backfill_professor_assignments(db, professor) == 0
+    assert await _professor_id_of(db, app) is None
+
+    service = ApplicationService(db)
+    applications, total = await service.get_professor_applications_paginated(professor_id=professor.id)
+    stats = await service.get_professor_review_stats(professor.id)
+    assert (total, applications) == (0, [])
+    assert stats["pending_reviews"] == 0  # badge and list agree
+
+
+@pytest.mark.asyncio
+async def test_skips_closed_professor_review_window(db: AsyncSession):
+    """Same stranding as a decided status, via the time gate: the review
+    endpoint would 403 such a row forever."""
+    student = await _seed_student_with_advisor(db, nycu_id="stu_closed", advisor_nycu_id=PROF_NYCU_ID)
+    cfg = await _seed_config(db, suffix="closed", professor_review_end=_CLOSED_WINDOW_END)
+    app = await _seed_app(db, student=student, config=cfg, suffix="closed")
+    professor = await _seed_user(db, role=UserRole.professor, nycu_id=PROF_NYCU_ID)
+
+    assert await backfill_professor_assignments(db, professor) == 0
+    assert await _professor_id_of(db, app) is None
+
+
+@pytest.mark.asyncio
+async def test_claims_when_review_window_is_not_configured(db: AsyncSession):
+    """NULL bounds mean no time gate (can_professor_submit_review skips it)."""
+    student = await _seed_student_with_advisor(db, nycu_id="stu_nowin", advisor_nycu_id=PROF_NYCU_ID)
+    cfg = await _seed_config(db, suffix="nowin", professor_review_end=None)
+    app = await _seed_app(db, student=student, config=cfg, suffix="nowin")
+    professor = await _seed_user(db, role=UserRole.professor, nycu_id=PROF_NYCU_ID)
+
+    assert await backfill_professor_assignments(db, professor) == 1
+    assert await _professor_id_of(db, app) == professor.id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("renewal_requires_prof", "renewal_window_end", "expected_claimed"),
+    [
+        (True, _OPEN_WINDOW_END, 1),
+        (True, _CLOSED_WINDOW_END, 0),
+        (False, _OPEN_WINDOW_END, 0),
+    ],
+)
+async def test_renewals_follow_the_renewal_flags(
+    db: AsyncSession, renewal_requires_prof: bool, renewal_window_end: datetime, expected_claimed: int
+):
+    """A renewal is gated by the renewal-specific admin flag and window, not
+    the initial-application ones (which are all open here)."""
+    student = await _seed_student_with_advisor(db, nycu_id="stu_renew", advisor_nycu_id=PROF_NYCU_ID)
+    cfg = await _seed_config(
+        db,
+        suffix="renew",
+        renewal_requires_prof=renewal_requires_prof,
+        renewal_professor_review_end=renewal_window_end,
+    )
+    app = await _seed_app(db, student=student, config=cfg, suffix="renew", is_renewal=True)
+    professor = await _seed_user(db, role=UserRole.professor, nycu_id=PROF_NYCU_ID)
+
+    assert await backfill_professor_assignments(db, professor) == expected_claimed
+    assert (await _professor_id_of(db, app) == professor.id) is bool(expected_claimed)
 
 
 # --- professor-facing queries (fallback advisor match) -----------------------
