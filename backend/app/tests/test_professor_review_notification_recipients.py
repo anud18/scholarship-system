@@ -51,9 +51,10 @@ async def _seed_application(
     suffix: str,
     advisor_email: Optional[str],
     professor: Optional[User],
+    advisor_nycu_id: Optional[str] = None,
 ) -> Application:
     student = await _seed_user(db, nycu_id=f"stu_{suffix}", role=UserRole.student, email=f"stu_{suffix}@u.edu")
-    db.add(UserProfile(user_id=student.id, advisor_email=advisor_email))
+    db.add(UserProfile(user_id=student.id, advisor_email=advisor_email, advisor_nycu_id=advisor_nycu_id))
 
     scholarship_type = ScholarshipType(code=f"prof_notify_{suffix}", name=f"Prof notify {suffix}", status="active")
     db.add(scholarship_type)
@@ -143,3 +144,28 @@ async def test_other_applications_do_not_leak_in(db: AsyncSession):
     await _seed_application(db, suffix="other", advisor_email="other.typed@gmail.com", professor=other_prof)
 
     assert await _recipients(db, target) == sorted([ACCOUNT_EMAIL, PROFILE_EMAIL])
+
+
+@pytest.mark.asyncio
+async def test_profile_naming_the_assigned_professor_mails_both_addresses(db: AsyncSession):
+    """Same person, two inboxes: the normal case the UNION exists for."""
+    professor = await _seed_user(db, nycu_id="prof_named", role=UserRole.professor, email=ACCOUNT_EMAIL)
+    application = await _seed_application(
+        db, suffix="named", advisor_email=PROFILE_EMAIL, professor=professor, advisor_nycu_id=professor.nycu_id
+    )
+
+    assert await _recipients(db, application) == sorted([ACCOUNT_EMAIL, PROFILE_EMAIL])
+
+
+@pytest.mark.asyncio
+async def test_profile_naming_a_different_professor_is_not_mailed(db: AsyncSession):
+    """returned→resubmit after an advisor change: professor_id still points at
+    the original reviewer, so the newly named advisor must not get a review
+    link that would 403 for them."""
+    original = await _seed_user(db, nycu_id="prof_orig", role=UserRole.professor, email=ACCOUNT_EMAIL)
+    await _seed_user(db, nycu_id="prof_new", role=UserRole.professor, email="new.prof@nycu.edu.tw")
+    application = await _seed_application(
+        db, suffix="changed", advisor_email="new.prof@gmail.com", professor=original, advisor_nycu_id="prof_new"
+    )
+
+    assert await _recipients(db, application) == [ACCOUNT_EMAIL]

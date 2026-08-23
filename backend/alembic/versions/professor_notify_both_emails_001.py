@@ -60,9 +60,16 @@ NEW_CONDITION_QUERY = """
                     SELECT up.advisor_email
                     FROM applications a
                     JOIN user_profiles up ON up.user_id = a.user_id
+                    LEFT JOIN users u ON u.id = a.professor_id
                     WHERE a.id = {application_id}
                     AND up.advisor_email IS NOT NULL
                     AND up.advisor_email != ''
+                    AND (
+                        u.id IS NULL
+                        OR up.advisor_nycu_id IS NULL
+                        OR up.advisor_nycu_id = ''
+                        OR up.advisor_nycu_id = u.nycu_id
+                    )
                 ) emails
                 WHERE email IS NOT NULL
             """

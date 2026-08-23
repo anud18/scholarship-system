@@ -66,6 +66,13 @@ COLLEGE_RANKING_SUBMITTED_CONDITION_QUERY = """
 # Picking one over the other (the old COALESCE) silently dropped the other
 # channel, e.g. a professor whose account email differs from what the student
 # wrote never heard about the application through the address they actually read.
+#
+# The profile address is skipped in exactly one case: the profile names a
+# DIFFERENT professor (advisor_nycu_id set and != the assigned professor's
+# nycu_id). professor_id is pinned at first submission and survives a
+# returned→resubmit cycle, so a student who changes advisor before resubmitting
+# would otherwise mail the new advisor a review link that 403s for them.
+# A blank advisor_nycu_id is not evidence of a different person, so it still mails.
 PROFESSOR_REVIEW_NOTIFICATION_CONDITION_QUERY = """
                 SELECT email FROM (
                     SELECT u.email
@@ -80,9 +87,16 @@ PROFESSOR_REVIEW_NOTIFICATION_CONDITION_QUERY = """
                     SELECT up.advisor_email
                     FROM applications a
                     JOIN user_profiles up ON up.user_id = a.user_id
+                    LEFT JOIN users u ON u.id = a.professor_id
                     WHERE a.id = {application_id}
                     AND up.advisor_email IS NOT NULL
                     AND up.advisor_email != ''
+                    AND (
+                        u.id IS NULL
+                        OR up.advisor_nycu_id IS NULL
+                        OR up.advisor_nycu_id = ''
+                        OR up.advisor_nycu_id = u.nycu_id
+                    )
                 ) emails
                 WHERE email IS NOT NULL
             """
