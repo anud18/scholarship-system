@@ -85,8 +85,8 @@ export function Footer({ locale = "zh" }: FooterProps) {
                   </p>
                   <p className="text-nycu-navy-600 text-sm">
                     {locale === "zh"
-                      ? "獎學金申請與審核系統"
-                      : "NYCU Admissions Scholarship System"}
+                      ? "博士生獎學金申請暨審核系統"
+                      : "NYCU PhD Scholarship System"}
                   </p>
                   <p className="text-nycu-navy-500 text-xs font-medium">
                     {locale === "zh" ? "版本 v1.0.0" : "Version v1.0.0"}

@@ -8,11 +8,12 @@
 # production one. There is no combined "stop everything" entry point on
 # purpose: a single dispatch must never be able to take both tiers down.
 #
-#   deploy-test.yml  ──▶ starts the test stack   (push to main / dispatch)
+#   deploy-test.yml  ──▶ starts the test stack   (dispatch ONLY)
 #   stop-test.yml    ──▶ stops  the test stack   (dispatch ONLY)
 #
 # MANUAL DISPATCH ONLY. Nothing about a code push implies the site should go
-# offline, so there is no `push:` trigger here.
+# offline, so there is no `push:` trigger here — as of the dispatch-only release
+# flow, its sibling has none either.
 #
 # Two things gate this run, and both are deliberate:
 #   1. `confirm` — you must type `test`. workflow_dispatch remembers the last
@@ -25,9 +26,9 @@
 #      this runs unattended. See SECRETS-SETUP-GUIDE.md § Environments.
 #
 # A STOP IS NOT A HOLD. It stops what is running now and leaves no marker
-# behind, so the next push to main redeploys and restarts test. If it has to
-# stay down, hold the merge or disable deploy-test.yml in the Actions tab for
-# that window. To bring test back immediately:
+# behind: merging to main no longer restarts test, but any dispatch of
+# deploy-test.yml does. If it has to stay down, disable deploy-test.yml in the
+# Actions tab for that window. To bring test back immediately:
 #
 #   gh workflow run deploy-test.yml [-f tag=v1.2.3]
 #

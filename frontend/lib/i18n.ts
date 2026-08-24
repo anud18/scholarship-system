@@ -8,9 +8,9 @@ export const translations = {
   zh: {
     // 系統標題
     system: {
-      title: "獎學金申請與審核系統",
-      subtitle: "NYCU Admissions Scholarship System",
-      name: "NYCU Admissions Scholarship System",
+      title: "博士生獎學金申請暨審核系統",
+      subtitle: "NYCU PhD Scholarship System",
+      name: "NYCU PhD Scholarship System",
     },
 
     // 導航
@@ -522,9 +522,9 @@ export const translations = {
   en: {
     // System Title
     system: {
-      title: "NYCU Admissions Scholarship System",
-      subtitle: "獎學金申請與審核系統",
-      name: "NYCU Admissions Scholarship System",
+      title: "NYCU PhD Scholarship System",
+      subtitle: "博士生獎學金申請暨審核系統",
+      name: "NYCU PhD Scholarship System",
     },
 
     // Navigation

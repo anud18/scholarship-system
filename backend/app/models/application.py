@@ -142,7 +142,9 @@ class Application(Base):
     agree_terms = Column(Boolean, default=False)
 
     # 審核相關
-    professor_id = Column(Integer, ForeignKey("users.id"))  # 指導教授
+    # Indexed: every professor review-queue / stats query filters on it, and the
+    # advisor backfill scans for the NULL rows.
+    professor_id = Column(Integer, ForeignKey("users.id"), index=True)  # 指導教授
     reviewer_id = Column(Integer, ForeignKey("users.id"))  # 審核者
     final_approver_id = Column(Integer, ForeignKey("users.id"))  # 最終核准者
 

@@ -22,10 +22,12 @@
 #
 # The `environment:` key alone gates nothing. See SECRETS-SETUP-GUIDE.md.
 #
-# The push trigger is narrow on purpose: monitoring has no image to promote, so
-# a redeploy is only warranted when the mirrored commit actually changed
-# monitoring content. Every run costs a ~30 s Grafana restart (the site is never
-# touched).
+# MANUAL DISPATCH ONLY. Nothing here fires on a push: monitoring has no image to
+# promote, so a redeploy is only warranted once someone has mirrored a change to
+# monitoring content and decided to ship it. Every run costs a ~30 s Grafana
+# restart (the site is never touched):
+#
+#   gh workflow run deploy-monitoring-production.yml
 #
 # Prerequisites: those deploy-production.yml already needs, plus the
 # `production` environment secrets GRAFANA_ADMIN_USER / GRAFANA_ADMIN_PASSWORD.
@@ -35,14 +37,9 @@
 name: Deploy Monitoring to Production
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'monitoring/**'
-      - 'docker-compose.prod.yml'
-      - '.github/workflows/deploy-monitoring-production.yml'
-      - '.github/workflows/deploy-monitoring-stack.yml'
+  # Dispatch only — see the header. Redeploy after a mirror sync brought in a
+  # change to monitoring/**, docker-compose.prod.yml, or either of these two
+  # workflow files.
   workflow_dispatch:
     inputs:
       reset_grafana_volume:
