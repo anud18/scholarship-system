@@ -541,16 +541,26 @@ jobs:
               | awk '/^  HTTP/{c=$2} END{print c+0}'
           }
 
-          if [ "$(probe "${ADMIN_USER}")" = "200" ]; then
-            echo "GRAFANA_API_USER=${ADMIN_USER}" >> "$GITHUB_ENV"
-            echo "✅ Declared admin credentials accepted"
-            exit 0
-          fi
+          # /api/health answers before Grafana finishes serving the user table:
+          # right after an image upgrade the SQLite migrations hold the DB
+          # ("database is locked") while the declared login already 401s
+          # "user not found". Observed on the test AP VM — a probe 3 s after
+          # container start concluded the volume needed reconciling when it
+          # merely needed a few more seconds. Retry briefly before deciding.
+          for i in $(seq 1 7); do
+            if [ "$(probe "${ADMIN_USER}")" = "200" ]; then
+              echo "GRAFANA_API_USER=${ADMIN_USER}" >> "$GITHUB_ENV"
+              echo "✅ Declared admin credentials accepted"
+              exit 0
+            fi
+            [ "$i" -lt 7 ] && sleep 5
+          done
 
           echo "::warning::The declared GRAFANA_ADMIN_USER cannot authenticate — grafana_data predates this configuration. Reconciling."
           # Operates directly on grafana.db and takes effect live (no restart).
-          # It resets the BUILT-IN admin user, whatever GF_SECURITY_ADMIN_USER
-          # says — which is precisely why the second probe below is needed.
+          # It resets USER ID 1 — Grafana's initial admin, whatever its login
+          # is — not the declared GF_SECURITY_ADMIN_USER; that is precisely why
+          # the probes below have to hunt for the login that exists.
           docker exec monitoring_grafana grafana cli --homepath /usr/share/grafana \
             admin reset-admin-password "${ADMIN_PASS}" 2>&1 | tail -2
 
@@ -560,17 +570,35 @@ jobs:
             exit 0
           fi
 
-          if [ "$(probe admin)" = "200" ]; then
-            # Deliberately NOT renaming or deleting the existing account: this
-            # workflow will not mutate an identity someone may be logging in
-            # with. The deploy proceeds under the login that exists, and says so.
-            echo "GRAFANA_API_USER=admin" >> "$GITHUB_ENV"
-            echo "::warning::This volume's only admin login is 'admin', not '${ADMIN_USER}'. Its password is now GRAFANA_ADMIN_PASSWORD and the deploy continues under it."
-            echo "::warning::To make '${ADMIN_USER}' the real admin login: create it in Grafana (Administration → Users), or re-run with reset_grafana_volume=true to rebuild from provisioning (DESTROYS manually saved dashboards)."
-            exit 0
-          fi
+          # A volume created under GF_SECURITY_ADMIN_USER=<some old name> has
+          # NO 'admin' user at all — Grafana names the initial admin after the
+          # configured value. After a credential rotation neither the declared
+          # login nor 'admin' exists, and the only account the reset above
+          # touched is user id 1 under its old name. Ask the database who that
+          # is (read-only; sqlite3 is not in the Grafana image, so read the
+          # volume from a throwaway python container) and try that login too.
+          GRAFANA_DB_VOL=$(docker inspect monitoring_grafana \
+            --format '{{range .Mounts}}{{if eq .Destination "/var/lib/grafana"}}{{.Name}}{{end}}{{end}}')
+          ADMIN1_LOGIN=$(docker run --rm -v "${GRAFANA_DB_VOL}:/var/lib/grafana:ro" python:3.13-slim \
+            python -c "import sqlite3; print(sqlite3.connect('file:/var/lib/grafana/grafana.db?mode=ro', uri=True).execute('select login from \"user\" where id=1').fetchone()[0])" \
+            2>/dev/null || true)
 
-          echo "::error::Cannot authenticate to Grafana as '${ADMIN_USER}' or as 'admin' even after a password reset."
+          for candidate in admin "${ADMIN1_LOGIN}"; do
+            [ -n "${candidate}" ] || continue
+            [ "${candidate}" = "${ADMIN_USER}" ] && continue
+            if [ "$(probe "${candidate}")" = "200" ]; then
+              # Deliberately NOT renaming or deleting the existing account:
+              # this workflow will not mutate an identity someone may be
+              # logging in with. The deploy proceeds under the login that
+              # exists, and says so.
+              echo "GRAFANA_API_USER=${candidate}" >> "$GITHUB_ENV"
+              echo "::warning::This volume's admin login is '${candidate}', not '${ADMIN_USER}'. Its password is now GRAFANA_ADMIN_PASSWORD and the deploy continues under it."
+              echo "::warning::To make '${ADMIN_USER}' the real admin login: create it in Grafana (Administration → Users), or re-run with reset_grafana_volume=true to rebuild from provisioning (DESTROYS manually saved dashboards)."
+              exit 0
+            fi
+          done
+
+          echo "::error::Cannot authenticate to Grafana as '${ADMIN_USER}', 'admin'${ADMIN1_LOGIN:+, or '${ADMIN1_LOGIN}' (user id 1)} even after a password reset."
           echo "::error::Inspect the volume, or re-run with reset_grafana_volume=true to rebuild it from provisioning (DESTRUCTIVE)."
           docker logs --tail 50 monitoring_grafana
           exit 1
