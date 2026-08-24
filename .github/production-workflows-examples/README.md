@@ -315,10 +315,11 @@ nginx-exporter、redis-exporter）。Alloy 把資料推到
   才會重新部署（每次都會重啟 Grafana 約 30 秒，站台不受影響）。
 - **先跑過一次 `deploy-<stage>.yml`**。這組 workflow 需要 `scholarship_prod_network`
   已存在（app stack 建的），最後一步的「透過 nginx 驗證 `/monitoring`」也需要 nginx 在跑。
-- **VM 上需要免密碼 sudo**，或事先把 `/opt/scholarship/monitoring` 與
-  `/opt/scholarship/secrets` 建好並 chown 給 runner 使用者。
-  `/opt/scholarship/secrets/gh_pat` 的路徑寫死在共用的 compose 檔裡（dev/prod 兩邊共用），
-  不能按 stage 搬家。
+- **不需要 root 權限**。偏好的位置是 `/opt/scholarship/{monitoring,secrets}`
+  （runner 有免密碼 sudo、或事先建好並 chown 給 runner 使用者時採用）；
+  兩者都不行時會自動退回 `$HOME/scholarship/{monitoring,secrets}`。
+  `gh_pat` 的掛載來源在共用的 compose 檔裡以
+  `${MONITORING_SECRETS_DIR:-/opt/scholarship/secrets}` 插值，由 workflow 匯出。
 - **⚠️ 防火牆**：共用的 compose 檔會把 Loki `3100` 與 Prometheus `9090`
   publish 到 host（`0.0.0.0`），因為 DB VM 的 Alloy 要跨機推資料進來。**這兩個埠沒有任何
   認證**，請用防火牆只開給該 stage 的 DB VM。

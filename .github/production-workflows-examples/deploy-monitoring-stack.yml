@@ -70,10 +70,13 @@
 #     GH_PAT (optional — only for alert → GitHub issue delivery).
 #   - Environment variables on the stage: DEPLOY_STAGE (already required by
 #     deploy-stack.yml) and either GRAFANA_ROOT_URL or EXPECT_DOMAIN.
-#   - Passwordless sudo on the AP VM, OR /opt/scholarship/{monitoring,secrets}
-#     pre-created and owned by the runner user (see "Prepare monitoring
-#     directories"). The gh_pat mount path is hardcoded in the shared compose
-#     file, so it cannot be relocated per stage.
+#   - No root access is required. Preferred layout is
+#     /opt/scholarship/{monitoring,secrets} — used when the runner has
+#     passwordless sudo or the directories are pre-created and owned by the
+#     runner user. A fully unprivileged runner falls back to
+#     $HOME/scholarship/{monitoring,secrets}; the gh_pat mount source is
+#     interpolated into the shared compose file via MONITORING_SECRETS_DIR
+#     (see "Prepare monitoring directories").
 #   - Host ports 3100 (Loki) and 9090 (Prometheus) are published by the shared
 #     compose file so the DB VM's Alloy can push to them. They carry NO
 #     authentication — firewall them to the DB VM only. See README § Firewall.
@@ -238,39 +241,62 @@ jobs:
         run: |
           set -euo pipefail
 
-          DIR="${MONITORING_DIR_INPUT:-${MONITORING_DIR_VAR:-/opt/scholarship/monitoring}}"
-
-          # Two paths matter and only one of them is relocatable:
-          #   $DIR                      — where this workflow puts the stack
-          #   /opt/scholarship/secrets  — hardcoded as the gh_pat bind-mount
-          #                               source in the SHARED compose file
-          #                               (monitoring/docker-compose.monitoring.yml,
-          #                               used by both repositories), so it
-          #                               cannot be moved per stage.
-          # Both live under /opt, which the runner user does not own. Try
-          # unprivileged first, fall back to `sudo -n` (never plain sudo — a VM
-          # without passwordless sudo must fail here with the message below
-          # instead of blocking forever on a password prompt no one can answer).
+          # Two directories matter, and BOTH are relocatable:
+          #   monitoring dir — where this workflow puts the stack.
+          #   secrets dir    — the gh_pat bind-mount source. The SHARED compose
+          #                    file (monitoring/docker-compose.monitoring.yml,
+          #                    used by both repositories) interpolates it as
+          #                    ${MONITORING_SECRETS_DIR:-/opt/scholarship/secrets},
+          #                    and $GITHUB_ENV below keeps the value exported
+          #                    for every later `docker compose` call.
+          # The preferred defaults live under /opt, which the runner user does
+          # not own. Try unprivileged first, fall back to `sudo -n` (never plain
+          # sudo — a VM without passwordless sudo must not block forever on a
+          # password prompt no one can answer), and when neither works fall back
+          # to the runner's HOME: an unprivileged runner must still be able to
+          # install the stack.
           ensure_dir() {
-            mkdir -p "$1" 2>/dev/null && return 0
-            sudo -n mkdir -p "$1" 2>/dev/null || {
-              echo "::error::Cannot create $1 — this runner has no passwordless sudo."
-              echo "::error::Create it once on the VM, owned by the runner user:"
-              echo "::error::  sudo mkdir -p $1 && sudo chown -R \$USER:\$USER $1"
-              return 1
-            }
-            sudo -n chown -R "$USER:$USER" "$1" 2>/dev/null || true
+            mkdir -p "$1" 2>/dev/null || sudo -n mkdir -p "$1" 2>/dev/null || return 1
+            [ -w "$1" ] || sudo -n chown -R "$USER:$USER" "$1" 2>/dev/null || true
+            [ -w "$1" ]
           }
 
-          ensure_dir "${DIR}"
-          [ -w "${DIR}" ] || sudo -n chown -R "$USER:$USER" "${DIR}" 2>/dev/null || {
-            echo "::error::${DIR} exists but is not writable by the runner user."
-            echo "::error::Fix once on the VM: sudo chown -R \$USER:\$USER ${DIR}"
-            exit 1
-          }
+          DIR="${MONITORING_DIR_INPUT:-${MONITORING_DIR_VAR:-}}"
+          if [ -n "${DIR}" ]; then
+            # Explicitly configured — never silently relocate it.
+            ensure_dir "${DIR}" || {
+              echo "::error::Cannot create or write ${DIR} (set via the monitoring_dir input or vars.MONITORING_DIR)."
+              echo "::error::Fix once on the VM: sudo mkdir -p ${DIR} && sudo chown -R \$USER:\$USER ${DIR}"
+              exit 1
+            }
+          elif ensure_dir /opt/scholarship/monitoring; then
+            DIR=/opt/scholarship/monitoring
+          else
+            DIR="${HOME}/scholarship/monitoring"
+            echo "::notice::/opt/scholarship/monitoring is not writable and this runner has no passwordless sudo — installing to ${DIR} instead."
+            ensure_dir "${DIR}" || { echo "::error::Cannot create ${DIR} either."; exit 1; }
+          fi
+
+          # Same fallback for the secrets dir. When sudo works it stays
+          # root-owned 0700 (the runner never reads it back — the PAT write
+          # goes through `sudo -n tee`); without sudo it is runner-owned 0700,
+          # which shields it from other unprivileged users just the same.
+          SECRETS_DIR=/opt/scholarship/secrets
+          if sudo -n mkdir -p "${SECRETS_DIR}" 2>/dev/null; then
+            sudo -n chmod 700 "${SECRETS_DIR}" 2>/dev/null || true
+          elif mkdir -p "${SECRETS_DIR}" 2>/dev/null && [ -w "${SECRETS_DIR}" ]; then
+            chmod 700 "${SECRETS_DIR}"
+          else
+            SECRETS_DIR="${HOME}/scholarship/secrets"
+            echo "::notice::/opt/scholarship/secrets is not writable and this runner has no passwordless sudo — using ${SECRETS_DIR} instead."
+            mkdir -p "${SECRETS_DIR}"
+            chmod 700 "${SECRETS_DIR}"
+          fi
 
           echo "MONITORING_DIR=${DIR}" >> "$GITHUB_ENV"
+          echo "MONITORING_SECRETS_DIR=${SECRETS_DIR}" >> "$GITHUB_ENV"
           echo "Monitoring directory: ${DIR}"
+          echo "Secrets directory:    ${SECRETS_DIR}"
 
       - name: Deploy monitoring configuration
         run: |
@@ -400,28 +426,32 @@ jobs:
           # webhook-bridge bind-mount it; when the source is missing Docker
           # materialises it as a DIRECTORY, and from then on the mount fails
           # in a way that reads like a Grafana bug.
-          SECRETS_DIR=/opt/scholarship/secrets
-          PAT_FILE="${SECRETS_DIR}/gh_pat"
-
-          sudo -n mkdir -p "${SECRETS_DIR}" 2>/dev/null || mkdir -p "${SECRETS_DIR}" || {
-            echo "::error::Cannot create ${SECRETS_DIR} (no passwordless sudo)."
-            echo "::error::Create it once on the VM: sudo mkdir -p ${SECRETS_DIR} && sudo chmod 700 ${SECRETS_DIR}"
-            exit 1
-          }
-          sudo -n chmod 700 "${SECRETS_DIR}" 2>/dev/null || true
+          #
+          # The directory itself was resolved and created by "Prepare
+          # monitoring directories" — /opt/scholarship/secrets when the runner
+          # can, the runner's HOME when it cannot — and the shared compose file
+          # mounts ${MONITORING_SECRETS_DIR:-/opt/scholarship/secrets}/gh_pat.
+          PAT_FILE="${MONITORING_SECRETS_DIR}/gh_pat"
 
           # An empty PAT is written deliberately rather than skipped: the mount
           # has to resolve to a file either way. The bridge reads it only when
           # an alert fires, so an empty value costs a failed dispatch at alert
           # time, not a failed deploy now (warned about in "Validate monitoring
           # secrets").
-          printf '%s' "${GH_PAT}" | sudo -n tee "${PAT_FILE}" > /dev/null 2>&1 \
-            || printf '%s' "${GH_PAT}" > "${PAT_FILE}"
+          if ! printf '%s' "${GH_PAT}" | sudo -n tee "${PAT_FILE}" > /dev/null 2>&1; then
+            # A previous run left the file 0444: its owner may delete it, but
+            # not open it for writing — recreate instead of overwriting.
+            rm -f "${PAT_FILE}" 2>/dev/null || true
+            printf '%s' "${GH_PAT}" > "${PAT_FILE}" || {
+              echo "::error::Cannot write ${PAT_FILE} — no passwordless sudo and the path is not writable."
+              exit 1
+            }
+          fi
 
           # Two containers with different UIDs read this (Grafana 472,
-          # webhook-bridge 1100). The file sits behind a 0700 root-owned
-          # directory that only bind mounts traverse, so 0444 on the file is not
-          # host-readable by other users.
+          # webhook-bridge 1100). The file sits behind a 0700 directory that
+          # only bind mounts traverse, so 0444 on the file is not host-readable
+          # by other unprivileged users.
           sudo -n chown root:root "${PAT_FILE}" 2>/dev/null || true
           sudo -n chmod 0444 "${PAT_FILE}" 2>/dev/null || chmod 0444 "${PAT_FILE}"
           echo "✅ ${PAT_FILE} written ($([ -n "${GH_PAT}" ] && echo 'PAT present' || echo 'EMPTY — issue dispatch disabled'))"
