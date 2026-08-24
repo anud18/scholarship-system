@@ -743,6 +743,45 @@ jobs:
           [ "$code" = "200" ] || { echo "::error::Frontend returned $code"; exit 1; }
           echo "✅ Smoke tests passed"
 
+      # ── Post-mortem: capture WHY before rollback destroys the evidence ──────
+      # `docker compose up -d` aborts on an unhealthy depends_on dependency
+      # with only "container X is unhealthy" — no container output, no probe
+      # results (run 32696545808 failed exactly this blind). This step dumps
+      # each container's state (incl. OOMKilled — the AP VM is memory-tight),
+      # its healthcheck probe log (each probe's exit code and curl output,
+      # which compose swallows), and its recent logs. It MUST stay above the
+      # rollback step: rollback re-runs `compose up -d`, recreating the
+      # containers and deleting exactly these logs.
+      - name: Diagnose failed deploy
+        if: failure()
+        run: |
+          echo "::group::Container states"
+          docker ps -a --filter "name=scholarship_" \
+            --format 'table {{.Names}}\t{{.Status}}\t{{.RunningFor}}' || true
+          echo "::endgroup::"
+
+          for c in scholarship_backend_prod scholarship_frontend_prod \
+                   scholarship_nginx_prod scholarship_redis_prod; do
+            docker inspect "$c" >/dev/null 2>&1 || continue
+
+            echo "::group::${c} — state"
+            docker inspect --format 'status={{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} restarts={{.RestartCount}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}n/a{{end}}' "$c" || true
+            echo "::endgroup::"
+
+            echo "::group::${c} — healthcheck probes"
+            docker inspect --format '{{if .State.Health}}{{range .State.Health.Log}}[exit {{.ExitCode}}] {{.Output}}{{end}}{{else}}(no healthcheck){{end}}' "$c" || true
+            echo "::endgroup::"
+
+            echo "::group::${c} — last 200 log lines"
+            docker logs --tail 200 "$c" 2>&1 || true
+            echo "::endgroup::"
+          done
+
+          echo "::group::Host resources"
+          free -h || true
+          df -h || true
+          echo "::endgroup::"
+
       - name: Record successful deployment tag
         if: success()
         run: |
