@@ -41,7 +41,7 @@ export const Footer = () => {
         >
           <strong style={{ fontWeight: '600' }}>系統網址：</strong>
           <Link
-            href="https://scholarship.nycu.edu.tw"
+            href="https://ss.aa.nycu.edu.tw"
             className="text-blue-600 underline"
             style={{
               color: '#2563eb',
@@ -49,7 +49,7 @@ export const Footer = () => {
               marginLeft: '4px',
             }}
           >
-            scholarship.nycu.edu.tw
+            ss.aa.nycu.edu.tw
           </Link>
         </Text>
         <Hr
