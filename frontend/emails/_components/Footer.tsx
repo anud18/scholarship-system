@@ -31,17 +31,6 @@ export const Footer = () => {
           國立陽明交通大學 博士生獎學金申請暨審核系統
         </Text>
         <Text
-          className="text-gray-600 text-xs m-0 mb-2"
-          style={{
-            color: '#6b7280',
-            fontSize: '13px',
-            margin: '0 0 8px 0',
-            lineHeight: '1.6',
-          }}
-        >
-          <strong style={{ fontWeight: '600' }}>聯絡我們：</strong> scholarship@nycu.edu.tw
-        </Text>
-        <Text
           className="text-gray-600 text-xs m-0 mb-3"
           style={{
             color: '#6b7280',
@@ -81,7 +70,7 @@ export const Footer = () => {
             fontStyle: 'italic',
           }}
         >
-          此郵件由系統自動發送，請勿直接回覆。如有問題請透過上述聯絡方式與我們聯繫。
+          此郵件由系統自動發送，請勿直接回覆。如有任何問題，歡迎隨時與各學院系所獎學金承辦人聯繫。
         </Text>
       </Section>
     </>
