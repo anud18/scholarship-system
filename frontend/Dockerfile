@@ -1,4 +1,4 @@
-FROM oven/bun:1-alpine AS base
+FROM oven/bun:1-alpine AS buildbase
 
 # Install Node.js for running Next.js (Bun for deps, Node for runtime)
 # Security: Pin exact package version and configure trusted repositories to prevent dependency confusion attacks
@@ -7,7 +7,7 @@ RUN echo "https://dl-cdn.alpinelinux.org/alpine/v3.22/main" > /etc/apk/repositor
     apk add --no-cache nodejs=22.23.2-r0
 
 # Install dependencies only when needed
-FROM base AS deps
+FROM buildbase AS deps
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
 # Security: Pin exact package version and configure trusted repositories to prevent dependency confusion attacks
 RUN echo "https://dl-cdn.alpinelinux.org/alpine/v3.22/main" > /etc/apk/repositories && \
@@ -26,7 +26,7 @@ COPY scripts ./scripts
 RUN bun install --frozen-lockfile
 
 # Rebuild the source code only when needed
-FROM base AS builder
+FROM buildbase AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -38,20 +38,27 @@ ENV NEXT_TELEMETRY_DISABLED 1
 
 RUN bun run build
 
-# Production image, copy all the files and run next
-FROM base AS runner
+# Production image, copy all the files and run next.
+# Deliberately NOT `FROM buildbase`: the runtime only ever executes
+# `node server.js`, so the ~90MB bun binary and its entrypoint have no
+# business in the shipped image. Alpine version must stay in lockstep with
+# oven/bun:1-alpine so the pinned nodejs package keeps resolving.
+FROM alpine:3.22 AS runner
+# Security: Pin exact package version and configure trusted repositories to prevent dependency confusion attacks
+RUN echo "https://dl-cdn.alpinelinux.org/alpine/v3.22/main" > /etc/apk/repositories && \
+    echo "https://dl-cdn.alpinelinux.org/alpine/v3.22/community" >> /etc/apk/repositories && \
+    apk add --no-cache nodejs=22.23.2-r0
 WORKDIR /app
 
 ENV NODE_ENV production
 # Uncomment the following line in case you want to disable telemetry during runtime.
 ENV NEXT_TELEMETRY_DISABLED 1
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
-
 # Set the correct permission for prerender cache
-RUN mkdir .next
-RUN chown nextjs:nodejs .next
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs && \
+    mkdir .next && \
+    chown nextjs:nodejs .next
 
 # Automatically leverage output traces to reduce image size
 # https://nextjs.org/docs/advanced-features/output-file-tracing
