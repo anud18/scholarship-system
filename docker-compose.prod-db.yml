@@ -51,11 +51,20 @@ services:
   # compose set a dead MINIO_BUCKET_NAME env, so the backend has been using
   # the config default "scholarship-files".
   #
-  # TLS gate: MinIO served TLS from minio_config/certs when present. RustFS
-  # reads certs from RUSTFS_TLS_PATH instead. If the prod backend really runs
-  # MINIO_SECURE=true against this host, provision /opt/scholarship/rustfs/certs
-  # and uncomment the two TLS lines below BEFORE cutover — do not drop the old
-  # minio_config volume until the cert story is replaced.
+  # TLS: NOT enabled, and the cutover has already happened. MinIO served TLS
+  # from minio_config/certs when present; RustFS reads certs from
+  # RUSTFS_TLS_PATH instead, and neither that nor the /certs mount below was
+  # ever turned on — so this store listens in CLEARTEXT. Confirmed by probing
+  # it from the backend container on both stages: https fails at the
+  # transport, http answers 403.
+  #
+  # docker-compose.prod.yml therefore defaults MINIO_SECURE to false. The two
+  # files must be changed together; changing either alone breaks storage.
+  #
+  # TO ENABLE TLS: provision /opt/scholarship/rustfs/certs, uncomment the two
+  # lines below, switch this service's healthcheck to https, and only then set
+  # MINIO_SECURE=true in the env file. Doing it in the other order reproduces
+  # run 33034953741 (`SSL: WRONG_VERSION_NUMBER` at "Seed baseline").
   minio:
     image: rustfs/rustfs:1.0.0-beta.8
     container_name: scholarship_rustfs_prod

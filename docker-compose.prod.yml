@@ -66,7 +66,35 @@ services:
       # name with that same default so the bucket choice is explicit instead
       # of accidental (same bug fixed in docker-compose.dev.yml).
       MINIO_BUCKET: ${MINIO_BUCKET:-scholarship-files}
-      MINIO_SECURE: ${MINIO_SECURE:-true}
+      # Defaults FALSE: the store speaks plain HTTP and has since the RustFS
+      # cutover — docker-compose.prod-db.yml keeps RUSTFS_TLS_PATH and the
+      # /certs mount commented out, and its healthcheck is http://. Probed
+      # from inside the backend container on BOTH stages, https fails at the
+      # transport and http answers 403 (an unauthenticated S3 request — proof
+      # the store replied):
+      #   production 10.40.2.86:9000    http 403 / https FAIL
+      #   test       10.113.74.25:19000 http 403 / https FAIL
+      #
+      # This said ${MINIO_SECURE:-true} and that is what took production down.
+      # 正式機更新手冊 §4.4 tells operators to set MINIO_SECURE=true, so the
+      # env file said true, the backend built its client with secure=True
+      # (minio_service.py:59-62), and storage died with `SSL:
+      # WRONG_VERSION_NUMBER` — surfacing as a failed "Seed baseline" (run
+      # 33034953741) and latent for every roster upload after it.
+      #
+      # Production was the lone outlier: dev, staging and staging-e2e already
+      # say false.
+      #
+      # TO ENABLE TLS: provision /opt/scholarship/rustfs/certs, uncomment
+      # RUSTFS_TLS_PATH and the /certs mount in docker-compose.prod-db.yml,
+      # switch that healthcheck to https, and only then set MINIO_SECURE=true
+      # in the env file. Doing it in the other order reproduces the outage.
+      #
+      # Safe over cleartext: S3 SigV4 sends an HMAC signature, so
+      # MINIO_SECRET_KEY never goes on the wire. File BODIES do — roster
+      # spreadsheets carry student PII. That is the accepted trade for an
+      # internal-only link; revisit it if this ever crosses an untrusted hop.
+      MINIO_SECURE: ${MINIO_SECURE:-false}
       # PII Encryption keys (issue #73). JSON map of {version: base64url 32-byte key}.
       # Required in production. Populated by the KMS sidecar at deploy time.
       PII_ENCRYPTION_KEYS: ${PII_ENCRYPTION_KEYS}
