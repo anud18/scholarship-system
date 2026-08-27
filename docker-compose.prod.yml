@@ -66,7 +66,35 @@ services:
       # name with that same default so the bucket choice is explicit instead
       # of accidental (same bug fixed in docker-compose.dev.yml).
       MINIO_BUCKET: ${MINIO_BUCKET:-scholarship-files}
-      MINIO_SECURE: ${MINIO_SECURE:-true}
+      # PINNED, NOT interpolated — this deliberately overrides the env file.
+      #
+      # The store speaks plain HTTP and has since the RustFS cutover: the two
+      # TLS lines in docker-compose.prod-db.yml (RUSTFS_TLS_PATH and the
+      # /certs mount) are still commented out, and its healthcheck is
+      # http://localhost:9000/health. Probed from inside the backend container
+      # on BOTH stages, https fails at the transport and http answers 403
+      # (an unauthenticated S3 request — proof the store replied):
+      #   production 10.40.2.86:9000  http 403 / https FAIL
+      #   test       10.113.74.25:19000 http 403 / https FAIL
+      #
+      # Meanwhile /home/nycuaa/.env:49 says MINIO_SECURE=true, following the
+      # install manual. secure=True against a cleartext store is what raised
+      # `SSL: WRONG_VERSION_NUMBER` in minio_service.py:83 and failed the
+      # production deploy at "Seed baseline" (run 33034953741). A `${...:-}`
+      # default cannot fix that — the env file wins interpolation — so the
+      # value is pinned here instead, and the stale `true` on the VM is now
+      # inert.
+      #
+      # TO RE-ENABLE TLS: provision /opt/scholarship/rustfs/certs, uncomment
+      # RUSTFS_TLS_PATH and the /certs mount in docker-compose.prod-db.yml,
+      # switch that healthcheck to https, and only then restore this to
+      # ${MINIO_SECURE:-false}. Flipping it here alone reproduces the outage.
+      #
+      # Safe over cleartext: S3 SigV4 sends an HMAC signature, so
+      # MINIO_SECRET_KEY never goes on the wire. File BODIES do — roster
+      # spreadsheets carry student PII. That is the accepted trade for an
+      # internal-only link; revisit it if this ever crosses an untrusted hop.
+      MINIO_SECURE: "false"
       # PII Encryption keys (issue #73). JSON map of {version: base64url 32-byte key}.
       # Required in production. Populated by the KMS sidecar at deploy time.
       PII_ENCRYPTION_KEYS: ${PII_ENCRYPTION_KEYS}
