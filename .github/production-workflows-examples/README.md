@@ -266,6 +266,18 @@ production 只是把同一份 artifact 拉下來跑，確保上線的東西跟 s
 （例：`main-2c2b89d6` 或 `v1.2.3`）。不填預設 `latest`；`latest` 會浮動，
 無法回滾，正式上線請指定明確 tag。
 
+兩種 tag 的來源不同：
+
+| Tag | 誰產生 | 何時 |
+|---|---|---|
+| `main-<sha>` | 開發 repo 的 `deploy-pipeline.yml` | 每次 push 到 main 建置完就有 |
+| `vX.Y.Z` | 開發 repo 的 `mirror-to-production.yml` | 開 release PR 時，把該 commit 的 `main-<sha>` 映像**複製 manifest** 標上版本號 |
+
+版本 tag 不是重新 build 出來的，內容與同一 commit 的 `main-<sha>` 逐位元相同。
+版本號要等 release PR 合併、prod repo 的 auto-tag 建立 git tag 後才算定案，
+在那之前 `vX.Y.Z` 仍可能被下一次 mirror 重指到新的 commit；要絕對釘死某份
+artifact（例如回滾）時用 `main-<sha>`。release PR 的內文會同時列出這兩個 tag。
+
 #### 環境建置相關 (setting-env.yml)
 
 | Secret Name | Description |

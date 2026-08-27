@@ -30,6 +30,12 @@ on:
         type: boolean
         default: true
 
+      skip_image_tagging:
+        description: '跳過 GHCR 版本標籤（僅在此 commit 尚未建置映像、但仍需先開 PR 時勾選；勾選後 production 將沒有 vX.Y.Z 映像可部署）'
+        required: false
+        type: boolean
+        default: false
+
 # SECURITY: Limit GITHUB_TOKEN permissions to minimum required
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
@@ -77,6 +83,14 @@ jobs:
     # Only run if secrets are configured
     if: github.event_name == 'workflow_dispatch'
 
+    # Overrides the workflow-level block, so `contents: write` has to be
+    # restated here. `packages: write` is what lets the "Tag release images"
+    # step below add the vX.Y.Z tag to the GHCR images (the GH_PAT is used
+    # when present; this is the GITHUB_TOKEN fallback).
+    permissions:
+      contents: write
+      packages: write
+
     # Directory owned by the production repository. The mirror neither pushes
     # development content into it nor deletes what production keeps there.
     env:
@@ -121,8 +135,18 @@ jobs:
             echo "::error::Re-issue the PAT with 'repo' + 'workflow' scopes (see .github/PRODUCTION_SYNC_GUIDE.md)."
             exit 1
           fi
+          # Same idea for GHCR: the mirror tags the release images with the
+          # version number (see "Tag release images in GHCR"), which a classic
+          # PAT can only do with the `write:packages` scope. Catch it here
+          # rather than after the whole sync has already run.
+          if [ "${{ inputs.skip_image_tagging }}" != "true" ] && [ -n "$SCOPES" ] && ! echo "$SCOPES" | grep -qw "write:packages"; then
+            echo "::error::GH_PAT lacks the 'write:packages' scope — the release version tag cannot be published to GHCR."
+            echo "::error::Re-issue the PAT with 'repo' + 'workflow' + 'write:packages' scopes,"
+            echo "::error::or dispatch with skip_image_tagging=true to release without a version-tagged image."
+            exit 1
+          fi
           if [ -z "$SCOPES" ]; then
-            echo "::warning::Could not read x-oauth-scopes (fine-grained PAT?) — ensure the token has the 'Workflows' repository permission (read and write) on the production repo."
+            echo "::warning::Could not read x-oauth-scopes (fine-grained PAT?) — ensure the token has the 'Workflows' repository permission (read and write) on the production repo, and 'Packages' (read and write) for the release image tag."
           fi
 
           echo "configured=true" >> $GITHUB_OUTPUT
@@ -821,6 +845,175 @@ jobs:
 
           echo "::endgroup::"
 
+      # ---------------------------------------------------------------------
+      # Publish the release version as a GHCR image tag.
+      #
+      # WHY THIS EXISTS: the production repo builds NO images. deploy-stack.yml
+      # only PROMOTES what this repo's deploy-pipeline.yml already pushed, and
+      # its `tag` input advertises `v1.2.3` as a valid value. But nothing ever
+      # created such a tag: deploy-pipeline runs on `push: main` and tags the
+      # image `main-<sha>` / `main` / `latest`, while the semantic version is
+      # born HERE — and, after the PR merges, as a *git* tag in the prod repo.
+      # A git tag is not an image tag, so `deploy-production.yml -f tag=v1.2.3`
+      # died on the resolve-images gate ("image not found") and operators had
+      # to fall back to the mutable `latest` — the exact thing that gate exists
+      # to prevent.
+      #
+      # So the version tag is created here, on the image built for the very
+      # commit being mirrored, BEFORE the PR is opened — the PR can then name a
+      # tag that actually resolves. `imagetools create` copies the manifest
+      # inside the registry: no pull, no rebuild, no re-tag of a fresh build,
+      # so the released bits are bit-identical to what CI tested (and to what
+      # `main-<sha>` points at).
+      #
+      # CAVEAT: a mirror whose PR is never merged still leaves its vX.Y.Z tag
+      # behind. The next mirror computes the SAME next version (the prod git
+      # tag was never created) and re-points that tag at the newer commit, so
+      # vX.Y.Z is only immutable once its PR is merged. The immutable
+      # `main-<sha>` source tag is recorded in the PR body for anyone who needs
+      # to pin the exact artifact regardless.
+      # ---------------------------------------------------------------------
+      - name: Tag release images in GHCR
+        id: tag-images
+        env:
+          # Set by the previous step via GITHUB_ENV; restated for `set -u`.
+          NEXT_VERSION: ${{ env.NEXT_VERSION }}
+          REGISTRY: ghcr.io
+          IMAGE_OWNER: ${{ github.repository_owner }}
+          GHCR_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+          SKIP_IMAGE_TAGGING: ${{ inputs.skip_image_tagging }}
+        run: |
+          set -euo pipefail
+          echo "::group::Tag release images in GHCR"
+
+          # GHCR namespaces are lowercase; the owner login may not be.
+          OWNER_LC=$(echo "${IMAGE_OWNER}" | tr '[:upper:]' '[:lower:]')
+          BACKEND="${REGISTRY}/${OWNER_LC}/scholarship-system-backend"
+          FRONTEND="${REGISTRY}/${OWNER_LC}/scholarship-system-frontend"
+
+          if [ "${SKIP_IMAGE_TAGGING}" = "true" ]; then
+            echo "::warning::skip_image_tagging=true — no ${NEXT_VERSION} image will be published."
+            echo "::warning::Production will have no version-tagged image to deploy for this release."
+            cat > /tmp/release-deploy-section.md <<'SKIPPED_DEPLOY_EOF'
+          ## 🚀 部署（合併後）
+
+          ⚠️ **本次同步沒有產生版本映像**（dispatch 時勾選了 `skip_image_tagging`）。
+
+          production repo **不會 build image**，它的 deploy workflows 只能部署開發 repo
+          已推上 GHCR 的映像，因此本版本**沒有 `vX.Y.Z` 可用**。請先讓
+          `deploy-pipeline.yml` 為此 commit 建置映像，再重新 dispatch 一次 mirror
+          （不要勾 `skip_image_tagging`）取得版本映像；在那之前只能用
+          `main-<sha>` 這種來源 tag 部署。
+
+          SKIPPED_DEPLOY_EOF
+            echo "RELEASE_IMAGE_TAG=" >> $GITHUB_ENV
+            echo "RELEASE_IMAGE_SOURCE_TAG=" >> $GITHUB_ENV
+            echo "RELEASE_IMAGE_NOTE=⚠️ 未標記（dispatch 時勾選 skip_image_tagging）— 本版本沒有 ${NEXT_VERSION} 映像可部署" >> $GITHUB_ENV
+            echo "image_tag=" >> $GITHUB_OUTPUT
+            echo "::endgroup::"
+            exit 0
+          fi
+
+          echo "${GHCR_TOKEN}" | docker login "${REGISTRY}" -u "${GHCR_USER}" --password-stdin
+
+          # Resolve the immutable tag deploy-pipeline.yml published for THIS
+          # commit. It writes two commit-derived tags:
+          #   type=sha,prefix={{branch}}-              → <ref>-<sha:0:7>
+          #   type=raw,value=<ref>-$(git rev-parse --short HEAD)
+          # The second uses git's auto-scaling abbreviation length, which grows
+          # with the object count, so probe a range instead of assuming 7.
+          SOURCE_TAG=""
+          for len in 7 8 9 10 11 12; do
+            candidate="${GITHUB_REF_NAME}-${GITHUB_SHA:0:$len}"
+            if docker buildx imagetools inspect "${BACKEND}:${candidate}" >/dev/null 2>&1; then
+              SOURCE_TAG="${candidate}"
+              break
+            fi
+          done
+
+          if [ -z "${SOURCE_TAG}" ]; then
+            echo "::error::No upstream image found for commit ${GITHUB_SHA} (${GITHUB_REF_NAME})."
+            echo "::error::Looked for ${BACKEND}:${GITHUB_REF_NAME}-<short sha>."
+            echo "::error::deploy-pipeline.yml publishes it on every push to main —"
+            echo "::error::wait for (or re-run) that workflow for this commit, then dispatch"
+            echo "::error::this mirror again. To open the PR without a deployable image"
+            echo "::error::anyway, dispatch with skip_image_tagging=true."
+            exit 1
+          fi
+
+          echo "::notice::Source image tag for this commit: ${SOURCE_TAG}"
+
+          # Both components must exist, and both must come from the same commit
+          # — half a release is worse than none.
+          if ! docker buildx imagetools inspect "${FRONTEND}:${SOURCE_TAG}" >/dev/null 2>&1; then
+            echo "::error::${FRONTEND}:${SOURCE_TAG} is missing while the backend image exists."
+            echo "::error::The build for this commit is incomplete — re-run deploy-pipeline.yml."
+            exit 1
+          fi
+
+          for image in "${BACKEND}" "${FRONTEND}"; do
+            if docker buildx imagetools inspect "${image}:${NEXT_VERSION}" >/dev/null 2>&1; then
+              echo "::warning::${image}:${NEXT_VERSION} already exists — re-pointing it at ${SOURCE_TAG}."
+              echo "::warning::(An earlier mirror computed the same version and its PR was never merged.)"
+            fi
+            echo "Tagging ${image}:${NEXT_VERSION} → ${SOURCE_TAG}"
+            docker buildx imagetools create --tag "${image}:${NEXT_VERSION}" "${image}:${SOURCE_TAG}"
+          done
+
+          echo "::notice::✅ Published ${NEXT_VERSION} images (from ${SOURCE_TAG})"
+
+          # Carried into the PR body / release notes by the next step.
+          echo "RELEASE_IMAGE_TAG=${NEXT_VERSION}" >> $GITHUB_ENV
+          echo "RELEASE_IMAGE_SOURCE_TAG=${SOURCE_TAG}" >> $GITHUB_ENV
+          echo "RELEASE_IMAGE_NOTE=\`${NEXT_VERSION}\`（由 \`${SOURCE_TAG}\` 複製 manifest，未重新 build）" >> $GITHUB_ENV
+          echo "image_tag=${NEXT_VERSION}" >> $GITHUB_OUTPUT
+          echo "source_tag=${SOURCE_TAG}" >> $GITHUB_OUTPUT
+
+          # The deploy section of the production PR. Rendered here (quoted
+          # heredoc + envsubst) rather than in the release-notes heredoc: the
+          # text is full of backticks, which an unquoted heredoc would run as
+          # command substitution.
+          export IMAGE_TAG="${NEXT_VERSION}" SOURCE_IMAGE_TAG="${SOURCE_TAG}" IMAGE_NS="${OWNER_LC}"
+          cat > /tmp/release-deploy-section.tpl <<'DEPLOY_EOF'
+          ## 🚀 部署（合併後）
+
+          **合併這個 PR 不會部署任何東西。** production repo 的 deploy workflows 只吃
+          dispatch，而且**不 build image** — 它們部署的是開發 repo 已推上 GHCR 的映像。
+          本次同步的 commit 已標上 `${IMAGE_TAG}`，兩個 stage 請帶**同一個 tag**：
+
+          ```bash
+          gh workflow run deploy-test.yml       -f tag=${IMAGE_TAG}
+          gh workflow run deploy-production.yml -f tag=${IMAGE_TAG}
+          # 只有本次同步動到 monitoring/** 時才需要：
+          gh workflow run deploy-monitoring-test.yml
+          gh workflow run deploy-monitoring-production.yml
+          ```
+
+          | 映像 | Tag |
+          |---|---|
+          | 版本（本次發布） | `ghcr.io/${IMAGE_NS}/scholarship-system-{backend,frontend}:${IMAGE_TAG}` |
+          | 來源（不可變，內容相同） | `ghcr.io/${IMAGE_NS}/scholarship-system-{backend,frontend}:${SOURCE_IMAGE_TAG}` |
+
+          版本 tag 是 mirror 時由來源映像**複製 manifest** 得來的，不是重新 build，
+          因此與 CI 測過的成品逐位元相同。PR 合併前這個 tag 仍可能被下一次 mirror 重指
+          （版本號要合併後才由 auto-tag 定案），要絕對釘死時請改用來源 tag。
+          `tag` 留空會部署 `latest`，兩個 stage 可能因此落在不同映像上。
+
+          DEPLOY_EOF
+          envsubst < /tmp/release-deploy-section.tpl > /tmp/release-deploy-section.md
+
+          {
+            echo "## 📦 Release images"
+            echo ""
+            echo "| Image | Tag | Source (immutable) |"
+            echo "|---|---|---|"
+            echo "| \`scholarship-system-backend\` | \`${NEXT_VERSION}\` | \`${SOURCE_TAG}\` |"
+            echo "| \`scholarship-system-frontend\` | \`${NEXT_VERSION}\` | \`${SOURCE_TAG}\` |"
+          } >> $GITHUB_STEP_SUMMARY
+
+          echo "::endgroup::"
+
       - name: Generate release notes
         id: release-notes
         run: |
@@ -844,6 +1037,7 @@ jobs:
           | Property | Value |
           |----------|-------|
           | **Version** | ${{ env.NEXT_VERSION }} |
+          | **Deploy Image Tag** | ${RELEASE_IMAGE_NOTE} |
           | **Source Repo** | [${{ github.repository }}](https://github.com/${{ github.repository }}) |
           | **Source Commit** | [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }}) |
           | **Sync Date** | ${SYNC_DATE} |
@@ -904,10 +1098,20 @@ jobs:
           - Backup scripts: `scripts/backup.sh`
           - Production configurations and deployment files
 
+          REMOVED_FILES_EOF
+
+          # Deploy instructions for the exact images this release ships,
+          # rendered by the "Tag release images in GHCR" step above.
+          if [ -s /tmp/release-deploy-section.md ]; then
+            cat /tmp/release-deploy-section.md >> /tmp/release-notes.md
+          fi
+
+          cat >> /tmp/release-notes.md <<'REMOVED_FILES_EOF'
           ## 📝 Notes
 
           - This is a production-ready snapshot with development files excluded or removed
           - Test files remain in development repository but are excluded from production sync
+          - Release image tag: ${RELEASE_IMAGE_NOTE}
           - Production workflows preserved: ${{ steps.preserve-workflows.outputs.preserved_count || '0' }} workflow(s)
           - Workflows updated from templates (pristine stale copies):${{ steps.install-workflows.outputs.updated || ' (none)' }}
           - Workflows customized on prod side (NOT overwritten):${{ steps.install-workflows.outputs.customized || ' (none)' }}
@@ -1156,6 +1360,8 @@ jobs:
 
           **Version**: ${{ env.NEXT_VERSION }}
 
+          **Deploy image tag**: \`${{ env.RELEASE_IMAGE_TAG || '(未標記 — skip_image_tagging)' }}\` (from \`${{ env.RELEASE_IMAGE_SOURCE_TAG || 'n/a' }}\`)
+
           **Temp Branch**: \`${{ steps.push-temp.outputs.temp_branch }}\`
 
           ## Next Steps
@@ -1167,8 +1373,8 @@ jobs:
              dispatch-only — run them yourself, in this order, approving at each
              environment gate:
              \`\`\`bash
-             gh workflow run deploy-test.yml       -f tag=<image tag>
-             gh workflow run deploy-production.yml -f tag=<same tag>
+             gh workflow run deploy-test.yml       -f tag=${{ env.RELEASE_IMAGE_TAG || '<image tag>' }}
+             gh workflow run deploy-production.yml -f tag=${{ env.RELEASE_IMAGE_TAG || '<same tag>' }}
              # only when monitoring/** changed in this sync:
              gh workflow run deploy-monitoring-test.yml
              gh workflow run deploy-monitoring-production.yml
@@ -1177,6 +1383,7 @@ jobs:
           ## 🏷️ Auto-Tagging Information
 
           - **Tag Format**: \`${{ env.NEXT_VERSION }}\` (e.g., v1.2.3)
+          - **Image Tag**: the same \`${{ env.NEXT_VERSION }}\` now exists on GHCR (\`scholarship-system-backend\` / \`-frontend\`), so the deploy dispatches above resolve
           - **PR Title Format**: \`Release ${{ env.NEXT_VERSION }}\`
           - **Metadata in PR Body**: Version information embedded for extraction
           - **Recommended**: Set up auto-tag workflow in production repository (see production-workflows-examples/)

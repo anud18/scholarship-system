@@ -154,8 +154,50 @@ Trigger a sync manually from GitHub UI:
 3. Click **"Run workflow"**
 4. Choose options:
    - Branch: `main` (or your main branch)
-   - Force push: ☐ (usually not needed)
+   - `version_bump`: `patch` / `minor` / `major`（決定這次的版本號）
+   - `pr_title`: 留空即可（預設 `Release vX.Y.Z`，prod repo 的 auto-tag 靠這個格式）
+   - `freeze_workflows`: ☐（勾了就不自動更新 prod 端的 pristine 舊 workflow 模板）
+   - `security_reports`: ☑（產生本次版本的 ZAP / CodeQL 報告）
+   - `skip_image_tagging`: ☐（勾了就不標版本映像 —— 見下方〈📦 版本映像〉，該版本將無 `vX.Y.Z` 可部署）
 5. Click **"Run workflow"**
+
+## 📦 版本映像（GHCR image tag）
+
+production repo **不建置映像檔**：它的 `deploy-test.yml` / `deploy-production.yml`
+只是把開發 repo 已經推上 GHCR 的映像拉下來跑（`deploy-stack.yml` 的
+`resolve-images` gate 會先確認該 tag 存在，不存在就直接失敗，連 runner 都不會叫醒）。
+
+映像本身是 `deploy-pipeline.yml` 在每次 push 到 main 時建的，標的是
+`main-<sha>` / `latest`；而版本號 `vX.Y.Z` 是 mirror 這裡才算出來的。
+兩者原本沒有交集 —— 於是 prod repo 有 `v1.2.3` 的 git tag、
+`gh workflow run deploy-production.yml -f tag=v1.2.3` 卻永遠找不到映像，
+只能退回浮動的 `latest`。
+
+因此 mirror 在**開 PR 之前**會做一件事：把本次同步 commit 的映像，
+用 `docker buildx imagetools create` 在 registry 內**複製 manifest**、標上版本號。
+
+```
+ghcr.io/<owner>/scholarship-system-backend:main-2c2b89d6   ← deploy-pipeline 建的
+ghcr.io/<owner>/scholarship-system-backend:v1.2.3          ← mirror 加的（同一份 manifest）
+（frontend 同理）
+```
+
+- **不重新 build**：只複製 manifest，所以上線的成品與 CI 測過的逐位元相同。
+- **找不到來源映像就中止**：若該 commit 還沒建置完成（或 `deploy-pipeline` 失敗），
+  這一步會直接讓 mirror 失敗，而不是開一個「無法部署」的 release PR。
+  等映像建好再 dispatch 一次即可；真的需要先開 PR 時，
+  dispatch 時勾 `skip_image_tagging`（該版本就不會有 `vX.Y.Z` 可部署）。
+- **合併前 `vX.Y.Z` 仍是浮動的**：版本號要等 PR 合併、prod repo 的 auto-tag
+  建好 git tag 才定案。若某次 mirror 的 PR 沒有合併，下一次 mirror 會算出同一個
+  版本號並把該 tag 重指到新的 commit。要絕對釘死時用來源 tag `main-<sha>`——
+  release PR 的內文兩個都會列出來。
+
+合併後的部署指令（兩個 stage 帶同一個 tag）：
+
+```bash
+gh workflow run deploy-test.yml       -f tag=v1.2.3
+gh workflow run deploy-production.yml -f tag=v1.2.3
+```
 
 ## 🔐 版本資安報告（ZAP + CodeQL）
 
