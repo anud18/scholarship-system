@@ -13,12 +13,12 @@ import { GraduationCap, ExternalLink, LogOut, AlertTriangle } from "lucide-react
 
 // NYCU Portal SSO entry for the current environment. The Portal maps the app ID
 // to our callback (/api/v1/auth/portal-sso/verify) and POSTs the SSO JWT there.
-// Production uses the "esas" ID assigned by the IT center ("scholarship" belongs
+// Production uses the "ssaa" ID assigned by the IT center ("scholarship" belongs
 // to another system on the production Portal); the test Portal still uses
 // "scholarship".
 const PRODUCTION_PORTAL = {
   url: "https://portal.nycu.edu.tw",
-  appId: "esas",
+  appId: "ssaa",
 } as const;
 const TEST_PORTAL = {
   url: "https://portal.test.nycu.edu.tw",
