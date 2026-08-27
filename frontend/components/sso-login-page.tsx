@@ -11,21 +11,33 @@ import {
 import { Button } from "@/components/ui/button";
 import { GraduationCap, ExternalLink, LogOut, AlertTriangle } from "lucide-react";
 
-// Resolve the NYCU Portal base URL for the current environment.
-function getPortalUrl(): string {
-  let portalUrl = "https://portal.nycu.edu.tw"; // default production
-  if (typeof window !== "undefined") {
-    const hostname = window.location.hostname;
-    if (
-      hostname.includes("test") ||
-      hostname.includes("staging") ||
-      hostname.includes("localhost") ||
-      hostname === "140.113.7.148"
-    ) {
-      portalUrl = "https://portal.test.nycu.edu.tw";
-    }
-  }
-  return portalUrl;
+// NYCU Portal SSO entry for the current environment. The Portal maps the app ID
+// to our callback (/api/v1/auth/portal-sso/verify) and POSTs the SSO JWT there.
+// Production uses the "esas" ID assigned by the IT center ("scholarship" belongs
+// to another system on the production Portal); the test Portal still uses
+// "scholarship".
+const PRODUCTION_PORTAL = {
+  url: "https://portal.nycu.edu.tw",
+  appId: "esas",
+} as const;
+const TEST_PORTAL = {
+  url: "https://portal.test.nycu.edu.tw",
+  appId: "scholarship",
+} as const;
+
+function isTestEnvironment(): boolean {
+  if (typeof window === "undefined") return false;
+  const hostname = window.location.hostname;
+  return (
+    hostname.includes("test") ||
+    hostname.includes("staging") ||
+    hostname.includes("localhost") ||
+    hostname === "140.113.7.148"
+  );
+}
+
+function getPortalConfig() {
+  return isTestEnvironment() ? TEST_PORTAL : PRODUCTION_PORTAL;
 }
 
 export function SSOLoginPage() {
@@ -48,14 +60,15 @@ export function SSOLoginPage() {
 
   const handleSSOLogin = () => {
     // Redirect to NYCU Portal for SSO authentication
-    window.location.href = `${getPortalUrl()}/#/redirect/scholarship`;
+    const portal = getPortalConfig();
+    window.location.href = `${portal.url}/#/redirect/${portal.appId}`;
   };
 
   const handlePortalLogout = () => {
     // Open the NYCU Portal so the user can complete a full SSO logout there
     // (clicking the Portal's own LogOut clears the userToken cookie). We can't
     // do it for them: portal.test is a different host and exposes no logout URL.
-    window.open(getPortalUrl(), "_blank", "noopener,noreferrer");
+    window.open(getPortalConfig().url, "_blank", "noopener,noreferrer");
   };
 
   return (
