@@ -470,6 +470,37 @@ class TestApplicationFieldsEndpoints:
         resp = await c.get(f"/api/v1/application-fields/documents/{doc.id}/example")
         assert resp.status_code == 404
 
+    @pytest.mark.asyncio
+    async def test_get_example_chinese_document_name_200(self, login, admin, monkeypatch):
+        """Regression: document_name is Chinese, and HTTP headers are latin-1.
+        Interpolating it raw into Content-Disposition made Starlette raise
+        UnicodeEncodeError -> 500 "範例文件讀取失敗" in production."""
+        from unittest.mock import MagicMock
+
+        from app.services.minio_service import minio_service
+
+        payload = b"%PDF-1.4 fake"
+        fake_obj = MagicMock()
+        fake_obj.read.return_value = payload
+        fake_client = MagicMock()
+        fake_client.get_object.return_value = fake_obj
+        monkeypatch.setattr(minio_service, "client", fake_client)
+
+        doc = await self._make_document(
+            scholarship_type="undergrad_exget_cn",
+            document_name="成績單",
+            example_file_url="examples/document_1_20260902.pdf",
+        )
+        c = login(admin)
+        resp = await c.get(f"/api/v1/application-fields/documents/{doc.id}/example")
+
+        assert resp.status_code == 200
+        assert resp.content == payload
+        assert resp.headers["content-type"] == "application/pdf"
+        assert resp.headers["content-length"] == str(len(payload))
+        assert resp.headers["content-disposition"] == "inline; filename*=UTF-8''%E6%88%90%E7%B8%BE%E5%96%AE_example.pdf"
+        fake_obj.release_conn.assert_called_once()
+
     # ------------------------------------------------------------------
     # DELETE /documents/{document_id}/example  (require_admin)
     # ------------------------------------------------------------------
