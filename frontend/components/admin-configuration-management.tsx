@@ -63,7 +63,51 @@ import { ConfigToggleSwitch } from "@/components/admin/config/ConfigToggleSwitch
 import { QuotaExcelButtons } from "@/components/admin/quota-import/QuotaExcelButtons";
 import { QuotaManagementMode, getQuotaManagementModeLabel } from "@/lib/enums";
 import { toast } from "sonner";
+import {
+  dateTimeLocalToIso,
+  formatDateTimeLocal,
+} from "@/lib/utils/datetime-local";
 const api = apiClient;
+
+/** Form fields bound to `datetime-local` pickers (browser-local wall clock). */
+const CONFIG_DATETIME_FIELDS = [
+  "renewal_application_start_date",
+  "renewal_application_end_date",
+  "application_start_date",
+  "application_end_date",
+  "renewal_professor_review_start",
+  "renewal_professor_review_end",
+  "renewal_college_review_start",
+  "renewal_college_review_end",
+  "professor_review_start",
+  "professor_review_end",
+  "college_review_start",
+  "college_review_end",
+  "review_deadline",
+  "effective_start_date",
+  "effective_end_date",
+] as const;
+
+type ConfigDateTimeField = (typeof CONFIG_DATETIME_FIELDS)[number];
+
+/**
+ * Convert every picker value in the form to an absolute UTC instant before it
+ * reaches the API. The backend reads a bare `YYYY-MM-DDTHH:mm` as UTC, which
+ * shifted every deadline by the viewer's UTC offset (+8h in Taiwan). Fields the
+ * form never touched are left out so their stored value is kept; a cleared
+ * picker is sent as null so the backend clears it.
+ */
+const serializeConfigDateTimes = (
+  data: Partial<ScholarshipConfigurationFormData>
+) => {
+  const converted: Partial<Record<ConfigDateTimeField, string | null>> = {};
+  for (const field of CONFIG_DATETIME_FIELDS) {
+    if (field in data) {
+      converted[field] = dateTimeLocalToIso(data[field]);
+    }
+  }
+  return { ...data, ...converted };
+};
 
 interface AdminConfigurationManagementProps {
   scholarshipTypes: ScholarshipType[];
@@ -352,16 +396,15 @@ export function AdminConfigurationManagement({
 
       // 根據 quota_management_mode 自動推導 has_quota_limit 和 has_college_quota
       const quotaMode = formData.quota_management_mode || "none";
-      const processedData = {
+      const processedData = serializeConfigDateTimes({
         ...formData,
         has_quota_limit: quotaMode !== "none",
         has_college_quota:
           quotaMode === "college_based" || quotaMode === "matrix_based",
-      };
+      });
 
-      const response = await api.admin.createScholarshipConfiguration(
-        processedData as ScholarshipConfigurationFormData
-      );
+      const response =
+        await api.admin.createScholarshipConfiguration(processedData);
       if (response.success) {
         setShowCreateDialog(false);
         setFormData({});
@@ -388,12 +431,12 @@ export function AdminConfigurationManagement({
 
       // 根據 quota_management_mode 自動推導 has_quota_limit 和 has_college_quota
       const quotaMode = formData.quota_management_mode || "none";
-      const processedData = {
+      const processedData = serializeConfigDateTimes({
         ...formData,
         has_quota_limit: quotaMode !== "none",
         has_college_quota:
           quotaMode === "college_based" || quotaMode === "matrix_based",
-      };
+      });
 
       const response = await api.admin.updateScholarshipConfiguration(
         selectedConfig.id,
@@ -638,30 +681,6 @@ export function AdminConfigurationManagement({
       return format(date, "yyyy年MM月dd日 HH:mm", { locale: zhTW });
     } catch (error) {
       return "無效日期";
-    }
-  };
-
-  // 格式化日期時間字符串為 datetime-local 輸入格式 (YYYY-MM-DDTHH:mm)
-  const formatDateTimeLocal = (dateString: string | null | undefined) => {
-    if (!dateString) return "";
-    try {
-      const date = new Date(dateString);
-      // 檢查日期是否有效
-      if (isNaN(date.getTime())) {
-        logger.warn("Invalid date string:", dateString);
-        return "";
-      }
-
-      // 使用本地時間
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, "0");
-      const day = String(date.getDate()).padStart(2, "0");
-      const hours = String(date.getHours()).padStart(2, "0");
-      const minutes = String(date.getMinutes()).padStart(2, "0");
-
-      return `${year}-${month}-${day}T${hours}:${minutes}`;
-    } catch (error) {
-      return "";
     }
   };
 
