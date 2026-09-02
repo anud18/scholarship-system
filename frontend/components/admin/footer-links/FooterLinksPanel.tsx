@@ -45,10 +45,12 @@ import {
   buildFooterLinkFileProxyUrl,
   notifyFooterLinksChanged,
   type FooterLink,
+  type FooterLinkSection,
 } from "@/lib/api/modules/footer-links";
 import { previewMimeType } from "@/lib/utils";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { AddFooterLinkDialog } from "./AddFooterLinkDialog";
+import { FOOTER_SECTION_COPY } from "./sections";
 
 const MAX_TITLE_LENGTH = 200;
 
@@ -180,7 +182,13 @@ function SortableRow({
   );
 }
 
-export function FooterLinksPanel() {
+interface FooterLinksPanelProps {
+  /** Which footer block this panel manages. Each block is its own list. */
+  section: FooterLinkSection;
+}
+
+export function FooterLinksPanel({ section }: FooterLinksPanelProps) {
+  const copy = FOOTER_SECTION_COPY[section];
   const [links, setLinks] = useState<FooterLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [reordering, setReordering] = useState(false);
@@ -201,13 +209,13 @@ export function FooterLinksPanel() {
   useEffect(() => {
     // include_inactive: admins manage hidden links too.
     apiClient.footerLinks
-      .list(true)
+      .list(true, section)
       .then((res) => {
         if (res.success && res.data) setLinks(res.data);
       })
-      .catch(() => toast.error("載入相關連結失敗"))
+      .catch(() => toast.error(`載入${copy.title}失敗`))
       .finally(() => setLoading(false));
-  }, []);
+  }, [section, copy.title]);
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
@@ -348,13 +356,14 @@ export function FooterLinksPanel() {
   };
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-5 mt-6">
+    <section
+      className="rounded-xl border border-gray-200 bg-white p-5 mt-6"
+      data-testid={`footer-links-panel-${section}`}
+    >
       <header className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="font-semibold text-nycu-navy-900">相關連結</h3>
-          <p className="text-sm text-gray-500 mt-0.5">
-            顯示在網頁最下方的連結，可放外部網址或上傳檔案（PDF 等），並可拖曳排序。
-          </p>
+          <h3 className="font-semibold text-nycu-navy-900">{copy.title}</h3>
+          <p className="text-sm text-gray-500 mt-0.5">{copy.description}</p>
         </div>
         <Button onClick={() => setAddOpen(true)} size="sm">
           <Plus className="h-4 w-4 mr-1.5" /> 新增
@@ -366,9 +375,7 @@ export function FooterLinksPanel() {
           <Loader2 className="h-4 w-4 animate-spin" /> 載入中…
         </div>
       ) : links.length === 0 ? (
-        <p className="text-sm text-gray-500 py-4">
-          目前尚無相關連結，點擊「新增」建立。
-        </p>
+        <p className="text-sm text-gray-500 py-4">{copy.emptyHint}</p>
       ) : (
         <DndContext
           sensors={sensors}
@@ -397,6 +404,7 @@ export function FooterLinksPanel() {
       )}
 
       <AddFooterLinkDialog
+        section={section}
         open={addOpen}
         onOpenChange={setAddOpen}
         onCreated={(link) => {
@@ -409,7 +417,7 @@ export function FooterLinksPanel() {
         <Dialog open onOpenChange={(next) => !next && setEditingLink(null)}>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>編輯相關連結</DialogTitle>
+              <DialogTitle>編輯{copy.title}</DialogTitle>
               <DialogDescription>
                 {editingLink.link_type === "file"
                   ? "檔案內容無法直接替換，如需更換請刪除後重新上傳。"
@@ -419,20 +427,20 @@ export function FooterLinksPanel() {
 
             <div className="space-y-4">
               <div>
-                <Label htmlFor="edit-footer-title-zh">名稱（中文）</Label>
+                <Label htmlFor={`edit-footer-${section}-title-zh`}>名稱（中文）</Label>
                 <Input
-                  id="edit-footer-title-zh"
+                  id={`edit-footer-${section}-title-zh`}
                   value={editTitleZh}
                   onChange={(e) => setEditTitleZh(e.target.value)}
                   maxLength={MAX_TITLE_LENGTH}
                 />
               </div>
               <div>
-                <Label htmlFor="edit-footer-title-en">
+                <Label htmlFor={`edit-footer-${section}-title-en`}>
                   名稱（英文，選填）
                 </Label>
                 <Input
-                  id="edit-footer-title-en"
+                  id={`edit-footer-${section}-title-en`}
                   value={editTitleEn}
                   onChange={(e) => setEditTitleEn(e.target.value)}
                   maxLength={MAX_TITLE_LENGTH}
@@ -440,9 +448,9 @@ export function FooterLinksPanel() {
               </div>
               {editingLink.link_type === "url" ? (
                 <div>
-                  <Label htmlFor="edit-footer-url">網址</Label>
+                  <Label htmlFor={`edit-footer-${section}-url`}>網址</Label>
                   <Input
-                    id="edit-footer-url"
+                    id={`edit-footer-${section}-url`}
                     value={editUrl}
                     onChange={(e) => setEditUrl(e.target.value)}
                     placeholder="https://www.nycu.edu.tw"

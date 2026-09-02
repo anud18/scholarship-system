@@ -45,6 +45,7 @@ function makeLink(overrides: Record<string, unknown> = {}) {
     title_zh: "陽明交大首頁",
     title_en: "NYCU Homepage",
     link_type: "url",
+    section: "related",
     url: "https://www.nycu.edu.tw",
     object_name: null,
     original_filename: null,
@@ -67,10 +68,20 @@ beforeEach(() => {
 test("requests inactive links so admins can manage hidden entries", async () => {
   api.list.mockResolvedValue({ success: true, message: "OK", data: [] });
 
-  render(<FooterLinksPanel />);
+  render(<FooterLinksPanel section="related" />);
 
-  await waitFor(() => expect(api.list).toHaveBeenCalledWith(true));
+  await waitFor(() => expect(api.list).toHaveBeenCalledWith(true, "related"));
   expect(await screen.findByText(/目前尚無相關連結/)).toBeInTheDocument();
+});
+
+test("the policy panel lists its own section and uses policy copy", async () => {
+  api.list.mockResolvedValue({ success: true, message: "OK", data: [] });
+
+  render(<FooterLinksPanel section="policy" />);
+
+  await waitFor(() => expect(api.list).toHaveBeenCalledWith(true, "policy"));
+  expect(await screen.findByText(/目前尚無政策連結/)).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "政策連結" })).toBeInTheDocument();
 });
 
 test("shows a 已隱藏 badge for inactive links", async () => {
@@ -80,7 +91,7 @@ test("shows a 已隱藏 badge for inactive links", async () => {
     data: [makeLink({ is_active: false })],
   });
 
-  render(<FooterLinksPanel />);
+  render(<FooterLinksPanel section="related" />);
 
   expect(await screen.findByText("已隱藏")).toBeInTheDocument();
 });
@@ -97,7 +108,7 @@ test("toggling visibility patches is_active", async () => {
     data: makeLink({ is_active: false }),
   });
 
-  render(<FooterLinksPanel />);
+  render(<FooterLinksPanel section="related" />);
 
   fireEvent.click(await screen.findByLabelText("隱藏"));
 
@@ -113,7 +124,7 @@ test("rejects a non-http URL before hitting the API", async () => {
     data: [makeLink()],
   });
 
-  render(<FooterLinksPanel />);
+  render(<FooterLinksPanel section="related" />);
 
   fireEvent.click(await screen.findByLabelText("編輯"));
 
@@ -147,7 +158,7 @@ test("file links expose a preview action and no URL field when edited", async ()
     ],
   });
 
-  render(<FooterLinksPanel />);
+  render(<FooterLinksPanel section="related" />);
 
   expect(await screen.findByLabelText("預覽")).toBeInTheDocument();
 
@@ -169,7 +180,7 @@ test("deleting a link removes the row and calls the API", async () => {
     data: { deleted: true },
   });
 
-  render(<FooterLinksPanel />);
+  render(<FooterLinksPanel section="related" />);
 
   fireEvent.click(await screen.findByLabelText("刪除"));
   fireEvent.click(await screen.findByText("刪除", { selector: "button" }));

@@ -1,6 +1,7 @@
-"""Admin-managed footer 相關連結 (Related Links).
+"""Admin-managed footer links.
 
-Each entry is either an external URL or an uploaded document (PDF / Office /
+Two blocks share this table, keyed by ``section``: the 相關連結 (Related
+Links) list and the bottom policy bar (隱私權政策 / 使用條款 / ...). Each entry is either an external URL or an uploaded document (PDF / Office /
 ODF) streamed back through this API — never a direct MinIO URL.
 """
 
@@ -23,7 +24,7 @@ from app.core.document_formats import (
 from app.core.path_security import validate_upload_file
 from app.core.security import get_current_user, require_admin
 from app.db.deps import get_db
-from app.models.footer_link import FooterLink, FooterLinkType
+from app.models.footer_link import FooterLink, FooterLinkSection, FooterLinkType
 from app.models.user import User
 from app.schemas.footer_link import (
     MAX_TITLE_LENGTH,
@@ -61,24 +62,32 @@ async def _get_link_or_404(db: AsyncSession, link_id: int) -> FooterLink:
     return link
 
 
-async def _next_sort_order(db: AsyncSession) -> int:
-    max_order = (await db.execute(select(func.max(FooterLink.sort_order)))).scalar()
+async def _next_sort_order(db: AsyncSession, section: FooterLinkSection) -> int:
+    """Sort orders are independent per section — each block is its own list."""
+    stmt = select(func.max(FooterLink.sort_order)).where(FooterLink.section == section)
+    max_order = (await db.execute(stmt)).scalar()
     return (max_order + 1) if max_order is not None else 0
 
 
 @router.get("")
 async def list_footer_links(
     include_inactive: bool = False,
+    section: Optional[FooterLinkSection] = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """List footer links ordered by sort_order then id.
+
+    ``section`` narrows to one block; omitted, both blocks are returned so the
+    footer needs a single request.
 
     Any authenticated user may read. ``include_inactive`` is honoured for
     admins only — a non-admin always gets the active (publicly shown) set,
     so a hidden link cannot leak through the query parameter.
     """
     stmt = select(FooterLink)
+    if section is not None:
+        stmt = stmt.where(FooterLink.section == section)
     if not (include_inactive and _is_admin(current_user)):
         stmt = stmt.where(FooterLink.is_active.is_(True))
     stmt = stmt.order_by(FooterLink.sort_order.asc(), FooterLink.id.asc())
@@ -103,9 +112,10 @@ async def create_footer_link(
         title_zh=payload.title_zh,
         title_en=payload.title_en,
         link_type=FooterLinkType.url,
+        section=payload.section,
         url=payload.url,
         is_active=payload.is_active,
-        sort_order=await _next_sort_order(db),
+        sort_order=await _next_sort_order(db, payload.section),
         created_by=current_user.id,
     )
     db.add(link)
@@ -127,6 +137,7 @@ async def upload_footer_link_file(
     file: UploadFile = File(...),
     title_zh: str = Form(...),
     title_en: Optional[str] = Form(None),
+    section: FooterLinkSection = Form(FooterLinkSection.related),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -170,12 +181,13 @@ async def upload_footer_link_file(
         title_zh=stripped_zh,
         title_en=stripped_en,
         link_type=FooterLinkType.file,
+        section=section,
         object_name=object_name,
         original_filename=file.filename or "",
         content_type=content_type,
         file_size=len(file_content),
         is_active=True,
-        sort_order=await _next_sort_order(db),
+        sort_order=await _next_sort_order(db, section),
         created_by=current_user.id,
     )
     db.add(link)

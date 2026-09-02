@@ -1,7 +1,9 @@
 /**
- * Footer Links API Module (相關連結)
+ * Footer Links API Module
  *
- * Admin-managed entries rendered in the site footer. Each link is either an
+ * Admin-managed entries rendered in the site footer, split into two blocks
+ * by `section`: 相關連結 (`related`) and the bottom policy bar (`policy`:
+ * 隱私權政策 / 使用條款 / ...). Each link is either an
  * external URL or an uploaded document (PDF / Office / ODF) streamed back
  * through the backend proxy — never a direct MinIO URL.
  */
@@ -10,12 +12,16 @@ import type { ApiResponse } from '../types';
 
 export type FooterLinkType = 'url' | 'file';
 
+/** Which footer block a link renders in. Mirrors backend FooterLinkSection. */
+export type FooterLinkSection = 'related' | 'policy';
+
 /** Footer link payload returned by the backend. */
 export type FooterLink = {
   id: number;
   title_zh: string;
   title_en: string | null;
   link_type: FooterLinkType;
+  section: FooterLinkSection;
   url: string | null;
   object_name: string | null;
   original_filename: string | null;
@@ -31,6 +37,7 @@ export type FooterLinkCreatePayload = {
   title_zh: string;
   title_en?: string | null;
   url: string;
+  section: FooterLinkSection;
   is_active?: boolean;
 };
 
@@ -40,6 +47,16 @@ export type FooterLinkUpdatePayload = {
   url?: string;
   is_active?: boolean;
 };
+
+/** Split one list response into its two footer blocks, preserving order. */
+export function splitFooterLinksBySection(
+  links: FooterLink[]
+): Record<FooterLinkSection, FooterLink[]> {
+  return {
+    related: links.filter((l) => l.section === 'related'),
+    policy: links.filter((l) => l.section === 'policy'),
+  };
+}
 
 /**
  * Broadcast name for "the footer link list changed".
@@ -111,12 +128,17 @@ export function createFooterLinksApi() {
   return {
     /**
      * List footer links. `includeInactive` is honoured for admins only —
-     * the backend always filters hidden links out for non-admins.
+     * the backend always filters hidden links out for non-admins. Omit
+     * `section` to get both blocks in one request.
      */
     list: async (
-      includeInactive = false
+      includeInactive = false,
+      section?: FooterLinkSection
     ): Promise<ApiResponse<FooterLink[]>> => {
-      const query = includeInactive ? '?include_inactive=true' : '';
+      const params = new URLSearchParams();
+      if (includeInactive) params.set('include_inactive', 'true');
+      if (section) params.set('section', section);
+      const query = params.toString() ? `?${params.toString()}` : '';
       const res = await fetch(`/api/v1/footer-links${query}`, {
         headers: { Authorization: `Bearer ${authToken()}` },
       });
@@ -139,11 +161,13 @@ export function createFooterLinksApi() {
     upload: async (
       file: File,
       titleZh: string,
+      section: FooterLinkSection,
       titleEn?: string
     ): Promise<ApiResponse<FooterLink>> => {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('title_zh', titleZh);
+      formData.append('section', section);
       if (titleEn) formData.append('title_en', titleEn);
 
       const res = await fetch('/api/v1/footer-links/upload-proxy', {
