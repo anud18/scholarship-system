@@ -41,7 +41,10 @@ services:
       - grafana_data:/var/lib/grafana
       - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./config/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
-      - /opt/scholarship/secrets/gh_pat:/etc/grafana/secrets/gh_pat:ro
+      # Host path interpolated so a runner without root can relocate the
+      # secrets dir (see the production deploy-monitoring-stack.yml workflow);
+      # the default preserves the staging layout.
+      - ${MONITORING_SECRETS_DIR:-/opt/scholarship/secrets}/gh_pat:/etc/grafana/secrets/gh_pat:ro
     networks:
       - monitoring_network
       - app_network
@@ -166,7 +169,7 @@ services:
       GH_EVENT_TYPE: ${GH_EVENT_TYPE:-monitoring-alert}
       GH_PAT_FILE: /etc/webhook-bridge/gh_pat
     volumes:
-      - /opt/scholarship/secrets/gh_pat:/etc/webhook-bridge/gh_pat:ro
+      - ${MONITORING_SECRETS_DIR:-/opt/scholarship/secrets}/gh_pat:/etc/webhook-bridge/gh_pat:ro
     networks:
       - monitoring_network
     restart: unless-stopped
