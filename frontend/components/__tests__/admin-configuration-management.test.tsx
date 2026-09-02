@@ -676,6 +676,47 @@ describe("AdminConfigurationManagement Component", () => {
     });
   });
 
+  it("sends datetime-local picker values to the API as absolute UTC instants", async () => {
+    // Regression: the raw picker value (browser-local wall clock, no offset)
+    // used to be sent as-is and stored as UTC, so 06:15 came back as 14:15.
+    const user = userEvent.setup();
+    render(
+      <AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("PhD獎學金114學年度第一學期")
+      ).toBeInTheDocument();
+    });
+    await user.click(screen.getAllByTitle("編輯配置")[0]);
+    await waitFor(() => {
+      expect(screen.getByText("編輯獎學金配置")).toBeInTheDocument();
+    });
+
+    const localValue = "2026-08-24T06:15";
+    const endInput = document.getElementById(
+      "edit_application_end_date"
+    ) as HTMLInputElement;
+    fireEvent.change(endInput, { target: { value: localValue } });
+    expect(endInput.value).toBe(localValue);
+
+    await user.click(screen.getByRole("button", { name: "更新配置" }));
+
+    await waitFor(() => {
+      expect(mockApi.admin.updateScholarshipConfiguration).toHaveBeenCalled();
+    });
+    const [, payload] =
+      mockApi.admin.updateScholarshipConfiguration.mock.calls[0];
+
+    // Same instant as the local wall-clock value, expressed in UTC.
+    expect(payload.application_end_date).toBe(
+      new Date(localValue).toISOString()
+    );
+    // Untouched pickers are sent as null so the backend clears them.
+    expect(payload.application_start_date).toBeNull();
+  });
+
   it("should delete configuration successfully", async () => {
     mockApi.admin.deleteScholarshipConfiguration.mockResolvedValue({
       success: true,
