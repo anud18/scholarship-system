@@ -166,7 +166,7 @@ dependencies = [
 
     # PDF generation
     "reportlab==4.4.10",
-    "pypdf==6.15.0",  # Security: CVE-2026-71852/71870 (ToUnicode token length, CID width range DoS, <6.15.0); merged 申請資料合併檔 PDF in the export package (pdf_merge.py)
+    "pypdf==6.16.2",  # Security: CVE-2026-84309/84310/84311 (TreeObject.insert_child infinite loop, outline + XForm DoS, <6.16.1); merged 申請資料合併檔 PDF in the export package (pdf_merge.py)
 
     # Logging and monitoring
     "structlog==24.4.0",

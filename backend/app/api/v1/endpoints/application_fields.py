@@ -6,6 +6,7 @@ import io
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, Path, UploadFile, status
 from fastapi.responses import StreamingResponse
@@ -398,40 +399,50 @@ async def get_document_example(
     if not document or not document.example_file_url:
         raise HTTPException(status_code=404, detail="範例文件不存在")
 
-    try:
-        from app.services.minio_service import minio_service
+    from app.services.minio_service import minio_service
 
+    response = None
+    try:
         # Download from MinIO
         response = minio_service.client.get_object(
             bucket_name=minio_service.default_bucket, object_name=document.example_file_url
         )
-
         file_content = response.read()
-
-        # Determine content type based on file extension
-        file_extension = document.example_file_url.rsplit(".", 1)[-1].lower()
-        content_type_map = {
-            "pdf": "application/pdf",
-            "doc": "application/msword",
-            "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "jpg": "image/jpeg",
-            "jpeg": "image/jpeg",
-            "png": "image/png",
-        }
-        content_type = content_type_map.get(file_extension, "application/octet-stream")
-
-        # Return as streaming response
-        return StreamingResponse(
-            io.BytesIO(file_content),
-            media_type=content_type,
-            headers={
-                "Content-Disposition": f"inline; filename*=UTF-8''{document.document_name}_example.{file_extension}"
-            },
-        )
-
     except Exception as e:
         logger.exception("Failed to get example file")
         raise HTTPException(status_code=500, detail="範例文件讀取失敗") from e
+    finally:
+        if response is not None:
+            response.close()
+            response.release_conn()
+
+    # Determine content type based on file extension
+    file_extension = document.example_file_url.rsplit(".", 1)[-1].lower()
+    content_type_map = {
+        "pdf": "application/pdf",
+        "doc": "application/msword",
+        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "jpg": "image/jpeg",
+        "jpeg": "image/jpeg",
+        "png": "image/png",
+    }
+    content_type = content_type_map.get(file_extension, "application/octet-stream")
+
+    # HTTP headers are latin-1 only: document_name is usually Chinese, so it
+    # MUST be percent-encoded (RFC 5987) or Starlette raises UnicodeEncodeError
+    # while building the response.
+    encoded_name = quote(f"{document.document_name}_example.{file_extension}", safe="")
+
+    return StreamingResponse(
+        io.BytesIO(file_content),
+        media_type=content_type,
+        headers={
+            "Content-Disposition": f"inline; filename*=UTF-8''{encoded_name}",
+            # Content-Length is REQUIRED: without it the frontend PDF viewer
+            # cannot detect truncation and reports a false "password protected".
+            "Content-Length": str(len(file_content)),
+        },
+    )
 
 
 @router.delete("/documents/{document_id}/example")

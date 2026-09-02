@@ -237,14 +237,14 @@ export default function ScholarshipManagementSystem() {
             className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
           >
             <FileText className="h-4 w-4" />
-            {locale === "zh" ? "學生申請" : "New Application"}
+            {locale === "zh" ? "獎學金申請" : "New Application"}
           </TabsTrigger>
           <TabsTrigger
             value="applications"
             className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
           >
             <BookOpen className="h-4 w-4" />
-            {locale === "zh" ? "我的申請" : "My Applications"}
+            {locale === "zh" ? "我的申請紀錄" : "My Applications"}
           </TabsTrigger>
         </TabsList>
       );

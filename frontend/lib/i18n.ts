@@ -16,7 +16,7 @@ export const translations = {
     // 導航
     nav: {
       dashboard: "儀表板",
-      applications: "學生申請",
+      applications: "獎學金申請",
       review: "審核管理",
       admin: "系統管理",
       profile: "個人資料",
@@ -178,7 +178,7 @@ export const translations = {
 
     // 學生入口網站
     portal: {
-      my_applications: "我的申請",
+      my_applications: "我的申請紀錄",
       new_application: "新增申請",
       application_records: "申請記錄",
       no_applications: "尚無申請記錄",
@@ -351,14 +351,14 @@ export const translations = {
       no_eligible_scholarships: "目前沒有符合資格的獎學金",
       no_eligible_scholarships_desc:
         "很抱歉，您目前沒有符合申請資格的獎學金。請稍後再試或聯繫獎學金辦公室。",
-      all_eligible_already_submitted: "您可申請的獎學金皆已送出，請至「我的申請」查看進度",
+      all_eligible_already_submitted: "您可申請的獎學金皆已送出，請至「我的申請紀錄」查看進度",
       application_period_ended: "獎學金申請時間已結束",
       eligible: "可申請",
       not_eligible: "不符合申請資格",
       loading_data: "正在載入資料...",
       loading_scholarship_info: "載入獎學金資訊...",
       application_success: "申請提交成功！",
-      application_success_with_progress: "申請提交成功！請在「我的申請」查看進度",
+      application_success_with_progress: "申請提交成功！請在「我的申請紀錄」查看進度",
       draft_saved: "草稿已保存，您可以繼續編輯",
       draft_updated: "草稿已更新",
       draft_deleted: "草稿已成功刪除",

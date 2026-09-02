@@ -86,7 +86,7 @@ export default function ApplicationSubmitted({
         <br />
         請確保您的聯絡資訊保持最新，以便我們能及時與您聯繫。
         <br />
-        如有任何問題，歡迎隨時與我們聯繫。
+        如有任何問題，歡迎隨時與各學院系所獎學金承辦人聯繫。
       </Text>
     </BaseTemplate>
   );

@@ -4,6 +4,7 @@ Clean, database-driven approach for dynamic scholarship configuration management
 """
 
 import logging
+from urllib.parse import quote
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
@@ -1910,7 +1911,9 @@ async def export_whitelist_excel(
     return StreamingResponse(
         excel_file,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+        # HTTP headers are latin-1 only: the filename is Chinese, so it MUST be
+        # percent-encoded (RFC 5987) or Starlette raises UnicodeEncodeError.
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename, safe='')}"},
     )
 
 
@@ -1945,5 +1948,7 @@ async def download_whitelist_template(
     return StreamingResponse(
         template_file,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+        # HTTP headers are latin-1 only: the filename is Chinese, so it MUST be
+        # percent-encoded (RFC 5987) or Starlette raises UnicodeEncodeError.
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename, safe='')}"},
     )
