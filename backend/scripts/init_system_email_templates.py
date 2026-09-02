@@ -48,7 +48,7 @@ async def initialize_system_email_templates():
 - 申請學期：{semester}
 - 獎學金金額：{scholarship_amount}
 
-我們會儘快處理您的申請，如有任何問題請隨時聯繫我們。
+我們會儘快處理您的申請。如有任何問題，歡迎隨時與各學院系所獎學金承辦人聯繫。
 
 祝學業順利！
 
@@ -89,7 +89,7 @@ async def initialize_system_email_templates():
 請點擊以下連結進行審查：
 {review_url}
 
-如有任何問題，請隨時聯繫我們。
+如有任何問題，歡迎隨時與各學院系所獎學金承辦人聯繫。
 
 國立陽明交通大學
 獎學金管理系統""",

@@ -964,7 +964,7 @@ async def seed_email_templates(session: AsyncSession) -> None:
 - 獎學金名稱：{scholarship_name}
 - 申請學期：{semester}
 
-我們會儘快處理您的申請，如有任何問題請隨時聯繫我們。
+我們會儘快處理您的申請。如有任何問題，歡迎隨時與各學院系所獎學金承辦人聯繫。
 
 祝學業順利！
 
@@ -1005,7 +1005,7 @@ async def seed_email_templates(session: AsyncSession) -> None:
 請點擊以下連結進行審查：
 {review_url}
 
-如有任何問題，請隨時聯繫我們。
+如有任何問題，歡迎隨時與各學院系所獎學金承辦人聯繫。
 
 國立陽明交通大學
 獎學金管理系統""",

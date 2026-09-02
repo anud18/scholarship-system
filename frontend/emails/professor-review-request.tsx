@@ -86,7 +86,7 @@ export default function ProfessorReviewRequest({
         3. 送出推薦結果
         <br />
         <br />
-        如有任何問題，歡迎隨時與獎學金辦公室聯繫。
+        如有任何問題，歡迎隨時與各學院系所獎學金承辦人聯繫。
       </Text>
     </BaseTemplate>
   );
