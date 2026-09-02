@@ -26,7 +26,7 @@ describe("getTranslation", () => {
   it("resolves a nested dot-path", () => {
     /** Multi-level dotted key traverses the translation tree. */
     expect(getTranslation("zh", "nav.dashboard")).toBe("儀表板");
-    expect(getTranslation("zh", "nav.applications")).toBe("學生申請");
+    expect(getTranslation("zh", "nav.applications")).toBe("獎學金申請");
   });
 
   it("returns the key itself when the path doesn't resolve", () => {
