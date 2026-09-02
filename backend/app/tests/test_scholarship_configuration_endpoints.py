@@ -850,3 +850,52 @@ class TestScholarshipConfigurationQuotaImport:
         }
         resp = await authenticated_admin_client.post(BASE, json=payload)
         assert resp.status_code == 422
+
+
+class TestWhitelistExcelDownloadHeaders:
+    """Regression: both whitelist downloads build a Chinese filename, and HTTP
+    headers are latin-1. Interpolating it raw into Content-Disposition made
+    Starlette raise UnicodeEncodeError -> 500 on every click in the admin UI."""
+
+    WHITELIST_BASE = "/api/v1/scholarship-configurations"
+    XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+    async def _create_config(self, client: AsyncClient, payload: dict, code: str) -> int:
+        resp = await client.post(BASE, json={**payload, "config_code": code})
+        assert resp.status_code == 200, resp.text
+        return resp.json()["data"]["id"]
+
+    @pytest.mark.asyncio
+    async def test_export_whitelist_encodes_chinese_filename(
+        self, authenticated_admin_client: AsyncClient, valid_config_payload
+    ):
+        config_id = await self._create_config(authenticated_admin_client, valid_config_payload, "WL-EXPORT-113-1")
+
+        resp = await authenticated_admin_client.get(f"{self.WHITELIST_BASE}/{config_id}/whitelist/export")
+
+        assert resp.status_code == 200, resp.text
+        assert resp.headers["content-type"] == self.XLSX
+        disposition = resp.headers["content-disposition"]
+        assert disposition.startswith("attachment; filename*=UTF-8''")
+        assert disposition.isascii()
+        # "_申請白名單_" percent-encoded
+        assert "_%E7%94%B3%E8%AB%8B%E7%99%BD%E5%90%8D%E5%96%AE_" in disposition
+        assert resp.content[:2] == b"PK"  # xlsx is a zip container
+
+    @pytest.mark.asyncio
+    async def test_whitelist_template_encodes_chinese_filename(
+        self, authenticated_admin_client: AsyncClient, valid_config_payload
+    ):
+        config_id = await self._create_config(authenticated_admin_client, valid_config_payload, "WL-TEMPLATE-113-1")
+
+        resp = await authenticated_admin_client.get(f"{self.WHITELIST_BASE}/{config_id}/whitelist/template")
+
+        assert resp.status_code == 200, resp.text
+        assert resp.headers["content-type"] == self.XLSX
+        disposition = resp.headers["content-disposition"]
+        # "白名單匯入模板_" percent-encoded
+        assert disposition.startswith(
+            "attachment; filename*=UTF-8''%E7%99%BD%E5%90%8D%E5%96%AE%E5%8C%AF%E5%85%A5%E6%A8%A1%E6%9D%BF_"
+        )
+        assert disposition.isascii()
+        assert resp.content[:2] == b"PK"
