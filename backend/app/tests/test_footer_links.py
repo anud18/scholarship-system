@@ -196,6 +196,62 @@ async def test_new_links_append_to_end_of_order(admin_client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_section_defaults_to_related_and_is_persisted(admin_client: AsyncClient):
+    related = await admin_client.post(
+        "/api/v1/footer-links", json={"title_zh": "教務處", "url": "https://a.nycu.edu.tw"}
+    )
+    policy = await admin_client.post(
+        "/api/v1/footer-links",
+        json={"title_zh": "隱私權政策", "url": "https://p.nycu.edu.tw", "section": "policy"},
+    )
+    assert related.json()["data"]["section"] == "related"
+    assert policy.json()["data"]["section"] == "policy"
+
+
+@pytest.mark.asyncio
+async def test_list_filters_by_section_and_returns_both_when_omitted(admin_client: AsyncClient):
+    await admin_client.post("/api/v1/footer-links", json={"title_zh": "教務處", "url": "https://a.nycu.edu.tw"})
+    await admin_client.post(
+        "/api/v1/footer-links",
+        json={"title_zh": "使用條款", "url": "https://t.nycu.edu.tw", "section": "policy"},
+    )
+
+    everything = await admin_client.get("/api/v1/footer-links")
+    assert {item["section"] for item in everything.json()["data"]} == {"related", "policy"}
+
+    only_policy = await admin_client.get("/api/v1/footer-links?section=policy")
+    assert [item["title_zh"] for item in only_policy.json()["data"]] == ["使用條款"]
+
+    bogus = await admin_client.get("/api/v1/footer-links?section=nope")
+    assert bogus.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_sort_order_is_independent_per_section(admin_client: AsyncClient):
+    """Each block is its own list: a new policy link starts at 0 even when
+    the related list already holds entries."""
+    await admin_client.post("/api/v1/footer-links", json={"title_zh": "A", "url": "https://a.nycu.edu.tw"})
+    await admin_client.post("/api/v1/footer-links", json={"title_zh": "B", "url": "https://b.nycu.edu.tw"})
+    policy = await admin_client.post(
+        "/api/v1/footer-links",
+        json={"title_zh": "隱私權政策", "url": "https://p.nycu.edu.tw", "section": "policy"},
+    )
+    assert policy.json()["data"]["sort_order"] == 0
+
+
+@pytest.mark.asyncio
+async def test_upload_accepts_section(admin_client: AsyncClient, fake_minio):
+    res = await admin_client.post(
+        "/api/v1/footer-links/upload",
+        data={"title_zh": "無障礙聲明", "section": "policy"},
+        files={"file": ("a11y.pdf", BytesIO(b"%PDF-1.4 test"), "application/pdf")},
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["data"]["section"] == "policy"
+    assert res.json()["data"]["link_type"] == "file"
+
+
+@pytest.mark.asyncio
 async def test_inactive_link_hidden_from_students_and_visible_to_admin(db: AsyncSession, admin_client: AsyncClient):
     created = await admin_client.post(
         "/api/v1/footer-links", json={"title_zh": "草稿連結", "url": "https://draft.nycu.edu.tw"}

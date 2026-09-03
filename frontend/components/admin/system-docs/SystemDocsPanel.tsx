@@ -455,7 +455,8 @@ export function SystemDocsPanel() {
 
       <ApplicationNoticesPanel />
 
-      <FooterLinksPanel />
+      <FooterLinksPanel section="related" />
+      <FooterLinksPanel section="policy" />
 
       <FilePreviewDialog
         isOpen={preview !== null}

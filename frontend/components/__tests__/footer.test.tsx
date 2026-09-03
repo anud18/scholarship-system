@@ -23,6 +23,7 @@ function makeLink(overrides: Record<string, unknown> = {}) {
     title_zh: "陽明交大首頁",
     title_en: "NYCU Homepage",
     link_type: "url",
+    section: "related",
     url: "https://www.nycu.edu.tw",
     object_name: null,
     original_filename: null,
@@ -113,6 +114,47 @@ test("the 相關連結 section is hidden when every link is hidden", async () =>
 
   expect(await screen.findByText("國立陽明交通大學")).toBeInTheDocument();
   await waitFor(() => expect(screen.queryByText("相關連結")).toBeNull());
+});
+
+test("policy links render in the bottom bar and are hidden when empty", async () => {
+  listMock.mockResolvedValue({
+    success: true,
+    message: "OK",
+    data: [
+      makeLink({ id: 1, title_zh: "教務處" }),
+      makeLink({
+        id: 2,
+        section: "policy",
+        title_zh: "隱私權政策",
+        title_en: "Privacy Policy",
+        url: "https://www.nycu.edu.tw/privacy",
+      }),
+    ],
+  });
+
+  render(<Footer locale="zh" />);
+
+  const policyNav = await screen.findByRole("navigation", { name: "政策連結" });
+  const policyLink = screen.getByRole("link", { name: "隱私權政策" });
+  expect(policyNav).toContainElement(policyLink);
+  expect(policyLink).toHaveAttribute("href", "https://www.nycu.edu.tw/privacy");
+  // Policy links never leak into 相關連結 and vice versa.
+  expect(policyNav).not.toContainElement(screen.getByRole("link", { name: "教務處" }));
+  // The old hardcoded placeholders are gone.
+  expect(screen.queryByRole("link", { name: "使用條款" })).toBeNull();
+});
+
+test("the policy bar is omitted when no policy link is visible", async () => {
+  listMock.mockResolvedValue({
+    success: true,
+    message: "OK",
+    data: [makeLink({ title_zh: "教務處" })],
+  });
+
+  render(<Footer locale="zh" />);
+
+  expect(await screen.findByRole("link", { name: "教務處" })).toBeInTheDocument();
+  expect(screen.queryByRole("navigation", { name: "政策連結" })).toBeNull();
 });
 
 test("refetches when the admin panel reports a change", async () => {
