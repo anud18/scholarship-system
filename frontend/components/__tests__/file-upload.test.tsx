@@ -24,6 +24,14 @@ jest.mock("../file-preview-dialog", () => ({
     ) : null,
 }));
 
+jest.mock("sonner", () => ({
+  toast: { error: jest.fn(), success: jest.fn() },
+}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { toast: mockToast } = jest.requireMock("sonner") as {
+  toast: { error: jest.Mock };
+};
+
 // jsdom has no URL.createObjectURL
 global.URL.createObjectURL = jest.fn(() => "blob:mock-object-url");
 global.URL.revokeObjectURL = jest.fn();
@@ -162,6 +170,56 @@ describe("FileUpload Component", () => {
     selectFiles(getFileInput(container), [smallFile, largeFile]);
 
     expect(mockOnFilesChange).toHaveBeenCalledWith([smallFile]);
+  });
+
+  it("should toast a warning for each file exceeding the size limit", () => {
+    const maxSize = 1024; // 1KB
+    const { container } = render(
+      <FileUpload onFilesChange={mockOnFilesChange} maxSize={maxSize} />
+    );
+
+    const largeFile = new File(["a".repeat(2000)], "large.pdf", {
+      type: "application/pdf",
+    });
+    selectFiles(getFileInput(container), [largeFile]);
+
+    expect(mockToast.error).toHaveBeenCalledTimes(1);
+    expect(mockToast.error).toHaveBeenCalledWith(
+      "檔案超過大小限制，未加入上傳",
+      expect.objectContaining({
+        description: expect.stringContaining("large.pdf"),
+      })
+    );
+    expect(mockToast.error.mock.calls[0][1].description).toContain("1 KB");
+  });
+
+  it("should toast a warning for files with an unaccepted extension", () => {
+    const { container } = render(
+      <FileUpload onFilesChange={mockOnFilesChange} acceptedTypes={[".pdf"]} />
+    );
+
+    const invalidFile = new File(["content"], "test.txt", {
+      type: "text/plain",
+    });
+    selectFiles(getFileInput(container), [invalidFile]);
+
+    expect(mockToast.error).toHaveBeenCalledTimes(1);
+    expect(mockToast.error).toHaveBeenCalledWith(
+      "不支援的檔案格式，未加入上傳",
+      expect.objectContaining({
+        description: expect.stringContaining("test.txt"),
+      })
+    );
+  });
+
+  it("should not toast when every selected file is valid", () => {
+    const { container } = render(
+      <FileUpload onFilesChange={mockOnFilesChange} />
+    );
+    const validFile = new File(["a"], "ok.pdf", { type: "application/pdf" });
+    selectFiles(getFileInput(container), [validFile]);
+
+    expect(mockToast.error).not.toHaveBeenCalled();
   });
 
   it("should enforce the max files limit", () => {

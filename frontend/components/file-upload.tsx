@@ -12,6 +12,7 @@ import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { Locale } from "@/lib/validators";
 import { getTranslation } from "@/lib/i18n";
 import { resolveFilePreviewUrl } from "@/lib/file-preview";
+import { toast } from "sonner";
 
 // Files passed as `initialFiles` may have been previously uploaded — the
 // caller attaches server-side metadata (id, url, file_path, originalSize)
@@ -41,6 +42,16 @@ interface FileUploadProps {
 // and wipes a just-selected file back to []. With a stable identity the
 // effect only runs on mount for uncontrolled usage.
 const EMPTY_FILES: File[] = [];
+
+const formatFileSize = (bytes: number) => {
+  if (bytes === 0) return "0 Bytes";
+  const k = 1024;
+  const sizes = ["Bytes", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return (
+    Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
+  );
+};
 
 export function FileUpload({
   onFilesChange,
@@ -132,15 +143,27 @@ export function FileUpload({
   };
 
   const handleFiles = (newFiles: File[]) => {
+    // Rejected files must be reported, not silently dropped — otherwise a
+    // student picking an oversized PDF sees nothing happen and assumes the
+    // upload worked.
     const validFiles = newFiles.filter(file => {
       // Check file type
       const fileExtension = "." + file.name.split(".").pop()?.toLowerCase();
       if (!acceptedTypes.includes(fileExtension)) {
+        const acceptedLabel = t("form_upload.accepted_formats_label");
+        toast.error(t("form_upload.file_type_rejected"), {
+          description: `${file.name} — ${acceptedLabel} ${acceptedTypes.join(", ")}`,
+        });
         return false;
       }
 
       // Check file size
       if (file.size > maxSize) {
+        const limitLabel = t("form_upload.file_size_limit_label");
+        const actual = formatFileSize(file.size);
+        toast.error(t("form_upload.file_too_large"), {
+          description: `${file.name} (${actual}) — ${limitLabel} ${formatFileSize(maxSize)}`,
+        });
         return false;
       }
 
@@ -195,16 +218,6 @@ export function FileUpload({
         return newStatus;
       });
     }
-  };
-
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return "0 Bytes";
-    const k = 1024;
-    const sizes = ["Bytes", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return (
-      Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
-    );
   };
 
   // 獲取文件的顯示大小
