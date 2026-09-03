@@ -24,6 +24,14 @@ jest.mock("../file-preview-dialog", () => ({
     ) : null,
 }));
 
+jest.mock("sonner", () => ({
+  toast: { error: jest.fn(), warning: jest.fn(), success: jest.fn() },
+}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { toast: mockToast } = jest.requireMock("sonner") as {
+  toast: { error: jest.Mock; warning: jest.Mock };
+};
+
 // jsdom has no URL.createObjectURL
 global.URL.createObjectURL = jest.fn(() => "blob:mock-object-url");
 global.URL.revokeObjectURL = jest.fn();
@@ -162,6 +170,133 @@ describe("FileUpload Component", () => {
     selectFiles(getFileInput(container), [smallFile, largeFile]);
 
     expect(mockOnFilesChange).toHaveBeenCalledWith([smallFile]);
+  });
+
+  it("should toast a warning for each file exceeding the size limit", () => {
+    const maxSize = 1024; // 1KB
+    const { container } = render(
+      <FileUpload onFilesChange={mockOnFilesChange} maxSize={maxSize} />
+    );
+
+    const largeFile = new File(["a".repeat(2000)], "large.pdf", {
+      type: "application/pdf",
+    });
+    selectFiles(getFileInput(container), [largeFile]);
+
+    expect(mockToast.error).toHaveBeenCalledTimes(1);
+    expect(mockToast.error).toHaveBeenCalledWith(
+      "檔案超過大小限制，未加入上傳",
+      expect.objectContaining({
+        description: expect.stringContaining("large.pdf"),
+      })
+    );
+    expect(mockToast.error.mock.calls[0][1].description).toContain("1 KB");
+  });
+
+  it("should toast a warning for files with an unaccepted extension", () => {
+    const { container } = render(
+      <FileUpload onFilesChange={mockOnFilesChange} acceptedTypes={[".pdf"]} />
+    );
+
+    const invalidFile = new File(["content"], "test.txt", {
+      type: "text/plain",
+    });
+    selectFiles(getFileInput(container), [invalidFile]);
+
+    expect(mockToast.error).toHaveBeenCalledTimes(1);
+    expect(mockToast.error).toHaveBeenCalledWith(
+      "不支援的檔案格式，未加入上傳",
+      expect.objectContaining({
+        description: expect.stringContaining("test.txt"),
+      })
+    );
+  });
+
+  it("should aggregate multiple oversized files into a single toast", () => {
+    const { container } = render(
+      <FileUpload onFilesChange={mockOnFilesChange} maxSize={1024} />
+    );
+    const a = new File(["a".repeat(2000)], "a.pdf", { type: "application/pdf" });
+    const b = new File(["b".repeat(2000)], "b.pdf", { type: "application/pdf" });
+    selectFiles(getFileInput(container), [a, b]);
+
+    expect(mockToast.error).toHaveBeenCalledTimes(1);
+    const description = mockToast.error.mock.calls[0][1].description as string;
+    expect(description).toContain("a.pdf");
+    expect(description).toContain("b.pdf");
+  });
+
+  it("should warn when a new pick evicts an earlier file past maxFiles", () => {
+    const { container } = render(
+      <FileUpload onFilesChange={mockOnFilesChange} maxFiles={1} />
+    );
+    const first = new File(["a"], "first.pdf", { type: "application/pdf" });
+    const second = new File(["b"], "second.pdf", { type: "application/pdf" });
+    selectFiles(getFileInput(container), [first]);
+    expect(mockToast.warning).not.toHaveBeenCalled();
+
+    selectFiles(getFileInput(container), [second]);
+    expect(mockToast.warning).toHaveBeenCalledTimes(1);
+    expect(mockToast.warning.mock.calls[0][1].description).toContain(
+      "first.pdf"
+    );
+    expect(mockOnFilesChange).toHaveBeenLastCalledWith([second]);
+  });
+
+  it("should reset the input value so the same file can be re-picked", () => {
+    const { container } = render(
+      <FileUpload onFilesChange={mockOnFilesChange} />
+    );
+    const input = getFileInput(container);
+    const file = new File(["a"], "ok.pdf", { type: "application/pdf" });
+    selectFiles(input, [file]);
+    expect(input.value).toBe("");
+  });
+
+  it("should accumulate files across successive drops (stale-closure regression)", () => {
+    const { container } = render(
+      <FileUpload onFilesChange={mockOnFilesChange} />
+    );
+    const dropZone = container.querySelector(
+      "[class*='border-dashed']"
+    ) as HTMLElement;
+    expect(dropZone).not.toBeNull();
+    const a = new File(["a"], "a.pdf", { type: "application/pdf" });
+    const b = new File(["b"], "b.pdf", { type: "application/pdf" });
+    fireEvent.drop(dropZone, { dataTransfer: { files: [a] } });
+    fireEvent.drop(dropZone, { dataTransfer: { files: [b] } });
+
+    expect(mockOnFilesChange).toHaveBeenLastCalledWith([a, b]);
+  });
+
+  it("should use a comma separator in the en locale and distinct toast ids per instance", () => {
+    const { container } = render(
+      <>
+        <FileUpload onFilesChange={mockOnFilesChange} maxSize={1024} locale="en" />
+        <FileUpload onFilesChange={mockOnFilesChange} maxSize={1024} locale="en" />
+      </>
+    );
+    const inputs = container.querySelectorAll('input[type="file"]');
+    const a = new File(["a".repeat(2000)], "a.pdf", { type: "application/pdf" });
+    const b = new File(["b".repeat(2000)], "b.pdf", { type: "application/pdf" });
+    selectFiles(inputs[0] as HTMLInputElement, [a, b]);
+    selectFiles(inputs[1] as HTMLInputElement, [a]);
+
+    expect(mockToast.error).toHaveBeenCalledTimes(2);
+    const [first, second] = mockToast.error.mock.calls;
+    expect(first[1].description).toContain("a.pdf (1.95 KB), b.pdf");
+    expect(first[1].description).not.toContain("、");
+    expect(first[1].id).not.toEqual(second[1].id);
+  });
+
+  it("should not toast when every selected file is valid", () => {
+    const { container } = render(
+      <FileUpload onFilesChange={mockOnFilesChange} />
+    );
+    const validFile = new File(["a"], "ok.pdf", { type: "application/pdf" });
+    selectFiles(getFileInput(container), [validFile]);
+
+    expect(mockToast.error).not.toHaveBeenCalled();
   });
 
   it("should enforce the max files limit", () => {
