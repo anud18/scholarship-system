@@ -42,6 +42,7 @@ import {
   isValidTaiwanMobile,
   TAIWAN_MOBILE_MESSAGE,
 } from "@/lib/utils/application-helpers";
+import { previewMimeType } from "@/lib/utils";
 import { getTranslation } from "@/lib/i18n";
 import type {
   ApplicationField,
@@ -304,6 +305,43 @@ export function DynamicApplicationForm({
     });
 
     setShowPreview(true);
+  };
+
+  /**
+   * Open an admin-uploaded example document in the shared preview dialog, so it
+   * behaves like every other document preview (inline viewer + 在新視窗開啟 +
+   * 下載) instead of dumping the file into a new tab.
+   */
+  const handleViewExampleDocument = (document: ApplicationDocument) => {
+    if (!document.example_file_url) return;
+
+    try {
+      // SECURITY: Use validated URL builder to prevent open redirect
+      const safeUrl = buildSecurePreviewUrl("/api/v1/preview/examples", {
+        documentId: document.id,
+        token: getAuthToken(),
+      });
+
+      // Mirror the filename the backend puts in Content-Disposition so the
+      // dialog caption and the download match what the browser saves.
+      const extension = document.example_file_url
+        .split(".")
+        .pop()
+        ?.toLowerCase();
+      const filename = extension
+        ? `${document.document_name}_example.${extension}`
+        : document.document_name;
+
+      setPreviewFile({
+        url: safeUrl,
+        filename,
+        type: previewMimeType(filename),
+      });
+      setShowPreview(true);
+    } catch (error) {
+      logger.error("Failed to build preview URL", { error });
+      alert(t("form_upload.preview_open_failed"));
+    }
   };
 
   const handleClosePreview = () => {
@@ -714,26 +752,7 @@ export function DynamicApplicationForm({
               type="button"
               onClick={e => {
                 e.preventDefault();
-                try {
-                  // SECURITY: Use validated URL builder to prevent open redirect
-                  const safeUrl = buildSecurePreviewUrl(
-                    "/api/v1/preview/examples",
-                    {
-                      documentId: document.id,
-                      token: getAuthToken(),
-                    }
-                  );
-
-                  // Create and trigger download/preview
-                  const link = window.document.createElement("a");
-                  link.href = safeUrl;
-                  link.target = "_blank";
-                  link.rel = "noopener noreferrer";
-                  link.click();
-                } catch (error) {
-                  logger.error("Failed to build preview URL", { error });
-                  alert(t("form_upload.preview_open_failed"));
-                }
+                handleViewExampleDocument(document);
               }}
               className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm font-medium mt-2"
             >
