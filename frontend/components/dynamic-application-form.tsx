@@ -312,25 +312,26 @@ export function DynamicApplicationForm({
    * behaves like every other document preview (inline viewer + 在新視窗開啟 +
    * 下載) instead of dumping the file into a new tab.
    */
-  const handleViewExampleDocument = (document: ApplicationDocument) => {
-    if (!document.example_file_url) return;
+  const handleViewExampleDocument = (doc: ApplicationDocument) => {
+    if (!doc.example_file_url) return;
 
     try {
       // SECURITY: Use validated URL builder to prevent open redirect
       const safeUrl = buildSecurePreviewUrl("/api/v1/preview/examples", {
-        documentId: document.id,
+        documentId: doc.id,
         token: getAuthToken(),
       });
 
-      // Mirror the filename the backend puts in Content-Disposition so the
-      // dialog caption and the download match what the browser saves.
-      const extension = document.example_file_url
-        .split(".")
-        .pop()
-        ?.toLowerCase();
+      // Mirror the filename the backend puts in Content-Disposition
+      // (`<document_name>_example.<ext>`, always the zh name) so the dialog
+      // caption matches what the browser actually saves on 下載.
+      const objectName = doc.example_file_url.split("/").pop() ?? "";
+      const dotIndex = objectName.lastIndexOf(".");
+      const extension =
+        dotIndex > 0 ? objectName.slice(dotIndex + 1).toLowerCase() : "";
       const filename = extension
-        ? `${document.document_name}_example.${extension}`
-        : document.document_name;
+        ? `${doc.document_name}_example.${extension}`
+        : `${doc.document_name}_example`;
 
       setPreviewFile({
         url: safeUrl,
