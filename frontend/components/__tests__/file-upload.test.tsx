@@ -25,11 +25,11 @@ jest.mock("../file-preview-dialog", () => ({
 }));
 
 jest.mock("sonner", () => ({
-  toast: { error: jest.fn(), success: jest.fn() },
+  toast: { error: jest.fn(), warning: jest.fn(), success: jest.fn() },
 }));
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { toast: mockToast } = jest.requireMock("sonner") as {
-  toast: { error: jest.Mock };
+  toast: { error: jest.Mock; warning: jest.Mock };
 };
 
 // jsdom has no URL.createObjectURL
@@ -210,6 +210,63 @@ describe("FileUpload Component", () => {
         description: expect.stringContaining("test.txt"),
       })
     );
+  });
+
+  it("should aggregate multiple oversized files into a single toast", () => {
+    const { container } = render(
+      <FileUpload onFilesChange={mockOnFilesChange} maxSize={1024} />
+    );
+    const a = new File(["a".repeat(2000)], "a.pdf", { type: "application/pdf" });
+    const b = new File(["b".repeat(2000)], "b.pdf", { type: "application/pdf" });
+    selectFiles(getFileInput(container), [a, b]);
+
+    expect(mockToast.error).toHaveBeenCalledTimes(1);
+    const description = mockToast.error.mock.calls[0][1].description as string;
+    expect(description).toContain("a.pdf");
+    expect(description).toContain("b.pdf");
+  });
+
+  it("should warn when a new pick evicts an earlier file past maxFiles", () => {
+    const { container } = render(
+      <FileUpload onFilesChange={mockOnFilesChange} maxFiles={1} />
+    );
+    const first = new File(["a"], "first.pdf", { type: "application/pdf" });
+    const second = new File(["b"], "second.pdf", { type: "application/pdf" });
+    selectFiles(getFileInput(container), [first]);
+    expect(mockToast.warning).not.toHaveBeenCalled();
+
+    selectFiles(getFileInput(container), [second]);
+    expect(mockToast.warning).toHaveBeenCalledTimes(1);
+    expect(mockToast.warning.mock.calls[0][1].description).toContain(
+      "first.pdf"
+    );
+    expect(mockOnFilesChange).toHaveBeenLastCalledWith([second]);
+  });
+
+  it("should reset the input value so the same file can be re-picked", () => {
+    const { container } = render(
+      <FileUpload onFilesChange={mockOnFilesChange} />
+    );
+    const input = getFileInput(container);
+    const file = new File(["a"], "ok.pdf", { type: "application/pdf" });
+    selectFiles(input, [file]);
+    expect(input.value).toBe("");
+  });
+
+  it("should accumulate files across successive drops (stale-closure regression)", () => {
+    const { container } = render(
+      <FileUpload onFilesChange={mockOnFilesChange} />
+    );
+    const dropZone = container.querySelector(
+      "[class*='border-dashed']"
+    ) as HTMLElement;
+    expect(dropZone).not.toBeNull();
+    const a = new File(["a"], "a.pdf", { type: "application/pdf" });
+    const b = new File(["b"], "b.pdf", { type: "application/pdf" });
+    fireEvent.drop(dropZone, { dataTransfer: { files: [a] } });
+    fireEvent.drop(dropZone, { dataTransfer: { files: [b] } });
+
+    expect(mockOnFilesChange).toHaveBeenLastCalledWith([a, b]);
   });
 
   it("should not toast when every selected file is valid", () => {

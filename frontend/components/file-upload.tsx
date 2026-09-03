@@ -125,7 +125,10 @@ export function FileUpload({
     }
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  // Not memoised on purpose: a `useCallback(..., [])` here froze the
+  // mount-time `handleFiles` (and its empty `files`), so every drop after
+  // the first silently wiped the previously dropped files.
+  const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
@@ -133,47 +136,72 @@ export function FileUpload({
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       handleFiles(Array.from(e.dataTransfer.files));
     }
-  }, []);
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     e.preventDefault();
     if (e.target.files && e.target.files[0]) {
       handleFiles(Array.from(e.target.files));
     }
+    // Reset so re-picking the same (e.g. just-rejected) file fires a new
+    // change event instead of being a silent no-op.
+    e.target.value = "";
   };
 
   const handleFiles = (newFiles: File[]) => {
     // Rejected files must be reported, not silently dropped — otherwise a
     // student picking an oversized PDF sees nothing happen and assumes the
-    // upload worked.
+    // upload worked. Rejections are aggregated into one toast per reason so
+    // a multi-select of many bad files doesn't flood the screen.
+    const wrongType: File[] = [];
+    const tooLarge: File[] = [];
     const validFiles = newFiles.filter(file => {
-      // Check file type
       const fileExtension = "." + file.name.split(".").pop()?.toLowerCase();
       if (!acceptedTypes.includes(fileExtension)) {
-        const acceptedLabel = t("form_upload.accepted_formats_label");
-        toast.error(t("form_upload.file_type_rejected"), {
-          description: `${file.name} — ${acceptedLabel} ${acceptedTypes.join(", ")}`,
-        });
+        wrongType.push(file);
         return false;
       }
-
-      // Check file size
       if (file.size > maxSize) {
-        const limitLabel = t("form_upload.file_size_limit_label");
-        const actual = formatFileSize(file.size);
-        toast.error(t("form_upload.file_too_large"), {
-          description: `${file.name} (${actual}) — ${limitLabel} ${formatFileSize(maxSize)}`,
-        });
+        tooLarge.push(file);
         return false;
       }
-
       return true;
     });
 
+    if (wrongType.length > 0) {
+      const acceptedLabel = t("form_upload.accepted_formats_label");
+      const names = wrongType.map(f => f.name).join("、");
+      toast.error(t("form_upload.file_type_rejected"), {
+        id: `${fileType}_wrong_type`,
+        description: `${names} — ${acceptedLabel} ${acceptedTypes.join(", ")}`,
+      });
+    }
+    if (tooLarge.length > 0) {
+      const limitLabel = t("form_upload.file_size_limit_label");
+      const names = tooLarge
+        .map(f => `${f.name} (${formatFileSize(f.size)})`)
+        .join("、");
+      toast.error(t("form_upload.file_too_large"), {
+        id: `${fileType}_too_large`,
+        description: `${names} — ${limitLabel} ${formatFileSize(maxSize)}`,
+      });
+    }
+
     // Keep the NEWEST maxFiles: picking a file into a full slot replaces the
     // oldest one instead of silently discarding the new pick (which used to
-    // play the upload animation for a file that was never kept).
-    const updatedFiles = [...files, ...validFiles].slice(-maxFiles);
+    // play the upload animation for a file that was never kept). Tell the
+    // user which files were evicted rather than dropping them silently.
+    const combined = [...files, ...validFiles];
+    const updatedFiles = combined.slice(-maxFiles);
+    const evicted = combined.slice(0, Math.max(0, combined.length - maxFiles));
+    if (evicted.length > 0) {
+      const maxLabel = t("form_upload.max_files_label");
+      const names = evicted.map(f => f.name).join("、");
+      toast.warning(t("form_upload.max_files_exceeded"), {
+        id: `${fileType}_max_files`,
+        description: `${names} — ${maxLabel} ${maxFiles}`,
+      });
+    }
     setFiles(updatedFiles);
     onFilesChange(updatedFiles);
 
