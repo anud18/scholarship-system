@@ -47,7 +47,10 @@ const formatFileSize = (bytes: number) => {
   if (bytes === 0) return "0 Bytes";
   const k = 1024;
   const sizes = ["Bytes", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  const i = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(k)),
+    sizes.length - 1
+  );
   return (
     Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
   );
@@ -168,11 +171,15 @@ export function FileUpload({
       return true;
     });
 
+    // Names joined with a locale-appropriate separator; toast ids are keyed
+    // on the per-instance inputId (fileType may be omitted, and a bare
+    // "_wrong_type" id would collide across instances).
+    const nameSeparator = locale === "zh" ? "、" : ", ";
     if (wrongType.length > 0) {
       const acceptedLabel = t("form_upload.accepted_formats_label");
-      const names = wrongType.map(f => f.name).join("、");
+      const names = wrongType.map(f => f.name).join(nameSeparator);
       toast.error(t("form_upload.file_type_rejected"), {
-        id: `${fileType}_wrong_type`,
+        id: `${inputId}_wrong_type`,
         description: `${names} — ${acceptedLabel} ${acceptedTypes.join(", ")}`,
       });
     }
@@ -180,9 +187,9 @@ export function FileUpload({
       const limitLabel = t("form_upload.file_size_limit_label");
       const names = tooLarge
         .map(f => `${f.name} (${formatFileSize(f.size)})`)
-        .join("、");
+        .join(nameSeparator);
       toast.error(t("form_upload.file_too_large"), {
-        id: `${fileType}_too_large`,
+        id: `${inputId}_too_large`,
         description: `${names} — ${limitLabel} ${formatFileSize(maxSize)}`,
       });
     }
@@ -196,9 +203,9 @@ export function FileUpload({
     const evicted = combined.slice(0, Math.max(0, combined.length - maxFiles));
     if (evicted.length > 0) {
       const maxLabel = t("form_upload.max_files_label");
-      const names = evicted.map(f => f.name).join("、");
+      const names = evicted.map(f => f.name).join(nameSeparator);
       toast.warning(t("form_upload.max_files_exceeded"), {
-        id: `${fileType}_max_files`,
+        id: `${inputId}_max_files`,
         description: `${names} — ${maxLabel} ${maxFiles}`,
       });
     }

@@ -269,6 +269,26 @@ describe("FileUpload Component", () => {
     expect(mockOnFilesChange).toHaveBeenLastCalledWith([a, b]);
   });
 
+  it("should use a comma separator in the en locale and distinct toast ids per instance", () => {
+    const { container } = render(
+      <>
+        <FileUpload onFilesChange={mockOnFilesChange} maxSize={1024} locale="en" />
+        <FileUpload onFilesChange={mockOnFilesChange} maxSize={1024} locale="en" />
+      </>
+    );
+    const inputs = container.querySelectorAll('input[type="file"]');
+    const a = new File(["a".repeat(2000)], "a.pdf", { type: "application/pdf" });
+    const b = new File(["b".repeat(2000)], "b.pdf", { type: "application/pdf" });
+    selectFiles(inputs[0] as HTMLInputElement, [a, b]);
+    selectFiles(inputs[1] as HTMLInputElement, [a]);
+
+    expect(mockToast.error).toHaveBeenCalledTimes(2);
+    const [first, second] = mockToast.error.mock.calls;
+    expect(first[1].description).toContain("a.pdf (1.95 KB), b.pdf");
+    expect(first[1].description).not.toContain("、");
+    expect(first[1].id).not.toEqual(second[1].id);
+  });
+
   it("should not toast when every selected file is valid", () => {
     const { container } = render(
       <FileUpload onFilesChange={mockOnFilesChange} />
