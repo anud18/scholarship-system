@@ -77,6 +77,12 @@ jobs:
     # Only run if secrets are configured
     if: github.event_name == 'workflow_dispatch'
 
+    # Consumed by tag-release-images, which stamps this release version onto the
+    # GHCR images already built from this very commit.
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      pr_url: ${{ steps.create-pr.outputs.pr_url }}
+
     # Directory owned by the production repository. The mirror neither pushes
     # development content into it nor deletes what production keeps there.
     env:
@@ -1167,12 +1173,21 @@ jobs:
              dispatch-only — run them yourself, in this order, approving at each
              environment gate:
              \`\`\`bash
-             gh workflow run deploy-test.yml       -f tag=<image tag>
-             gh workflow run deploy-production.yml -f tag=<same tag>
+             gh workflow run deploy-test.yml       -f tag=${{ env.NEXT_VERSION }}
+             gh workflow run deploy-production.yml -f tag=${{ env.NEXT_VERSION }}
              # only when monitoring/** changed in this sync:
              gh workflow run deploy-monitoring-test.yml
              gh workflow run deploy-monitoring-production.yml
              \`\`\`
+
+          ## 📦 Release Images
+
+          The \`tag-release-images\` job of THIS run copies the images already built
+          from this commit (\`main-<sha>\`) to \`${{ env.NEXT_VERSION }}\`, so both
+          deploy dispatches above promote the exact same digest:
+
+          - \`ghcr.io/${{ github.repository_owner }}/scholarship-system-backend:${{ env.NEXT_VERSION }}\`
+          - \`ghcr.io/${{ github.repository_owner }}/scholarship-system-frontend:${{ env.NEXT_VERSION }}\`
 
           ## 🏷️ Auto-Tagging Information
 
@@ -1201,6 +1216,104 @@ jobs:
           git remote remove prod-repo 2>/dev/null || true
 
           echo "::notice::Cleanup completed"
+
+  # ---------------------------------------------------------------------------
+  # Stamp the release version onto the GHCR images.
+  #
+  # WHY THIS EXISTS: images are built ONLY in this (development) repository —
+  # deploy-pipeline.yml publishes ghcr.io/<owner>/scholarship-system-{backend,
+  # frontend} on every push to main, tagged `main-<sha>` and `latest`. The
+  # release VERSION, however, is minted here in the mirror and the matching git
+  # tag is created in the PRODUCTION repo (auto-tag-on-merge.yml). Neither of
+  # those ever reaches this repo's deploy-pipeline, so its `type=semver` rule
+  # never fires and no image ever carried a version tag: the production deploy
+  # could only be pinned to `main-<sha>` (or the mutable `latest`).
+  #
+  # This job closes that gap WITHOUT rebuilding. `docker buildx imagetools
+  # create` copies the existing manifest under a new tag, so the release tag and
+  # `main-<sha>` resolve to the exact same digest — the artifact the test stage
+  # verified is bit-identical to the one production promotes.
+  #
+  # TIMING: the tag is pushed when the release PR is CREATED, not when it is
+  # merged. If that PR is abandoned, the next mirror recomputes the same version
+  # (the calculation reads the production repo's tags, and an unmerged PR
+  # created none) and re-points the image tag at the newer commit. The version
+  # therefore always names the content that actually shipped as that release.
+  # ---------------------------------------------------------------------------
+  tag-release-images:
+    name: Tag GHCR images ${{ needs.sync-to-production.outputs.version }}
+    runs-on: ubuntu-latest
+    needs: sync-to-production
+    if: needs.sync-to-production.outputs.version != ''
+
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      # Both components are independent; a missing frontend image should still
+      # let the backend get its tag (and vice versa) so the failure is explicit
+      # per component rather than masked by fail-fast cancellation.
+      fail-fast: false
+      matrix:
+        component: [backend, frontend]
+
+    steps:
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          # Same token deploy-pipeline.yml pushes with — it already carries
+          # write:packages on this namespace.
+          password: ${{ secrets.GH_PAT }}
+
+      - name: Retag ${{ matrix.component }} image as ${{ needs.sync-to-production.outputs.version }}
+        id: retag
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/scholarship-system-${{ matrix.component }}
+          VERSION: ${{ needs.sync-to-production.outputs.version }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          echo "::group::Resolve source image"
+
+          # deploy-pipeline.yml tags with `type=sha,prefix={{branch}}-` (7 chars)
+          # AND with `main-$(git rev-parse --short HEAD)`, whose width follows
+          # core.abbrev and grows with the repository. Probe the plausible
+          # widths instead of hard-coding one.
+          SOURCE_REF=""
+          for len in 7 8 9 10 11 12 40; do
+            CANDIDATE="${IMAGE}:main-${SOURCE_SHA:0:$len}"
+            if docker buildx imagetools inspect "$CANDIDATE" >/dev/null 2>&1; then
+              SOURCE_REF="$CANDIDATE"
+              break
+            fi
+          done
+
+          if [ -z "$SOURCE_REF" ]; then
+            echo "::error::No image found for commit ${SOURCE_SHA} at ${IMAGE}:main-<sha>."
+            echo "::error::deploy-pipeline.yml publishes it on every push to main —"
+            echo "::error::check that its run for this commit succeeded, then re-run this job."
+            exit 1
+          fi
+          echo "::notice::Source image: $SOURCE_REF"
+          echo "::endgroup::"
+
+          echo "::group::Push release tag"
+          # Manifest-level copy: no pull, no rebuild, identical digest.
+          docker buildx imagetools create --tag "${IMAGE}:${VERSION}" "$SOURCE_REF"
+
+          DIGEST=$(docker buildx imagetools inspect "${IMAGE}:${VERSION}" --format '{{.Manifest.Digest}}')
+          echo "::notice::${IMAGE}:${VERSION} -> ${DIGEST}"
+          echo "::endgroup::"
+
+          {
+            echo "### Release image tagged"
+            echo "- \`${IMAGE}:${VERSION}\`"
+            echo "  - copied from \`${SOURCE_REF}\`"
+            echo "  - digest \`${DIGEST}\`"
+          } >> $GITHUB_STEP_SUMMARY
 
   # ---------------------------------------------------------------------------
   # Consolidated security summary — written to THIS RUN's job summary only.
