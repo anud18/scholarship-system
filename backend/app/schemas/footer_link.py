@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.models.footer_link import FooterLinkSection, FooterLinkType
+from app.models.footer_link import FooterLinkType
 
 MAX_TITLE_LENGTH = 200
 MAX_URL_LENGTH = 1000
@@ -47,7 +47,6 @@ class FooterLinkResponse(BaseModel):
     title_zh: str
     title_en: Optional[str] = None
     link_type: FooterLinkType
-    section: FooterLinkSection
     url: Optional[str] = None
     object_name: Optional[str] = None
     original_filename: Optional[str] = None
@@ -67,7 +66,6 @@ class FooterLinkCreate(BaseModel):
     title_zh: str = Field(..., min_length=1, max_length=MAX_TITLE_LENGTH)
     title_en: Optional[str] = Field(default=None, max_length=MAX_TITLE_LENGTH)
     url: str = Field(..., min_length=1, max_length=MAX_URL_LENGTH)
-    section: FooterLinkSection = FooterLinkSection.related
     is_active: bool = True
 
     @field_validator("title_zh")
