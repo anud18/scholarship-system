@@ -453,6 +453,61 @@ class TestApplicationFieldsEndpoints:
         )
         assert resp.status_code == 404
 
+    @pytest.mark.asyncio
+    async def test_upload_example_invalidates_form_config_cache(self, login, admin, monkeypatch):
+        """Regression: students read example_file_url through the 6 h cached
+        form config, so an upload that skips invalidation leaves the new
+        範例文件 invisible until the TTL expires."""
+        from unittest.mock import MagicMock
+
+        import app.api.v1.endpoints.application_fields as endpoints
+        from app.services.minio_service import minio_service
+
+        monkeypatch.setattr(minio_service, "client", MagicMock())
+        monkeypatch.setattr(minio_service, "default_bucket", "test-bucket")
+        calls: list[str] = []
+
+        async def _record(prefix: str) -> int:
+            calls.append(prefix)
+            return 0
+
+        monkeypatch.setattr(endpoints, "invalidate", _record)
+
+        doc = await self._make_document(scholarship_type="undergrad_exinv")
+        c = login(admin)
+        resp = await c.post(
+            f"/api/v1/application-fields/documents/{doc.id}/upload-example",
+            files={"file": ("test.pdf", b"%PDF-1.4 fake", "application/pdf")},
+        )
+        assert resp.status_code == 200, resp.text
+        assert "formconfig:undergrad_exinv" in calls
+        assert "documents:undergrad_exinv" in calls
+
+    @pytest.mark.asyncio
+    async def test_delete_example_invalidates_form_config_cache(self, login, admin, monkeypatch):
+        from unittest.mock import MagicMock
+
+        import app.api.v1.endpoints.application_fields as endpoints
+        from app.services.minio_service import minio_service
+
+        monkeypatch.setattr(minio_service, "client", MagicMock())
+        calls: list[str] = []
+
+        async def _record(prefix: str) -> int:
+            calls.append(prefix)
+            return 0
+
+        monkeypatch.setattr(endpoints, "invalidate", _record)
+
+        doc = await self._make_document(
+            scholarship_type="undergrad_exdelinv", example_file_url="examples/document_1.pdf"
+        )
+        c = login(admin)
+        resp = await c.delete(f"/api/v1/application-fields/documents/{doc.id}/example")
+        assert resp.status_code == 200, resp.text
+        assert "formconfig:undergrad_exdelinv" in calls
+        assert "documents:undergrad_exdelinv" in calls
+
     # ------------------------------------------------------------------
     # GET /documents/{document_id}/example  (get_current_user)
     # ------------------------------------------------------------------
