@@ -24,10 +24,8 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { FileUpload } from "@/components/file-upload";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
-import {
-  buildSecurePreviewUrl,
-  getAuthToken,
-} from "@/lib/utils/url-validation";
+import { getAuthToken } from "@/lib/utils/url-validation";
+import { buildExampleDocumentPreview } from "@/lib/utils/example-document-preview";
 import {
   Loader2,
   AlertCircle,
@@ -42,7 +40,6 @@ import {
   isValidTaiwanMobile,
   TAIWAN_MOBILE_MESSAGE,
 } from "@/lib/utils/application-helpers";
-import { previewMimeType } from "@/lib/utils";
 import { getTranslation } from "@/lib/i18n";
 import type {
   ApplicationField,
@@ -257,12 +254,7 @@ export function DynamicApplicationForm({
 
     // 如果 URL 中沒有 token，嘗試從存儲中獲取
     if (!token) {
-      token =
-        localStorage.getItem("auth_token") ||
-        localStorage.getItem("token") ||
-        sessionStorage.getItem("auth_token") ||
-        sessionStorage.getItem("token") ||
-        "";
+      token = getAuthToken();
 
       if (!token) {
         logger.error("No authentication token available");
@@ -313,31 +305,10 @@ export function DynamicApplicationForm({
    * 下載) instead of dumping the file into a new tab.
    */
   const handleViewExampleDocument = (doc: ApplicationDocument) => {
-    if (!doc.example_file_url) return;
-
     try {
-      // SECURITY: Use validated URL builder to prevent open redirect
-      const safeUrl = buildSecurePreviewUrl("/api/v1/preview/examples", {
-        documentId: doc.id,
-        token: getAuthToken(),
-      });
-
-      // Mirror the filename the backend puts in Content-Disposition
-      // (`<document_name>_example.<ext>`, always the zh name) so the dialog
-      // caption matches what the browser actually saves on 下載.
-      const objectName = doc.example_file_url.split("/").pop() ?? "";
-      const dotIndex = objectName.lastIndexOf(".");
-      const extension =
-        dotIndex > 0 ? objectName.slice(dotIndex + 1).toLowerCase() : "";
-      const filename = extension
-        ? `${doc.document_name}_example.${extension}`
-        : `${doc.document_name}_example`;
-
-      setPreviewFile({
-        url: safeUrl,
-        filename,
-        type: previewMimeType(filename),
-      });
+      const preview = buildExampleDocumentPreview(doc);
+      if (!preview) return;
+      setPreviewFile(preview);
       setShowPreview(true);
     } catch (error) {
       logger.error("Failed to build preview URL", { error });
