@@ -15,7 +15,16 @@ existing DB. This migration rewrites the phd moe_1w row in place:
 
 The description carries the rolling-adjustment note rather than restating the
 name, because the professor review screen now shows it underneath the heading.
-downgrade() restores the wording shipped by update_moe_1w_label_001.
+
+For the same reason the sibling nstc description is cleared: it only restated
+that row's own name ("國科會博士生獎學金，適用於符合條件的博士生"), so once
+descriptions became visible it rendered as a tautological third line that
+trained reviewers to skip the very position carrying the moe_1w caveat. The
+review screen renders the note only when it is non-empty, so clearing the
+column removes the line with no code change.
+
+downgrade() restores the wording shipped by update_moe_1w_label_001 and the
+original nstc description.
 
 The UPDATE is scoped to the phd scholarship type: sub_type_code values are
 configuration-driven strings, not globally unique, so another scholarship
@@ -46,6 +55,17 @@ def upgrade() -> None:
           )
         """)
 
+    op.execute("""
+        UPDATE scholarship_sub_type_configs
+        SET
+            description = NULL,
+            description_en = NULL
+        WHERE sub_type_code = 'nstc'
+          AND scholarship_type_id IN (
+              SELECT id FROM scholarship_types WHERE code = 'phd'
+          )
+        """)
+
 
 def downgrade() -> None:
     op.execute("""
@@ -56,6 +76,17 @@ def downgrade() -> None:
             description = '教育部博士生獎學金，指導教授配合款每月 $5000 元',
             description_en = 'MOE PHD Scholarship with professor match of NT$5,000/month'
         WHERE sub_type_code = 'moe_1w'
+          AND scholarship_type_id IN (
+              SELECT id FROM scholarship_types WHERE code = 'phd'
+          )
+        """)
+
+    op.execute("""
+        UPDATE scholarship_sub_type_configs
+        SET
+            description = '國科會博士生獎學金，適用於符合條件的博士生',
+            description_en = 'NSTC PHD Scholarship for eligible PhD students'
+        WHERE sub_type_code = 'nstc'
           AND scholarship_type_id IN (
               SELECT id FROM scholarship_types WHERE code = 'phd'
           )
