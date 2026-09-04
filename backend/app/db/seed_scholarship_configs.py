@@ -901,10 +901,10 @@ async def seed_scholarship_sub_type_configs(session: AsyncSession) -> None:
                     {
                         "scholarship_type_id": scholarship.id,
                         "sub_type_code": "moe_1w",
-                        "name": "教育部博士生獎學金 (指導教授配合款每月 $5000 元)",
-                        "name_en": "MOE PHD Scholarship (Professor Match NT$5,000/month)",
-                        "description": "教育部博士生獎學金，指導教授配合款每月 $5000 元",
-                        "description_en": "MOE PHD Scholarship with professor match of NT$5,000/month",
+                        "name": "115學年度教育部博士生獎學金 (指導教授配合款每月 $5000 元)",
+                        "name_en": "AY115 MOE PHD Scholarship (Professor Match NT$5,000/month)",
+                        "description": "每年配合款經費金額將配合教育部相關規定，採滾動式調整。",
+                        "description_en": "The annual matching fund amount is subject to rolling adjustment in accordance with MOE regulations.",
                         "amount": None,  # 使用主獎學金金額
                         "display_order": 2,
                         "is_active": True,
