@@ -890,8 +890,11 @@ async def seed_scholarship_sub_type_configs(session: AsyncSession) -> None:
                         "sub_type_code": "nstc",
                         "name": "國科會博士生獎學金",
                         "name_en": "NSTC PHD Scholarship",
-                        "description": "國科會博士生獎學金，適用於符合條件的博士生",
-                        "description_en": "NSTC PHD Scholarship for eligible PhD students",
+                        # Left empty on purpose: the professor review screen shows
+                        # description as a note under the heading, and this row's
+                        # description only restated its own name.
+                        "description": None,
+                        "description_en": None,
                         "amount": None,  # 使用主獎學金金額
                         "display_order": 1,
                         "is_active": True,
