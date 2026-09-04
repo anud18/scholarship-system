@@ -83,6 +83,11 @@ interface SubTypeOption {
   value: string;
   label: string;
   label_en: string;
+  // Sub-type description from scholarship_sub_type_configs; carries notes the
+  // professor must see alongside the heading (e.g. the moe_1w matching-fund
+  // rolling adjustment). Absent for sub-types without a description.
+  note?: string | null;
+  note_en?: string | null;
   is_default: boolean;
 }
 
@@ -858,6 +863,11 @@ function ProfessorReviewComponentInner({
                             {subType.label_en && (
                               <p className="text-sm text-muted-foreground mb-2">
                                 {subType.label_en}
+                              </p>
+                            )}
+                            {subType.note && (
+                              <p className="text-sm text-muted-foreground mb-2">
+                                （{subType.note}）
                               </p>
                             )}
                           </div>

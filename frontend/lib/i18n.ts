@@ -260,7 +260,7 @@ export const translations = {
     },
     rule_types: {
       nstc: "國科會博士生獎學金",
-      moe_1w: "教育部博士生獎學金 (指導教授配合款每月 $5000 元)",
+      moe_1w: "115學年度教育部博士生獎學金 (指導教授配合款每月 $5000 元)",
       moe_2w: "教育部博士生獎學金 (指導教授配合款兩萬)",
     },
     scholarship_sections: {
@@ -410,6 +410,9 @@ export const translations = {
       accepted_formats_label: "接受格式：",
       file_size_limit_label: "檔案大小限制：",
       max_files_label: "最多檔案數：",
+      file_too_large: "檔案超過大小限制，未加入上傳",
+      file_type_rejected: "不支援的檔案格式，未加入上傳",
+      max_files_exceeded: "已超過檔案數量上限，較早選擇的檔案已被替換",
       preview_open_failed: "無法開啟預覽，請稍後再試",
       view_sample_document: "查看範例文件",
       loading_form: "載入表單中...",
@@ -445,6 +448,7 @@ export const translations = {
         title: "文件預覽",
         loading: "載入中...",
         cannot_preview: "此文件類型無法預覽",
+        load_failed: "無法載入文件，請重新登入或稍後再試",
         open_in_new_window: "在新視窗開啟",
         download: "下載",
         close: "關閉",
@@ -788,7 +792,7 @@ export const translations = {
     },
     rule_types: {
       nstc: "NSTC PhD Scholarship",
-      moe_1w: "MOE PhD Scholarship (Advisor Matching Fund - NT$5,000/month)",
+      moe_1w: "AY115 MOE PhD Scholarship (Advisor Matching Fund - NT$5,000/month)",
       moe_2w: "MOE PhD Scholarship (Advisor Matching Fund - 20K)",
     },
     scholarship_sections: {
@@ -943,6 +947,9 @@ export const translations = {
       accepted_formats_label: "Accepted formats:",
       file_size_limit_label: "File size limit:",
       max_files_label: "Maximum number of files:",
+      file_too_large: "File exceeds the size limit and was not added",
+      file_type_rejected: "Unsupported file format, file was not added",
+      max_files_exceeded: "File limit exceeded, earlier files were replaced",
       preview_open_failed: "Unable to open preview, please try again later",
       view_sample_document: "View Sample Document",
       loading_form: "Loading form...",
@@ -980,6 +987,7 @@ export const translations = {
         title: "Document Preview",
         loading: "Loading...",
         cannot_preview: "This document type cannot be previewed",
+        load_failed: "Unable to load the document. Please sign in again or try later.",
         open_in_new_window: "Open in New Window",
         download: "Download",
         close: "Close",
