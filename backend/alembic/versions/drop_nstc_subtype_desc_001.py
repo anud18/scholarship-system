@@ -1,6 +1,6 @@
 """clear the phd nstc sub-type description (it only restated its own name)
 
-Revision ID: drop_nstc_subtype_description_001
+Revision ID: drop_nstc_subtype_desc_001
 Revises: moe_1w_ay115_label_001
 Create Date: 2026-09-04 00:00:00.000000
 
@@ -22,13 +22,18 @@ deployed database.
 The UPDATE is scoped to the phd scholarship type: sub_type_code values are
 configuration-driven strings, not globally unique, so another scholarship
 type could legitimately define its own 'nstc' with a description worth keeping.
+
+The revision id is kept at 26 characters: alembic_version.version_num is
+VARCHAR(32), and the first cut of this migration used a 33-character id, which
+applied the UPDATE and then blew up writing the version row (staging rolled
+back cleanly). Existing ids in this repo top out at exactly 32.
 """
 
 from typing import Sequence, Union
 
 from alembic import op
 
-revision: str = "drop_nstc_subtype_description_001"
+revision: str = "drop_nstc_subtype_desc_001"
 down_revision: Union[str, Sequence[str], None] = "moe_1w_ay115_label_001"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
