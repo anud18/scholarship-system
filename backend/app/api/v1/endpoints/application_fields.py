@@ -368,6 +368,11 @@ async def upload_document_example(
         document.updated_by = current_user.id
         await db.commit()
 
+        # Students read example_file_url through the cached form config, so a
+        # fresh 範例文件 would otherwise stay invisible for the whole TTL.
+        await invalidate(f"documents:{document.scholarship_type}")
+        await invalidate(f"formconfig:{document.scholarship_type}")
+
         return ApiResponse(success=True, message="範例文件上傳成功", data={"example_file_url": object_name})
 
     except Exception as e:
@@ -483,6 +488,9 @@ async def delete_document_example(
         document.example_file_url = None
         document.updated_by = current_user.id
         await db.commit()
+
+        await invalidate(f"documents:{document.scholarship_type}")
+        await invalidate(f"formconfig:{document.scholarship_type}")
 
         return ApiResponse(success=True, message="範例文件刪除成功", data=True)
 

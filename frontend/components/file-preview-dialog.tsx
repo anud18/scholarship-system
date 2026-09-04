@@ -10,10 +10,11 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Eye, FileText } from "lucide-react";
+import { AlertCircle, Eye, FileText } from "lucide-react";
 import { Locale } from "@/lib/validators";
 import { getTranslation } from "@/lib/i18n";
 import { triggerFileDownload } from "@/lib/utils/download";
+import { logger } from "@/lib/utils/logger";
 
 interface FilePreviewDialogProps {
   isOpen: boolean;
@@ -34,34 +35,73 @@ export function FilePreviewDialog({
   locale,
 }: FilePreviewDialogProps) {
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const t = (k: string) => getTranslation(locale, k);
 
-  // Reset loading state when dialog opens or file changes.
+  const isRenderable =
+    !!file && (file.type.includes("pdf") || file.type.includes("image"));
+
+  // Fetch the file ourselves and hand the viewer a blob: URL.
   //
-  // The skeleton overlay is gated on `isLoading`, and `isLoading` is otherwise
-  // only cleared by the iframe's onLoad/onError. That is reliable for images
-  // (<img> fires onLoad), but Chrome's built-in PDF viewer frequently NEVER
-  // fires the iframe load event — which left the skeleton covering an
-  // opacity-0 iframe forever, so a PDF preview showed a permanent "loading…"
-  // even though the proxy returned the file (HTTP 200). Fall back to clearing
-  // the loading state on a short timer so the preview always becomes visible.
+  // Pointing an <iframe>/<img> straight at the proxy URL cannot surface HTTP
+  // errors: a 401 (expired token) or 404 (example deleted) body does not fire
+  // onError, so the student saw the right caption over a blank pane. Fetching
+  // first lets us show a real error message; the blob also spares the proxy a
+  // second full round trip when the viewer re-requests the resource.
   useEffect(() => {
-    if (isOpen && file) {
-      setIsLoading(true);
-      const fallback = setTimeout(() => setIsLoading(false), 1500);
-      return () => clearTimeout(fallback);
+    if (!isOpen || !file) return;
+
+    setIsLoading(true);
+    setLoadError(null);
+    setObjectUrl(null);
+    if (!isRenderable) {
+      setIsLoading(false);
+      return;
     }
-  }, [isOpen, file?.url]);
+
+    let isCancelled = false;
+    let createdUrl: string | null = null;
+
+    fetch(file.url, { credentials: "same-origin" })
+      .then(async response => {
+        if (!response.ok) {
+          throw new Error(`Preview request failed with HTTP ${response.status}`);
+        }
+        const blob = await response.blob();
+        if (isCancelled) return;
+        createdUrl = URL.createObjectURL(blob);
+        setObjectUrl(createdUrl);
+      })
+      .catch((error: unknown) => {
+        if (isCancelled) return;
+        logger.error("File preview failed to load", { url: file.url, error });
+        setLoadError(t("dialogs.preview.load_failed"));
+        setIsLoading(false);
+      });
+
+    return () => {
+      isCancelled = true;
+      if (createdUrl) URL.revokeObjectURL(createdUrl);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, file?.url, file?.type]);
+
+  // The skeleton overlay is gated on `isLoading`, which is otherwise only
+  // cleared by the viewer's onLoad/onError. That is reliable for images, but
+  // Chrome's built-in PDF viewer frequently NEVER fires the iframe load event,
+  // which left the skeleton covering an opacity-0 iframe forever. Fall back to
+  // clearing the loading state on a short timer once the blob is ready.
+  useEffect(() => {
+    if (!objectUrl) return;
+    const fallback = setTimeout(() => setIsLoading(false), 1500);
+    return () => clearTimeout(fallback);
+  }, [objectUrl]);
 
   const handleOpenInNewWindow = () => {
     if (!file) return;
-
-    // 使用前端URL在新視窗開啟，確保包含token
-    const frontendUrl = file.url.startsWith("/api/v1/preview")
-      ? file.url
-      : file.url; // 如果已經是前端URL就直接使用
-
-    window.open(frontendUrl, "_blank");
+    // The proxy URL carries the auth token: never leak window.opener/referrer.
+    window.open(file.url, "_blank", "noopener,noreferrer");
   };
 
   const handleDownload = () => {
@@ -82,7 +122,16 @@ export function FilePreviewDialog({
         </DialogHeader>
 
         <div className="flex-1 overflow-hidden relative">
-          {file.type.includes("pdf") ? (
+          {loadError ? (
+            <div
+              role="alert"
+              className="flex flex-col items-center justify-center h-[70vh] bg-muted rounded"
+            >
+              <AlertCircle className="h-16 w-16 text-destructive mb-4" />
+              <p className="text-lg font-medium mb-2">{file.filename}</p>
+              <p className="text-sm text-muted-foreground">{loadError}</p>
+            </div>
+          ) : file.type.includes("pdf") ? (
             <>
               {isLoading && (
                 <div className="absolute inset-0 flex items-center justify-center bg-background p-8">
@@ -106,7 +155,8 @@ export function FilePreviewDialog({
                 </div>
               )}
               <iframe
-                src={file.url}
+                src={objectUrl ?? "about:blank"}
+                data-source-url={file.url}
                 className={`w-full h-[70vh] border rounded transition-opacity duration-300 ${
                   isLoading ? "opacity-0" : "opacity-100"
                 }`}
@@ -122,16 +172,18 @@ export function FilePreviewDialog({
                   <Skeleton className="w-full h-full max-w-3xl max-h-[60vh] rounded-lg" />
                 </div>
               )}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={file.url}
-                alt={file.filename}
-                className={`max-w-full max-h-full object-contain transition-opacity duration-300 ${
-                  isLoading ? "opacity-0" : "opacity-100"
-                }`}
-                onLoad={() => setIsLoading(false)}
-                onError={() => setIsLoading(false)}
-              />
+              {objectUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={objectUrl}
+                  alt={file.filename}
+                  className={`max-w-full max-h-full object-contain transition-opacity duration-300 ${
+                    isLoading ? "opacity-0" : "opacity-100"
+                  }`}
+                  onLoad={() => setIsLoading(false)}
+                  onError={() => setIsLoading(false)}
+                />
+              )}
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center h-[70vh] bg-muted rounded">

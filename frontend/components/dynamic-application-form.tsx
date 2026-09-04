@@ -24,10 +24,8 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { FileUpload } from "@/components/file-upload";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
-import {
-  buildSecurePreviewUrl,
-  getAuthToken,
-} from "@/lib/utils/url-validation";
+import { getAuthToken } from "@/lib/utils/url-validation";
+import { buildExampleDocumentPreview } from "@/lib/utils/example-document-preview";
 import {
   Loader2,
   AlertCircle,
@@ -256,12 +254,7 @@ export function DynamicApplicationForm({
 
     // 如果 URL 中沒有 token，嘗試從存儲中獲取
     if (!token) {
-      token =
-        localStorage.getItem("auth_token") ||
-        localStorage.getItem("token") ||
-        sessionStorage.getItem("auth_token") ||
-        sessionStorage.getItem("token") ||
-        "";
+      token = getAuthToken();
 
       if (!token) {
         logger.error("No authentication token available");
@@ -304,6 +297,23 @@ export function DynamicApplicationForm({
     });
 
     setShowPreview(true);
+  };
+
+  /**
+   * Open an admin-uploaded example document in the shared preview dialog, so it
+   * behaves like every other document preview (inline viewer + 在新視窗開啟 +
+   * 下載) instead of dumping the file into a new tab.
+   */
+  const handleViewExampleDocument = (doc: ApplicationDocument) => {
+    try {
+      const preview = buildExampleDocumentPreview(doc);
+      if (!preview) return;
+      setPreviewFile(preview);
+      setShowPreview(true);
+    } catch (error) {
+      logger.error("Failed to build preview URL", { error });
+      alert(t("form_upload.preview_open_failed"));
+    }
   };
 
   const handleClosePreview = () => {
@@ -714,26 +724,7 @@ export function DynamicApplicationForm({
               type="button"
               onClick={e => {
                 e.preventDefault();
-                try {
-                  // SECURITY: Use validated URL builder to prevent open redirect
-                  const safeUrl = buildSecurePreviewUrl(
-                    "/api/v1/preview/examples",
-                    {
-                      documentId: document.id,
-                      token: getAuthToken(),
-                    }
-                  );
-
-                  // Create and trigger download/preview
-                  const link = window.document.createElement("a");
-                  link.href = safeUrl;
-                  link.target = "_blank";
-                  link.rel = "noopener noreferrer";
-                  link.click();
-                } catch (error) {
-                  logger.error("Failed to build preview URL", { error });
-                  alert(t("form_upload.preview_open_failed"));
-                }
+                handleViewExampleDocument(document);
               }}
               className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm font-medium mt-2"
             >

@@ -36,8 +36,19 @@ class FooterLinkType(enum.Enum):
     file = "file"
 
 
+class FooterLinkSection(enum.Enum):
+    """Which footer block an entry is rendered in.
+
+    ``related`` is the 相關連結 (Related Links) list; ``policy`` is the small
+    bottom bar (隱私權政策 / 使用條款 / 無障礙聲明 / 網站地圖 ...).
+    """
+
+    related = "related"
+    policy = "policy"
+
+
 class FooterLink(Base):
-    """Admin-managed entry in the site footer's 相關連結 (Related Links) list.
+    """Admin-managed entry in one of the site footer's link blocks.
 
     Exactly one of the two payload shapes is populated, keyed by ``link_type``:
     an external ``url``, or an uploaded document (``object_name`` + metadata).
@@ -55,6 +66,13 @@ class FooterLink(Base):
         Enum(FooterLinkType, values_callable=lambda obj: [e.value for e in obj]),
         nullable=False,
         default=FooterLinkType.url,
+    )
+    section = Column(
+        Enum(FooterLinkSection, values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False,
+        default=FooterLinkSection.related,
+        server_default=FooterLinkSection.related.value,
+        index=True,
     )
 
     # link_type == url
