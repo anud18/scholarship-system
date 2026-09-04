@@ -16,7 +16,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import apiClient from "@/lib/api";
-import type { FooterLink } from "@/lib/api/modules/footer-links";
+import type {
+  FooterLink,
+  FooterLinkSection,
+} from "@/lib/api/modules/footer-links";
+import { FOOTER_SECTION_COPY } from "./sections";
 
 const ACCEPTED = ".pdf,.doc,.docx,.odt,.ods,.odp";
 const ACCEPTED_LABEL = "PDF · DOC · DOCX · ODF";
@@ -24,6 +28,7 @@ const MAX_SIZE_MB = 10;
 const MAX_TITLE_LENGTH = 200;
 
 interface Props {
+  section: FooterLinkSection;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated: (link: FooterLink) => void;
@@ -35,7 +40,13 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-export function AddFooterLinkDialog({ open, onOpenChange, onCreated }: Props) {
+export function AddFooterLinkDialog({
+  section,
+  open,
+  onOpenChange,
+  onCreated,
+}: Props) {
+  const copy = FOOTER_SECTION_COPY[section];
   const [mode, setMode] = useState<"url" | "file">("url");
   const [titleZh, setTitleZh] = useState("");
   const [titleEn, setTitleEn] = useState("");
@@ -97,9 +108,10 @@ export function AddFooterLinkDialog({ open, onOpenChange, onCreated }: Props) {
           title_zh: trimmedZh,
           title_en: trimmedEn || null,
           url: trimmedUrl,
+          section,
         });
         if (res.success && res.data) {
-          toast.success("已新增相關連結");
+          toast.success(`已新增${copy.title}`);
           onCreated(res.data);
           reset();
           onOpenChange(false);
@@ -123,10 +135,11 @@ export function AddFooterLinkDialog({ open, onOpenChange, onCreated }: Props) {
       const res = await apiClient.footerLinks.upload(
         file,
         trimmedZh,
+        section,
         trimmedEn || undefined
       );
       if (res.success && res.data) {
-        toast.success("已新增相關連結");
+        toast.success(`已新增${copy.title}`);
         onCreated(res.data);
         reset();
         onOpenChange(false);
@@ -152,32 +165,30 @@ export function AddFooterLinkDialog({ open, onOpenChange, onCreated }: Props) {
     >
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>新增相關連結</DialogTitle>
-          <DialogDescription>
-            新增後會顯示在網頁最下方的「相關連結」區塊。
-          </DialogDescription>
+          <DialogTitle>新增{copy.title}</DialogTitle>
+          <DialogDescription>{copy.addDialogDescription}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div>
-            <Label htmlFor="footer-link-title-zh">名稱（中文）</Label>
+            <Label htmlFor={`footer-link-${section}-title-zh`}>名稱（中文）</Label>
             <Input
-              id="footer-link-title-zh"
+              id={`footer-link-${section}-title-zh`}
               value={titleZh}
               onChange={(e) => setTitleZh(e.target.value)}
-              placeholder="例如：獎學金申請指南"
+              placeholder={copy.titlePlaceholderZh}
               maxLength={MAX_TITLE_LENGTH}
               disabled={submitting}
             />
           </div>
 
           <div>
-            <Label htmlFor="footer-link-title-en">名稱（英文，選填）</Label>
+            <Label htmlFor={`footer-link-${section}-title-en`}>名稱（英文，選填）</Label>
             <Input
-              id="footer-link-title-en"
+              id={`footer-link-${section}-title-en`}
               value={titleEn}
               onChange={(e) => setTitleEn(e.target.value)}
-              placeholder="Scholarship Guide"
+              placeholder={copy.titlePlaceholderEn}
               maxLength={MAX_TITLE_LENGTH}
               disabled={submitting}
             />
@@ -200,9 +211,9 @@ export function AddFooterLinkDialog({ open, onOpenChange, onCreated }: Props) {
             </TabsList>
 
             <TabsContent value="url" className="mt-4">
-              <Label htmlFor="footer-link-url">網址</Label>
+              <Label htmlFor={`footer-link-${section}-url`}>網址</Label>
               <Input
-                id="footer-link-url"
+                id={`footer-link-${section}-url`}
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="https://www.nycu.edu.tw"

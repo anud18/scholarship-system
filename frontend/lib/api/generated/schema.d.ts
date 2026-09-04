@@ -7262,6 +7262,9 @@ export interface paths {
          * List Footer Links
          * @description List footer links ordered by sort_order then id.
          *
+         *     ``section`` narrows to one block; omitted, both blocks are returned so the
+         *     footer needs a single request.
+         *
          *     Any authenticated user may read. ``include_inactive`` is honoured for
          *     admins only — a non-admin always gets the active (publicly shown) set,
          *     so a hidden link cannot leak through the query parameter.
@@ -9141,6 +9144,8 @@ export interface components {
             title_zh: string;
             /** Title En */
             title_en?: string | null;
+            /** @default related */
+            section: components["schemas"]["FooterLinkSection"];
         };
         /** Body_upload_renewal_import_api_v1_college_review_renewal_import_upload_post */
         Body_upload_renewal_import_api_v1_college_review_renewal_import_upload_post: {
@@ -9763,6 +9768,8 @@ export interface components {
             title_en?: string | null;
             /** Url */
             url: string;
+            /** @default related */
+            section: components["schemas"]["FooterLinkSection"];
             /**
              * Is Active
              * @default true
@@ -9781,6 +9788,15 @@ export interface components {
             /** Items */
             items: components["schemas"]["FooterLinkReorderItem"][];
         };
+        /**
+         * FooterLinkSection
+         * @description Which footer block an entry is rendered in.
+         *
+         *     ``related`` is the 相關連結 (Related Links) list; ``policy`` is the small
+         *     bottom bar (隱私權政策 / 使用條款 / 無障礙聲明 / 網站地圖 ...).
+         * @enum {string}
+         */
+        FooterLinkSection: "related" | "policy";
         /**
          * FooterLinkUpdate
          * @description Partial update. ``url`` is only accepted for link_type == url rows,
@@ -23344,6 +23360,7 @@ export interface operations {
         parameters: {
             query?: {
                 include_inactive?: boolean;
+                section?: components["schemas"]["FooterLinkSection"] | null;
             };
             header?: never;
             path?: never;
