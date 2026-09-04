@@ -149,6 +149,8 @@ export function createProfessorApi() {
           value: string;
           label: string;
           label_en: string;
+          note?: string | null;
+          note_en?: string | null;
           is_default: boolean;
         }>
       >

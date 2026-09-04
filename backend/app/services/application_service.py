@@ -2934,6 +2934,8 @@ class ApplicationService:
                 "value": c.sub_type_code,
                 "label": c.name,
                 "label_en": c.name_en or c.name,
+                "note": c.description,
+                "note_en": c.description_en or c.description,
                 "is_default": c.sub_type_code == "default",
             }
             for c in available

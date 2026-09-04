@@ -1,14 +1,15 @@
 /**
  * E2E spec: the phd moe_1w sub-type card label reads
- * 「教育部博士生獎學金 (指導教授配合款每月 $5000 元)」.
+ * 「115學年度教育部博士生獎學金 (指導教授配合款每月 $5000 元)」.
  *
  * Why this exists: the student wizard (ScholarshipApplicationStep) renders
  * the 選擇申請項目 cards verbatim from `eligible_sub_types[].label`, which the
  * backend reads from scholarship_sub_type_configs.name. The label was renamed
  * from the stale 「指導教授配合款一萬」 wording, and because the seed only
  * INSERTs when the row is missing, deployed DBs kept the old name until
- * migration update_moe_1w_label_001 rewrote it in place. This spec pins both
- * layers so the wording can't silently regress:
+ * migration update_moe_1w_label_001 rewrote it in place; moe_1w_ay115_label_001
+ * later added the 115學年度 prefix the same way. This spec pins both layers so
+ * the wording can't silently regress:
  *
  *   (a) DB   — scholarship_sub_type_configs.name for (phd, moe_1w) is the
  *              new wording (the migration/seed actually landed), and
@@ -17,7 +18,7 @@
  *              eligible_sub_types, which is the string the wizard card shows.
  *
  * Pinned invariants:
- * - The zh label is exactly 教育部博士生獎學金 (指導教授配合款每月 $5000 元).
+ * - The zh label is exactly 115學年度教育部博士生獎學金 (指導教授配合款每月 $5000 元).
  * - Neither the stale 「一萬」 nor the interim 「每月五千」 wording survives
  *   anywhere in the phd sub-type labels served to students.
  */
@@ -31,7 +32,7 @@ import { captureDiagnostics } from "../helpers/diagnose";
 const STUDENT_ID = "stuphd001";
 const SCHOLARSHIP_CODE = "phd";
 const SUB_TYPE = "moe_1w";
-const EXPECTED_LABEL = "教育部博士生獎學金 (指導教授配合款每月 $5000 元)";
+const EXPECTED_LABEL = "115學年度教育部博士生獎學金 (指導教授配合款每月 $5000 元)";
 const STALE_WORDINGS = ["指導教授配合款一萬", "指導教授配合款每月五千"];
 
 interface EligibleSubType {
