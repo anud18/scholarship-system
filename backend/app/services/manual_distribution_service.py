@@ -28,6 +28,7 @@ from app.services.received_months_service import (
     calculate_received_months_bulk_async,
     get_imported_months_bulk_async,
 )
+from app.services.sub_type_labels import resolve_sub_type_labels, zh_labels
 from app.utils.student_snapshot_fields import format_enrollment_date_roc
 
 logger = logging.getLogger(__name__)
@@ -904,7 +905,8 @@ class ManualDistributionService:
             .order_by(ScholarshipSubTypeConfig.display_order)
         )
         sub_type_configs = (await self.db.execute(sub_type_query)).scalars().all()
-        sub_type_names = {stc.sub_type_code: stc.name for stc in sub_type_configs}
+        # This year's wording (ScholarshipConfiguration.sub_type_labels) over the base name.
+        sub_type_names = zh_labels(resolve_sub_type_labels(sub_type_configs, current_config))
 
         # Drive columns off the requesting config's own quota sub_types.
         own_quotas = current_config.quotas or {}

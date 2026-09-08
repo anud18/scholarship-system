@@ -3,22 +3,28 @@
  * 「115學年度教育部博士生獎學金 (指導教授配合款每月 $5000 元)」.
  *
  * Why this exists: the student wizard (ScholarshipApplicationStep) renders
- * the 選擇申請項目 cards verbatim from `eligible_sub_types[].label`, which the
- * backend reads from scholarship_sub_type_configs.name. The label was renamed
- * from the stale 「指導教授配合款一萬」 wording, and because the seed only
- * INSERTs when the row is missing, deployed DBs kept the old name until
- * migration update_moe_1w_label_001 rewrote it in place; moe_1w_ay115_label_001
- * later added the 115學年度 prefix the same way. This spec pins both layers so
- * the wording can't silently regress:
+ * the 選擇申請項目 cards verbatim from `eligible_sub_types[].label`. The
+ * backend resolves that label per academic year: the year-agnostic base name
+ * in scholarship_sub_type_configs.name, overridden by the offered
+ * ScholarshipConfiguration's `sub_type_labels` (admin-editable per year, see
+ * app/services/sub_type_labels.py). The label was renamed from the stale
+ * 「指導教授配合款一萬」 wording, and because the seed only INSERTs when the row
+ * is missing, deployed DBs kept the old name until migration
+ * update_moe_1w_label_001 rewrote it in place; moe_1w_ay115_label_001 added the
+ * 115學年度 prefix, and add_config_sub_type_labels_001 moved that prefix onto
+ * the per-year configuration override. This spec pins both layers so the
+ * wording can't silently regress:
  *
  *   (a) DB   — scholarship_sub_type_configs.name for (phd, moe_1w) is the
- *              new wording (the migration/seed actually landed), and
+ *              base 每月 $5000 元 wording (the migration/seed actually landed), and
  *   (b) API  — GET /api/v1/scholarships/eligible as stuphd001 (本國籍,
- *              三年級 → eligible for moe_1w) returns that exact label in
- *              eligible_sub_types, which is the string the wizard card shows.
+ *              三年級 → eligible for moe_1w) returns the current cycle's
+ *              115學年度-prefixed label in eligible_sub_types (from the seeded
+ *              configuration's sub_type_labels), which is the string the wizard
+ *              card shows.
  *
  * Pinned invariants:
- * - The zh label is exactly 115學年度教育部博士生獎學金 (指導教授配合款每月 $5000 元).
+ * - The zh label served is exactly 115學年度教育部博士生獎學金 (指導教授配合款每月 $5000 元).
  * - Neither the stale 「一萬」 nor the interim 「每月五千」 wording survives
  *   anywhere in the phd sub-type labels served to students.
  */
@@ -32,7 +38,10 @@ import { captureDiagnostics } from "../helpers/diagnose";
 const STUDENT_ID = "stuphd001";
 const SCHOLARSHIP_CODE = "phd";
 const SUB_TYPE = "moe_1w";
+// What the student sees: the seeded configuration's per-year override.
 const EXPECTED_LABEL = "115學年度教育部博士生獎學金 (指導教授配合款每月 $5000 元)";
+// The year-agnostic base row the override sits on top of.
+const BASE_LABEL = "教育部博士生獎學金 (指導教授配合款每月 $5000 元)";
 const STALE_WORDINGS = ["指導教授配合款一萬", "指導教授配合款每月五千"];
 
 interface EligibleSubType {
@@ -79,8 +88,8 @@ test.describe("phd moe_1w sub-type label wording", () => {
     ).toBe(1);
     expect(
       rows[0].name,
-      "scholarship_sub_type_configs.name must carry the 每月 $5000 元 wording (migration update_moe_1w_label_001)",
-    ).toBe(EXPECTED_LABEL);
+      "scholarship_sub_type_configs.name must carry the year-agnostic 每月 $5000 元 wording (migration add_config_sub_type_labels_001)",
+    ).toBe(BASE_LABEL);
 
     // (b) API layer — the exact payload ScholarshipApplicationStep renders as
     // the 選擇申請項目 card text (subType.label, verbatim).

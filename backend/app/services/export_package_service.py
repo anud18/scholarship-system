@@ -226,7 +226,7 @@ class ExportPackageService:
         # must not lose the primary materials ZIP — degrade to an error placeholder.
         try:
             summary_tables = await build_embedded_summary_tables(
-                self.db, scholarship_type, dept_groups, college_name, academic_year
+                self.db, scholarship_type, dept_groups, college_name, academic_year, semester
             )
         except Exception as e:
             logger.exception("embedded summary tables generation failed wholesale")

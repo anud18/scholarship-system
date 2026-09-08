@@ -22,7 +22,7 @@ from app.models.application import Application
 from app.models.audit_log import AuditAction, AuditLog
 from app.models.college_review import CollegeRanking, CollegeRankingItem, ManualDistributionHistory
 from app.models.email_management import EmailCategory
-from app.models.scholarship import ScholarshipConfiguration, ScholarshipSubTypeConfig, ScholarshipType
+from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User
 from app.schemas.application import RevokeRequest, SuspendRequest
 from app.services.application_audit_service import ApplicationAuditService
@@ -33,6 +33,7 @@ from app.services.manual_distribution_export_service import (
     build_recipient_row,
 )
 from app.services.manual_distribution_service import ManualDistributionService
+from app.services.sub_type_labels import load_sub_type_labels, zh_labels
 from app.utils.date_utils import now_taipei_str
 from app.utils.export_download import XLSX_MEDIA_TYPE, sanitise_filename_part
 
@@ -666,16 +667,14 @@ async def export_distribution_summary(
         logger.warning("distribution-summary export rejected: no allocated students", extra=log_extra)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="尚無已分配的學生可匯出")
 
-    # Sub-type display labels from configuration (NOT the hardcoded legacy maps);
+    # Sub-type display labels from configuration (NOT the hardcoded legacy maps),
+    # with this year's ScholarshipConfiguration.sub_type_labels override applied;
     # unknown / historical codes fall through as the raw code. Deliberately no
     # is_active filter: a finalized distribution may reference a since-disabled
     # sub-type and its label must still render.
-    label_rows = await db.execute(
-        select(ScholarshipSubTypeConfig.sub_type_code, ScholarshipSubTypeConfig.name).where(
-            ScholarshipSubTypeConfig.scholarship_type_id == scholarship_type_id
-        )
+    sub_type_labels = zh_labels(
+        await load_sub_type_labels(db, scholarship_type_id, academic_year, semester, include_inactive=True)
     )
-    sub_type_labels = {code: name for code, name in label_rows.all()}
 
     # scalar_one() not scalar_one_or_none(): finalized rankings exist for this id
     # (checked above) and they FK onto scholarship_types — a miss here is a broken

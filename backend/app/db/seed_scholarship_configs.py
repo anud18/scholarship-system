@@ -302,6 +302,16 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
                 "nstc": "114R000001",
                 "moe_1w": "114E000001",
             },
+            # Per-year sub-type display names shown to students / reviewers for
+            # this configuration (overrides scholarship_sub_type_configs.name).
+            # This is the current cycle's wording requested by the office
+            # (student-subtype-label.spec.ts pins it); admins edit it per year.
+            "sub_type_labels": {
+                "moe_1w": {
+                    "name": "115學年度教育部博士生獎學金 (指導教授配合款每月 $5000 元)",
+                    "name_en": "AY115 MOE PHD Scholarship (Professor Match NT$5,000/month)",
+                },
+            },
             "amount": 40000,
             "currency": "TWD",
             # The renewal cycle runs alongside the general cycle (續領 and 新申請
@@ -384,6 +394,11 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
             if "project_numbers" in config_data and existing.project_numbers != config_data["project_numbers"]:
                 existing.project_numbers = config_data["project_numbers"]
                 logger.info(f"Updated project_numbers for: {config_data['config_code']}")
+            # Seed the per-year sub-type labels only where the admin hasn't set any,
+            # so re-seeding never overwrites wording edited through the UI.
+            if config_data.get("sub_type_labels") and not existing.sub_type_labels:
+                existing.sub_type_labels = config_data["sub_type_labels"]
+                logger.info(f"Seeded sub_type_labels for: {config_data['config_code']}")
 
     await session.commit()
     logger.info("Scholarship configurations initialized successfully!")
@@ -904,8 +919,11 @@ async def seed_scholarship_sub_type_configs(session: AsyncSession) -> None:
                     {
                         "scholarship_type_id": scholarship.id,
                         "sub_type_code": "moe_1w",
-                        "name": "115學年度教育部博士生獎學金 (指導教授配合款每月 $5000 元)",
-                        "name_en": "AY115 MOE PHD Scholarship (Professor Match NT$5,000/month)",
+                        # Year-agnostic base label. The year-specific wording
+                        # (e.g. 115學年度…) is a per-configuration override in
+                        # ScholarshipConfiguration.sub_type_labels — see phd_114.
+                        "name": "教育部博士生獎學金 (指導教授配合款每月 $5000 元)",
+                        "name_en": "MOE PHD Scholarship (Professor Match NT$5,000/month)",
                         "description": "每年配合款經費金額將配合教育部相關規定，採滾動式調整。",
                         "description_en": "The annual matching fund amount is subject to rolling adjustment in accordance with MOE regulations.",
                         "amount": None,  # 使用主獎學金金額

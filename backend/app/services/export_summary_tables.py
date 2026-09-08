@@ -55,6 +55,7 @@ async def build_embedded_summary_tables(
     dept_groups: Dict[str, List[Application]],
     college_name: Optional[str],
     academic_year: int,
+    semester: Optional[str] = None,
 ) -> Dict[str, bytes]:
     """Return { zip_inner_path : xlsx_bytes } for the college-level table
     (ZIP root) plus one table per department folder.
@@ -73,6 +74,8 @@ async def build_embedded_summary_tables(
         db,
         scholarship_type=scholarship_type,
         applications=all_apps,
+        academic_year=academic_year,
+        semester=semester,
     )
 
     scholarship_name = scholarship_type.name or "獎學金"

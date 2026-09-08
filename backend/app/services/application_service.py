@@ -45,6 +45,7 @@ from app.services.email_automation_service import email_automation_service
 from app.services.email_service import EmailService
 from app.services.minio_service import minio_service
 from app.services.student_service import StudentService
+from app.services.sub_type_labels import load_configuration_for_period, resolve_sub_type_labels
 from app.utils.college_scope import (
     college_scope_for_user,
     college_user_may_access,
@@ -963,15 +964,14 @@ class ApplicationService:
         # submitted_form_data), so every form-data view has to read them from here.
         profile_owned_fields = await self._load_profile_owned_fields(application.user_id)
 
-        # Build sub_type labels from scholarship.sub_type_configs
+        # Build sub_type labels from scholarship.sub_type_configs, overridden by
+        # the applied-for configuration's per-year sub_type_labels.
         sub_type_labels = {}
         if application.scholarship and hasattr(application.scholarship, "sub_type_configs"):
-            for config in application.scholarship.sub_type_configs:
-                if config.is_active:
-                    sub_type_labels[config.sub_type_code] = {
-                        "zh": config.name,
-                        "en": config.name_en or config.name,
-                    }
+            sub_type_labels = resolve_sub_type_labels(
+                application.scholarship.sub_type_configs,
+                await self._configuration_for_labels(application),
+            )
 
         # Build ApplicationResponse with all the original fields plus display fields
         response_data = {
@@ -2929,17 +2929,34 @@ class ApplicationService:
         available = [c for c in active_configs if c.sub_type_code not in excluded_codes]
         available.sort(key=lambda c: (c.display_order or 0, c.sub_type_code))
 
+        # Headings use the applied-for year's wording (ScholarshipConfiguration.sub_type_labels).
+        labels = resolve_sub_type_labels(available, await self._configuration_for_labels(application))
+
         return [
             {
                 "value": c.sub_type_code,
-                "label": c.name,
-                "label_en": c.name_en or c.name,
+                "label": labels[c.sub_type_code]["zh"],
+                "label_en": labels[c.sub_type_code]["en"],
                 "note": c.description,
                 "note_en": c.description_en or c.description,
                 "is_default": c.sub_type_code == "default",
             }
             for c in available
         ]
+
+    async def _configuration_for_labels(self, application: Application) -> Optional[ScholarshipConfiguration]:
+        """The configuration whose ``sub_type_labels`` apply to this application.
+
+        Prefers the configuration the student applied under; applications created
+        before ``scholarship_configuration_id`` was recorded fall back to the
+        configuration governing their (year, semester) period.
+        """
+        if application.scholarship_configuration_id is not None:
+            return await self.db.get(ScholarshipConfiguration, application.scholarship_configuration_id)
+        semester = application.semester.value if application.semester is not None else None
+        return await load_configuration_for_period(
+            self.db, application.scholarship_type_id, application.academic_year, semester
+        )
 
     async def get_available_professors(self, user: User, search: Optional[str] = None) -> List[Dict[str, Any]]:
         """
