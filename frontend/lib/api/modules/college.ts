@@ -778,9 +778,15 @@ export function createCollegeApi() {
       }
 
       const payload = await precheck.json().catch(() => null);
+      const filename = payload?.data?.filename;
+      if (typeof filename !== "string" || !filename) {
+        // A 200 without the ApiResponse shape means the proxy chain is
+        // broken; do not hand the browser a URL we cannot vouch for.
+        throw new Error("匯出預檢回應格式錯誤");
+      }
       return {
         downloadUrl,
-        filename: payload?.data?.filename || "export.zip",
+        filename,
         applicationCount: Number(payload?.data?.application_count) || 0,
       };
     },

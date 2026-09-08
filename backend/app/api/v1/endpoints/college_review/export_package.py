@@ -63,6 +63,23 @@ async def _stream_with_audit(
         )
 
 
+async def _require_export_permissions(
+    current_user: User, scholarship_type_id: int, academic_year: int, db: AsyncSession, log_extra: Dict[str, object]
+) -> None:
+    """403 unless the actor may see this scholarship type AND academic year.
+
+    Denials are logged at warning level so repeated attempts can be flagged as
+    potential bypass probing.
+    """
+    if not await _check_scholarship_permission(current_user, scholarship_type_id, db):
+        logger.warning("export-package denied: scholarship permission missing", extra=log_extra)
+        raise HTTPException(status_code=403, detail="無權限存取此獎學金類型")
+
+    if not await _check_academic_year_permission(current_user, academic_year, db):
+        logger.warning("export-package denied: academic-year permission missing", extra=log_extra)
+        raise HTTPException(status_code=403, detail="無權限存取此學年度")
+
+
 @router.get("/export-package")
 async def export_application_package(
     scholarship_type_id: int = Query(..., description="Scholarship type ID"),
@@ -96,14 +113,7 @@ async def export_application_package(
         "semester": semester,
     }
 
-    # Permission checks
-    if not await _check_scholarship_permission(current_user, scholarship_type_id, db):
-        logger.warning("export-package denied: scholarship permission missing", extra=log_extra)
-        raise HTTPException(status_code=403, detail="無權限存取此獎學金類型")
-
-    if not await _check_academic_year_permission(current_user, academic_year, db):
-        logger.warning("export-package denied: academic-year permission missing", extra=log_extra)
-        raise HTTPException(status_code=403, detail="無權限存取此學年度")
+    await _require_export_permissions(current_user, scholarship_type_id, academic_year, db, log_extra)
 
     # Determine college_code for filtering
     college_code = current_user.college_code if current_user.role == UserRole.college else None
@@ -117,6 +127,8 @@ async def export_application_package(
             academic_year=academic_year,
             semester=semester,
             college_code=college_code,
+            # The precheck only needs the filename and count; skip the workbooks.
+            include_summary_tables=not dry_run,
         )
     except ValueError as e:
         logger.warning("export-package rejected: %s", e, extra=log_extra, exc_info=True)

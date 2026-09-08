@@ -145,3 +145,26 @@ async def test_prepare_export_rejects_empty_and_oversized_selections_before_stre
         await _prepare(monkeypatch, [], FakeMinio({}))
     with pytest.raises(ValueError, match=str(MAX_EXPORT_APPLICATIONS)):
         await _prepare(monkeypatch, [object()] * (MAX_EXPORT_APPLICATIONS + 1), FakeMinio({}))
+
+
+@pytest.mark.asyncio
+async def test_precheck_plan_skips_the_summary_workbooks(monkeypatch):
+    # The dry_run precheck only needs filename + count: the workbooks are the
+    # expensive part of preparation and must not be built twice per export.
+    async def _must_not_run(*args, **kwargs):
+        raise AssertionError("summary tables built for a precheck")
+
+    monkeypatch.setattr("app.services.export_package_service.build_embedded_summary_tables", _must_not_run)
+    monkeypatch.setattr("app.services.export_package_service.load_form_field_labels", _coro_returning({}))
+    svc = ExportPackageService(db=None, minio_service=FakeMinio({}))
+    stype = SimpleNamespace(name="某獎學金", code="phd", sub_type_configs=[])
+    monkeypatch.setattr(svc, "_get_scholarship_type", _coro_returning(stype))
+    monkeypatch.setattr(svc, "_query_applications", _coro_returning([make_application(1, "001", [])]))
+
+    plan = await svc.prepare_export(
+        scholarship_type_id=1, academic_year=114, semester="first", college_code="A", include_summary_tables=False
+    )
+
+    assert plan.summary_tables == {}
+    assert plan.application_count == 1
+    assert plan.zip_filename == "某獎學金_申請資料_114_1_某學院.zip"

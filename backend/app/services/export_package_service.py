@@ -199,8 +199,31 @@ def _copy_object_into_zip(
         incomplete_entry = _zip_has_entry(zf, entry_path)
         return None, _write_fetch_error(zf, error_path, error_label, e, incomplete_entry=incomplete_entry)
     finally:
+        _release_quietly(response, object_name)
+
+
+def _release_quietly(response, object_name: str) -> None:
+    """Close a storage response without letting a teardown error replace the
+    outcome: a half-consumed or already-reset connection can raise from
+    close()/release_conn(), and that must not abort the rest of the export."""
+    try:
         response.close()
         response.release_conn()
+    except Exception:
+        logger.warning("Failed to release storage connection for %s", object_name, exc_info=True)
+
+
+def _uploaded_file_name(af, student_prefix: str, label: str, count: int, total: int) -> str:
+    """`{學號_姓名}_{label}[_{n}]{ext}` — the sequence number only when the
+    student has several files of one type; extension from the original name,
+    else from the mime type."""
+    ext = ""
+    if af.original_filename and "." in af.original_filename:
+        ext = "." + af.original_filename.rsplit(".", 1)[1]
+    elif af.mime_type and "/" in af.mime_type:
+        ext = {"application/pdf": ".pdf", "image/jpeg": ".jpg", "image/png": ".png"}.get(af.mime_type, "")
+    suffix = f"_{count}" if total > 1 else ""
+    return f"{student_prefix}_{label}{suffix}{ext}"
 
 
 def _group_by_department(applications: List[Application]) -> Dict[str, List[Application]]:
@@ -268,12 +291,15 @@ class ExportPackageService:
         academic_year: int,
         semester: Optional[str],
         college_code: Optional[str],
+        include_summary_tables: bool = True,
     ) -> ExportPlan:
         """Validate the request and load everything the archive needs.
 
         Raises ValueError for the user-facing rejections (mapped to 400 by the
         endpoint). All DB work — scholarship type, applications with their
         files, form-field labels, the embedded 申請總表 workbooks — happens here.
+        The dry-run precheck passes ``include_summary_tables=False``: it only
+        needs the filename and count, and the workbooks are the expensive part.
         """
         # 1. Scholarship type (name drives ZIP/PDF filenames; object passed to the table builder)
         scholarship_type = await self._get_scholarship_type(scholarship_type_id)
@@ -298,13 +324,15 @@ class ExportPackageService:
         # a wholesale failure (e.g. an aux-data DB error before the per-table
         # try/except) must not lose the primary materials ZIP — degrade to an
         # error placeholder.
-        try:
-            summary_tables = await build_embedded_summary_tables(
-                self.db, scholarship_type, dept_groups, college_name, academic_year
-            )
-        except Exception as e:
-            logger.exception("embedded summary tables generation failed wholesale")
-            summary_tables = {"_錯誤_申請總表生成失敗.txt": f"申請總表生成失敗：{e}".encode("utf-8")}
+        summary_tables: Dict[str, bytes] = {}
+        if include_summary_tables:
+            try:
+                summary_tables = await build_embedded_summary_tables(
+                    self.db, scholarship_type, dept_groups, college_name, academic_year
+                )
+            except Exception as e:
+                logger.exception("embedded summary tables generation failed wholesale")
+                summary_tables = {"_錯誤_申請總表生成失敗.txt": f"申請總表生成失敗：{e}".encode("utf-8")}
 
         return ExportPlan(
             scholarship_name=scholarship_type.name,
@@ -333,7 +361,11 @@ class ExportPackageService:
                     for block in sink.take_blocks():
                         yield block
             for inner_path, payload in plan.summary_tables.items():
-                zf.writestr(inner_path, payload)
+                # Deflating a department workbook is CPU work too: keep it off
+                # the event loop and drain after each so pending stays bounded.
+                await asyncio.to_thread(zf.writestr, inner_path, payload)
+                for block in sink.take_blocks():
+                    yield block
         # Closing the archive appended the central directory; flush what is left.
         for block in sink.take_blocks():
             yield block
@@ -403,49 +435,64 @@ class ExportPackageService:
         Blocking end to end (reportlab, MinIO I/O, deflate, pypdf): runs in a
         worker thread from iter_export_zip so the event loop stays free.
         """
-        scholarship_name = plan.scholarship_name
-        academic_year = plan.academic_year
-        semester = plan.semester
-        field_labels = plan.field_labels
         student = app.student_data or {}
         std_code = _sanitize_filename(student.get("std_stdcode", "unknown"))
         std_name = _sanitize_filename(student.get("std_cname", "未知"))
         student_prefix = f"{std_code}_{std_name}"
         base_path = f"{dept_folder}/{student_prefix}"
 
-        # Generate summary PDF. Kept in memory as well: it leads the merged PDF
-        # below, so reviewers open one file and start at the student's data.
+        summary_item = self._add_summary_pdf(zf, base_path, student_prefix, app, plan)
+        dynamic_items = self._add_uploaded_files(zf, base_path, student_prefix, app)
+        # Extra per-student PDF stitching the summary and all dynamic documents
+        # together. Built for every student — summary_item is always present, so
+        # a student who uploaded no dynamic documents still gets one holding
+        # just their summary and reviewers work from the same file throughout.
+        self._add_merged_pdf(zf, base_path, student_prefix, app, plan, [summary_item] + dynamic_items)
+
+    def _add_summary_pdf(
+        self, zf: zipfile.ZipFile, base_path: str, student_prefix: str, app: Application, plan: ExportPlan
+    ) -> MergeItem:
+        """Write the 學生資料彙整 PDF and return it as the merge's leading item.
+
+        The bytes are kept in memory on purpose: the summary leads the merged
+        PDF so reviewers open one file and start at the student's data. On
+        failure the ZIP gets an error placeholder and the merge still lists the
+        summary as a placeholder page — a reviewer working only from the merged
+        PDF must not read a missing summary as "no personal data submitted".
+        """
         try:
-            pdf_bytes = self._generate_summary_pdf(app, scholarship_name, academic_year, semester, field_labels)
+            pdf_bytes = self._generate_summary_pdf(
+                app, plan.scholarship_name, plan.academic_year, plan.semester, plan.field_labels
+            )
             # _unique_zip_path here too: two applications can share one
             # base_path (same student code + name in one department, e.g. a
             # rejected and a resubmitted application), and a duplicate ZIP
             # entry would silently drop one of the two summaries.
             summary_path = _unique_zip_path(zf, f"{base_path}/{student_prefix}_{SUMMARY_PDF_LABEL}.pdf")
             zf.writestr(summary_path, pdf_bytes)
-            summary_item = MergeItem(
-                label=SUMMARY_PDF_LABEL,
-                filename=summary_path.rsplit("/", 1)[-1],
-                content=pdf_bytes,
-            )
+            return MergeItem(label=SUMMARY_PDF_LABEL, filename=summary_path.rsplit("/", 1)[-1], content=pdf_bytes)
         except Exception as e:
-            logger.exception(f"Failed to generate summary PDF for app {app.id}")
+            logger.exception("Failed to generate summary PDF for app %s", app.id)
             zf.writestr(
                 _unique_zip_path(zf, f"{base_path}/_錯誤_彙整PDF生成失敗.txt"),
                 f"PDF 生成失敗：{str(e)}",
             )
-            # Still list it in the merge as a placeholder page: a reviewer
-            # working only from the merged PDF must not read a missing summary
-            # as "this student submitted no personal data".
-            summary_item = MergeItem(
+            return MergeItem(
                 label=SUMMARY_PDF_LABEL,
                 filename=f"{student_prefix}_{SUMMARY_PDF_LABEL}.pdf",
                 content=None,
                 error=f"{SUMMARY_PDF_LABEL} PDF 生成失敗：{str(e)}",
             )
 
-        # Add uploaded files from ApplicationFile records; keep the bytes of
-        # dynamic documents so they can be stitched into one extra PDF below.
+    def _add_uploaded_files(
+        self, zf: zipfile.ZipFile, base_path: str, student_prefix: str, app: Application
+    ) -> List[MergeItem]:
+        """Copy every ApplicationFile into the student's folder.
+
+        Fixed-type files stream straight through; dynamic documents are also
+        kept in memory and returned as merge items so they can be stitched into
+        the 申請資料合併檔 (a failed download becomes a placeholder item there).
+        """
         type_totals = Counter(af.file_type or "other" for af in app.files)
         file_type_counter: Dict[str, int] = defaultdict(int)
         dynamic_items: List[MergeItem] = []
@@ -454,20 +501,7 @@ class ExportPackageService:
             file_type_counter[ft] += 1
             count = file_type_counter[ft]
             label = _label_for_file_type(ft)
-
-            # Determine file extension from original filename or mime_type
-            ext = ""
-            if af.original_filename and "." in af.original_filename:
-                ext = "." + af.original_filename.rsplit(".", 1)[1]
-            elif af.mime_type and "/" in af.mime_type:
-                ext_map = {"application/pdf": ".pdf", "image/jpeg": ".jpg", "image/png": ".png"}
-                ext = ext_map.get(af.mime_type, "")
-
-            # Add sequence number only if multiple files of same type
-            if type_totals[ft] > 1:
-                filename = f"{student_prefix}_{label}_{count}{ext}"
-            else:
-                filename = f"{student_prefix}_{label}{ext}"
+            filename = _uploaded_file_name(af, student_prefix, label, count, type_totals[ft])
 
             is_dynamic = _is_dynamic_document_type(ft)
             file_bytes, fetch_error = _copy_object_into_zip(
@@ -477,8 +511,6 @@ class ExportPackageService:
                 zip_path=f"{base_path}/{_sanitize_filename(filename)}",
                 error_path=f"{base_path}/_錯誤_找不到檔案_{_sanitize_filename(label)}.txt",
                 error_label=af.original_filename or af.object_name or "未知檔案",
-                # Only dynamic documents are needed whole (for the merged PDF);
-                # fixed types stream straight through without landing in memory.
                 keep_bytes=is_dynamic,
             )
 
@@ -492,29 +524,37 @@ class ExportPackageService:
                         error=f"檔案下載失敗：{fetch_error}" if fetch_error else None,
                     )
                 )
+        return dynamic_items
 
-        # Extra per-student PDF stitching the summary and all dynamic documents
-        # together. Built for every student — summary_item is always present, so
-        # a student who uploaded no dynamic documents still gets one holding
-        # just their summary and reviewers work from the same file throughout.
+    def _add_merged_pdf(
+        self,
+        zf: zipfile.ZipFile,
+        base_path: str,
+        student_prefix: str,
+        app: Application,
+        plan: ExportPlan,
+        items: List[MergeItem],
+    ) -> None:
+        """Write the per-student 申請資料合併檔, or an error placeholder."""
+        student = app.student_data or {}
         semester_map = {"first": "第一學期", "second": "第二學期"}
-        semester_label = semester_map.get(semester, "全學年") if semester else "全學年"
+        semester_label = semester_map.get(plan.semester, "全學年") if plan.semester else "全學年"
         try:
             # pypdf/Pillow/reportlab do seconds of pure CPU per student; this
-            # whole method already runs off the event loop (see iter_export_zip).
+            # already runs off the event loop (see iter_export_zip).
             merged_bytes = build_merged_pdf(
                 title=MERGED_PDF_LABEL,
                 subtitle_lines=[
-                    f"{scholarship_name} {academic_year}學年度 {semester_label}",
+                    f"{plan.scholarship_name} {plan.academic_year}學年度 {semester_label}",
                     # Display surface: raw SIS values (sanitization is for
                     # ZIP paths), with the same fallbacks as folder naming.
                     f"{student.get('std_stdcode', 'unknown')} {student.get('std_cname', '未知')}",
                 ],
-                items=[summary_item] + dynamic_items,
+                items=items,
             )
             zf.writestr(_unique_zip_path(zf, f"{base_path}/{student_prefix}_{MERGED_PDF_LABEL}.pdf"), merged_bytes)
         except Exception as e:
-            logger.exception(f"Failed to build merged application PDF for app {app.id}")
+            logger.exception("Failed to build merged application PDF for app %s", app.id)
             zf.writestr(
                 _unique_zip_path(zf, f"{base_path}/_錯誤_{MERGED_PDF_LABEL}PDF生成失敗.txt"),
                 f"{MERGED_PDF_LABEL} PDF 生成失敗：{str(e)}",

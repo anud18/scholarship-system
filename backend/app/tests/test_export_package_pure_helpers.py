@@ -415,3 +415,25 @@ class TestCopyObjectIntoZip:
             assert "不完整" in content
         fake_response.close.assert_called_once()
         fake_response.release_conn.assert_called_once()
+
+    def test_connection_teardown_error_does_not_undo_a_successful_copy(self):
+        import io
+        import zipfile
+        from unittest.mock import MagicMock
+
+        fake_response = self._response(b"PDF-BYTES", [b"PDF-", b"BYTES"])
+        fake_response.close.side_effect = RuntimeError("connection already reset")
+        minio = MagicMock()
+        minio.get_file_stream.return_value = fake_response
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            returned = self._copy(zf, minio, keep_bytes=True)
+
+        # Pin: a raising close()/release_conn() must neither replace the
+        # result nor escape and abort the whole export at this student.
+        assert returned == (b"PDF-BYTES", None)
+        buf.seek(0)
+        with zipfile.ZipFile(buf) as zf:
+            assert zf.read(self.ENTRY) == b"PDF-BYTES"
+            assert self.ERROR_ENTRY not in zf.namelist()

@@ -616,14 +616,14 @@ export function ApplicationReviewPanel({
 
       // Hand the (possibly multi-GB, #1376) archive to the browser's own
       // download manager: it streams to disk with its own progress UI instead
-      // of buffering the whole ZIP in JS memory. The filename comes from the
-      // backend's Content-Disposition.
+      // of buffering the whole ZIP in JS memory. From here on the browser
+      // owns the outcome — the precheck above caught what we could catch.
       triggerFileDownload(downloadUrl, filename);
 
-      toast.success(
+      toast.info(
         locale === "zh"
-          ? "已開始下載，請於瀏覽器下載列查看進度"
-          : "Download started — check your browser's download bar",
+          ? "已交由瀏覽器下載，請於下載列查看進度與結果"
+          : "Handed to your browser — check the download bar for progress and result",
         { description: filename }
       );
     } catch (error) {

@@ -386,17 +386,19 @@ describe("createCollegeApi", () => {
     expect(result.downloadUrl).not.toContain("semester=");
   });
 
-  it("exportPackage falls back to export.zip when the precheck carries no filename", async () => {
+  it("exportPackage throws when a 200 precheck lacks the ApiResponse filename", async () => {
+    // Pin: a 200 without `data.filename` means the proxy chain is broken —
+    // fail loudly rather than start a download we cannot vouch for.
     mockPrecheck({});
 
     const api = createCollegeApi();
-    const result = await api.exportPackage({
-      scholarship_type_id: 7,
-      academic_year: 114,
-      token: "abc",
-    });
-    expect(result.filename).toBe("export.zip");
-    expect(result.applicationCount).toBe(0);
+    await expect(
+      api.exportPackage({
+        scholarship_type_id: 7,
+        academic_year: 114,
+        token: "abc",
+      })
+    ).rejects.toThrow("匯出預檢回應格式錯誤");
   });
 
   it("exportPackage throws on non-OK with backend error fallback chain", async () => {

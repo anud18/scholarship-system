@@ -193,7 +193,18 @@ async def test_college_scope_and_semester_normalisation_reach_the_service(wire, 
         "academic_year": 114,
         "semester": None,
         "college_code": "C",
+        # dry_run skips the workbook build — only filename + count are needed
+        "include_summary_tables": False,
     }
+
+
+@pytest.mark.asyncio
+async def test_real_download_builds_the_summary_tables(wire, college_user, fake_logger):
+    stub = wire(_StubService(plan=_plan()))
+
+    await _call(college_user)
+
+    assert stub.prepare_kwargs["include_summary_tables"] is True
 
 
 @pytest.mark.asyncio
