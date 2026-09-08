@@ -27,6 +27,7 @@
  *                                    → DB applications.status = 'approved'
  */
 import { test, expect } from "@playwright/test";
+import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { loginAs } from "../helpers/auth";
 import { apiAs } from "../helpers/api";
 import {
@@ -64,7 +65,7 @@ async function purgeStudentApps(): Promise<void> {
   }
 }
 
-test.describe("Admin manual distribution → application approved", () => {
+test.describe("Admin manual distribution → application approved", { tag: [MODE.api, ROLE.student, ROLE.professor, ROLE.college, ROLE.admin, FEATURE.ranking, FEATURE.distribution] }, () => {
   let runState: RunState;
   let createdAppId: string | undefined;
   let createdRankingId: number | undefined;

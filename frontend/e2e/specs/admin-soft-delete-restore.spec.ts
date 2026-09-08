@@ -29,6 +29,7 @@
  *   - POST /applications/{id}/restore: any authenticated user; staff can restore any app
  */
 import { test, expect } from "@playwright/test";
+import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { loginAs } from "../helpers/auth";
 import { apiAs } from "../helpers/api";
 import {
@@ -68,7 +69,7 @@ async function purgeStudentApps(
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Admin soft-delete + restore: submitted app → deleted → under_review", () => {
+test.describe("Admin soft-delete + restore: submitted app → deleted → under_review", { tag: [MODE.api, ROLE.admin, ROLE.student, FEATURE.apply] }, () => {
   let runState: RunState;
   let createdAppId: string | undefined;
   let createdNumericId: number | undefined;

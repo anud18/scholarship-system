@@ -20,6 +20,7 @@
  * reviewability.
  */
 import { test, expect } from "@playwright/test";
+import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { loginAs } from "../helpers/auth";
 import { apiAs } from "../helpers/api";
 import { deleteApplicationCascade, getActiveConfig, getApplication, getReviews, pool } from "../helpers/db";
@@ -47,7 +48,7 @@ async function purgeStudentApps(studentNycuId: string, scholarshipCode: string):
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Admin 回發 restores professor reviewability after a full reject", () => {
+test.describe("Admin 回發 restores professor reviewability after a full reject", { tag: [MODE.api, ROLE.professor, ROLE.admin, FEATURE.review] }, () => {
   let runState: RunState;
   let createdAppId: string | undefined;
 

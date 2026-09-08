@@ -38,6 +38,7 @@
  * - PATCH endpoint (applications.py line 664): require_staff dependency
  */
 import { test, expect } from "@playwright/test";
+import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { loginAs } from "../helpers/auth";
 import { apiAs } from "../helpers/api";
 import { deleteApplicationCascade, getActiveConfig, getApplication, pool } from "../helpers/db";
@@ -72,7 +73,7 @@ const SUB_TYPE = "nstc";
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Admin returns application; student edits and re-submits", () => {
+test.describe("Admin returns application; student edits and re-submits", { tag: [MODE.api, ROLE.admin, ROLE.student, FEATURE.review, FEATURE.apply] }, () => {
   let runState: RunState;
   let createdAppId: string | undefined;
 

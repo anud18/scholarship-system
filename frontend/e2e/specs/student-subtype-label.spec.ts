@@ -23,6 +23,7 @@
  *   anywhere in the phd sub-type labels served to students.
  */
 import { test, expect } from "@playwright/test";
+import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { loginAs } from "../helpers/auth";
 import { apiAs } from "../helpers/api";
 import { pool } from "../helpers/db";
@@ -47,7 +48,7 @@ interface EligibleScholarship {
   eligible_sub_types: EligibleSubType[];
 }
 
-test.describe("phd moe_1w sub-type label wording", () => {
+test.describe("phd moe_1w sub-type label wording", { tag: [MODE.api, ROLE.student, FEATURE.label] }, () => {
   let runState: RunState;
 
   test.beforeEach(() => {

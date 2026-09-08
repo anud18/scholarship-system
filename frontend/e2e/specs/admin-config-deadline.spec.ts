@@ -45,6 +45,7 @@
  *   - No scholarship_rules for year 115, so the rule loop is a no-op.
  */
 import { test, expect } from "@playwright/test";
+import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { loginAs } from "../helpers/auth";
 import { apiAs } from "../helpers/api";
 import { deleteApplicationCascade, pool } from "../helpers/db";
@@ -94,7 +95,7 @@ async function purgeE2EConfig(): Promise<void> {
   }
 }
 
-test.describe("Admin config CRUD pins application_end_date deadline enforcement", () => {
+test.describe("Admin config CRUD pins application_end_date deadline enforcement", { tag: [MODE.api, ROLE.admin, FEATURE.config, FEATURE.apply] }, () => {
   let runState: RunState;
   let createdConfigId: number | undefined;
   let createdAppId: string | undefined;

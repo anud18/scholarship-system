@@ -32,6 +32,7 @@
  * covered by config review + staging validation.
  */
 import { test, expect, type Page } from "@playwright/test";
+import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { loginAs } from "../helpers/auth";
@@ -93,7 +94,7 @@ function trackFramingViolations(page: Page): string[] {
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Admin preview dialog renders an uploaded PDF (UI layer)", () => {
+test.describe("Admin preview dialog renders an uploaded PDF (UI layer)", { tag: [MODE.browser, ROLE.admin, ROLE.student, FEATURE.upload, FEATURE.preview] }, () => {
   let runState: RunState;
   let createdAppId: string | undefined;
 
@@ -228,7 +229,7 @@ test.describe("Admin preview dialog renders an uploaded PDF (UI layer)", () => {
   });
 });
 
-test.describe("pdfjs worker version contract", () => {
+test.describe("pdfjs worker version contract", { tag: [MODE.api, FEATURE.preview] }, () => {
   test("@nightly /pdf.worker.min.mjs version === package.json pdfjs-dist (the #928 class)", async () => {
     // pdf.js hard-rejects getDocument when the worker version differs from the
     // API version — BEFORE fetching the PDF — so a drifted public/ worker

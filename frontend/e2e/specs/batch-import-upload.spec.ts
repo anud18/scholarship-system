@@ -14,6 +14,7 @@
  *   - the batch shows up in /history
  */
 import { test, expect } from "@playwright/test";
+import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { loginAs } from "../helpers/auth";
 import { apiAs } from "../helpers/api";
 import { pool } from "../helpers/db";
@@ -29,7 +30,7 @@ const CSV_STUDENT_NAME = "批次匯入測試生";
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Admin batch-import upload parses CSV into a preview batch", () => {
+test.describe("Admin batch-import upload parses CSV into a preview batch", { tag: [MODE.api, ROLE.admin, FEATURE.batchImport] }, () => {
   let runState: RunState;
   let createdBatchId: number | undefined;
 

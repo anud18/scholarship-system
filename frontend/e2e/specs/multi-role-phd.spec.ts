@@ -26,6 +26,7 @@
  * responsible layer. Never silence an assertion to make it pass.
  */
 import { test, expect } from "@playwright/test";
+import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { loginAs } from "../helpers/auth";
 import { apiAs } from "../helpers/api";
 import {
@@ -49,7 +50,7 @@ const PROFESSOR_NYCU_ID = "professor";
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Multi-role PhD review chain", () => {
+test.describe("Multi-role PhD review chain", { tag: [MODE.browser, ROLE.student, ROLE.professor, ROLE.college, ROLE.admin, FEATURE.apply, FEATURE.review, FEATURE.ranking] }, () => {
   let runState: RunState;
   let createdAppId: string | undefined;
 

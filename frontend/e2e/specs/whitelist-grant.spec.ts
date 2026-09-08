@@ -19,6 +19,7 @@
  * Diagnose-and-fix table is in helpers/diagnose.ts.
  */
 import { test, expect } from "@playwright/test";
+import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { loginAs } from "../helpers/auth";
 import { apiAs } from "../helpers/api";
 import { getActiveConfig, getWhitelist } from "../helpers/db";
@@ -42,7 +43,7 @@ interface EligibleScholarship {
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Whitelist grants access to undergraduate_freshman", () => {
+test.describe("Whitelist grants access to undergraduate_freshman", { tag: [MODE.browser, ROLE.admin, ROLE.student, FEATURE.whitelist] }, () => {
   let runState: RunState;
   let configId: number | undefined;
   let whitelisted = false;

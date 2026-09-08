@@ -23,6 +23,7 @@
  * a minute and doesn't fight DB cleanup.
  */
 import { test, expect } from "@playwright/test";
+import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { loginAs } from "../helpers/auth";
 import { apiAs } from "../helpers/api";
 import { deleteApplicationCascade, getActiveConfig, pool } from "../helpers/db";
@@ -59,7 +60,7 @@ const SUB_TYPE = "nstc";
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Role-permission boundaries on applications endpoints", () => {
+test.describe("Role-permission boundaries on applications endpoints", { tag: [MODE.api, ROLE.student, ROLE.professor, FEATURE.permissions] }, () => {
   let runState: RunState;
   let createdAppId: string | undefined;
   let appDbId: number | undefined;

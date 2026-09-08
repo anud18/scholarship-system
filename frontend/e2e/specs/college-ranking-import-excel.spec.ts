@@ -23,6 +23,7 @@
  * Issue #76 AC: college import-excel spec.
  */
 import { test, expect } from "@playwright/test";
+import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { apiAs } from "../helpers/api";
 import { deleteApplicationCascade, getActiveConfig, pool } from "../helpers/db";
 import {
@@ -62,7 +63,7 @@ async function getApiToken(nycuId: string): Promise<string> {
   return body.data.access_token;
 }
 
-test.describe("College ranking import-excel @nightly", () => {
+test.describe("College ranking import-excel @nightly", { tag: [MODE.api, ROLE.college, FEATURE.ranking] }, () => {
   let runState: RunState;
   let rankingId: number | undefined;
   let fixtureAppId: string | undefined;
