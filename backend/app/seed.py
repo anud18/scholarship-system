@@ -321,8 +321,8 @@ async def seed_professor_student_relationships(session: AsyncSession):
             "student_id": student_phd_id,
             "relationship_type": "advisor",
             "department": "資訊工程學系",
-            "academic_year": 114,
-            "semester": "second",
+            "academic_year": 115,
+            "semester": "first",
             "is_active": True,
             "can_view_applications": True,
             "can_upload_documents": True,
@@ -334,8 +334,8 @@ async def seed_professor_student_relationships(session: AsyncSession):
             "student_id": student_under_id,
             "relationship_type": "supervisor",
             "department": "資訊工程學系",
-            "academic_year": 114,
-            "semester": "second",
+            "academic_year": 115,
+            "semester": "first",
             "is_active": True,
             "can_view_applications": True,
             "can_upload_documents": False,
@@ -690,6 +690,12 @@ async def seed_development():
 
             await seed_regulations_doc(session, system_user_id=1)
 
+            # 8. AY115 demo cohort: 114 recipients (續領 pool) + 115 new-applicant accounts
+            print("\n🎒 Initializing AY115 demo students...")
+            from app.db.seed_ay115_demo import seed_ay115_demo
+
+            await seed_ay115_demo(session)
+
             print("\n📋 Test User Accounts:")
             print("- Admin: admin@nycu.edu.tw")
             print("- Super Admin: super_admin@nycu.edu.tw")
@@ -699,6 +705,14 @@ async def seed_development():
             print("- Student (博士): stuphd001@nycu.edu.tw")
             print("- Student (逕讀博士): studirect@nycu.edu.tw")
             print("- Student (碩士): stumaster@nycu.edu.tw")
+            print(
+                "- 續領生 (113 新申請→114 續領中, 姓名前綴「續領-」): 313551201 / 313551202 / 312551203 / 313551204 / 311551205"
+            )
+            print("- 114 新申請得獎者 (姓名前綴「114新申請-」): 314551206 / 314551207")
+            print(
+                "- 115 批次匯入 (帳號已建, 申請請用 Excel 匯入, 姓名前綴「匯入-」): 314551301 / 314551302 / 314551303 / 313551304"
+            )
+            print("- 115 新申請 (學生自行申請, 姓名前綴「新申請-」): 315551401 / 314551402 / 315551403 / 314551404")
 
             print("\n✅ Development seed completed successfully!")
 
