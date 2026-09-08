@@ -21,9 +21,9 @@ from app.models.system_setting import EmailTemplate, SendingType
 logger = logging.getLogger(__name__)
 
 # Academic years the eligibility rules are seeded for. 115 is the current year;
-# 114 is the previous cohort (its approved recipients are the 115 續領 pool).
-CURRENT_ACADEMIC_YEAR = 115
-RULE_ACADEMIC_YEARS = (114, 115)
+# 113/114 are the closed years whose approved applications and locked rosters
+# seed_ay115_demo creates — re-validating those rosters needs their rules too.
+RULE_ACADEMIC_YEARS = (113, 114, 115)
 
 # --- 學院送出排名通知 -------------------------------------------------------
 # The third and last automatic trigger point in the system: a college finalizes
@@ -228,7 +228,7 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
             "has_quota_limit": True,
             "has_college_quota": True,
             "quota_management_mode": QuotaManagementMode.matrix_based,
-            "total_quota": 30,
+            "total_quota": 36,
             "quotas": {
                 "nstc": {
                     "E": 3,
@@ -245,6 +245,10 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
                     "A": 1,
                     "K": 1,
                 },
+                # MOE is current-year only (never shared), but the 113 cohort in
+                # seed_ay115_demo holds moe_1w awards, so the pool must exist or
+                # the quota dashboard reports 113 moe_1w as permanently negative.
+                "moe_1w": {"E": 2, "C": 2, "I": 1, "S": 1},
             },
             "project_numbers": {"nstc": "113R000001", "moe_1w": "113E000001"},
             "amount": 40000,
@@ -851,7 +855,7 @@ async def seed_scholarship_rules(session: AsyncSession) -> None:
         {
             "scholarship_type_id": 1,
             "sub_type": None,
-            "academic_year": 115,
+            "academic_year": 114,
             "semester": Semester.first,
             "is_template": False,
             "rule_name": "學士新生獎學金 學士生身分",

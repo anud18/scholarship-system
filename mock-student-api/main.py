@@ -861,7 +861,7 @@ SAMPLE_STUDENTS = {
         "std_enrollyear": 110,
         "std_enrollterm": 1,
         "std_highestschname": "國立交通大學",
-        "std_cname": "續領-張雅婷",
+        "std_cname": "張雅婷",
         "std_ename": "ZHANG,YA-TING",
         "std_pid": "A210551004",
         "std_bdate": "900125",
@@ -5121,7 +5121,7 @@ def _mk_ay115_student(code, e):
         "std_identity": 1,
         "std_schoolid": 1,
         "std_overseaplace": "",
-        "std_termcount": _ay115_term_count(enrollyear, CURRENT_ACADEMIC_YEAR, 1),
+        "std_termcount": _ay115_term_count(enrollyear, CURRENT_ACADEMIC_YEAR, 2),
         "std_studingstatus": 2,
         "mgd_title": "在學",
         "ToDoctor": 0,
@@ -5134,8 +5134,7 @@ def _mk_ay115_student(code, e):
 def _mk_ay115_terms(code, e):
     """One row per semester from enrolment through 115-1 (the current term)."""
     cname, ename, sex, aca, acaname, dep, depname, enrollyear = e
-    periods = [(y, t) for y in range(enrollyear, CURRENT_ACADEMIC_YEAR) for t in (1, 2)]
-    periods.append((CURRENT_ACADEMIC_YEAR, 1))
+    periods = [(y, t) for y in range(enrollyear, CURRENT_ACADEMIC_YEAR + 1) for t in (1, 2)]
     return [
         {
             "std_stdcode": code,
@@ -5164,10 +5163,16 @@ SAMPLE_TERMS.update({c: _mk_ay115_terms(c, e) for c, e in _AY115_DEMO.items()})
 
 def _extend_terms_to_current_year(terms_by_student, current_year):
     """Roll legacy fixtures forward: a student whose newest term row is
-    `current_year - 1` and who was still enrolled (studystatus 1/2/3) gets a
-    synthesised `current_year`-1 row copied from that newest row. Without it
-    every hand-written student stops resolving the moment the seed moves to
-    a new academic year (the "mock SIS term-year ceiling"). Returns a new dict."""
+    `current_year - 1` and who was still enrolled (studystatus 1/2/3) gets
+    synthesised `current_year` term-1 and term-2 rows copied from that newest
+    row. Without them every hand-written student stops resolving the moment
+    the seed moves to a new academic year (the "mock SIS term-year ceiling").
+
+    trm_termcount is deliberately FROZEN (not bumped): the fixtures were
+    authored with a termcount that gives them a known eligibility (e.g. the
+    moe_1w 1-6 學期 rule), and std_termcount on the basic record is not
+    touched either, so bumping would silently flip ~40 legacy students out of
+    MOE eligibility and desync the two SIS layers. Returns a new dict."""
     active_statuses = {1, 2, 3}
     extended = {}
     for code, rows in terms_by_student.items():
@@ -5178,19 +5183,10 @@ def _extend_terms_to_current_year(terms_by_student, current_year):
         if newest["trm_year"] != current_year - 1 or newest["trm_studystatus"] not in active_statuses:
             extended[code] = rows
             continue
-        extra_terms = 1 if newest["trm_term"] == 2 else 2
-        extended[code] = rows + [
-            {
-                **newest,
-                "trm_year": current_year,
-                "trm_term": 1,
-                "trm_termcount": newest["trm_termcount"] + extra_terms,
-            }
-        ]
+        extended[code] = rows + [{**newest, "trm_year": current_year, "trm_term": term} for term in (1, 2)]
     return extended
 
 
-SAMPLE_TERMS = _extend_terms_to_current_year(SAMPLE_TERMS, CURRENT_ACADEMIC_YEAR)
 # --- end AY115 demo cohort ----------------------------------------------------
 
 # --- optional local dataset (git-ignored) ------------------------------------
@@ -5203,6 +5199,9 @@ try:
     SAMPLE_TERMS.update(TERMS_LOCAL)
 except ImportError:
     pass
+# Roll every fixture (built-in AND local) forward to the current year — must run
+# after the local merge or students_local.py rows stay capped at 114.
+SAMPLE_TERMS = _extend_terms_to_current_year(SAMPLE_TERMS, CURRENT_ACADEMIC_YEAR)
 # --- end local dataset --------------------------------------------------------
 
 

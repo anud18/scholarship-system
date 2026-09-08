@@ -22,7 +22,7 @@ Students meant to arrive via 批次匯入 get an ACCOUNT ONLY (so they show up i
 the Development Login picker); the import creates their applications.
 
 Every student here is mirrored in `mock-student-api/main.py` (`_AY115_DEMO`)
-with term rows up to 115-1, so SIS lookups and the eligibility rules resolve.
+with term rows through 115-2, so SIS lookups and the eligibility rules resolve.
 
 Idempotent: users/profiles are created only when missing; applications,
 rankings, rosters and schedules are skipped when they already exist.
@@ -46,8 +46,10 @@ from app.models.payment_roster import (
     RosterTriggerType,
     StudentVerificationStatus,
 )
+from app.models.received_months import StudentReceivedMonthRecord
+from app.models.review import ApplicationReview, ApplicationReviewItem
 from app.models.roster_schedule import RosterSchedule, RosterScheduleStatus
-from app.models.scholarship import ScholarshipConfiguration, ScholarshipType, SubTypeSelectionMode
+from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule, ScholarshipType, SubTypeSelectionMode
 from app.models.user import EmployeeStatus, User, UserRole, UserType
 from app.models.user_profile import UserProfile
 
@@ -66,6 +68,15 @@ APP_SEQUENCE_BASE = 200  # APP-<year>-0-002xx, clear of the sequence counter and
 MONTHS_BEFORE_NOW_BY_YEAR = {FIRST_AWARD_YEAR: 24, RENEWAL_YEAR: 12}
 DAYS_PER_MONTH = 30
 RANKING_SUB_TYPE_CODE = "default"  # college rankings are per college, not per sub-type
+# 已領月份數 baseline (StudentReceivedMonthRecord, the 領取月份數匯入 half of the
+# additive rule in docs/adr/0001): the system half only counts rosters under the
+# CURRENT config (phd_115), so months paid under phd_113/phd_114 must come from
+# here or the 115 手動分發 grid shows 0 for every 續領 candidate. 鄭宇軒 sits at
+# the 36-month ceiling (2 years before the system + 113/114), which is why the
+# 115 續領 sheet marks them 領獎期滿.
+MONTHS_PER_YEAR = 12
+RECEIVED_MONTHS_CEILING_STUDENT = "311551205"
+RECEIVED_MONTHS_CEILING = 36
 COLLEGE_NAMES = {"C": "資訊學院", "E": "電機學院"}
 
 # (stdcode, cname, ename, sex, academyno, academyname, depno, depname, enrollyear[, sub_type])
@@ -252,8 +263,11 @@ async def _get_or_create_application(
     is_renewal: bool,
     phd: ScholarshipType,
     config: ScholarshipConfiguration,
+    previous_application: Optional[Application] = None,
 ) -> Application:
-    """Approved yearly application for `year`, shaped like a finalized distribution left it."""
+    """Approved yearly application for `year`, shaped like a finalized distribution
+    left it, plus the professor's approving review so it does not linger in the
+    professor's 待審核 list (approved is a reviewable status; 待審核 = no review row)."""
     stdcode, academyno, sub_type = entry[0], entry[4], entry[9]
     advisor = ADVISOR_BY_COLLEGE[academyno]
     user = await _get_or_create_student_user(session, entry)
@@ -276,8 +290,10 @@ async def _get_or_create_application(
         sub_type_selection_mode=SubTypeSelectionMode.multiple,
         sub_scholarship_type=sub_type,
         is_renewal=is_renewal,
-        # renewal_import_service convention: renewal_year = the year being renewed IN.
-        renewal_year=year if is_renewal else None,
+        # Self-renew convention (renewal.py): renewal_year = the prior award's year,
+        # linked through previous_application_id.
+        renewal_year=previous_application.academic_year if (is_renewal and previous_application) else None,
+        previous_application_id=previous_application.id if (is_renewal and previous_application) else None,
         status=ApplicationStatus.approved.value,
         review_stage=ReviewStage.quota_distributed.value,
         quota_allocation_status="allocated",
@@ -291,6 +307,17 @@ async def _get_or_create_application(
     )
     session.add(application)
     await session.flush()
+    if advisor_user:
+        review = ApplicationReview(
+            application_id=application.id,
+            reviewer_id=advisor_user.id,
+            recommendation="approve",
+            comments="推薦（開發環境示範資料）",
+            reviewed_at=submitted_at + timedelta(days=10),
+        )
+        session.add(review)
+        await session.flush()
+        session.add(ApplicationReviewItem(review_id=review.id, sub_type_code=sub_type, recommendation="approve"))
     return application
 
 
@@ -357,7 +384,24 @@ async def _get_or_create_finalized_ranking(
     return ranking
 
 
-def _build_roster_item(roster: PaymentRoster, application: Application, phd: ScholarshipType) -> PaymentRosterItem:
+def _rule_details(rules: List[ScholarshipRule]) -> Dict[str, Any]:
+    """Frozen per-rule snapshot in the shape RosterService._validate_student_eligibility
+    writes — the roster Excel builds its 資格 columns from these keys."""
+    return {
+        f"rule_{rule.id}": {
+            "passed": True,
+            "rule_name": rule.rule_name,
+            "rule_type": rule.rule_type,
+            "is_hard_rule": rule.is_hard_rule,
+            "message": rule.message,
+        }
+        for rule in rules
+    }
+
+
+def _build_roster_item(
+    roster: PaymentRoster, application: Application, phd: ScholarshipType, rules: List[ScholarshipRule]
+) -> PaymentRosterItem:
     student_data = application.student_data
     identity = f"{application.academic_year}{'續領' if application.is_renewal else '新申請'}"
     return PaymentRosterItem(
@@ -379,10 +423,16 @@ def _build_roster_item(roster: PaymentRoster, application: Application, phd: Sch
         verification_status=StudentVerificationStatus.VERIFIED,
         verification_message="學籍驗證通過",
         verification_at=roster.completed_at,
+        verification_snapshot={"status": "verified", "message": "學籍驗證通過"},
         is_included=True,
         nationality_code="1",
         residence_days_over_183="是",
-        rule_validation_result={"is_eligible": True, "failed_rules": [], "warning_rules": []},
+        rule_validation_result={
+            "is_eligible": True,
+            "failed_rules": [],
+            "warning_rules": [],
+            "details": _rule_details(rules),
+        },
         failed_rules=[],
         warning_rules=[],
     )
@@ -396,6 +446,7 @@ async def _get_or_create_locked_roster(
     applications: List[Application],
     ranking_id: Optional[int],
     phd: ScholarshipType,
+    rules: List[ScholarshipRule],
     admin_id: int,
 ) -> bool:
     """One LOCKED yearly roster per (config, sub_type), shaped like
@@ -438,15 +489,17 @@ async def _get_or_create_locked_roster(
     session.add(roster)
     await session.flush()
     for application in applications:
-        session.add(_build_roster_item(roster, application, phd))
+        session.add(_build_roster_item(roster, application, phd, rules))
     return True
 
 
 async def _ensure_yearly_schedule(session: AsyncSession, config: ScholarshipConfiguration, admin_id: int) -> bool:
     """Active yearly 造冊 schedule for `config`, as the admin would create it in 造冊管理."""
+    # roster_schedules has no unique constraint on the config FK: an admin can add a
+    # second schedule in 造冊管理, so never assume a single row.
     existing = (
         await session.execute(select(RosterSchedule.id).where(RosterSchedule.scholarship_configuration_id == config.id))
-    ).scalar_one_or_none()
+    ).first()
     if existing:
         return False
     session.add(
@@ -486,18 +539,39 @@ async def _seed_closed_years(
 
     for entry in RENEWAL_COHORT + NEW_RECIPIENTS_114:
         await _ensure_account(session, entry)
+    first_award_by_index: Dict[int, Application] = {}
     for entry, index, year, is_renewal in _closed_year_plan():
         already = (
             await session.execute(select(Application.id).where(Application.app_id == _app_id(year, index)))
         ).scalar_one_or_none()
         application = await _get_or_create_application(
-            session, entry=entry, index=index, year=year, is_renewal=is_renewal, phd=phd, config=configs[year]
+            session,
+            entry=entry,
+            index=index,
+            year=year,
+            is_renewal=is_renewal,
+            phd=phd,
+            config=configs[year],
+            previous_application=first_award_by_index.get(index) if is_renewal else None,
         )
         counts["applications"] += already is None
         apps_by_year[year].append(application)
+        if year == FIRST_AWARD_YEAR:
+            first_award_by_index[index] = application
 
     for year in CLOSED_YEARS:
         config = configs[year]
+        rules = list(
+            (
+                await session.execute(
+                    select(ScholarshipRule).where(
+                        ScholarshipRule.scholarship_type_id == phd.id,
+                        ScholarshipRule.academic_year == year,
+                        ScholarshipRule.is_active.is_(True),
+                    )
+                )
+            ).scalars()
+        )
         ranking_ids: List[int] = []
         for college_code in sorted(COLLEGE_NAMES):
             new_apps = [
@@ -521,9 +595,44 @@ async def _seed_closed_years(
                 applications=group,
                 ranking_id=ranking_ids[0] if ranking_ids else None,
                 phd=phd,
+                rules=rules,
                 admin_id=admin_id,
             )
     return counts
+
+
+def _received_months_for(entry: StudentEntry, years_awarded: int) -> int:
+    if entry[0] == RECEIVED_MONTHS_CEILING_STUDENT:
+        return RECEIVED_MONTHS_CEILING
+    return years_awarded * MONTHS_PER_YEAR
+
+
+async def _ensure_received_months(session: AsyncSession, phd: ScholarshipType) -> int:
+    """已領月份數 baseline rows for every closed-year recipient (see the constant note)."""
+    created = 0
+    cohort = [(entry, len(CLOSED_YEARS)) for entry in RENEWAL_COHORT] + [(entry, 1) for entry in NEW_RECIPIENTS_114]
+    for entry, years_awarded in cohort:
+        stdcode = entry[0]
+        existing = (
+            await session.execute(
+                select(StudentReceivedMonthRecord.id).where(
+                    StudentReceivedMonthRecord.student_number == stdcode,
+                    StudentReceivedMonthRecord.scholarship_type_id == phd.id,
+                )
+            )
+        ).first()
+        if existing:
+            continue
+        session.add(
+            StudentReceivedMonthRecord(
+                student_number=stdcode,
+                scholarship_type_id=phd.id,
+                months=_received_months_for(entry, years_awarded),
+                raw_row={"source": "seed_ay115_demo"},
+            )
+        )
+        created += 1
+    return created
 
 
 async def _load_config(session: AsyncSession, code: str) -> Optional[ScholarshipConfiguration]:
@@ -549,6 +658,7 @@ async def seed_ay115_demo(session: AsyncSession) -> None:
         return
 
     closed = await _seed_closed_years(session, phd, configs, admin.id)
+    received_months = await _ensure_received_months(session, phd)
     import_accounts = sum([await _ensure_account(session, entry) for entry in BATCH_IMPORT_STUDENTS_115])
     applicants = sum([await _ensure_account(session, entry) for entry in NEW_APPLICANTS_115])
 
@@ -565,6 +675,7 @@ async def seed_ay115_demo(session: AsyncSession) -> None:
     print(f"  ✓ 113/114 已核准申請 (續領生 113 新申請 + 114 續領, 114 新申請得獎者): +{closed['applications']}")
     print(f"  ✓ 113/114 已定案並分發之學院排名: +{closed['rankings']}")
     print(f"  ✓ 113/114 已鎖定造冊: +{closed['rosters']}")
+    print(f"  ✓ 已領月份數基準 (StudentReceivedMonthRecord): +{received_months}")
     print(f"  ✓ 115 批次匯入學生帳號 (僅帳號, 申請由匯入建立): +{import_accounts}")
     print(f"  ✓ 115 新申請學生帳號: +{applicants}")
     print(f"  ✓ 年度造冊排程 (phd_113/114/115): +{schedules}")
