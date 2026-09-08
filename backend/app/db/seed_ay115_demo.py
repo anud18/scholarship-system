@@ -41,6 +41,7 @@ from app.models.payment_roster import (
     RosterTriggerType,
     StudentVerificationStatus,
 )
+from app.models.roster_schedule import RosterSchedule, RosterScheduleStatus
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType, SubTypeSelectionMode
 from app.models.user import EmployeeStatus, User, UserRole, UserType
 from app.models.user_profile import UserProfile
@@ -51,6 +52,10 @@ PHD_SCHOLARSHIP_CODE = "phd"
 FIRST_AWARD_YEAR = 113  # 新申請 year of the 續領 cohort
 RENEWAL_YEAR = 114  # year they are currently renewing in
 CONFIG_CODE_BY_YEAR = {FIRST_AWARD_YEAR: "phd_113", RENEWAL_YEAR: "phd_114"}
+# The 造冊 dashboard (payment-rosters/cycle-status) lists a config's periods ONLY
+# when the config has a RosterSchedule — without one, 114-整學年 shows nothing
+# even though its locked rosters exist. Seed a yearly schedule for every PhD year.
+SCHEDULE_CONFIG_CODES = ("phd_113", "phd_114", "phd_115")
 APP_SEQUENCE_BASE = 200  # APP-<year>-0-0020x, clear of the sequence counter and other demo seeds
 MONTHS_BEFORE_NOW_BY_YEAR = {FIRST_AWARD_YEAR: 24, RENEWAL_YEAR: 12}
 DAYS_PER_MONTH = 30
@@ -334,6 +339,29 @@ async def _get_or_create_locked_roster(
     return True
 
 
+async def _ensure_yearly_schedule(session: AsyncSession, config: ScholarshipConfiguration, admin_id: int) -> bool:
+    """Active yearly 造冊 schedule for `config`, as the admin would create it in 造冊管理."""
+    existing = (
+        await session.execute(select(RosterSchedule.id).where(RosterSchedule.scholarship_configuration_id == config.id))
+    ).scalar_one_or_none()
+    if existing:
+        return False
+    session.add(
+        RosterSchedule(
+            schedule_name=f"{config.config_name} 年度造冊",
+            description="開發環境示範排程（seed_ay115_demo）",
+            scholarship_configuration_id=config.id,
+            roster_cycle=RosterCycle.YEARLY,
+            auto_lock=False,
+            student_verification_enabled=True,
+            notification_enabled=False,
+            status=RosterScheduleStatus.ACTIVE,
+            created_by_user_id=admin_id,
+        )
+    )
+    return True
+
+
 async def _seed_renewal_cohort(
     session: AsyncSession, phd: ScholarshipType, configs: Dict[int, ScholarshipConfiguration], admin_id: int
 ) -> Dict[str, int]:
@@ -399,9 +427,18 @@ async def seed_ay115_demo(session: AsyncSession) -> None:
 
     cohort = await _seed_renewal_cohort(session, phd, configs, admin.id)
     applicants = await _seed_115_new_applicants(session)
+
+    schedules = 0
+    for code in SCHEDULE_CONFIG_CODES:
+        config = (
+            await session.execute(select(ScholarshipConfiguration).where(ScholarshipConfiguration.config_code == code))
+        ).scalar_one_or_none()
+        if config:
+            schedules += await _ensure_yearly_schedule(session, config, admin.id)
     await session.commit()
 
     logger.info("AY115 demo cohort seeded: %s", {**cohort, "applicants": applicants})
     print(f"  ✓ 續領生 (113 新申請 + 114 續領, approved): +{cohort['applications']} applications")
     print(f"  ✓ 113/114 已鎖定造冊: +{cohort['rosters']} rosters")
     print(f"  ✓ 115 新申請學生帳號: +{applicants} users")
+    print(f"  ✓ 年度造冊排程 (phd_113/114/115): +{schedules} schedules")
