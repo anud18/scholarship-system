@@ -246,7 +246,7 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
                     "K": 1,
                 },
             },
-            "project_numbers": {"nstc": "113R000001"},
+            "project_numbers": {"nstc": "113R000001", "moe_1w": "113E000001"},
             "amount": 40000,
             "currency": "TWD",
             "is_active": False,
