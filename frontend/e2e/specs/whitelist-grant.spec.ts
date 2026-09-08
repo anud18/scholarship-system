@@ -43,7 +43,7 @@ interface EligibleScholarship {
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Whitelist grants access to undergraduate_freshman", { tag: [MODE.browser, ROLE.admin, ROLE.student, FEATURE.whitelist] }, () => {
+test.describe("白名單開放大一新生申請資格", { tag: [MODE.browser, ROLE.admin, ROLE.student, FEATURE.whitelist] }, () => {
   let runState: RunState;
   let configId: number | undefined;
   let whitelisted = false;

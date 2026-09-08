@@ -65,7 +65,7 @@ async function purgeStudentApps(): Promise<void> {
   }
 }
 
-test.describe("Admin manual distribution → application approved", { tag: [MODE.api, ROLE.student, ROLE.professor, ROLE.college, ROLE.admin, FEATURE.ranking, FEATURE.distribution] }, () => {
+test.describe("管理員手動分發後申請轉為核准", { tag: [MODE.api, ROLE.student, ROLE.professor, ROLE.college, ROLE.admin, FEATURE.ranking, FEATURE.distribution] }, () => {
   let runState: RunState;
   let createdAppId: string | undefined;
   let createdRankingId: number | undefined;

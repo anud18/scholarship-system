@@ -68,7 +68,7 @@ async function purgeStudentApps(
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Admin PATCH /admin/applications/{id}/status: approve then reject", { tag: [MODE.api, ROLE.admin, ROLE.student, FEATURE.review, FEATURE.apply] }, () => {
+test.describe("管理員核准後再駁回申請", { tag: [MODE.api, ROLE.admin, ROLE.student, FEATURE.review, FEATURE.apply] }, () => {
   let runState: RunState;
   let createdAppId: string | undefined;
 

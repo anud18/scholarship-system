@@ -48,7 +48,7 @@ async function purgeStudentApps(studentNycuId: string, scholarshipCode: string):
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Admin 回發 restores professor reviewability after a full reject", { tag: [MODE.api, ROLE.professor, ROLE.admin, FEATURE.review] }, () => {
+test.describe("管理員回發後教授可重新審核", { tag: [MODE.api, ROLE.professor, ROLE.admin, FEATURE.review] }, () => {
   let runState: RunState;
   let createdAppId: string | undefined;
 

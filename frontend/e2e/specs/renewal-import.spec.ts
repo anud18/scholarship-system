@@ -88,7 +88,7 @@ async function resetRenewalState(): Promise<void> {
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Renewal import: upload → preview → confirm → 造冊", { tag: [MODE.browser, ROLE.admin, FEATURE.renewalImport, FEATURE.roster] }, () => {
+test.describe("續領生匯入：上傳→預覽→確認→造冊", { tag: [MODE.browser, ROLE.admin, FEATURE.renewalImport, FEATURE.roster] }, () => {
   let runState: RunState;
   let batchId: number | undefined;
 

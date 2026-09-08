@@ -42,7 +42,7 @@ async function purgeStudentApps(studentNycuId: string, scholarshipCode: string):
   }
 }
 
-test.describe("Regulations PDF renders as react-pdf canvas in the consent step", { tag: [MODE.browser, ROLE.student, FEATURE.regulations, FEATURE.preview] }, () => {
+test.describe("同意步驟中獎學金要點 PDF 以 canvas 呈現", { tag: [MODE.browser, ROLE.student, FEATURE.regulations, FEATURE.preview] }, () => {
   let runState: RunState;
 
   test.beforeEach(() => {

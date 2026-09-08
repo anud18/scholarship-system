@@ -69,7 +69,7 @@ async function purgeStudentApps(
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Duplicate-application prevention + post-withdrawal reapplication", { tag: [MODE.api, ROLE.student, FEATURE.apply, FEATURE.withdraw] }, () => {
+test.describe("重複申請防護與撤回後重新申請", { tag: [MODE.api, ROLE.student, FEATURE.apply, FEATURE.withdraw] }, () => {
   let runState: RunState;
   // Track both apps so afterAll can clean both.
   let createdAppIds: string[] = [];

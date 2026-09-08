@@ -33,7 +33,7 @@ interface EligibleScholarship {
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Whitelist removal revokes access to undergraduate_freshman", { tag: [MODE.api, ROLE.admin, ROLE.student, FEATURE.whitelist] }, () => {
+test.describe("移除白名單後撤銷申請資格", { tag: [MODE.api, ROLE.admin, ROLE.student, FEATURE.whitelist] }, () => {
   let runState: RunState;
   let configId: number | undefined;
   let whitelisted = false;

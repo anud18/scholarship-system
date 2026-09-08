@@ -94,7 +94,7 @@ function trackFramingViolations(page: Page): string[] {
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Admin preview dialog renders an uploaded PDF (UI layer)", { tag: [MODE.browser, ROLE.admin, ROLE.student, FEATURE.upload, FEATURE.preview] }, () => {
+test.describe("管理員預覽對話框顯示已上傳 PDF", { tag: [MODE.browser, ROLE.admin, ROLE.student, FEATURE.upload, FEATURE.preview] }, () => {
   let runState: RunState;
   let createdAppId: string | undefined;
 
@@ -229,7 +229,7 @@ test.describe("Admin preview dialog renders an uploaded PDF (UI layer)", { tag: 
   });
 });
 
-test.describe("pdfjs worker version contract", { tag: [MODE.api, FEATURE.preview] }, () => {
+test.describe("pdfjs worker 版本一致性", { tag: [MODE.api, FEATURE.preview] }, () => {
   test("@nightly /pdf.worker.min.mjs version === package.json pdfjs-dist (the #928 class)", async () => {
     // pdf.js hard-rejects getDocument when the worker version differs from the
     // API version — BEFORE fetching the PDF — so a drifted public/ worker

@@ -73,7 +73,7 @@ const SUB_TYPE = "nstc";
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Admin returns application; student edits and re-submits", { tag: [MODE.api, ROLE.admin, ROLE.student, FEATURE.review, FEATURE.apply] }, () => {
+test.describe("管理員退回申請，學生修改後重送", { tag: [MODE.api, ROLE.admin, ROLE.student, FEATURE.review, FEATURE.apply] }, () => {
   let runState: RunState;
   let createdAppId: string | undefined;
 

@@ -80,7 +80,7 @@ const PROFESSOR_NYCU_ID = "professor";
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Professor reject recommendation + upsert", { tag: [MODE.api, ROLE.professor, FEATURE.review] }, () => {
+test.describe("教授拒絕推薦與重複審核限制", { tag: [MODE.api, ROLE.professor, FEATURE.review] }, () => {
   let runState: RunState;
   let createdAppId: string | undefined;
 

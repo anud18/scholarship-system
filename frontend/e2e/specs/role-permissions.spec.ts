@@ -60,7 +60,7 @@ const SUB_TYPE = "nstc";
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Role-permission boundaries on applications endpoints", { tag: [MODE.api, ROLE.student, ROLE.professor, FEATURE.permissions] }, () => {
+test.describe("申請端點的角色權限邊界", { tag: [MODE.api, ROLE.student, ROLE.professor, FEATURE.permissions] }, () => {
   let runState: RunState;
   let createdAppId: string | undefined;
   let appDbId: number | undefined;

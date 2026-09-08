@@ -26,7 +26,7 @@ test.describe.configure({ mode: "serial" });
 // §1 — Roster admin management flows
 // ---------------------------------------------------------------------------
 
-test.describe("Admin roster management flows @nightly", { tag: [MODE.api, ROLE.admin, FEATURE.roster] }, () => {
+test.describe("管理員造冊管理流程 @nightly", { tag: [MODE.api, ROLE.admin, FEATURE.roster] }, () => {
   let runState: RunState;
   let adminToken: string;
   let rosterId: number | undefined;
@@ -246,7 +246,7 @@ test.describe("Admin roster management flows @nightly", { tag: [MODE.api, ROLE.a
 // §2 — Roster schedule management flows
 // ---------------------------------------------------------------------------
 
-test.describe("Admin roster schedule management @nightly", { tag: [MODE.api, ROLE.admin, FEATURE.roster, FEATURE.config] }, () => {
+test.describe("管理員造冊排程管理 @nightly", { tag: [MODE.api, ROLE.admin, FEATURE.roster, FEATURE.config] }, () => {
   let runState: RunState;
   let scheduleId: number | undefined;
   let configId: number;

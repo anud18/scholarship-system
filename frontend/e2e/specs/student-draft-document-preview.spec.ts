@@ -85,7 +85,7 @@ interface DocEntry {
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Student uploads a document to a draft, reopens it, and previews it", { tag: [MODE.api, ROLE.student, FEATURE.draft, FEATURE.upload, FEATURE.preview] }, () => {
+test.describe("學生上傳文件至草稿、重開後預覽", { tag: [MODE.api, ROLE.student, FEATURE.draft, FEATURE.upload, FEATURE.preview] }, () => {
   let runState: RunState;
   let createdAppId: string | undefined;
 

@@ -30,7 +30,7 @@ const CSV_STUDENT_NAME = "批次匯入測試生";
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Admin batch-import upload parses CSV into a preview batch", { tag: [MODE.api, ROLE.admin, FEATURE.batchImport] }, () => {
+test.describe("管理員批次匯入 CSV 產生預覽批次", { tag: [MODE.api, ROLE.admin, FEATURE.batchImport] }, () => {
   let runState: RunState;
   let createdBatchId: number | undefined;
 

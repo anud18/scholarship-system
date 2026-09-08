@@ -44,7 +44,7 @@ const PERIOD_LABEL = "2099-E2E";
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Admin generates a payment roster", { tag: [MODE.api, ROLE.admin, FEATURE.roster] }, () => {
+test.describe("管理員產生造冊", { tag: [MODE.api, ROLE.admin, FEATURE.roster] }, () => {
   let runState: RunState;
   let createdRosterId: number | undefined;
 
