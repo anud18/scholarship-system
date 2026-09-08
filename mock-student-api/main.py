@@ -5066,6 +5066,130 @@ SAMPLE_STUDENTS.update({c: _mk_summary_demo_student(c, e) for c, e in _SUMMARY_E
 SAMPLE_TERMS.update({c: _mk_summary_demo_terms(c, e) for c, e in _SUMMARY_EXPORT_DEMO.items()})
 # --- end demo students ------------------------------------------------------
 
+# --- AY115 demo cohort --------------------------------------------------------
+# The current academic year is 115. Mirrors backend/app/db/seed_ay115_demo.py
+# (114 recipients + 115 new applicants) and the 批次匯入 sample workbook from
+# backend/scripts/generate_ay115_import_samples.py, so every student in those
+# three groups resolves in SIS with term rows up to 115-1. std_depno values
+# are REAL departments.code rows.
+# (stdcode -> cname, ename, sex, academyno, academyname, depno, depname, enrollyear)
+CURRENT_ACADEMIC_YEAR = 115
+_AY115_DEMO = {
+    # 114 得獎者 → 115 續領候選 (approved phd_114 applications in the seed)
+    "313551201": ("林承翰", "LIN,CHENG-HAN", 1, "C", "資訊學院", "1550", "資訊工程學系", 113),
+    "313551202": ("張雅婷", "CHANG,YA-TING", 2, "C", "資訊學院", "155", "資訊科學與工程研究所", 113),
+    "312551203": ("黃冠宇", "HUANG,KUAN-YU", 1, "E", "電機學院", "3511", "電機工程學系", 112),
+    "313551204": ("吳佩珊", "WU,PEI-SHAN", 2, "E", "電機學院", "183", "電機學院博士班", 113),
+    "311551205": ("鄭宇軒", "CHENG,YU-HSUAN", 1, "C", "資訊學院", "1550", "資訊工程學系", 111),
+    # 115 批次匯入 (Excel) — no pre-seeded account, the import creates it
+    "314551301": ("陳柏宇", "CHEN,PO-YU", 1, "C", "資訊學院", "1550", "資訊工程學系", 114),
+    "314551302": ("李欣怡", "LEE,HSIN-YI", 2, "C", "資訊學院", "155", "資訊科學與工程研究所", 114),
+    "314551303": ("王志豪", "WANG,CHIH-HAO", 1, "E", "電機學院", "3511", "電機工程學系", 114),
+    "313551304": ("劉育綺", "LIU,YU-CHI", 2, "E", "電機學院", "183", "電機學院博士班", 113),
+    # 115 新申請 — student logs in via mock SSO and applies through the wizard
+    "315551401": ("蔡承恩", "TSAI,CHENG-EN", 1, "C", "資訊學院", "1550", "資訊工程學系", 115),
+    "314551402": ("郭芷瑄", "KUO,CHIH-HSUAN", 2, "C", "資訊學院", "155", "資訊科學與工程研究所", 114),
+    "315551403": ("楊子萱", "YANG,TZU-HSUAN", 2, "E", "電機學院", "3511", "電機工程學系", 115),
+    "314551404": ("許文傑", "HSU,WEN-CHIEH", 1, "E", "電機學院", "183", "電機學院博士班", 114),
+}
+
+
+def _ay115_term_count(enroll_year, year, term):
+    return (year - enroll_year) * 2 + term
+
+
+def _mk_ay115_student(code, e):
+    cname, ename, sex, aca, acaname, dep, depname, enrollyear = e
+    return {
+        "std_stdcode": code,
+        "std_enrollyear": enrollyear,
+        "std_enrollterm": 1,
+        "std_highestschname": "國立陽明交通大學",
+        "std_cname": cname,
+        "std_ename": ename,
+        "std_pid": f"A{code}",
+        "std_bdate": "900101",
+        "std_academyno": aca,
+        "std_depno": dep,
+        "std_sex": sex,
+        "std_nation": "中華民國",
+        "std_degree": 1,
+        "std_enrolltype": 4,
+        "std_identity": 1,
+        "std_schoolid": 1,
+        "std_overseaplace": "",
+        "std_termcount": _ay115_term_count(enrollyear, CURRENT_ACADEMIC_YEAR, 1),
+        "std_studingstatus": 2,
+        "mgd_title": "在學",
+        "ToDoctor": 0,
+        "com_commadd": "新竹市東區大學路1001號",
+        "com_email": code + "@nycu.edu.tw",
+        "com_cellphone": f"0912{code[-6:]}",
+    }
+
+
+def _mk_ay115_terms(code, e):
+    """One row per semester from enrolment through 115-1 (the current term)."""
+    cname, ename, sex, aca, acaname, dep, depname, enrollyear = e
+    periods = [(y, t) for y in range(enrollyear, CURRENT_ACADEMIC_YEAR) for t in (1, 2)]
+    periods.append((CURRENT_ACADEMIC_YEAR, 1))
+    return [
+        {
+            "std_stdcode": code,
+            "trm_year": year,
+            "trm_term": term,
+            "trm_termcount": _ay115_term_count(enrollyear, year, term),
+            "trm_studystatus": 1,
+            "trm_degree": 1,
+            "trm_academyno": aca,
+            "trm_academyname": acaname,
+            "trm_depno": dep,
+            "trm_depname": depname,
+            "trm_placings": 0,
+            "trm_placingsrate": 0.0,
+            "trm_depplacing": 0,
+            "trm_depplacingrate": 0.0,
+            "trm_ascore_gpa": 3.85,
+        }
+        for year, term in periods
+    ]
+
+
+SAMPLE_STUDENTS.update({c: _mk_ay115_student(c, e) for c, e in _AY115_DEMO.items()})
+SAMPLE_TERMS.update({c: _mk_ay115_terms(c, e) for c, e in _AY115_DEMO.items()})
+
+
+def _extend_terms_to_current_year(terms_by_student, current_year):
+    """Roll legacy fixtures forward: a student whose newest term row is
+    `current_year - 1` and who was still enrolled (studystatus 1/2/3) gets a
+    synthesised `current_year`-1 row copied from that newest row. Without it
+    every hand-written student stops resolving the moment the seed moves to
+    a new academic year (the "mock SIS term-year ceiling"). Returns a new dict."""
+    active_statuses = {1, 2, 3}
+    extended = {}
+    for code, rows in terms_by_student.items():
+        if not rows:
+            extended[code] = rows
+            continue
+        newest = max(rows, key=lambda r: (r["trm_year"], r["trm_term"]))
+        if newest["trm_year"] != current_year - 1 or newest["trm_studystatus"] not in active_statuses:
+            extended[code] = rows
+            continue
+        extra_terms = 1 if newest["trm_term"] == 2 else 2
+        extended[code] = rows + [
+            {
+                **newest,
+                "trm_year": current_year,
+                "trm_term": 1,
+                "trm_termcount": newest["trm_termcount"] + extra_terms,
+            }
+        ]
+    return extended
+
+
+SAMPLE_TERMS = _extend_terms_to_current_year(SAMPLE_TERMS, CURRENT_ACADEMIC_YEAR)
+# --- end AY115 demo cohort ----------------------------------------------------
+
 # --- optional local dataset (git-ignored) ------------------------------------
 # Merges extra students/terms from students_local.py when present, so datasets
 # with real-looking student IDs stay out of version control (see .gitignore).

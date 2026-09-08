@@ -10,10 +10,10 @@
  *      non-passing one (the core business rule of the feature).
  *   3. Confirm creates *approved renewal* Applications shaped for 造冊
  *      (is_renewal, status=approved, sub_scholarship_type=nstc,
- *      allocation_config_id=5, app_id ends with 'R').
+ *      allocation_config_id=6, app_id ends with 'R').
  *   4. The non-passing student never becomes an application.
  *   5. 造冊 (generate-rosters-from-distribution) pulls those renewals into the
- *      nstc payment roster, each item labelled `114續領`.
+ *      nstc payment roster, each item labelled `115續領`.
  *
  * Yearly-cycle note: the panel's handleUpload sends `semester=yearly` for the
  * suffix-less (yearly) period — that fix is what lets this yearly (phd) UI
@@ -35,9 +35,9 @@ import { captureDiagnostics } from "../helpers/diagnose";
 const SUPER_ADMIN = "super_admin";
 const SCHOLARSHIP_CODE = "phd";
 const SCHOLARSHIP_TYPE_ID = 2;
-const CONFIG_ID = 5;
-const ACADEMIC_YEAR = 114;
-const PERIOD_VALUE = "114"; // yearly period.value exposed by the panel's period <select>
+const CONFIG_ID = 6;
+const ACADEMIC_YEAR = 115;
+const PERIOD_VALUE = "115"; // yearly period.value exposed by the panel's period <select>
 const FILE_NAME = "e2e-renewal-import.csv";
 
 // Two passing (是 + 通過) + one non-passing (否). All three resolve in the mock
@@ -130,7 +130,7 @@ test.describe("Renewal import: upload → preview → confirm → 造冊", () =>
       selects.nth(1).locator(`option[value="${PERIOD_VALUE}"]`),
       "period options load after picking the scholarship",
     ).toHaveCount(1, { timeout: 30_000 });
-    await selects.nth(1).selectOption(PERIOD_VALUE); // 學年度 → 114
+    await selects.nth(1).selectOption(PERIOD_VALUE); // 學年度 → 115
     await page.setInputFiles("#renewal-file-upload", {
       name: FILE_NAME,
       mimeType: "text/csv",
@@ -236,7 +236,7 @@ test.describe("Renewal import: upload → preview → confirm → 造冊", () =>
     expect(nstcRoster, "an nstc roster was generated").toBeTruthy();
     runState.rosterId = nstcRoster!.id;
 
-    // ── 7. The renewals are in the nstc roster, labelled 114續領 ──────────
+    // ── 7. The renewals are in the nstc roster, labelled 115續領 ──────────
     const rosterDb = await pool.query(
       `SELECT id, roster_code FROM payment_rosters
          WHERE scholarship_configuration_id = $1 AND sub_type = 'nstc'
@@ -250,7 +250,7 @@ test.describe("Renewal import: upload → preview → confirm → 造冊", () =>
       [rosterDb.rows[0].id, `${ACADEMIC_YEAR}續領`],
     );
     const rosterStudentIds = items.rows.map((r) => r.student_number as string).sort();
-    expect(rosterStudentIds, "both renewals appear in the nstc roster as 114續領").toEqual(
+    expect(rosterStudentIds, "both renewals appear in the nstc roster as 115續領").toEqual(
       [PASS_1.id, PASS_2.id].sort(),
     );
 
