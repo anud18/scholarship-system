@@ -9,7 +9,7 @@ needs MinIO and a DB — so these are plain async unit tests.
 """
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 from urllib.parse import quote
 
 import pytest
@@ -90,8 +90,15 @@ def fake_logger(monkeypatch):
     return logger
 
 
-async def _call(user, **overrides):
-    params = dict(scholarship_type_id=2, academic_year=114, semester=None, dry_run=False, current_user=user, db=None)
+async def _call(user, db=None, **overrides):
+    params = dict(
+        scholarship_type_id=2,
+        academic_year=114,
+        semester=None,
+        dry_run=False,
+        current_user=user,
+        db=db if db is not None else AsyncMock(),
+    )
     return await ep.export_application_package(**{**params, **overrides})
 
 
@@ -104,8 +111,9 @@ def _ended_extra(fake_logger):
 @pytest.mark.asyncio
 async def test_dry_run_returns_api_response_without_building_the_archive(wire, college_user, fake_logger):
     stub = wire(_StubService(plan=_plan()))
+    db = AsyncMock()
 
-    result = await _call(college_user, dry_run=True)
+    result = await _call(college_user, db=db, dry_run=True)
 
     assert result == {
         "success": True,
@@ -113,6 +121,7 @@ async def test_dry_run_returns_api_response_without_building_the_archive(wire, c
         "data": {"filename": _FILENAME, "application_count": 3},
     }
     assert stub.iter_calls == 0
+    db.close.assert_not_awaited()  # nothing streams; the dependency teardown follows at once
     # Still an audited bulk-PII access, flagged as the precheck.
     issued = fake_logger.info.call_args_list[0]
     assert issued.args[1] == "precheck passed"
@@ -123,11 +132,15 @@ async def test_dry_run_returns_api_response_without_building_the_archive(wire, c
 @pytest.mark.asyncio
 async def test_download_is_a_chunked_stream_without_content_length(wire, college_user, fake_logger):
     stub = wire(_StubService(plan=_plan()))
+    db = AsyncMock()
 
-    response = await _call(college_user)
+    response = await _call(college_user, db=db)
 
     assert isinstance(response, StreamingResponse)
     assert response.media_type == "application/zip"
+    # The pooled connection is released before the client-paced transfer
+    # starts; FastAPI's own teardown would only run after the last byte.
+    db.close.assert_awaited_once()
     # The size is unknown up front; the ASGI server sends chunked encoding.
     assert "content-length" not in response.headers
     assert response.headers["content-disposition"] == f"attachment; filename*=UTF-8''{quote(_FILENAME)}"

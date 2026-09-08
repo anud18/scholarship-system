@@ -49,6 +49,22 @@ class TestZipStreamSink:
     def test_default_block_size_is_one_mebibyte(self):
         assert STREAM_BLOCK_SIZE == 1 << 20
 
+    def test_one_large_write_is_split_into_blocks_and_small_writes_coalesce(self):
+        block = 1 << 20
+        sink = ZipStreamSink(block_size=block)
+        big = bytes(range(256)) * (5 * block // 256)  # 5 MiB in a single write, like one deflated entry
+        sink.write(big)
+        blocks = list(sink.take_blocks())
+        assert [len(b) for b in blocks] == [block] * 5
+        assert b"".join(blocks) == big
+        assert sink.pending_bytes == 0
+
+        for _ in range(3):
+            sink.write(b"x" * (block // 2))  # three half-blocks → one full block + a half pending
+        assert [len(b) for b in sink.take_blocks()] == [block]
+        assert sink.pending_bytes == block // 2
+        assert sink.take_all() == b"x" * (block // 2)
+
     def test_zipfile_streams_through_the_sink_and_the_output_round_trips(self):
         sink = ZipStreamSink(block_size=64)
         chunks = []
@@ -86,27 +102,28 @@ class TestWriteStreamEntry:
                 seen.append(piece)
                 yield piece
 
-        returned, zf = self._round_trip(chunks=chunks(), expected_size=5)
+        returned, zf = self._round_trip(chunks=chunks(), size=5)
         assert returned is None
         assert seen == [b"ab", b"cd", b"e"]
         assert zf.read("docs/x.bin") == b"abcde"
         assert zf.testzip() is None
 
     def test_keep_bytes_returns_the_full_content(self):
-        returned, zf = self._round_trip(chunks=iter([b"ab", b"cd"]), expected_size=4, keep_bytes=True)
+        returned, zf = self._round_trip(chunks=iter([b"ab", b"cd"]), size=4, keep_bytes=True)
         assert returned == b"abcd"
         assert zf.read("docs/x.bin") == b"abcd"
 
-    def test_unknown_size_still_produces_a_readable_entry(self):
-        # No Content-Length → ZIP64 is forced so a >2 GiB object cannot fail at
-        # close time; small entries must remain perfectly ordinary to read.
-        returned, zf = self._round_trip(chunks=iter([b"xyz"]))
+    def test_size_only_steers_zip64_the_written_size_is_what_lands_in_the_archive(self):
+        # In streaming mode the data descriptor records what was actually
+        # written, so a wrong hint cannot corrupt the entry.
+        returned, zf = self._round_trip(chunks=iter([b"xyz"]), size=100)
         assert returned is None
         assert zf.read("docs/x.bin") == b"xyz"
+        assert zf.getinfo("docs/x.bin").file_size == 3
         assert zf.testzip() is None
 
     def test_entry_carries_a_real_timestamp_and_the_archive_compression(self):
-        _, zf = self._round_trip(chunks=iter([b"payload"]), expected_size=7)
+        _, zf = self._round_trip(chunks=iter([b"payload"]), size=7)
         info = zf.getinfo("docs/x.bin")
         # zipfile stamps bare-name entries 1980-01-01; ours get the current time
         # like writestr() does, so extractors show a sensible date.

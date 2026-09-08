@@ -5,19 +5,20 @@ it in a ``BytesIO`` and handing that to ``StreamingResponse`` kept the whole
 archive in RAM and — because ``iter(BytesIO)`` iterates line by line — pushed
 millions of tiny chunks through the threadpool. These helpers let ``zipfile``
 write straight into a sink the response generator drains in fixed-size blocks,
-and copy object-storage streams into entries chunk by chunk.
+and copy spooled object streams into entries chunk by chunk.
 """
 
 import io
 import time
 import zipfile
-from typing import Iterable, Iterator, Optional
+from collections import deque
+from typing import Deque, Iterable, Iterator, Optional
 
 # Size of each chunk handed to the ASGI server. 1 MiB keeps the number of
 # send() round-trips for a multi-GB archive in the low thousands.
 STREAM_BLOCK_SIZE = 1 << 20
 
-# Read size per iteration when copying an object-storage stream into the ZIP.
+# Read size per iteration when copying an object-storage stream.
 COPY_CHUNK_SIZE = 256 * 1024
 
 
@@ -27,12 +28,15 @@ class ZipStreamSink(io.RawIOBase):
     Because ``seek()`` is unsupported, zipfile switches to streaming mode and
     trails every entry with a data descriptor instead of seeking back to patch
     the local header — so bytes can leave as soon as they are written. The
-    producer drains the sink between entries via ``take_blocks()`` (whole
-    blocks) and ``take_all()`` (the tail once the archive is closed), which
-    keeps the pending buffer bounded by one entry rather than the archive.
+    producer drains the sink via ``take_blocks()`` (whole blocks) and
+    ``take_all()`` (the tail once the archive is closed); what stays pending is
+    bounded by whatever the producer writes between two drains (one student's
+    entries in the export), never by the archive.
 
-    The internal buffer is the one place bytes are mutated in place: it is an
-    I/O buffer, private to this class, and drained by the owner.
+    Chunks are kept as memoryviews in a deque and sliced without copying, so a
+    drain costs one concatenation per block instead of memmoving the remainder
+    on every block. The deque is the one place state is mutated in place: it is
+    an I/O buffer, private to this class, and drained by the owner.
     """
 
     def __init__(self, block_size: int = STREAM_BLOCK_SIZE) -> None:
@@ -40,7 +44,8 @@ class ZipStreamSink(io.RawIOBase):
         if block_size <= 0:
             raise ValueError("block_size must be positive")
         self._block_size = block_size
-        self._pending = bytearray()
+        self._chunks: Deque[memoryview] = deque()
+        self._pending = 0
         self._position = 0
 
     def writable(self) -> bool:
@@ -55,28 +60,42 @@ class ZipStreamSink(io.RawIOBase):
         return self._position
 
     def write(self, data) -> int:
-        view = memoryview(data)
-        self._pending += view
-        self._position += view.nbytes
-        return view.nbytes
+        # bytes() is free for bytes and a copy for any buffer the writer might
+        # reuse; the memoryview lets _take() slice it without copying.
+        chunk = memoryview(bytes(data))
+        self._chunks.append(chunk)
+        self._pending += chunk.nbytes
+        self._position += chunk.nbytes
+        return chunk.nbytes
 
     @property
     def pending_bytes(self) -> int:
         """Bytes written but not yet taken by the producer."""
-        return len(self._pending)
+        return self._pending
 
     def take_blocks(self) -> Iterator[bytes]:
         """Yield every complete block currently pending; the remainder stays."""
-        while len(self._pending) >= self._block_size:
-            block = bytes(self._pending[: self._block_size])
-            del self._pending[: self._block_size]
-            yield block
+        while self._pending >= self._block_size:
+            yield self._take(self._block_size)
 
     def take_all(self) -> bytes:
         """Return and clear everything pending (the tail after ZipFile.close())."""
-        tail = bytes(self._pending)
-        self._pending = bytearray()
-        return tail
+        return self._take(self._pending) if self._pending else b""
+
+    def _take(self, size: int) -> bytes:
+        parts = []
+        remaining = size
+        while remaining:
+            chunk = self._chunks.popleft()
+            if chunk.nbytes > remaining:
+                parts.append(chunk[:remaining])
+                self._chunks.appendleft(chunk[remaining:])
+                remaining = 0
+            else:
+                parts.append(chunk)
+                remaining -= chunk.nbytes
+        self._pending -= size
+        return b"".join(parts)
 
 
 def write_stream_entry(
@@ -84,25 +103,24 @@ def write_stream_entry(
     zip_path: str,
     chunks: Iterable[bytes],
     *,
-    expected_size: Optional[int] = None,
+    size: int,
     keep_bytes: bool = False,
 ) -> Optional[bytes]:
-    """Write ``chunks`` as one ZIP entry without materialising them first.
+    """Write ``chunks`` (``size`` bytes in total) as one ZIP entry.
 
-    ``expected_size`` (the object's Content-Length when known) only steers the
-    ZIP64 decision; an unknown size forces ZIP64 so an entry over 2 GiB cannot
-    fail at close time. With ``keep_bytes`` the content is also accumulated
-    and returned, for callers that still need the whole document afterwards
-    (the merged PDF). Returns the bytes when kept, else ``None``.
+    The size lets zipfile decide on ZIP64 up front, so an entry over 2 GiB
+    cannot fail at close time; in streaming mode the sizes actually written
+    are what land in the archive. With ``keep_bytes`` the content is also
+    accumulated and returned, for callers that still need the whole document
+    afterwards (the merged PDF). Returns the bytes when kept, else ``None``.
 
     Blocking (deflate + whatever ``chunks`` reads from): run in a worker thread.
     """
     info = zipfile.ZipInfo(zip_path, date_time=time.localtime(time.time())[:6])
     info.compress_type = zf.compression
-    if expected_size is not None:
-        info.file_size = expected_size
+    info.file_size = size
     kept = bytearray() if keep_bytes else None
-    with zf.open(info, "w", force_zip64=expected_size is None) as dest:
+    with zf.open(info, "w") as dest:
         for chunk in chunks:
             dest.write(chunk)
             if kept is not None:

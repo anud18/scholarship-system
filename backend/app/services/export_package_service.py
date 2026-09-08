@@ -10,6 +10,7 @@ import asyncio
 import io
 import logging
 import re
+import tempfile
 
 # `escape` is a pure string-escaping helper (replaces `<` → `&lt;` etc.) used
 # for sanitising values before they are placed inside reportlab Paragraph
@@ -31,6 +32,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.config import settings
 from app.models.application import Application
 from app.models.scholarship import ScholarshipType
 from app.services.export_summary_tables import build_embedded_summary_tables
@@ -43,13 +45,21 @@ from app.services.minio_service import MinIOService
 from app.services.pdf_fonts import CJK_FONT_NAME, ensure_cjk_font
 from app.services.pdf_merge import MergeItem, build_merged_pdf
 from app.services.zip_stream import COPY_CHUNK_SIZE, ZipStreamSink, write_stream_entry
+from app.utils.export_download import sanitise_filename_part
 
 logger = logging.getLogger(__name__)
 
 # Hard cap on applications per export: keeps one request's work (and the
 # reviewer's archive) within reason; above it the UI asks for a narrower filter.
-# Raised from 200 once the archive streamed instead of being built in RAM.
-MAX_EXPORT_APPLICATIONS = 1000
+# Tunable via EXPORT_PACKAGE_MAX_APPLICATIONS (default 1000; it was 200 while
+# the archive was still built in RAM).
+MAX_EXPORT_APPLICATIONS = settings.export_package_max_applications
+
+# Objects up to this size are spooled in memory before they are written into
+# the archive; bigger ones spill to a temp file. Spooling makes each entry
+# atomic: a storage stream that dies half-way leaves only an error placeholder,
+# never a truncated document under the student's real filename.
+SPOOL_MAX_MEMORY = 32 * 1024 * 1024
 
 # The per-student summary PDF shipped standalone AND as the first document of
 # the merged PDF, and the merged PDF that stitches it together with the
@@ -142,16 +152,11 @@ def _unique_zip_path(zf: zipfile.ZipFile, path: str) -> str:
         counter += 1
 
 
-def _write_fetch_error(
-    zf: zipfile.ZipFile, error_path: str, error_label: str, error: Exception, incomplete_entry: bool
-) -> str:
+def _write_fetch_error(zf: zipfile.ZipFile, error_path: str, error_label: str, error: Exception) -> str:
     """Write the `_錯誤_…txt` placeholder for a failed object copy and return the
     reason the merged PDF's placeholder page should show."""
     reason = str(error) or "無法自檔案儲存服務下載"
-    lines = [f"檔案下載失敗：{error_label}", f"錯誤：{reason}"]
-    if incomplete_entry:
-        lines.append("注意：下載途中中斷，ZIP 內同名檔案的內容不完整。")
-    zf.writestr(_unique_zip_path(zf, error_path), "\n".join(lines))
+    zf.writestr(_unique_zip_path(zf, error_path), f"檔案下載失敗：{error_label}\n錯誤：{reason}")
     return reason
 
 
@@ -164,51 +169,58 @@ def _copy_object_into_zip(
     error_label: str,
     keep_bytes: bool,
 ) -> Tuple[Optional[bytes], Optional[str]]:
-    """Copy one MinIO object into the ZIP at `zip_path`, chunk by chunk.
+    """Copy one MinIO object into the ZIP at `zip_path`.
 
-    Blocking (network + deflate) — call from a worker thread. Returns
-    (file_bytes, None) on success; file_bytes is only collected when
-    `keep_bytes` (the merged PDF needs the whole document), otherwise the
-    object flows through in COPY_CHUNK_SIZE pieces and never sits in memory
-    whole. On any failure writes a `_錯誤_…txt` placeholder at `error_path`
-    instead, so a single bad object never aborts the whole ZIP build, and
-    returns (None, error message) so the merged PDF's placeholder page can
-    show the same concrete reason.
+    Blocking (network + deflate) — call from a worker thread. The object is
+    spooled first (memory up to SPOOL_MAX_MEMORY, then disk) and only then
+    written as an entry, so a download that dies half-way never leaves a
+    partial file in the archive. Returns (file_bytes, None) on success;
+    file_bytes is only collected when `keep_bytes` (the merged PDF needs the
+    whole document). On any failure writes a `_錯誤_…txt` placeholder at
+    `error_path` instead, so a single bad object never aborts the whole ZIP
+    build, and returns (None, error message) so the merged PDF's placeholder
+    page can show the same concrete reason.
     """
     try:
-        response = minio.get_file_stream(object_name)
-    except Exception as e:
-        logger.exception("Failed to fetch file %s", object_name)
-        return None, _write_fetch_error(zf, error_path, error_label, e, incomplete_entry=False)
-
-    entry_path = _unique_zip_path(zf, zip_path)
-    try:
-        content_length = response.headers.get("Content-Length")
-        file_bytes = write_stream_entry(
-            zf,
-            entry_path,
-            response.stream(COPY_CHUNK_SIZE),
-            expected_size=int(content_length) if content_length else None,
-            keep_bytes=keep_bytes,
-        )
+        with tempfile.SpooledTemporaryFile(max_size=SPOOL_MAX_MEMORY) as spool:
+            size = _spool_object(minio, object_name, spool)
+            spool.seek(0)
+            file_bytes = write_stream_entry(
+                zf,
+                _unique_zip_path(zf, zip_path),
+                iter(lambda: spool.read(COPY_CHUNK_SIZE), b""),
+                size=size,
+                keep_bytes=keep_bytes,
+            )
         return file_bytes, None
     except Exception as e:
-        # A streamed archive cannot take back an entry whose header already
-        # left, so the placeholder says whether a truncated copy sits beside it.
-        logger.exception("Failed to stream file %s into the ZIP", object_name)
-        incomplete_entry = _zip_has_entry(zf, entry_path)
-        return None, _write_fetch_error(zf, error_path, error_label, e, incomplete_entry=incomplete_entry)
+        logger.exception("Failed to fetch file %s", object_name)
+        return None, _write_fetch_error(zf, error_path, error_label, e)
+
+
+def _spool_object(minio: MinIOService, object_name: str, spool) -> int:
+    """Stream one MinIO object into `spool` chunk by chunk; returns its size."""
+    response = minio.get_file_stream(object_name)
+    try:
+        size = 0
+        for chunk in response.stream(COPY_CHUNK_SIZE):
+            spool.write(chunk)
+            size += len(chunk)
+        return size
     finally:
         _release_quietly(response, object_name)
 
 
 def _release_quietly(response, object_name: str) -> None:
     """Close a storage response without letting a teardown error replace the
-    outcome: a half-consumed or already-reset connection can raise from
-    close()/release_conn(), and that must not abort the rest of the export."""
+    outcome, and hand the connection back to the pool even if close() raised:
+    a half-consumed or already-reset connection can raise from either call,
+    and that must neither leak the connection nor abort the rest of the export."""
     try:
-        response.close()
-        response.release_conn()
+        try:
+            response.close()
+        finally:
+            response.release_conn()
     except Exception:
         logger.warning("Failed to release storage connection for %s", object_name, exc_info=True)
 
@@ -249,10 +261,12 @@ def _build_zip_filename(
     scholarship_name: str, academic_year: int, semester: Optional[str], college_name: Optional[str]
 ) -> str:
     semester_label = {"first": "1", "second": "2", "annual": "0"}.get(semester, "0") if semester else "0"
+    # The shared download-filename scrubber: same character set as the ZIP-path
+    # sanitiser plus the `untitled` fallback every sibling export uses.
     return (
-        f"{_sanitize_filename(scholarship_name)}"
+        f"{sanitise_filename_part(scholarship_name)}"
         f"_申請資料_{academic_year}_{semester_label}"
-        f"_{_sanitize_filename(college_name or '全校')}.zip"
+        f"_{sanitise_filename_part(college_name or '全校')}.zip"
     )
 
 

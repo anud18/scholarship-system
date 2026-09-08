@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { logger } from "@/lib/utils/logger";
 import { buildFileProxyUrl } from "@/lib/api/modules/system-settings";
 import { previewMimeType } from "@/lib/utils";
-import { triggerFileDownload } from "@/lib/utils/download";
+import { triggerAttachmentDownload } from "@/lib/utils/download";
 import { User } from "@/types/user";
 import { useCollegeManagement } from "@/contexts/college-management-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -618,7 +618,7 @@ export function ApplicationReviewPanel({
       // download manager: it streams to disk with its own progress UI instead
       // of buffering the whole ZIP in JS memory. From here on the browser
       // owns the outcome — the precheck above caught what we could catch.
-      triggerFileDownload(downloadUrl, filename);
+      triggerAttachmentDownload(downloadUrl, filename);
 
       toast.info(
         locale === "zh"

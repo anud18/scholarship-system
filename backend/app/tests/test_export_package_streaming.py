@@ -113,7 +113,7 @@ async def test_peak_memory_stays_far_below_the_archive_size(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_storage_dropping_midstream_keeps_the_archive_valid_and_flags_the_entry(monkeypatch):
+async def test_storage_dropping_midstream_keeps_the_archive_valid_without_a_truncated_entry(monkeypatch):
     minio = FakeMinio(
         {"obj/toefl.pdf": _blank_pdf(), "obj/dies.pdf": os.urandom(4096)},
         chunk_size=1024,
@@ -125,13 +125,14 @@ async def test_storage_dropping_midstream_keeps_the_archive_valid_and_flags_the_
     with zipfile.ZipFile(await collect_zip(svc, plan)) as zf:
         assert zf.testzip() is None
         names = zf.namelist()
-        # The truncated copy is still a well-formed member (its header had
-        # already left the building), and the placeholder beside it says so.
-        assert "1000_A系/001_甲/001_甲_社團證明.pdf" in names
-        assert len(zf.read("1000_A系/001_甲/001_甲_社團證明.pdf")) == 1024
+        # Objects are spooled before their entry is opened, so nothing half
+        # written ever sits under the student's real filename — a reviewer
+        # cannot mistake a truncated PDF for the real document.
+        assert "1000_A系/001_甲/001_甲_社團證明.pdf" not in names
         note = zf.read("1000_A系/001_甲/_錯誤_找不到檔案_社團證明.txt").decode("utf-8")
-        assert "不完整" in note
         assert "connection reset" in note
+        # The other document and the rest of the student's folder are intact.
+        assert "1000_A系/001_甲/001_甲_語言檢定證明.pdf" in names
         # The merged PDF lists the document as a download failure, not silently short.
         merged = PdfReader(io.BytesIO(zf.read("1000_A系/001_甲/001_甲_申請資料合併檔.pdf")))
         last_page = merged.pages[-1].extract_text()

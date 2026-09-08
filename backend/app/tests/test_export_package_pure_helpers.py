@@ -383,10 +383,8 @@ class TestCopyObjectIntoZip:
             content = zf.read(self.ERROR_ENTRY).decode("utf-8")
             assert "object missing" in content
             assert "申請文件.pdf" in content
-            # Nothing was written for the entry, so no "incomplete copy" warning.
-            assert "不完整" not in content
 
-    def test_midstream_failure_flags_the_truncated_entry(self):
+    def test_midstream_failure_leaves_only_the_placeholder(self):
         import io
         import zipfile
         from unittest.mock import MagicMock
@@ -404,15 +402,16 @@ class TestCopyObjectIntoZip:
         with zipfile.ZipFile(buf, "w") as zf:
             returned = self._copy(zf, minio, keep_bytes=True)
 
-        # Pin: a streamed archive cannot take back the half-written entry, so
-        # the placeholder next to it says the copy is incomplete.
+        # Pin: the object is spooled before the entry is opened, so a stream
+        # that dies half-way leaves NO truncated document under the student's
+        # real filename — only the error placeholder, as before streaming.
         assert returned == (None, "connection reset")
         buf.seek(0)
         with zipfile.ZipFile(buf) as zf:
-            assert zf.read(self.ENTRY) == b"PDF-"
+            assert self.ENTRY not in zf.namelist()
             content = zf.read(self.ERROR_ENTRY).decode("utf-8")
             assert "connection reset" in content
-            assert "不完整" in content
+            assert "申請文件.pdf" in content
         fake_response.close.assert_called_once()
         fake_response.release_conn.assert_called_once()
 
@@ -431,8 +430,10 @@ class TestCopyObjectIntoZip:
             returned = self._copy(zf, minio, keep_bytes=True)
 
         # Pin: a raising close()/release_conn() must neither replace the
-        # result nor escape and abort the whole export at this student.
+        # result nor escape and abort the whole export at this student — and
+        # the connection still goes back to the pool.
         assert returned == (b"PDF-BYTES", None)
+        fake_response.release_conn.assert_called_once()
         buf.seek(0)
         with zipfile.ZipFile(buf) as zf:
             assert zf.read(self.ENTRY) == b"PDF-BYTES"

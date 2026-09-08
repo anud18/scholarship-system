@@ -22,6 +22,7 @@ from app.db.deps import get_db
 from app.models.user import User, UserRole
 from app.services.export_package_service import ExportPackageService, ExportPlan
 from app.services.minio_service import MinIOService
+from app.utils.export_download import ZIP_MEDIA_TYPE
 
 from ._helpers import _check_academic_year_permission, _check_scholarship_permission, normalize_semester_value
 
@@ -160,9 +161,14 @@ async def export_application_package(
             "data": {"filename": plan.zip_filename, "application_count": plan.application_count},
         }
 
+    # The stream does no DB work, but FastAPI tears request dependencies down
+    # only after the last byte is sent: release the pooled connection now
+    # rather than pinning it for a client-paced multi-GB download.
+    await db.close()
+
     stream_extra = {**log_extra, "export_filename": plan.zip_filename, "college_code": college_code}
     return StreamingResponse(
         _stream_with_audit(service, plan, stream_extra),
-        media_type="application/zip",
+        media_type=ZIP_MEDIA_TYPE,
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(plan.zip_filename)}"},
     )
