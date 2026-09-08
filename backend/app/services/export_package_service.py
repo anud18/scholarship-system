@@ -18,8 +18,9 @@ import re
 from xml.sax.saxutils import escape as xml_escape  # nosec B406
 import zipfile
 from collections import Counter, defaultdict
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import AsyncIterator, Dict, List, Optional, Tuple
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -41,8 +42,14 @@ from app.services.form_field_labels import (
 from app.services.minio_service import MinIOService
 from app.services.pdf_fonts import CJK_FONT_NAME, ensure_cjk_font
 from app.services.pdf_merge import MergeItem, build_merged_pdf
+from app.services.zip_stream import COPY_CHUNK_SIZE, ZipStreamSink, write_stream_entry
 
 logger = logging.getLogger(__name__)
+
+# Hard cap on applications per export: keeps one request's work (and the
+# reviewer's archive) within reason; above it the UI asks for a narrower filter.
+# Raised from 200 once the archive streamed instead of being built in RAM.
+MAX_EXPORT_APPLICATIONS = 1000
 
 # The per-student summary PDF shipped standalone AND as the first document of
 # the merged PDF, and the merged PDF that stitches it together with the
@@ -103,22 +110,22 @@ def _is_dynamic_document_type(file_type: Optional[str]) -> bool:
     return bool(file_type) and file_type not in FILE_TYPE_LABELS
 
 
+def _zip_has_entry(zf: zipfile.ZipFile, name: str) -> bool:
+    """getinfo() is a documented O(1) name lookup — no per-call namelist() scan."""
+    try:
+        zf.getinfo(name)
+        return True
+    except KeyError:
+        return False
+
+
 def _unique_zip_path(zf: zipfile.ZipFile, path: str) -> str:
     """Return `path`, suffixed with _2/_3/… if the ZIP already holds an entry
     at that name. zipfile happily writes duplicate names and most extractors
     then keep only the last one, silently shadowing the other file — e.g. an
     admin-configured dynamic document named exactly 申請資料合併檔 colliding with
     the merged PDF, or two same-type download failures sharing one error path."""
-
-    def _taken(name: str) -> bool:
-        # getinfo() is a documented O(1) name lookup — no per-call namelist() scan
-        try:
-            zf.getinfo(name)
-            return True
-        except KeyError:
-            return False
-
-    if not _taken(path):
+    if not _zip_has_entry(zf, path):
         return path
     stem, dot, ext = path.rpartition(".")
     # Only honour a real extension on the final component: a trailing dot
@@ -130,39 +137,123 @@ def _unique_zip_path(zf: zipfile.ZipFile, path: str) -> str:
     counter = 2
     while True:
         candidate = f"{stem}_{counter}.{ext}" if dot else f"{path}_{counter}"
-        if not _taken(candidate):
+        if not _zip_has_entry(zf, candidate):
             return candidate
         counter += 1
 
 
-async def _fetch_and_write(
+def _write_fetch_error(
+    zf: zipfile.ZipFile, error_path: str, error_label: str, error: Exception, incomplete_entry: bool
+) -> str:
+    """Write the `_錯誤_…txt` placeholder for a failed object copy and return the
+    reason the merged PDF's placeholder page should show."""
+    reason = str(error) or "無法自檔案儲存服務下載"
+    lines = [f"檔案下載失敗：{error_label}", f"錯誤：{reason}"]
+    if incomplete_entry:
+        lines.append("注意：下載途中中斷，ZIP 內同名檔案的內容不完整。")
+    zf.writestr(_unique_zip_path(zf, error_path), "\n".join(lines))
+    return reason
+
+
+def _copy_object_into_zip(
     zf: zipfile.ZipFile,
     minio: MinIOService,
     object_name: str,
     zip_path: str,
     error_path: str,
     error_label: str,
+    keep_bytes: bool,
 ) -> Tuple[Optional[bytes], Optional[str]]:
-    """Stream one MinIO object into the ZIP at `zip_path`.
+    """Copy one MinIO object into the ZIP at `zip_path`, chunk by chunk.
 
-    Returns (file_bytes, None) on success. On any failure, writes a
-    `_錯誤_…txt` placeholder at `error_path` instead so a single bad object
-    never aborts the whole ZIP build, and returns (None, error message) so
-    the merged PDF's placeholder page can show the same concrete reason.
+    Blocking (network + deflate) — call from a worker thread. Returns
+    (file_bytes, None) on success; file_bytes is only collected when
+    `keep_bytes` (the merged PDF needs the whole document), otherwise the
+    object flows through in COPY_CHUNK_SIZE pieces and never sits in memory
+    whole. On any failure writes a `_錯誤_…txt` placeholder at `error_path`
+    instead, so a single bad object never aborts the whole ZIP build, and
+    returns (None, error message) so the merged PDF's placeholder page can
+    show the same concrete reason.
     """
     try:
-        response = await asyncio.to_thread(minio.get_file_stream, object_name)
-        try:
-            file_bytes = await asyncio.to_thread(response.read)
-        finally:
-            response.close()
-            response.release_conn()
-        zf.writestr(_unique_zip_path(zf, zip_path), file_bytes)
+        response = minio.get_file_stream(object_name)
+    except Exception as e:
+        logger.exception("Failed to fetch file %s", object_name)
+        return None, _write_fetch_error(zf, error_path, error_label, e, incomplete_entry=False)
+
+    entry_path = _unique_zip_path(zf, zip_path)
+    try:
+        content_length = response.headers.get("Content-Length")
+        file_bytes = write_stream_entry(
+            zf,
+            entry_path,
+            response.stream(COPY_CHUNK_SIZE),
+            expected_size=int(content_length) if content_length else None,
+            keep_bytes=keep_bytes,
+        )
         return file_bytes, None
     except Exception as e:
-        logger.exception(f"Failed to fetch file {object_name}")
-        zf.writestr(_unique_zip_path(zf, error_path), f"檔案下載失敗：{error_label}\n錯誤：{str(e)}")
-        return None, str(e) or "無法自檔案儲存服務下載"
+        # A streamed archive cannot take back an entry whose header already
+        # left, so the placeholder says whether a truncated copy sits beside it.
+        logger.exception("Failed to stream file %s into the ZIP", object_name)
+        incomplete_entry = _zip_has_entry(zf, entry_path)
+        return None, _write_fetch_error(zf, error_path, error_label, e, incomplete_entry=incomplete_entry)
+    finally:
+        response.close()
+        response.release_conn()
+
+
+def _group_by_department(applications: List[Application]) -> Dict[str, List[Application]]:
+    """Folder key per application: `{depno}_{depname}` from the SIS term snapshot."""
+    dept_groups: Dict[str, List[Application]] = defaultdict(list)
+    for app in applications:
+        student = app.student_data or {}
+        dep_no = student.get("trm_depno", "unknown")
+        dep_name = student.get("trm_depname", "未知系所")
+        dept_groups[f"{_sanitize_filename(dep_no)}_{_sanitize_filename(dep_name)}"].append(app)
+    return dept_groups
+
+
+def _first_college_name(applications: List[Application]) -> Optional[str]:
+    """College display name from the first application whose snapshot carries one."""
+    for app in applications:
+        if app.student_data and app.student_data.get("trm_academyname"):
+            return app.student_data["trm_academyname"]
+    return None
+
+
+def _build_zip_filename(
+    scholarship_name: str, academic_year: int, semester: Optional[str], college_name: Optional[str]
+) -> str:
+    semester_label = {"first": "1", "second": "2", "annual": "0"}.get(semester, "0") if semester else "0"
+    return (
+        f"{_sanitize_filename(scholarship_name)}"
+        f"_申請資料_{academic_year}_{semester_label}"
+        f"_{_sanitize_filename(college_name or '全校')}.zip"
+    )
+
+
+@dataclass(frozen=True)
+class ExportPlan:
+    """Everything the streaming phase needs, resolved before the response starts.
+
+    prepare_export() raises every user-facing rejection (unknown scholarship,
+    no data, over the cap) while a 4xx can still be sent, and iter_export_zip()
+    then works purely from this plan — no DB access once bytes are flowing.
+    """
+
+    scholarship_name: str
+    academic_year: int
+    semester: Optional[str]
+    college_name: Optional[str]
+    dept_groups: Dict[str, List[Application]]
+    field_labels: Dict[str, str]
+    summary_tables: Dict[str, bytes]
+    zip_filename: str
+
+    @property
+    def application_count(self) -> int:
+        return sum(len(apps) for apps in self.dept_groups.values())
 
 
 class ExportPackageService:
@@ -171,59 +262,42 @@ class ExportPackageService:
         self.minio = minio_service
         ensure_cjk_font()
 
-    async def generate_export_zip(
+    async def prepare_export(
         self,
         scholarship_type_id: int,
         academic_year: int,
         semester: Optional[str],
         college_code: Optional[str],
-    ) -> Tuple[io.BytesIO, str]:
-        """
-        Generate a ZIP file with all application materials.
+    ) -> ExportPlan:
+        """Validate the request and load everything the archive needs.
 
-        Returns:
-            Tuple of (BytesIO buffer, suggested filename)
+        Raises ValueError for the user-facing rejections (mapped to 400 by the
+        endpoint). All DB work — scholarship type, applications with their
+        files, form-field labels, the embedded 申請總表 workbooks — happens here.
         """
-        # 1. Get scholarship type (name drives ZIP/PDF filenames; object passed to table builder)
+        # 1. Scholarship type (name drives ZIP/PDF filenames; object passed to the table builder)
         scholarship_type = await self._get_scholarship_type(scholarship_type_id)
-        scholarship_name = scholarship_type.name
 
-        # 2. Query applications with files
+        # 2. Applications with their files
         applications = await self._query_applications(scholarship_type_id, academic_year, semester, college_code)
-
         if not applications:
             raise ValueError("無申請資料可匯出")
+        if len(applications) > MAX_EXPORT_APPLICATIONS:
+            raise ValueError(
+                f"申請筆數超過上限 ({MAX_EXPORT_APPLICATIONS})，請縮小篩選範圍（目前 {len(applications)} 筆）"
+            )
 
-        if len(applications) > 200:
-            raise ValueError(f"申請筆數超過上限 (200)，請縮小篩選範圍（目前 {len(applications)} 筆）")
-
-        # 2.5 zh-TW labels for the submitted form fields. Loaded once, after the
-        # rejection guards above, because _generate_summary_pdf is sync and runs
-        # inside the per-student loop.
+        # 2.5 zh-TW labels for the submitted form fields, loaded once for the
+        # per-student summary PDFs (built later, off the event loop).
         field_labels = await load_form_field_labels(self.db, scholarship_type.code)
 
-        # Derive college name from first application's student_data
-        college_name = None
-        if college_code:
-            for app in applications:
-                if app.student_data:
-                    college_name = app.student_data.get("trm_academyname")
-                    if college_name:
-                        break
+        college_name = _first_college_name(applications) if college_code else None
+        dept_groups = _group_by_department(applications)
 
-        # 3. Group by department
-        dept_groups: Dict[str, List[Application]] = defaultdict(list)
-        for app in applications:
-            student = app.student_data or {}
-            dep_no = student.get("trm_depno", "unknown")
-            dep_name = student.get("trm_depname", "未知系所")
-            key = f"{_sanitize_filename(dep_no)}_{_sanitize_filename(dep_name)}"
-            dept_groups[key].append(app)
-
-        # 3.5 Build the embedded 申請總表 workbooks from the SAME dept_groups.
-        # Best-effort: the summary tables are a secondary artifact, so a wholesale
-        # failure here (e.g. an aux-data DB error before the per-table try/except)
-        # must not lose the primary materials ZIP — degrade to an error placeholder.
+        # 3. Embedded 申請總表 workbooks from the SAME dept_groups. Best-effort:
+        # a wholesale failure (e.g. an aux-data DB error before the per-table
+        # try/except) must not lose the primary materials ZIP — degrade to an
+        # error placeholder.
         try:
             summary_tables = await build_embedded_summary_tables(
                 self.db, scholarship_type, dept_groups, college_name, academic_year
@@ -232,28 +306,40 @@ class ExportPackageService:
             logger.exception("embedded summary tables generation failed wholesale")
             summary_tables = {"_錯誤_申請總表生成失敗.txt": f"申請總表生成失敗：{e}".encode("utf-8")}
 
-        # 4. Build ZIP
-        buf = io.BytesIO()
-        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-            for dept_folder, apps in sorted(dept_groups.items()):
-                for app in apps:
-                    await self._add_application_to_zip(
-                        zf, dept_folder, app, scholarship_name, academic_year, semester, field_labels
-                    )
-            for inner_path, payload in summary_tables.items():
-                zf.writestr(inner_path, payload)
-
-        buf.seek(0)
-
-        # 5. Build filename
-        semester_label = {"first": "1", "second": "2", "annual": "0"}.get(semester, "0") if semester else "0"
-        zip_filename = (
-            f"{_sanitize_filename(scholarship_name)}"
-            f"_申請資料_{academic_year}_{semester_label}"
-            f"_{_sanitize_filename(college_name or '全校')}.zip"
+        return ExportPlan(
+            scholarship_name=scholarship_type.name,
+            academic_year=academic_year,
+            semester=semester,
+            college_name=college_name,
+            dept_groups=dept_groups,
+            field_labels=field_labels,
+            summary_tables=summary_tables,
+            zip_filename=_build_zip_filename(scholarship_type.name, academic_year, semester, college_name),
         )
 
-        return buf, zip_filename
+    async def iter_export_zip(self, plan: ExportPlan) -> AsyncIterator[bytes]:
+        """Stream the archive for `plan` in STREAM_BLOCK_SIZE chunks.
+
+        Each application is assembled in a worker thread (MinIO I/O, deflate,
+        reportlab and pypdf are all blocking) and whatever it produced is then
+        drained from the sink, so the ZIP is never held in memory as a whole
+        and the client sees bytes from the first student onward (issue #1376).
+        """
+        sink = ZipStreamSink()
+        with zipfile.ZipFile(sink, "w", zipfile.ZIP_DEFLATED) as zf:
+            for dept_folder, apps in sorted(plan.dept_groups.items()):
+                for app in apps:
+                    await asyncio.to_thread(self._add_application_to_zip, zf, dept_folder, app, plan)
+                    for block in sink.take_blocks():
+                        yield block
+            for inner_path, payload in plan.summary_tables.items():
+                zf.writestr(inner_path, payload)
+        # Closing the archive appended the central directory; flush what is left.
+        for block in sink.take_blocks():
+            yield block
+        tail = sink.take_all()
+        if tail:
+            yield tail
 
     async def _get_scholarship_type(self, scholarship_type_id: int) -> ScholarshipType:
         """Load the full ScholarshipType (with sub_type_configs) — name drives the
@@ -305,17 +391,22 @@ class ExportPackageService:
 
         return applications
 
-    async def _add_application_to_zip(
+    def _add_application_to_zip(
         self,
         zf: zipfile.ZipFile,
         dept_folder: str,
         app: Application,
-        scholarship_name: str,
-        academic_year: int,
-        semester: Optional[str],
-        field_labels: Dict[str, str],
+        plan: ExportPlan,
     ) -> None:
-        """Add one application's files + summary PDF + merged PDF to the ZIP."""
+        """Add one application's files + summary PDF + merged PDF to the ZIP.
+
+        Blocking end to end (reportlab, MinIO I/O, deflate, pypdf): runs in a
+        worker thread from iter_export_zip so the event loop stays free.
+        """
+        scholarship_name = plan.scholarship_name
+        academic_year = plan.academic_year
+        semester = plan.semester
+        field_labels = plan.field_labels
         student = app.student_data or {}
         std_code = _sanitize_filename(student.get("std_stdcode", "unknown"))
         std_name = _sanitize_filename(student.get("std_cname", "未知"))
@@ -378,16 +469,20 @@ class ExportPackageService:
             else:
                 filename = f"{student_prefix}_{label}{ext}"
 
-            file_bytes, fetch_error = await _fetch_and_write(
+            is_dynamic = _is_dynamic_document_type(ft)
+            file_bytes, fetch_error = _copy_object_into_zip(
                 zf,
                 self.minio,
                 object_name=af.object_name,
                 zip_path=f"{base_path}/{_sanitize_filename(filename)}",
                 error_path=f"{base_path}/_錯誤_找不到檔案_{_sanitize_filename(label)}.txt",
                 error_label=af.original_filename or af.object_name or "未知檔案",
+                # Only dynamic documents are needed whole (for the merged PDF);
+                # fixed types stream straight through without landing in memory.
+                keep_bytes=is_dynamic,
             )
 
-            if _is_dynamic_document_type(ft):
+            if is_dynamic:
                 item_label = f"{label} {count}" if type_totals[ft] > 1 else label
                 dynamic_items.append(
                     MergeItem(
@@ -405,10 +500,9 @@ class ExportPackageService:
         semester_map = {"first": "第一學期", "second": "第二學期"}
         semester_label = semester_map.get(semester, "全學年") if semester else "全學年"
         try:
-            # to_thread: pypdf/Pillow/reportlab do seconds of pure CPU per
-            # student — inline they would stall the whole event loop.
-            merged_bytes = await asyncio.to_thread(
-                build_merged_pdf,
+            # pypdf/Pillow/reportlab do seconds of pure CPU per student; this
+            # whole method already runs off the event loop (see iter_export_zip).
+            merged_bytes = build_merged_pdf(
                 title=MERGED_PDF_LABEL,
                 subtitle_lines=[
                     f"{scholarship_name} {academic_year}學年度 {semester_label}",

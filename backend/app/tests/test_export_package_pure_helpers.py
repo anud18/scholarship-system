@@ -27,10 +27,11 @@ from app.services.export_package_service import (
     _label_for_file_type,
     _is_dynamic_document_type,
     _unique_zip_path,
-    _fetch_and_write,
+    _copy_object_into_zip,
     FILE_TYPE_LABELS,
     DEGREE_LABELS,
 )
+from app.services.zip_stream import COPY_CHUNK_SIZE
 
 
 class TestSanitizeFilename:
@@ -281,48 +282,84 @@ class TestUniqueZipPath:
         assert _unique_zip_path(zf, "a/.config") == "a/.config_2"
 
 
-class TestFetchAndWrite:
-    """Pin: the shared MinIO fetch-and-write used by the app.files
-    loop. On success the bytes land at zip_path; on any MinIO error
-    a placeholder .txt lands at error_path instead (the ZIP build
-    never aborts)."""
+class TestCopyObjectIntoZip:
+    """Pin: the shared MinIO copy used by the app.files loop. On success the
+    object is streamed chunk-wise into zip_path (bytes returned only when
+    keep_bytes — the merged PDF needs them whole); on any MinIO error a
+    placeholder .txt lands at error_path instead (the ZIP build never
+    aborts)."""
 
-    def test_success_writes_bytes_and_releases_connection(self):
-        import asyncio
+    ENTRY = "dept/stu/stu_申請文件.pdf"
+    ERROR_ENTRY = "dept/stu/_錯誤_找不到檔案_申請文件.txt"
+
+    @staticmethod
+    def _response(payload, chunks):
+        from unittest.mock import MagicMock
+
+        fake = MagicMock()
+        fake.headers = {"Content-Length": str(len(payload))}
+        fake.stream.return_value = iter(chunks)
+        return fake
+
+    @classmethod
+    def _copy(cls, zf, minio, keep_bytes):
+        return _copy_object_into_zip(
+            zf,
+            minio,
+            object_name="application-documents/12_x.pdf",
+            zip_path=cls.ENTRY,
+            error_path=cls.ERROR_ENTRY,
+            error_label="申請文件.pdf",
+            keep_bytes=keep_bytes,
+        )
+
+    def test_success_streams_chunks_keeps_bytes_and_releases_connection(self):
         import io
         import zipfile
         from unittest.mock import MagicMock
 
-        fake_response = MagicMock()
-        fake_response.read.return_value = b"PDF-BYTES"
+        fake_response = self._response(b"PDF-BYTES", [b"PDF-", b"BYTES"])
         minio = MagicMock()
         minio.get_file_stream.return_value = fake_response
 
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w") as zf:
-            returned = asyncio.run(
-                _fetch_and_write(
-                    zf,
-                    minio,
-                    object_name="application-documents/12_x.pdf",
-                    zip_path="dept/stu/stu_申請文件.pdf",
-                    error_path="dept/stu/_錯誤_找不到檔案_申請文件.txt",
-                    error_label="申請文件.pdf",
-                )
-            )
+            returned = self._copy(zf, minio, keep_bytes=True)
 
         # Pin: success returns (bytes, None) — the bytes are reused for the
         # merged dynamic-documents PDF without a second MinIO round-trip.
         assert returned == (b"PDF-BYTES", None)
+        # Pin #1376: chunked stream(), never a whole-object read().
+        fake_response.stream.assert_called_once_with(COPY_CHUNK_SIZE)
+        fake_response.read.assert_not_called()
         buf.seek(0)
         with zipfile.ZipFile(buf) as zf:
-            assert zf.read("dept/stu/stu_申請文件.pdf") == b"PDF-BYTES"
-            assert "dept/stu/_錯誤_找不到檔案_申請文件.txt" not in zf.namelist()
+            assert zf.read(self.ENTRY) == b"PDF-BYTES"
+            assert self.ERROR_ENTRY not in zf.namelist()
         fake_response.close.assert_called_once()
         fake_response.release_conn.assert_called_once()
 
-    def test_failure_writes_error_placeholder(self):
-        import asyncio
+    def test_fixed_type_copy_returns_no_bytes(self):
+        import io
+        import zipfile
+        from unittest.mock import MagicMock
+
+        fake_response = self._response(b"PDF-BYTES", [b"PDF-", b"BYTES"])
+        minio = MagicMock()
+        minio.get_file_stream.return_value = fake_response
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            returned = self._copy(zf, minio, keep_bytes=False)
+
+        # Pin: fixed-type documents flow straight into the archive; nothing is
+        # retained in memory for them.
+        assert returned == (None, None)
+        buf.seek(0)
+        with zipfile.ZipFile(buf) as zf:
+            assert zf.read(self.ENTRY) == b"PDF-BYTES"
+
+    def test_fetch_failure_writes_error_placeholder(self):
         import io
         import zipfile
         from unittest.mock import MagicMock
@@ -332,16 +369,7 @@ class TestFetchAndWrite:
 
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w") as zf:
-            returned = asyncio.run(
-                _fetch_and_write(
-                    zf,
-                    minio,
-                    object_name="application-documents/12_x.pdf",
-                    zip_path="dept/stu/stu_申請文件.pdf",
-                    error_path="dept/stu/_錯誤_找不到檔案_申請文件.txt",
-                    error_label="申請文件.pdf",
-                )
-            )
+            returned = self._copy(zf, minio, keep_bytes=True)
 
         # Pin: failure returns (None, error message) — the caller renders a
         # download-failure placeholder page in the merged PDF carrying the
@@ -350,8 +378,40 @@ class TestFetchAndWrite:
         buf.seek(0)
         with zipfile.ZipFile(buf) as zf:
             names = zf.namelist()
-            assert "dept/stu/stu_申請文件.pdf" not in names
-            assert "dept/stu/_錯誤_找不到檔案_申請文件.txt" in names
-            content = zf.read("dept/stu/_錯誤_找不到檔案_申請文件.txt").decode("utf-8")
+            assert self.ENTRY not in names
+            assert self.ERROR_ENTRY in names
+            content = zf.read(self.ERROR_ENTRY).decode("utf-8")
             assert "object missing" in content
             assert "申請文件.pdf" in content
+            # Nothing was written for the entry, so no "incomplete copy" warning.
+            assert "不完整" not in content
+
+    def test_midstream_failure_flags_the_truncated_entry(self):
+        import io
+        import zipfile
+        from unittest.mock import MagicMock
+
+        def _chunks():
+            yield b"PDF-"
+            raise ConnectionError("connection reset")
+
+        fake_response = self._response(b"PDF-BYTES", [])
+        fake_response.stream.return_value = _chunks()
+        minio = MagicMock()
+        minio.get_file_stream.return_value = fake_response
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            returned = self._copy(zf, minio, keep_bytes=True)
+
+        # Pin: a streamed archive cannot take back the half-written entry, so
+        # the placeholder next to it says the copy is incomplete.
+        assert returned == (None, "connection reset")
+        buf.seek(0)
+        with zipfile.ZipFile(buf) as zf:
+            assert zf.read(self.ENTRY) == b"PDF-"
+            content = zf.read(self.ERROR_ENTRY).decode("utf-8")
+            assert "connection reset" in content
+            assert "不完整" in content
+        fake_response.close.assert_called_once()
+        fake_response.release_conn.assert_called_once()
