@@ -128,30 +128,7 @@ If you see `LookupError: 'value' is not among the defined enum values`:
 
 ### 6. Application ID Format
 
-**Sequential Application Numbering**: Application IDs follow a structured format for better tracking and management.
-
-#### Format Specification
-```
-APP-{academic_year}-{semester_code}-{sequence:05d}
-
-Examples:
-- APP-113-1-00001 (Academic Year 113, First Semester, Sequence 1)
-- APP-113-2-00125 (Academic Year 113, Second Semester, Sequence 125)
-- APP-114-0-00001 (Academic Year 114, Annual, Sequence 1)
-```
-
-#### Semester Codes
-- `1`: First Semester (`first`)
-- `2`: Second Semester (`second`)
-- `0`: Yearly Scholarships (`yearly`)
-
-#### Implementation Details
-- **Sequence Management**: Each (academic_year, semester) combination has an independent sequence counter
-- **Database Table**: `application_sequences` stores the last used sequence number
-- **Concurrency Safety**: Uses database-level row locking (`FOR UPDATE`) to prevent duplicate numbers
-- **Auto-Creation**: Sequence records are created automatically when first application is made
-
-Implementation: `backend/app/models/application_sequence.py` + `_generate_app_id` in `backend/app/services/application_service.py`.
+Application IDs are `APP-{academic_year}-{semester_code}-{sequence:05d}` with an independent, row-locked sequence per (academic_year, semester). Implementation: `backend/app/models/application_sequence.py` + `_generate_app_id` in `backend/app/services/application_service.py`.
 
 ### 7. Application Data Structure Principles
 
@@ -183,18 +160,6 @@ Implementation: `backend/app/models/application_sequence.py` + `_generate_app_id
 #### Review Data Principles
 **No Scoring System**: Review mechanism simplified to recommendation/ranking mode.
 
-**Application Table**:
-- ❌ Removed: `review_score`, `review_comments`, `rejection_reason`, `priority_score`, `college_ranking_score`
-- ✅ Kept: `final_ranking_position` (position number, not score)
-
-**ApplicationReview Table**:
-- ❌ Removed: `score`, `criteria_scores`
-- ✅ Kept: `comments`, `recommendation`, `decision_reason` (包含拒絕原因)
-
-**CollegeReview Table**:
-- ❌ Removed: `ranking_score`, `academic_score`, `professor_review_score`, etc.
-- ✅ Kept: `preliminary_rank`, `final_rank` (positions, not scores)
-
 **Review Flow**:
 1. Professor Review: Recommend (yes/no) + comments
 2. College Review: Ranking position + comments
@@ -214,36 +179,6 @@ CI validates type sync automatically. Backend must be running on `localhost:8000
 ## Database Initialization & Migration Standards
 
 **ALWAYS** rebuild the database with `./scripts/reset_database.sh` (`--dry-run` to preview) — never by hand. Every migration MUST include existence checks before DDL. Full rules, examples and the pre-migration test checklist: `backend/CLAUDE.md`.
-
-## Path Security & Backslash Handling
-
-**CRITICAL**: Always validate file paths to prevent path traversal attacks.
-
-### Path Traversal Prevention
-```python
-# ✅ CORRECT - Triple validation
-if ".." in filename or "/" in filename or "\\" in filename:
-    raise HTTPException(status_code=400, detail="無效的檔案名稱")
-
-if not re.match(r"^[a-zA-Z0-9_\-\.]+$", filename):
-    raise HTTPException(status_code=400, detail="檔案名稱包含無效字元")
-
-resolved_path = os.path.abspath(file_path)
-expected_dir = os.path.abspath(os.path.join(upload_base, bank_docs_dir))
-if not resolved_path.startswith(expected_dir):
-    raise HTTPException(status_code=403, detail="存取被拒絕")
-```
-
-### Security Checklist
-- [ ] Check for `..` (parent directory traversal)
-- [ ] Check for `/` (absolute path injection)
-- [ ] Check for `\` (Windows path separator)
-- [ ] Validate with regex pattern `^[a-zA-Z0-9_\-\.]+$`
-- [ ] Verify resolved absolute path is within expected directory
-
-## Regex Injection Prevention
-
-**CRITICAL**: Never use `re.escape()` on admin-provided validation patterns (it breaks them), and never call `re.match()`/`re.search()` on them directly — always use the safe wrappers in `backend/app/core/regex_validator.py` (`validate_regex_pattern()`, `safe_regex_match()`, `safe_regex_search()`). For the full validation architecture, ReDoS rules, CodeQL `filter-sarif` suppression workflow, and integration examples, use the **regex-security** skill.
 
 ## File Upload & Preview Architecture
 

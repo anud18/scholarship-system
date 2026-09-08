@@ -38,16 +38,6 @@ Convert Pydantic schemas with `.model_dump()` (v2). `PaginatedResponse` is **not
 
 The frontend `api.ts` auto-detects this shape (`"success" in data && "message" in data`), so a non-wrapped endpoint silently falls through to the raw-body path.
 
-### Migration Checklist
-When standardizing existing endpoints:
-- [ ] Remove `response_model=` parameter from `@router` decorator
-- [ ] Wrap return statement in `{success, message, data}` dict format
-- [ ] Convert Pydantic schemas using `.model_dump()`
-- [ ] Remove unused imports (MessageResponse, specific response models)
-- [ ] Run `python -m black` for auto-formatting
-- [ ] Verify with `python -m flake8` (check F401 unused imports)
-- [ ] Test endpoint returns expected format
-
 ## Database Initialization & Migration Standards
 
 ### Database Volume Recreation
@@ -75,25 +65,6 @@ def upgrade() -> None:
 def upgrade() -> None:
     op.create_table('new_table', ...)  # May fail if exists
 ```
-
-### Database Constraint Requirements
-Ensure all constraints used in seed scripts exist in SQLAlchemy models:
-
-```python
-# ✅ CORRECT - Define constraints for ON CONFLICT
-class ApplicationField(Base):
-    __tablename__ = "application_fields"
-    __table_args__ = (
-        UniqueConstraint('scholarship_type', 'field_name', name='uq_application_field_type_name'),
-    )
-```
-
-### Migration Testing
-Before creating any migration:
-- Test on fresh database using `./scripts/reset_database.sh`
-- Include existence checks for all DDL operations
-- Verify seed scripts work with new constraints
-- Test rollback functionality
 
 ## Testing, Lint & CI Standards
 
@@ -136,3 +107,33 @@ python -m pytest app/tests/<touched_file> -p no:cacheprovider   # in the dev con
 
 - **Eager-load to-one relationships read inside loops.** A `db.query(Application).all()` whose rows later read `application.student` / `application.scholarship_configuration.scholarship_type` in a loop is N+1. Add `.options(joinedload(Application.student), joinedload(Application.scholarship_configuration).joinedload(...))` (many-to-one → `joinedload` is safe, no row multiplication).
 - **Index foreign keys and audit-trail lookups.** PostgreSQL does NOT auto-index FKs. Index columns filtered/ordered on hot paths (e.g. `applications.scholarship_configuration_id`; composite `audit_logs(resource_type, resource_id, created_at)`), and declare them in the model `__table_args__` so autogenerate stays in sync.
+
+## Path Security & Backslash Handling
+
+**CRITICAL**: Always validate file paths to prevent path traversal attacks.
+
+### Path Traversal Prevention
+```python
+# ✅ CORRECT - Triple validation
+if ".." in filename or "/" in filename or "\\" in filename:
+    raise HTTPException(status_code=400, detail="無效的檔案名稱")
+
+if not re.match(r"^[a-zA-Z0-9_\-\.]+$", filename):
+    raise HTTPException(status_code=400, detail="檔案名稱包含無效字元")
+
+resolved_path = os.path.abspath(file_path)
+expected_dir = os.path.abspath(os.path.join(upload_base, bank_docs_dir))
+if not resolved_path.startswith(expected_dir):
+    raise HTTPException(status_code=403, detail="存取被拒絕")
+```
+
+### Security Checklist
+- [ ] Check for `..` (parent directory traversal)
+- [ ] Check for `/` (absolute path injection)
+- [ ] Check for `\` (Windows path separator)
+- [ ] Validate with regex pattern `^[a-zA-Z0-9_\-\.]+$`
+- [ ] Verify resolved absolute path is within expected directory
+
+## Regex Injection Prevention
+
+**CRITICAL**: Never use `re.escape()` on admin-provided validation patterns (it breaks them), and never call `re.match()`/`re.search()` on them directly — always use the safe wrappers in `backend/app/core/regex_validator.py` (`validate_regex_pattern()`, `safe_regex_match()`, `safe_regex_search()`). For the full validation architecture, ReDoS rules, CodeQL `filter-sarif` suppression workflow, and integration examples, use the **regex-security** skill.
