@@ -337,6 +337,15 @@ export interface WhitelistResponse {
 // Additional types for backward compatibility
 // ============================================
 
+/** One sub-type's display name for a specific configuration (academic year). */
+export interface SubTypeLabel {
+  name: string;
+  name_en?: string;
+}
+
+/** {sub_type_code: label} — e.g. {"moe_1w": {name: "115學年度教育部…", name_en: "AY115 MOE…"}} */
+export type SubTypeLabels = Record<string, SubTypeLabel>;
+
 export interface ScholarshipConfiguration {
   id: number;
   scholarship_type_id: number;
@@ -360,6 +369,8 @@ export interface ScholarshipConfiguration {
   total_quota?: number;
   quotas?: Record<string, Record<string, number>>;
   project_numbers?: Record<string, string>;
+  /** Per-year sub-type display names overriding the base sub-type config names. */
+  sub_type_labels?: SubTypeLabels | null;
   shared_quota_sources?: { source_config_code: string; sub_types: string[] }[];
   whitelist_student_ids?: Record<string, number[]>;
   hasWhitelist?: boolean;
@@ -1226,6 +1237,7 @@ export interface ScholarshipConfigurationFormData {
   total_quota?: number;
   quotas?: Record<string, any> | string;
   project_numbers?: Record<string, string> | string;
+  sub_type_labels?: SubTypeLabels;
   shared_quota_sources?: { source_config_code: string; sub_types: string[] }[] | string;
   whitelist_student_ids?: Record<string, number[]> | string;
   renewal_application_start_date?: string;

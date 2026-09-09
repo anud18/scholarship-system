@@ -21,6 +21,27 @@ class SharedQuotaSource(BaseModel):
     sub_types: List[str] = Field(..., min_length=1)
 
 
+class SubTypeLabel(BaseModel):
+    """Per-configuration display name of one sub-type, overriding the
+    year-agnostic ``scholarship_sub_type_configs.name`` for this period."""
+
+    name: str = Field(..., min_length=1, max_length=200)
+    name_en: Optional[str] = Field(None, max_length=200)
+
+
+def _normalize_sub_type_label_codes(v):
+    """Sub-type codes are configuration-driven strings; store them lowercase/stripped."""
+    if v is None:
+        return v
+    normalized = {}
+    for code, label in v.items():
+        clean_code = code.lower().strip()
+        if not clean_code:
+            raise ValueError("子類型代碼不可為空")
+        normalized[clean_code] = label
+    return normalized
+
+
 class ScholarshipConfigurationBase(BaseModel):
     """Base schema for scholarship configuration"""
 
@@ -42,6 +63,9 @@ class ScholarshipConfigurationBase(BaseModel):
 
     # 計畫編號 — flattened to own-year only {sub_type: code}
     project_numbers: Optional[Dict[str, str]] = None
+
+    # 本年度子類型顯示名稱覆寫 {sub_type: {"name": ..., "name_en": ...}}
+    sub_type_labels: Optional[Dict[str, SubTypeLabel]] = None
 
     # 跨配置共享配額來源（取代 prior_quota_years）
     shared_quota_sources: Optional[List[SharedQuotaSource]] = None
@@ -116,6 +140,11 @@ class ScholarshipConfigurationBase(BaseModel):
                     raise ValueError(f"配額總和 ({college_total}) 超過總配額 ({total_quota})")
         return v
 
+    @field_validator("sub_type_labels")
+    @classmethod
+    def validate_sub_type_labels(cls, v):
+        return _normalize_sub_type_label_codes(v)
+
     @model_validator(mode="after")
     def validate_renewal_review_dates(self):
         """Renewal review dates must not be set unless the matching renewal
@@ -168,6 +197,9 @@ class ScholarshipConfigurationUpdate(BaseModel):
     total_quota: Optional[int] = Field(None, ge=0)
     quotas: Optional[Dict[str, Dict[str, int]]] = None
 
+    # 本年度子類型顯示名稱覆寫 {sub_type: {"name": ..., "name_en": ...}}
+    sub_type_labels: Optional[Dict[str, SubTypeLabel]] = None
+
     # 金額設定 (從 ScholarshipType 移至此處)
     amount: Optional[int] = Field(None, gt=0, description="獎學金金額（整數）")
     currency: Optional[str] = Field(None, max_length=10)
@@ -209,6 +241,11 @@ class ScholarshipConfigurationUpdate(BaseModel):
 
     # 版本控制
     version: Optional[str] = None
+
+    @field_validator("sub_type_labels")
+    @classmethod
+    def validate_sub_type_labels(cls, v):
+        return _normalize_sub_type_label_codes(v)
 
 
 class ScholarshipConfigurationResponse(ScholarshipConfigurationBase):

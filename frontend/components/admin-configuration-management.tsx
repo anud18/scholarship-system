@@ -60,6 +60,7 @@ import apiClient, {
 } from "@/lib/api";
 import { WhitelistManagementDialog } from "./whitelist-management-dialog";
 import { ConfigToggleSwitch } from "@/components/admin/config/ConfigToggleSwitch";
+import { SubTypeLabelsEditor } from "@/components/admin/config/SubTypeLabelsEditor";
 import { QuotaExcelButtons } from "@/components/admin/quota-import/QuotaExcelButtons";
 import { QuotaManagementMode, getQuotaManagementModeLabel } from "@/lib/enums";
 import { toast } from "sonner";
@@ -562,6 +563,7 @@ export function AdminConfigurationManagement({
       total_quota: 0,
       quotas: {},
       project_numbers: {},
+      sub_type_labels: {},
       shared_quota_sources: [],
       whitelist_student_ids: {},
     });
@@ -606,6 +608,7 @@ export function AdminConfigurationManagement({
       total_quota: config.total_quota,
       quotas: config.quotas,
       project_numbers: config.project_numbers || {},
+      sub_type_labels: config.sub_type_labels || {},
       shared_quota_sources: config.shared_quota_sources || [],
       whitelist_student_ids: config.whitelist_student_ids,
       renewal_application_start_date: formatDateTimeLocal(
@@ -1080,6 +1083,26 @@ export function AdminConfigurationManagement({
                   <p className="text-sm text-muted-foreground">無說明</p>
                 )}
               </div>
+
+              {selectedConfig?.sub_type_labels &&
+                Object.keys(selectedConfig.sub_type_labels).length > 0 && (
+                  <>
+                    <Separator />
+                    <div>
+                      <h3 className="text-sm font-medium mb-2">本學年度子類型顯示名稱</h3>
+                      <div className="space-y-1">
+                        {Object.entries(selectedConfig.sub_type_labels).map(
+                          ([code, label]) => (
+                            <p key={code} className="text-sm text-muted-foreground">
+                              <span className="font-mono">{code}</span>：{label.name}
+                              {label.name_en ? ` / ${label.name_en}` : ""}
+                            </p>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
 
               <Separator />
 
@@ -1749,6 +1772,15 @@ export function AdminConfigurationManagement({
                 />
               </div>
 
+              <SubTypeLabelsEditor
+                idPrefix="sub_type_label"
+                subTypes={quotaSubTypes.map(s => s.code)}
+                value={formData.sub_type_labels}
+                onChange={next =>
+                  setFormData(prev => ({ ...prev, sub_type_labels: next }))
+                }
+              />
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="amount">獎學金金額 *</Label>
@@ -2242,6 +2274,15 @@ export function AdminConfigurationManagement({
                   className="min-h-[80px]"
                 />
               </div>
+
+              <SubTypeLabelsEditor
+                idPrefix="edit_sub_type_label"
+                subTypes={quotaSubTypes.map(s => s.code)}
+                value={formData.sub_type_labels}
+                onChange={next =>
+                  setFormData(prev => ({ ...prev, sub_type_labels: next }))
+                }
+              />
 
               <div className="grid grid-cols-2 gap-4">
                 <div>

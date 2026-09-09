@@ -552,6 +552,11 @@ class ScholarshipConfiguration(Base):
         JSON, nullable=True
     )  # 計畫編號，依子類型 {sub_type: own-year-code} e.g. {"nstc": "114R000001", "moe_1w": "114E000001"}
 
+    # 本年度子類型顯示名稱覆寫（覆蓋 scholarship_sub_type_configs.name / name_en）
+    # {sub_type: {"name": "115學年度教育部博士生獎學金 (...)", "name_en": "AY115 MOE ..."}}
+    # 解析邏輯集中在 app/services/sub_type_labels.py
+    sub_type_labels = Column(JSON, nullable=True)
+
     # 跨配置共享配額來源 — 依 config_code 連結前年度配置，per sub_type，無數量
     shared_quota_sources = Column(
         JSON, nullable=True

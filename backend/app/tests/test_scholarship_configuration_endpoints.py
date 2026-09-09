@@ -674,6 +674,66 @@ class TestScholarshipConfigurationEndpointsIntegration:
         assert body["shared_quota_sources"] == [{"source_config_code": "USRC-113-1", "sub_types": ["nstc"]}]
 
     @pytest.mark.asyncio
+    async def test_create_and_update_persist_per_year_sub_type_labels(
+        self,
+        authenticated_admin_client: AsyncClient,
+        valid_config_payload,
+    ):
+        """sub_type_labels round-trips through POST, GET and PUT; codes are
+        normalised, blank names mean 'use the base label', and clearing works."""
+        payload = {
+            **valid_config_payload,
+            "sub_type_labels": {
+                " MOE_1w ": {"name": " 115學年度教育部博士生獎學金 ", "name_en": "AY115 MOE"},
+                "nstc": {"name": ""},
+            },
+        }
+        create_response = await authenticated_admin_client.post(BASE, json=payload)
+        assert create_response.status_code == 200, create_response.text
+        config_id = create_response.json()["data"]["id"]
+
+        body = (await authenticated_admin_client.get(f"{BASE}/{config_id}")).json()["data"]
+        assert body["sub_type_labels"] == {"moe_1w": {"name": "115學年度教育部博士生獎學金", "name_en": "AY115 MOE"}}
+
+        update_response = await authenticated_admin_client.put(
+            f"{BASE}/{config_id}", json={"sub_type_labels": {"nstc": {"name": "115學年度國科會博士生獎學金"}}}
+        )
+        assert update_response.status_code == 200, update_response.text
+        body = (await authenticated_admin_client.get(f"{BASE}/{config_id}")).json()["data"]
+        assert body["sub_type_labels"] == {"nstc": {"name": "115學年度國科會博士生獎學金"}}
+
+        clear_response = await authenticated_admin_client.put(f"{BASE}/{config_id}", json={"sub_type_labels": {}})
+        assert clear_response.status_code == 200, clear_response.text
+        body = (await authenticated_admin_client.get(f"{BASE}/{config_id}")).json()["data"]
+        assert body["sub_type_labels"] is None
+
+    @pytest.mark.asyncio
+    async def test_update_rejects_malformed_sub_type_labels(
+        self,
+        authenticated_admin_client: AsyncClient,
+        db: AsyncSession,
+        test_scholarship_type,
+    ):
+        config = ScholarshipConfiguration(
+            scholarship_type_id=test_scholarship_type.id,
+            academic_year=115,
+            semester=Semester.first,
+            config_name="Labels 115",
+            config_code="LBL-115-1",
+            amount=40000,
+            is_active=True,
+        )
+        db.add(config)
+        await db.commit()
+        await db.refresh(config)
+
+        response = await authenticated_admin_client.put(
+            f"{BASE}/{config.id}", json={"sub_type_labels": {"nstc": "國科會博士生獎學金"}}
+        )
+        assert response.status_code == 400, response.text
+        assert "nstc 必須是物件" in response.json()["message"]
+
+    @pytest.mark.asyncio
     async def test_update_rejects_invalid_shared_quota_source(
         self,
         authenticated_admin_client: AsyncClient,

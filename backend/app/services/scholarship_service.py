@@ -158,6 +158,7 @@ class ScholarshipService:
                     scholarship_type.sub_type_list or [],
                     eligibility_details,
                     scholarship_type,
+                    config,
                 )
 
                 scholarship_dict = {
@@ -243,6 +244,7 @@ class ScholarshipService:
         all_subtypes: List[str],
         eligibility_details: Dict[str, Any],
         scholarship_type,
+        configuration=None,
     ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """
         Filter subtypes based on student eligibility and return detailed eligibility info
@@ -251,6 +253,8 @@ class ScholarshipService:
             all_subtypes: List of all available subtypes for this scholarship
             eligibility_details: Detailed eligibility results from eligibility service
             scholarship_type: ScholarshipType instance for getting name translations
+            configuration: the ScholarshipConfiguration being offered; its
+                ``sub_type_labels`` override the base names for this period
 
         Returns:
             Tuple of (eligible_subtypes_with_names_list, subtype_eligibility_info_dict)
@@ -258,8 +262,8 @@ class ScholarshipService:
         if not all_subtypes:
             return [], {}
 
-        # Get subtype name translations from database
-        translations = await self._get_subtype_translations(scholarship_type.id)
+        # Get subtype name translations from database (with this year's overrides)
+        translations = await self._get_subtype_translations(scholarship_type.id, configuration)
 
         # Track which subtypes have failed rules (non-warning rules)
         subtype_failures = {}
@@ -342,11 +346,15 @@ class ScholarshipService:
 
         return eligible_subtypes_with_names, subtype_eligibility_info
 
-    async def _get_subtype_translations(self, scholarship_type_id: int) -> Dict[str, Dict[str, str]]:
-        """Get subtype name translations from database"""
+    async def _get_subtype_translations(
+        self, scholarship_type_id: int, configuration=None
+    ) -> Dict[str, Dict[str, str]]:
+        """Get subtype name translations from database, applying the
+        configuration's per-year ``sub_type_labels`` overrides when given."""
         from sqlalchemy import select
 
         from app.models.scholarship import ScholarshipSubTypeConfig
+        from app.services.sub_type_labels import resolve_sub_type_labels
 
         translations = {"zh": {}, "en": {}}
 
@@ -359,9 +367,9 @@ class ScholarshipService:
         configs = result.scalars().all()
 
         # Build translations from database
-        for config in configs:
-            translations["zh"][config.sub_type_code] = config.name
-            translations["en"][config.sub_type_code] = config.name_en or config.name
+        for code, label in resolve_sub_type_labels(configs, configuration).items():
+            translations["zh"][code] = label["zh"]
+            translations["en"][code] = label["en"]
 
         # Add default for general subtype if not configured
         if "general" not in translations["zh"]:

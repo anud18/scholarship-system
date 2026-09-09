@@ -52,7 +52,7 @@ def _coro_returning(value):
 async def test_export_zip_contains_summary_tables_matching_folders(monkeypatch):
     monkeypatch.setattr("app.services.export_package_service.ensure_cjk_font", lambda: None)
 
-    async def _fake_aux(db, *, scholarship_type, applications):
+    async def _fake_aux(db, *, scholarship_type, applications, academic_year=None, semester=None):
         return ([], {}, {}, {})
 
     monkeypatch.setattr("app.services.export_summary_tables.load_export_aux_data", _fake_aux)
