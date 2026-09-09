@@ -739,14 +739,25 @@ export function createCollegeApi() {
     },
 
     /**
-     * Download application materials export package as ZIP
+     * Prepare the application-materials ZIP download.
+     *
+     * The archive can be gigabytes (issue #1376), so it is never fetched into
+     * JS memory: this runs the backend's `dry_run` precheck (permissions,
+     * data present, under the cap) so a 400/403 reason still surfaces as a
+     * thrown Error, then returns the same-origin URL the caller hands to the
+     * browser's own download manager. The token rides in the query string so
+     * plain navigation works.
      */
     exportPackage: async (params: {
       scholarship_type_id: number;
       academic_year: number;
       semester?: string;
       token: string;
-    }): Promise<{ blob: Blob; filename: string }> => {
+    }): Promise<{
+      downloadUrl: string;
+      filename: string;
+      applicationCount: number;
+    }> => {
       const searchParams = new URLSearchParams();
       searchParams.set(
         "scholarship_type_id",
@@ -757,25 +768,27 @@ export function createCollegeApi() {
         searchParams.set("semester", params.semester);
       }
       searchParams.set("token", params.token);
+      const downloadUrl = `/api/v1/export-package?${searchParams.toString()}`;
 
-      const response = await fetch(
-        `/api/v1/export-package?${searchParams.toString()}`
-      );
+      const precheck = await fetch(`${downloadUrl}&dry_run=true`);
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
+      if (!precheck.ok) {
+        const errorData = await precheck.json().catch(() => null);
         throw new Error(errorData?.error || errorData?.detail || "匯出失敗");
       }
 
-      // Extract filename from Content-Disposition header
-      const disposition = response.headers.get("content-disposition") || "";
-      const filenameMatch = disposition.match(/filename\*=UTF-8''(.+)/);
-      const filename = filenameMatch
-        ? decodeURIComponent(filenameMatch[1])
-        : "export.zip";
-
-      const blob = await response.blob();
-      return { blob, filename };
+      const payload = await precheck.json().catch(() => null);
+      const filename = payload?.data?.filename;
+      if (typeof filename !== "string" || !filename) {
+        // A 200 without the ApiResponse shape means the proxy chain is
+        // broken; do not hand the browser a URL we cannot vouch for.
+        throw new Error("匯出預檢回應格式錯誤");
+      }
+      return {
+        downloadUrl,
+        filename,
+        applicationCount: Number(payload?.data?.application_count) || 0,
+      };
     },
   };
 }

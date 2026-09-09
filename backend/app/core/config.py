@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     max_file_size: int = 10485760  # 10MB
     allowed_file_types: str = "pdf,jpg,jpeg,png,doc,docx"
     max_files_per_application: int = 5
+    export_package_max_applications: int = 1000  # 匯出申請資料 ZIP 的申請筆數上限 (#1376)
     max_document_image_width: int = 1200
     max_document_image_height: int = 1200
 

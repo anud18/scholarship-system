@@ -1,4 +1,4 @@
-"""Integration test: generate_export_zip embeds the 申請總表 workbooks and the
+"""Integration test: the streamed export ZIP embeds the 申請總表 workbooks and the
 table rows match the student folders. Avoids DB / MinIO by monkeypatching
 ensure_cjk_font, _query_applications, _get_scholarship_type,
 _generate_summary_pdf, load_form_field_labels and load_export_aux_data.
@@ -20,6 +20,7 @@ from openpyxl import load_workbook
 
 from app.models.application import Application
 from app.services.export_package_service import ExportPackageService
+from app.tests.export_package_fakes import collect_zip
 
 
 def _mk_app(app_id, user_id, dep_no, dep_name, std_code, cname, academy="某學院"):
@@ -69,12 +70,13 @@ async def test_export_zip_contains_summary_tables_matching_folders(monkeypatch):
     monkeypatch.setattr(svc, "_query_applications", _coro_returning(apps))
     monkeypatch.setattr(svc, "_generate_summary_pdf", lambda *a, **k: b"%PDF-1.4 fake")
 
-    buf, fname = await svc.generate_export_zip(
+    plan = await svc.prepare_export(
         scholarship_type_id=1,
         academic_year=114,
         semester="first",
         college_code="A",
     )
+    buf = await collect_zip(svc, plan)
 
     names = zipfile.ZipFile(buf).namelist()
 
@@ -118,12 +120,13 @@ async def test_export_zip_degrades_when_summary_build_fails_wholesale(monkeypatc
     monkeypatch.setattr(svc, "_query_applications", _coro_returning(apps))
     monkeypatch.setattr(svc, "_generate_summary_pdf", lambda *a, **k: b"%PDF-1.4 fake")
 
-    buf, fname = await svc.generate_export_zip(
+    plan = await svc.prepare_export(
         scholarship_type_id=1,
         academic_year=114,
         semester="first",
         college_code="A",
     )
+    buf = await collect_zip(svc, plan)
 
     names = zipfile.ZipFile(buf).namelist()
     # Materials ZIP still produced (the student's summary PDF is present)

@@ -4992,12 +4992,18 @@ export interface paths {
         };
         /**
          * Export Application Package
-         * @description Download a ZIP package of all application materials for a scholarship period.
+         * @description Stream a ZIP package of all application materials for a scholarship period.
+         *
+         *     ``dry_run=true`` performs the same permission checks and data validation
+         *     but answers with an ApiResponse (filename + application count) instead of
+         *     the archive, so the UI can surface a 400/403 reason before handing the real
+         *     download to the browser's download manager.
          *
          *     SECURITY: Bulk PII export. Every call is audit-logged with the actor's
-         *     user_id and role, scholarship/period filters, and the resulting file
-         *     size. 403 (permission-denied) paths are also logged at warning level
-         *     so repeated denials can be flagged as potential bypass attempts.
+         *     user_id and role, scholarship/period filters and application count, and
+         *     the end of the stream is logged with the bytes actually sent. 403
+         *     (permission-denied) paths are also logged at warning level so repeated
+         *     denials can be flagged as potential bypass attempts.
          */
         get: operations["export_application_package_api_v1_college_review_export_package_get"];
         put?: never;
@@ -19878,6 +19884,8 @@ export interface operations {
                 academic_year: number;
                 /** @description Semester (first/second/null for annual) */
                 semester?: string | null;
+                /** @description 只檢查匯出條件（權限、資料筆數），不產生 ZIP */
+                dry_run?: boolean;
             };
             header?: never;
             path?: never;
