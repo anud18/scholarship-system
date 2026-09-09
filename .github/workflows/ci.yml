@@ -332,7 +332,9 @@ jobs:
         # and taking every backend test lane down before a single test ran.
         # Drop those sources for this job and retry the index refresh.
         run: |
-          sudo rm -f /etc/apt/sources.list.d/google-chrome*.list
+          # The source may be a .list or a deb822 .sources file; drop anything pointing at dl.google.com.
+          sudo rm -f /etc/apt/sources.list.d/google-chrome*
+          grep -rl "dl.google.com" /etc/apt/sources.list.d 2>/dev/null | xargs -r sudo rm -f
           for attempt in 1 2 3; do
             if sudo apt-get update -o Acquire::Retries=3; then break; fi
             echo "apt-get update failed (attempt ${attempt}), retrying in 10s"
