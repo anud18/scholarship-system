@@ -69,7 +69,15 @@ async def _load_config_in_renewal_period(
     academic_year: int,
     semester: Optional[str],
 ) -> ScholarshipConfiguration:
-    """Load the (year, semester) config and require it to be in its renewal window."""
+    """Load the (year, semester) config the renewals belong to and require the
+    scholarship's renewal window to be open.
+
+    The selected year is the cohort: 114 續領生 are the 114 awardees, and they
+    renew during the CURRENT cycle's 續領期間 (the phd_115 window in summer
+    2026), not during phd_114's own window a year earlier. So the gate is
+    "some configuration of this scholarship type is in its renewal period
+    now", never relaxed to "always open".
+    """
     semester_enum = _to_semester_enum(semester)
     stmt = select(ScholarshipConfiguration).where(
         ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
@@ -86,10 +94,15 @@ async def _load_config_in_renewal_period(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"找不到 {academic_year} 學年度的獎學金配置",
         )
-    if not config.is_renewal_application_period:
+    siblings_stmt = select(ScholarshipConfiguration).where(
+        ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
+        ScholarshipConfiguration.renewal_application_start_date.isnot(None),
+    )
+    siblings = (await db.execute(siblings_stmt)).scalars().all()
+    if not any(c.is_renewal_application_period for c in siblings):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="此獎學金配置目前不在續領期間，無法匯入續領生",
+            detail="此獎學金目前不在續領期間，無法匯入續領生",
         )
     return config
 

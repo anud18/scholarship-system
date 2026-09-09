@@ -318,16 +318,37 @@ class TestRenewalImportEndpoints:
         self, client: AsyncClient, db: AsyncSession, admin_user: User, phd_scholarship: ScholarshipType, monkeypatch
     ):
         """Confirming a pending renewal batch creates an approved is_renewal Application."""
+        from app.models.scholarship import SubTypeSelectionMode
+
         # Config for the (year, semester) is required by create_renewals_from_batch.
-        db.add(_make_config(phd_scholarship.id, renewal_open=True))
+        config = _make_config(phd_scholarship.id, renewal_open=True)
+        db.add(config)
         # Pre-create the student User so _get_or_create_users_bulk needs no SIS lookup.
+        student = User(
+            nycu_id="413271002",
+            name="曾美麗",
+            email="mei@test.com",
+            role=UserRole.student,
+            user_type="student",
+        )
+        db.add(student)
+        await db.flush()
+        # 續領只開放給該配置的得獎者: the student must hold an approved award on
+        # the selected configuration, which also fixes the paying year (114 → 115).
         db.add(
-            User(
-                nycu_id="413271002",
-                name="曾美麗",
-                email="mei@test.com",
-                role=UserRole.student,
-                user_type="student",
+            Application(
+                app_id="APP-114-1-00001",
+                user_id=student.id,
+                scholarship_type_id=phd_scholarship.id,
+                scholarship_configuration_id=config.id,
+                allocation_config_id=config.id,
+                academic_year=114,
+                semester="first",
+                status=ApplicationStatus.approved,
+                sub_type_selection_mode=SubTypeSelectionMode.single,
+                scholarship_subtype_list=["nstc"],
+                sub_scholarship_type="nstc",
+                amount=40000,
             )
         )
         batch = BatchImport(

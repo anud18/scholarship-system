@@ -275,16 +275,18 @@ class RenewalImportService:
                         "message": f"學號 {sid} 已有此獎學金 {paying_year} 學年度的續領申請。",
                     }
                 )
-            elif sid not in paying_years:
-                warnings.append(
+            elif config and sid not in paying_years:
+                # 續領只開放給該配置的得獎者：查無該配置下的核准申請就不是這批續領生
+                # （多半是選錯學年度，例如把 114 得獎者匯進 113）。擋下來，不猜。
+                errors.append(
                     {
                         "row_number": r["row_number"],
                         "student_id": sid,
                         "field": "學號",
-                        "warning_type": "no_prior_award",
+                        "error_type": "not_awardee",
                         "message": (
-                            f"學號 {sid} 在 {academic_year} 學年度配置下查無核准申請，"
-                            f"將視為第一年續領（{paying_year} 學年度）。"
+                            f"學號 {sid} 在 {academic_year} 學年度配置下查無核准的申請，"
+                            f"不是 {academic_year} 學年度的得獎者，無法以 {academic_year} 續領生匯入。"
                         ),
                     }
                 )
@@ -436,7 +438,17 @@ class RenewalImportService:
             for idx, row in enumerate(parsed_rows):
                 current_row = row.get("row_number", idx + 2)
                 user = user_map[row["student_id"]]
-                paying_year = paying_years.get(row["student_id"], config.academic_year + 1)
+                paying_year = paying_years.get(row["student_id"])
+                if paying_year is None:
+                    # The preview already rejects this; guard the confirm path too
+                    # (all-or-nothing, like the missing-snapshot case).
+                    raise BatchImportError(
+                        message=(
+                            f"學號 {row['student_id']} 在 {config.academic_year} 學年度配置下查無核准的申請，"
+                            f"不是 {config.academic_year} 學年度的得獎者，無法匯入。"
+                        ),
+                        batch_id=batch_import.id,
+                    )
 
                 # Inline sequential app_id with 'R' (renewal) suffix — same lock pattern as batch import.
                 seq_stmt = (

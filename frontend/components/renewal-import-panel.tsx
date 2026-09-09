@@ -441,6 +441,11 @@ export function RenewalImportPanel({ locale = "zh" }: RenewalImportPanelProps) {
                     ))}
                   </select>
                 )}
+                <p className="mt-1 text-xs text-gray-500">
+                  {locale === "zh"
+                    ? "選擇得獎配置的學年度：114 = 114 學年度得獎者的續領（續領只開放給該配置的得獎者）；領獎年度依該生最近一筆核准申請往後推一年。"
+                    : "Pick the awarding configuration's year: 114 = renewals of the 114 awardees (renewal is only open to that configuration's awardees); the paying year is the student's latest approved award plus one."}
+                </p>
               </div>
             </div>
 
