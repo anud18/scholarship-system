@@ -30,7 +30,7 @@ import {
 import { captureDiagnostics } from "../helpers/diagnose";
 
 // Use direct_phd (NOT phd): seed_scholarship_configs.py:258 sets
-// direct_phd_114 to QuotaManagementMode.simple, while phd_114 is
+// direct_phd_115 to QuotaManagementMode.simple, while phd_115 is
 // matrix_based — and matrix-mode rosters require a prior matrix
 // distribution before /payment-rosters/generate will accept them
 // (see roster_service.py: "找不到已執行分發的排名"). This spec only
