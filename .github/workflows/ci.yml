@@ -326,8 +326,18 @@ jobs:
       # Docker image (see backend/Dockerfile). CI runs on a bare runner, so the
       # font must be installed here for the build_pdf / export-pdf tests to render.
       - name: Install CJK font (reportlab PDF export tests)
+        # fonts-wqy-zenhei only needs the Ubuntu archive. The runner image also
+        # carries third-party apt sources (Google Chrome, …) whose index has
+        # flaked with "Hash Sum mismatch", failing `apt-get update` (exit 100)
+        # and taking every backend test lane down before a single test ran.
+        # Drop those sources for this job and retry the index refresh.
         run: |
-          sudo apt-get update
+          sudo rm -f /etc/apt/sources.list.d/google-chrome*.list
+          for attempt in 1 2 3; do
+            if sudo apt-get update -o Acquire::Retries=3; then break; fi
+            echo "apt-get update failed (attempt ${attempt}), retrying in 10s"
+            sleep 10
+          done
           sudo apt-get install -y --no-install-recommends fonts-wqy-zenhei
 
       - name: Setup Python
