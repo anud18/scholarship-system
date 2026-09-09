@@ -31,6 +31,7 @@
  *   /applications/{id}/submit under the /api/v1 prefix.
  */
 import { test, expect } from "@playwright/test";
+import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { loginAs } from "../helpers/auth";
 import { apiAs } from "../helpers/api";
 import { deleteApplicationCascade, getActiveConfig, getApplication, pool } from "../helpers/db";
@@ -65,7 +66,7 @@ const SUB_TYPE = "nstc";
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Student saves draft, updates, then submits an application", () => {
+test.describe("學生儲存草稿、更新後送出申請 | Student saves draft, updates, then submits an application", { tag: [MODE.api, ROLE.student, FEATURE.draft, FEATURE.apply] }, () => {
   let runState: RunState;
   let createdAppId: string | undefined;
 

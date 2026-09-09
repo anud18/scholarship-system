@@ -10,9 +10,10 @@
  */
 
 import { test, expect } from "@playwright/test";
+import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { loginAs } from "../helpers/auth";
 
-test.describe("Admin student scholarship history", () => {
+test.describe("管理員學生領獎紀錄查詢 | Admin student scholarship history", { tag: [MODE.browser, ROLE.admin, FEATURE.history] }, () => {
   test("shows the 查詢開放設定 switches for 學生 and 學院", async ({
     browser,
   }) => {

@@ -30,6 +30,7 @@
  *   Next.js /api/v1/preview proxy the wizard uses for preview.
  */
 import { test, expect } from "@playwright/test";
+import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { loginAs } from "../helpers/auth";
 import { apiAs } from "../helpers/api";
 import { deleteApplicationCascade, getActiveConfig, getApplication, pool } from "../helpers/db";
@@ -84,7 +85,7 @@ interface DocEntry {
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Student uploads a document to a draft, reopens it, and previews it", () => {
+test.describe("學生上傳文件至草稿、重開後預覽 | Student uploads a document to a draft, reopens it, and previews it", { tag: [MODE.api, ROLE.student, FEATURE.draft, FEATURE.upload, FEATURE.preview] }, () => {
   let runState: RunState;
   let createdAppId: string | undefined;
 

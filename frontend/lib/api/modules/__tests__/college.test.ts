@@ -325,22 +325,26 @@ describe("createCollegeApi", () => {
     );
   });
 
-  // ─── exportPackage (raw fetch + URLSearchParams + token in URL) ───
+  // ─── exportPackage (dry_run precheck + browser-native download URL) ───
 
-  it("exportPackage sends token via QUERY (NOT Authorization header)", async () => {
-    // Pin SECURITY: token in QUERY for download links (so direct
-    // browser navigation works). Pin so refactor moving to header
-    // breaks "right-click → save as" download UX.
+  function mockPrecheck(
+    data: unknown = { filename: "包.zip", application_count: 3 }
+  ) {
     const fetchMock = jest.fn().mockResolvedValue({
       ok: true,
-      headers: {
-        get: jest.fn().mockReturnValue(
-          "attachment; filename*=UTF-8''%E5%8C%85.zip"
-        ),
-      },
-      blob: jest.fn().mockResolvedValue(new Blob(["zip"])),
+      json: jest
+        .fn()
+        .mockResolvedValue({ success: true, message: "可匯出", data }),
     });
     global.fetch = fetchMock as any;
+    return fetchMock;
+  }
+
+  it("exportPackage prechecks with dry_run and returns a same-origin download URL with the token in QUERY", async () => {
+    // Pin SECURITY + #1376: the token rides in the QUERY so the browser's own
+    // download manager can fetch the URL — the multi-GB archive must never
+    // pass through JS memory — and the ONLY fetch is the dry_run precheck.
+    const fetchMock = mockPrecheck();
 
     const api = createCollegeApi();
     const result = await api.exportPackage({
@@ -349,31 +353,52 @@ describe("createCollegeApi", () => {
       semester: "first",
       token: "abc-token",
     });
-    const url = fetchMock.mock.calls[0][0];
-    expect(url).toContain("scholarship_type_id=7");
-    expect(url).toContain("academic_year=114");
-    expect(url).toContain("semester=first");
-    expect(url).toContain("token=abc-token");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const precheckUrl = fetchMock.mock.calls[0][0];
+    expect(precheckUrl).toContain("/api/v1/export-package?");
+    expect(precheckUrl).toContain("scholarship_type_id=7");
+    expect(precheckUrl).toContain("academic_year=114");
+    expect(precheckUrl).toContain("semester=first");
+    expect(precheckUrl).toContain("token=abc-token");
+    expect(precheckUrl).toContain("dry_run=true");
+
+    expect(result.downloadUrl).toContain("/api/v1/export-package?");
+    expect(result.downloadUrl).toContain("scholarship_type_id=7");
+    expect(result.downloadUrl).toContain("token=abc-token");
+    expect(result.downloadUrl).not.toContain("dry_run");
     expect(result.filename).toBe("包.zip");
+    expect(result.applicationCount).toBe(3);
   });
 
   it("exportPackage omits semester from query when not provided", async () => {
     // Pin: optional semester — pin so yearly scholarships export
     // doesn't accidentally include `semester=` empty string.
-    const fetchMock = jest.fn().mockResolvedValue({
-      ok: true,
-      headers: { get: jest.fn().mockReturnValue("") },
-      blob: jest.fn().mockResolvedValue(new Blob()),
-    });
-    global.fetch = fetchMock as any;
+    const fetchMock = mockPrecheck();
 
     const api = createCollegeApi();
-    await api.exportPackage({
+    const result = await api.exportPackage({
       scholarship_type_id: 7,
       academic_year: 114,
       token: "abc",
     });
     expect(fetchMock.mock.calls[0][0]).not.toContain("semester=");
+    expect(result.downloadUrl).not.toContain("semester=");
+  });
+
+  it("exportPackage throws when a 200 precheck lacks the ApiResponse filename", async () => {
+    // Pin: a 200 without `data.filename` means the proxy chain is broken —
+    // fail loudly rather than start a download we cannot vouch for.
+    mockPrecheck({});
+
+    const api = createCollegeApi();
+    await expect(
+      api.exportPackage({
+        scholarship_type_id: 7,
+        academic_year: 114,
+        token: "abc",
+      })
+    ).rejects.toThrow("匯出預檢回應格式錯誤");
   });
 
   it("exportPackage throws on non-OK with backend error fallback chain", async () => {

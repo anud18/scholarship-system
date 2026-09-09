@@ -38,6 +38,7 @@
  * - Allowed from-states: submitted, under_review (line 63-66)
  */
 import { test, expect } from "@playwright/test";
+import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { loginAs } from "../helpers/auth";
 import { apiAs } from "../helpers/api";
 import { deleteApplicationCascade, getActiveConfig, getApplication, pool } from "../helpers/db";
@@ -69,7 +70,7 @@ const SUB_TYPE = "nstc";
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Admin bulk-approves a submitted application", () => {
+test.describe("管理員批次核准已送出申請 | Admin bulk-approves a submitted application", { tag: [MODE.api, ROLE.admin, ROLE.student, FEATURE.review] }, () => {
   let runState: RunState;
   let createdAppId: string | undefined;
 

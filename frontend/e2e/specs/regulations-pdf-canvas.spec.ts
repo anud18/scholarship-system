@@ -19,6 +19,7 @@
  * clear message rather than a silent skip.
  */
 import { test, expect } from "@playwright/test";
+import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { loginAs } from "../helpers/auth";
 import { deleteApplicationCascade, pool } from "../helpers/db";
 import { attachRunState, newRunState, type RunState } from "../helpers/runState";
@@ -41,7 +42,7 @@ async function purgeStudentApps(studentNycuId: string, scholarshipCode: string):
   }
 }
 
-test.describe("Regulations PDF renders as react-pdf canvas in the consent step", () => {
+test.describe("同意步驟中獎學金要點 PDF 以 canvas 呈現 | Regulations PDF renders as react-pdf canvas in the consent step", { tag: [MODE.browser, ROLE.student, FEATURE.regulations, FEATURE.preview] }, () => {
   let runState: RunState;
 
   test.beforeEach(() => {

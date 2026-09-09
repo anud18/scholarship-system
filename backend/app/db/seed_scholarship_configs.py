@@ -20,6 +20,11 @@ from app.models.system_setting import EmailTemplate, SendingType
 
 logger = logging.getLogger(__name__)
 
+# Academic years the eligibility rules are seeded for. 115 is the current year;
+# 113/114 are the closed years whose approved applications and locked rosters
+# seed_ay115_demo creates — re-validating those rosters needs their rules too.
+RULE_ACADEMIC_YEARS = (113, 114, 115)
+
 # --- 學院送出排名通知 -------------------------------------------------------
 # The third and last automatic trigger point in the system: a college finalizes
 # ("送出") its ranking and its own reviewers get a confirmation. Recipients are
@@ -127,17 +132,17 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
     # Current date for workflow testing
     now = datetime.now(timezone.utc)
 
-    # === 獎學金配置 (114學年度) ===
+    # === 獎學金配置 (115學年度為當前學年；114 及更早為前年度剩餘配額/續領來源) ===
     configurations_data = [
-        # 學士班新生獎學金配置 (114-1)
+        # 學士班新生獎學金配置 (115-1)
         {
             "scholarship_type_id": undergrad_scholarship.id,
-            "config_code": "undergraduate_freshman_114_1",
-            "config_name": "學士班新生獎學金 114學年第一學期",
-            "academic_year": 114,
+            "config_code": "undergraduate_freshman_115_1",
+            "config_name": "學士班新生獎學金 115學年第一學期",
+            "academic_year": 115,
             "semester": Semester.first,
-            "description": "114學年度第一學期學士班新生獎學金配置",
-            "description_en": "Undergraduate Freshman Scholarship Configuration for 114-1",
+            "description": "115學年度第一學期學士班新生獎學金配置",
+            "description_en": "Undergraduate Freshman Scholarship Configuration for 115-1",
             "has_quota_limit": False,
             "has_college_quota": False,
             "quota_management_mode": QuotaManagementMode.simple,
@@ -151,15 +156,15 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
             "effective_end_date": now + timedelta(days=90),
             "version": "1.0",
         },
-        # 學士班新生獎學金配置 (114-2)
+        # 學士班新生獎學金配置 (115-2)
         {
             "scholarship_type_id": undergrad_scholarship.id,
-            "config_code": "undergraduate_freshman_114_2",
-            "config_name": "學士班新生獎學金 114學年第二學期",
-            "academic_year": 114,
+            "config_code": "undergraduate_freshman_115_2",
+            "config_name": "學士班新生獎學金 115學年第二學期",
+            "academic_year": 115,
             "semester": Semester.second,
-            "description": "114學年度第二學期學士班新生獎學金配置",
-            "description_en": "Undergraduate Freshman Scholarship Configuration for 114-2",
+            "description": "115學年度第二學期學士班新生獎學金配置",
+            "description_en": "Undergraduate Freshman Scholarship Configuration for 115-2",
             "has_quota_limit": False,
             "has_college_quota": False,
             "quota_management_mode": QuotaManagementMode.simple,
@@ -223,7 +228,7 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
             "has_quota_limit": True,
             "has_college_quota": True,
             "quota_management_mode": QuotaManagementMode.matrix_based,
-            "total_quota": 30,
+            "total_quota": 36,
             "quotas": {
                 "nstc": {
                     "E": 3,
@@ -240,8 +245,12 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
                     "A": 1,
                     "K": 1,
                 },
+                # MOE is current-year only (never shared), but the 113 cohort in
+                # seed_ay115_demo holds moe_1w awards, so the pool must exist or
+                # the quota dashboard reports 113 moe_1w as permanently negative.
+                "moe_1w": {"E": 2, "C": 2, "I": 1, "S": 1},
             },
-            "project_numbers": {"nstc": "113R000001"},
+            "project_numbers": {"nstc": "113R000001", "moe_1w": "113E000001"},
             "amount": 40000,
             "currency": "TWD",
             "is_active": False,
@@ -249,15 +258,17 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
             "effective_end_date": now - timedelta(days=120),
             "version": "1.0",
         },
-        # 博士生獎學金配置 (114學年) - Matrix Quota
+        # 博士生獎學金配置 (114學年) - 前一學年（已結束申請；為 115 續領生的來源年度，
+        # 其 nstc 剩餘配額可由 115 共用）。seed_ay115_demo 會在此配置下建立已核准的
+        # 114 得獎者，讓 115 的「續領」（學生自助 / 管理員匯入續領生）有資料可續。
         {
             "scholarship_type_id": phd_scholarship.id,
             "config_code": "phd_114",
             "config_name": "博士生獎學金 114學年",
             "academic_year": 114,
             "semester": None,  # 學年制
-            "description": "114學年度博士生獎學金配置",
-            "description_en": "PhD Scholarship Configuration for Academic Year 114 with Matrix Quota",
+            "description": "114學年度博士生獎學金配置（前一學年，申請已截止）",
+            "description_en": "PhD Scholarship Configuration for Academic Year 114 (previous year, closed)",
             "has_quota_limit": True,
             "has_college_quota": True,
             "quota_management_mode": QuotaManagementMode.matrix_based,
@@ -302,6 +313,88 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
                 "nstc": "114R000001",
                 "moe_1w": "114E000001",
             },
+            "amount": 40000,
+            "currency": "TWD",
+            # Every 114 window is in the past: the year is over, its recipients
+            # are now 115 續領 candidates. The config stays is_active so its
+            # approved applications, rosters and 領獎紀錄 remain queryable.
+            "renewal_application_start_date": now - timedelta(days=410),
+            "renewal_application_end_date": now - timedelta(days=350),
+            "application_start_date": now - timedelta(days=410),
+            "application_end_date": now - timedelta(days=350),
+            "renewal_requires_professor_review": True,
+            "renewal_professor_review_start": now - timedelta(days=370),
+            "renewal_professor_review_end": now - timedelta(days=335),
+            "renewal_requires_college_review": True,
+            "renewal_college_review_start": now - timedelta(days=370),
+            "renewal_college_review_end": now - timedelta(days=305),
+            "requires_professor_recommendation": True,
+            "professor_review_start": now - timedelta(days=370),
+            "professor_review_end": now - timedelta(days=335),
+            "requires_college_review": True,
+            "college_review_start": now - timedelta(days=370),
+            "college_review_end": now - timedelta(days=305),
+            "review_deadline": now - timedelta(days=300),
+            "is_active": True,
+            "effective_start_date": now - timedelta(days=485),
+            "effective_end_date": now - timedelta(days=10),
+            "version": "1.0",
+        },
+        # 博士生獎學金配置 (115學年) - 當前學年, Matrix Quota
+        {
+            "scholarship_type_id": phd_scholarship.id,
+            "config_code": "phd_115",
+            "config_name": "博士生獎學金 115學年",
+            "academic_year": 115,
+            "semester": None,  # 學年制
+            "description": "115學年度博士生獎學金配置",
+            "description_en": "PhD Scholarship Configuration for Academic Year 115 with Matrix Quota",
+            "has_quota_limit": True,
+            "has_college_quota": True,
+            "quota_management_mode": QuotaManagementMode.matrix_based,
+            "total_quota": 100,
+            "quotas": {
+                "nstc": {
+                    "E": 15,
+                    "C": 12,
+                    "I": 10,
+                    "S": 8,
+                    "B": 6,
+                    "O": 5,
+                    "D": 4,
+                    "1": 3,
+                    "6": 3,
+                    "7": 3,
+                    "M": 5,
+                    "A": 4,
+                    "K": 2,
+                },
+                "moe_1w": {
+                    "E": 10,
+                    "C": 8,
+                    "I": 7,
+                    "S": 6,
+                    "B": 4,
+                    "O": 3,
+                    "D": 3,
+                    "1": 2,
+                    "6": 2,
+                    "7": 2,
+                    "M": 4,
+                    "A": 3,
+                    "K": 1,
+                },
+            },
+            # NSTC leftovers from prior years can still be distributed (補發);
+            # MOE is always current-year only.
+            "shared_quota_sources": [
+                {"source_config_code": "phd_114", "sub_types": ["nstc"]},
+                {"source_config_code": "phd_113", "sub_types": ["nstc"]},
+            ],
+            "project_numbers": {
+                "nstc": "115R000001",
+                "moe_1w": "115E000001",
+            },
             # Per-year sub-type display names shown to students / reviewers for
             # this configuration (overrides scholarship_sub_type_configs.name).
             # This is the current cycle's wording requested by the office
@@ -344,15 +437,15 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
             "effective_end_date": now + timedelta(days=365),
             "version": "1.0",
         },
-        # 逕讀博士獎學金配置 (114學年)
+        # 逕讀博士獎學金配置 (115學年)
         {
             "scholarship_type_id": direct_phd_scholarship.id,
-            "config_code": "direct_phd_114",
-            "config_name": "逕讀博士獎學金 114學年",
-            "academic_year": 114,
+            "config_code": "direct_phd_115",
+            "config_name": "逕讀博士獎學金 115學年",
+            "academic_year": 115,
             "semester": None,  # 學年制
-            "description": "114學年度逕讀博士獎學金配置",
-            "description_en": "Direct PhD Scholarship Configuration for Academic Year 114",
+            "description": "115學年度逕讀博士獎學金配置",
+            "description_en": "Direct PhD Scholarship Configuration for Academic Year 115",
             "has_quota_limit": False,
             "has_college_quota": False,
             "quota_management_mode": QuotaManagementMode.simple,
@@ -425,8 +518,12 @@ async def seed_scholarship_rules(session: AsyncSession) -> None:
     if not admin_id:
         admin_id = 1
 
-    # === 獎學金資格規則 (114學年度) ===
-    scholarship_rules_data = [
+    # === 獎學金資格規則 ===
+    # Authored once (as 114) and emitted for every year in RULE_ACADEMIC_YEARS:
+    # the eligibility service matches rules on `academic_year == config.academic_year`
+    # (or NULL), so the 115 config would validate NOTHING without its own copy.
+    # 114 keeps its copy so prior-year rosters / 續領 re-checks still resolve.
+    base_scholarship_rules = [
         # 博士生獎學金 共同規則 - 114學年度
         {
             "scholarship_type_id": 2,
@@ -870,6 +967,10 @@ async def seed_scholarship_rules(session: AsyncSession) -> None:
         },
     ]
 
+    scholarship_rules_data = [
+        {**rule, "academic_year": year} for year in RULE_ACADEMIC_YEARS for rule in base_scholarship_rules
+    ]
+
     for rule_data in scholarship_rules_data:
         scholarship_rule = ScholarshipRule(**rule_data)
         session.add(scholarship_rule)
@@ -921,7 +1022,7 @@ async def seed_scholarship_sub_type_configs(session: AsyncSession) -> None:
                         "sub_type_code": "moe_1w",
                         # Year-agnostic base label. The year-specific wording
                         # (e.g. 115學年度…) is a per-configuration override in
-                        # ScholarshipConfiguration.sub_type_labels — see phd_114.
+                        # ScholarshipConfiguration.sub_type_labels — see phd_115.
                         "name": "教育部博士生獎學金 (指導教授配合款每月 $5000 元)",
                         "name_en": "MOE PHD Scholarship (Professor Match NT$5,000/month)",
                         "description": "每年配合款經費金額將配合教育部相關規定，採滾動式調整。",
@@ -1226,8 +1327,8 @@ async def init_all_scholarship_configs() -> None:
 
     print("✅ Scholarship configuration initialization completed successfully!")
     print("\n📋 Configuration Data Summary:")
-    print("- 3 scholarship configurations (114 academic year)")
-    print("- 18 scholarship rules (114 academic year)")
+    print("- scholarship configurations (115 current year + 112/113/114 prior years)")
+    print("- scholarship rules (emitted for 114 and 115)")
     print("- 3 sub-type configurations (NSTC, MOE_1W, MOE_2W)")
     print("- 7 email templates (single + bulk sending)")
 

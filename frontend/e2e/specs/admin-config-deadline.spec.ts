@@ -3,7 +3,7 @@
  *
  * Flow under test:
  *   admin    → POST /scholarship-configurations/configurations
- *              (phd, academic_year=115, semester=null, application window
+ *              (phd, academic_year=116, semester=null, application window
  *               in the past — i.e. window already CLOSED)
  *              → 201/200, config row persisted with the supplied
  *                application_start_date / application_end_date.
@@ -32,19 +32,20 @@
  *   - After PUT extends application_end_date into the future, the same
  *     student succeeds (HTTP 200, applications.status='submitted').
  *   - application_end_date in the past is the ONLY barrier to step 8:
- *     academic_year=115 has no seeded scholarship_rules and no other active
+ *     academic_year=116 has no seeded scholarship_rules and no other active
  *     phd configuration, so eligibility passes once the window is open.
- *     (SIS API term data for year 115 doesn't exist either, but that only
+ *     (SIS API term data for year 116 doesn't exist either, but that only
  *      sets _term_data_status='error' in the snapshot — it does not block
  *      application creation when no rule needs term data.)
  *
- * Why year 115:
- *   - Seeded configurations cover 112/113/114 only — year 115 has no
+ * Why year 116:
+ *   - Seeded configurations cover 112–115 (115 is the live year) — year 116 has no
  *     conflicting active config, so the 409 unique-period check (type,
  *     year, semester, is_active=True) does not fire.
- *   - No scholarship_rules for year 115, so the rule loop is a no-op.
+ *   - No scholarship_rules for year 116, so the rule loop is a no-op.
  */
 import { test, expect } from "@playwright/test";
+import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { loginAs } from "../helpers/auth";
 import { apiAs } from "../helpers/api";
 import { deleteApplicationCascade, pool } from "../helpers/db";
@@ -62,9 +63,9 @@ const SCHOLARSHIP_CODE = "phd";
 // "general" fallback for such scholarships (PR #845) — so both apply calls
 // must select a concrete sub-type or they 422 for the wrong reason.
 const SUB_TYPE = "nstc";
-const ACADEMIC_YEAR = 115;
-const CONFIG_CODE = "phd_115_e2e_deadline";
-const CONFIG_NAME = "E2E Deadline Test 115";
+const ACADEMIC_YEAR = 116;
+const CONFIG_CODE = "phd_116_e2e_deadline";
+const CONFIG_NAME = "E2E Deadline Test 116";
 const AMOUNT = 10000;
 
 test.describe.configure({ mode: "serial" });
@@ -94,7 +95,7 @@ async function purgeE2EConfig(): Promise<void> {
   }
 }
 
-test.describe("Admin config CRUD pins application_end_date deadline enforcement", () => {
+test.describe("管理員設定申請截止日並強制生效 | Admin config CRUD pins application_end_date deadline enforcement", { tag: [MODE.api, ROLE.admin, FEATURE.config, FEATURE.apply] }, () => {
   let runState: RunState;
   let createdConfigId: number | undefined;
   let createdAppId: string | undefined;
@@ -126,7 +127,7 @@ test.describe("Admin config CRUD pins application_end_date deadline enforcement"
     }
   });
 
-  test("@nightly admin POST/PUT phd 115 config — closed window 422, opened window 200", async ({
+  test("@nightly admin POST/PUT phd 116 config — closed window 422, opened window 200", async ({
     browser,
   }) => {
     // Build dates relative to "now" so the spec is stable regardless of

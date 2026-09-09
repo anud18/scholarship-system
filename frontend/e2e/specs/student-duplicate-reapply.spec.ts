@@ -29,6 +29,7 @@
  *   5. stuphd001 submits a new phd application → HTTP 200/201, success=true (allowed).
  */
 import { test, expect } from "@playwright/test";
+import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { loginAs } from "../helpers/auth";
 import { apiAs } from "../helpers/api";
 import {
@@ -68,7 +69,7 @@ async function purgeStudentApps(
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Duplicate-application prevention + post-withdrawal reapplication", () => {
+test.describe("重複申請防護與撤回後重新申請 | Duplicate-application prevention + post-withdrawal reapplication", { tag: [MODE.api, ROLE.student, FEATURE.apply, FEATURE.withdraw] }, () => {
   let runState: RunState;
   // Track both apps so afterAll can clean both.
   let createdAppIds: string[] = [];

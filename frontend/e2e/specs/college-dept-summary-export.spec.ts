@@ -34,6 +34,7 @@
  * - CollegeRankingExportService.build_workbook: no MinIO dependency
  */
 import { test, expect } from "@playwright/test";
+import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { loginAs } from "../helpers/auth";
 import { apiAs } from "../helpers/api";
 import { deleteApplicationCascade, getActiveConfig, getApplication, pool } from "../helpers/db";
@@ -64,7 +65,7 @@ async function purgeStudentApps(studentNycuId: string, scholarshipCode: string):
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Admin department-summary-export returns XLSX for dept with submissions", () => {
+test.describe("系所申請總表匯出 XLSX | Admin department-summary-export returns XLSX for dept with submissions", { tag: [MODE.api, ROLE.admin, ROLE.college, FEATURE.export] }, () => {
   let runState: RunState;
   let createdAppId: string | undefined;
 

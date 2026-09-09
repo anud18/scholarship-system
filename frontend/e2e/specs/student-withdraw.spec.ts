@@ -26,6 +26,7 @@
  *   /api/v1 prefix.
  */
 import { test, expect } from "@playwright/test";
+import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { loginAs } from "../helpers/auth";
 import { apiAs } from "../helpers/api";
 import { deleteApplicationCascade, getActiveConfig, getApplication, pool } from "../helpers/db";
@@ -60,7 +61,7 @@ const SUB_TYPE = "nstc";
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Student withdraws a submitted application", () => {
+test.describe("學生撤回已送出申請 | Student withdraws a submitted application", { tag: [MODE.api, ROLE.student, FEATURE.withdraw] }, () => {
   let runState: RunState;
   let createdAppId: string | undefined;
 

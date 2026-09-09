@@ -18,6 +18,7 @@
  * CI e2e-smoke job picks it up alongside the whitelist + multi-role specs.
  */
 import { test, expect } from "@playwright/test";
+import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { loginAs } from "../helpers/auth";
 import { apiAs } from "../helpers/api";
 import { getActiveConfig, pool } from "../helpers/db";
@@ -30,7 +31,7 @@ import {
 import { captureDiagnostics } from "../helpers/diagnose";
 
 // Use direct_phd (NOT phd): seed_scholarship_configs.py:258 sets
-// direct_phd_114 to QuotaManagementMode.simple, while phd_114 is
+// direct_phd_115 to QuotaManagementMode.simple, while phd_115 is
 // matrix_based — and matrix-mode rosters require a prior matrix
 // distribution before /payment-rosters/generate will accept them
 // (see roster_service.py: "找不到已執行分發的排名"). This spec only
@@ -43,7 +44,7 @@ const PERIOD_LABEL = "2099-E2E";
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Admin generates a payment roster", () => {
+test.describe("管理員產生造冊 | Admin generates a payment roster", { tag: [MODE.api, ROLE.admin, FEATURE.roster] }, () => {
   let runState: RunState;
   let createdRosterId: number | undefined;
 

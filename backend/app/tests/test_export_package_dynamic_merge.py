@@ -1,4 +1,4 @@
-"""Integration tests: generate_export_zip ships one extra per-student
+"""Integration tests: the streamed export ZIP ships one extra per-student
 申請資料合併檔 PDF merging that student's 學生資料彙整 summary with their
 admin-configured dynamic documents (file_type not in FILE_TYPE_LABELS).
 Fixed-type files (transcript, …) stay out of the merge; the merged PDF is
@@ -21,6 +21,8 @@ from pypdf import PdfReader, PdfWriter
 
 from app.models.application import Application
 from app.services.export_package_service import ExportPackageService
+from app.tests.export_package_fakes import FakeMinio as _FakeMinio
+from app.tests.export_package_fakes import collect_zip
 
 
 def _blank_pdf(num_pages=1):
@@ -68,32 +70,6 @@ def _mk_app(app_id, user_id, std_code, cname, files, submitted_form_data=None):
     return a
 
 
-class _FakeMinioResponse:
-    def __init__(self, payload):
-        self._payload = payload
-
-    def read(self):
-        return self._payload
-
-    def close(self):
-        pass
-
-    def release_conn(self):
-        pass
-
-
-class _FakeMinio:
-    """dict-backed MinIO double; unknown object_name raises like NoSuchKey."""
-
-    def __init__(self, objects):
-        self.objects = objects
-
-    def get_file_stream(self, object_name):
-        if object_name not in self.objects:
-            raise Exception(f"NoSuchKey: {object_name}")
-        return _FakeMinioResponse(self.objects[object_name])
-
-
 def _coro_returning(value):
     async def _inner(*args, **kwargs):
         return value
@@ -121,13 +97,13 @@ async def _run_export(monkeypatch, apps, minio, field_labels=None, summary_pdf=N
     if summary_pdf is not None:
         monkeypatch.setattr(svc, "_generate_summary_pdf", summary_pdf)
 
-    buf, _ = await svc.generate_export_zip(
+    plan = await svc.prepare_export(
         scholarship_type_id=1,
         academic_year=114,
         semester="first",
         college_code="A",
     )
-    return zipfile.ZipFile(buf)
+    return zipfile.ZipFile(await collect_zip(svc, plan))
 
 
 @pytest.mark.asyncio
@@ -190,7 +166,7 @@ async def test_merged_pdf_covers_summary_and_dynamic_docs_only(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_field_labels_reach_the_summary_pdf_inside_the_zip(monkeypatch):
-    # Wiring test: generate_export_zip loads the label map once and threads it
+    # Wiring test: prepare_export loads the label map once and threads it
     # down to _generate_summary_pdf. Dropping that argument anywhere in the
     # chain silently reverts 三、表單填寫資料 to English field ids.
     apps = [

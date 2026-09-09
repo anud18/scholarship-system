@@ -11,6 +11,8 @@ export default defineConfig({
     ["list"],
     ["html", { open: "never" }],
     ["./e2e/reporters/diagnostic-reporter.ts"],
+    // Must stay after "html": it patches the generated index.html.
+    ["./e2e/reporters/tag-filter-reporter.ts"],
   ],
   globalSetup: "./e2e/global-setup.ts",
   globalTeardown: "./e2e/global-teardown.ts",

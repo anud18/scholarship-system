@@ -21,27 +21,30 @@
  */
 
 import { test, expect } from "@playwright/test";
+import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { authContext } from "../helpers/auth";
 
 // Record video + an interactive trace on EVERY run, not just on failure.
 test.use({ video: "on", trace: "on" });
 
-test("showcase: admin looks up a student's scholarship history", async ({
-  page,
-}) => {
-  await authContext(page.context(), "admin");
-  await page.goto("/");
+test(
+  "示範：管理員查詢學生領獎紀錄 | showcase: admin looks up a student's scholarship history",
+  { tag: [MODE.browser, ROLE.admin, FEATURE.history] },
+  async ({ page }) => {
+    await authContext(page.context(), "admin");
+    await page.goto("/");
 
-  // AdminManagementShell renders inside the top-level "系統管理" tab.
-  await page.getByRole("tab", { name: "系統管理" }).click();
-  await page.getByRole("tab", { name: "學生領獎紀錄查詢" }).click();
+    // AdminManagementShell renders inside the top-level "系統管理" tab.
+    await page.getByRole("tab", { name: "系統管理" }).click();
+    await page.getByRole("tab", { name: "學生領獎紀錄查詢" }).click();
 
-  await page.getByLabel("學號").fill("stuphd001");
-  await page.getByRole("button", { name: "查詢" }).click();
+    await page.getByLabel("學號").fill("stuphd001");
+    await page.getByRole("button", { name: "查詢" }).click();
 
-  // Either a result table or an empty / not-found state is a valid render — the
-  // point is the page responded without error (see admin-student-history.spec).
-  await expect(
-    page.getByText(/領取明細|查無此學生資料|尚無領取記錄/).first()
-  ).toBeVisible({ timeout: 10000 });
-});
+    // Either a result table or an empty / not-found state is a valid render — the
+    // point is the page responded without error (see admin-student-history.spec).
+    await expect(
+      page.getByText(/領取明細|查無此學生資料|尚無領取記錄/).first()
+    ).toBeVisible({ timeout: 10000 });
+  }
+);
