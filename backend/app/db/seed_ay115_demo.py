@@ -18,9 +18,13 @@ for both 新申請 and 續領. Three kinds of students exist:
    renewals never sit in a ranking.
 3. **115 新申請** — plain student accounts for the application wizard.
 
-Groups 1 and 2 are the 115 續領 pool: the student can self-renew via
-`/renewals/eligible`, or the admin imports them through 匯入續領生 (workbook
-from `backend/scripts/generate_ay115_import_samples.py`).
+Groups 1 and 2 also carry an APPROVED 115 續領 each (`APP-115-0-002xx`): the
+113 續領生 on `phd_113` (second renewal) and the 114 續領生 on `phd_114`
+(first renewal), with no 115 rosters yet — so 造冊管理 shows both
+configurations' 115 segment ready to roster month by month. The 匯入續領生
+workbook from `backend/scripts/generate_ay115_import_samples.py` therefore
+previews as duplicates against this seed; use it against a database without
+these renewals (or delete them) to exercise the import path.
 
 Students meant to arrive via 批次匯入 get an ACCOUNT ONLY (so they show up in
 the Development Login picker); the import creates their applications.
@@ -69,7 +73,8 @@ CONFIG_CODE_BY_YEAR = {FIRST_AWARD_YEAR: "phd_113", RENEWAL_YEAR: "phd_114"}
 # even though its locked rosters exist. 博士生是月度造冊: seed a monthly schedule for every PhD year.
 SCHEDULE_CONFIG_CODES = ("phd_113", "phd_114", "phd_115")
 APP_SEQUENCE_BASE = 200  # APP-<year>-0-002xx, clear of the sequence counter and other demo seeds
-MONTHS_BEFORE_NOW_BY_YEAR = {FIRST_AWARD_YEAR: 24, RENEWAL_YEAR: 12}
+OPEN_YEAR = RENEWAL_YEAR + 1  # 115: both cohorts' renewals for this year are seeded approved, not yet rostered
+MONTHS_BEFORE_NOW_BY_YEAR = {FIRST_AWARD_YEAR: 24, RENEWAL_YEAR: 12, OPEN_YEAR: 1}
 DAYS_PER_MONTH = 30
 RANKING_SUB_TYPE_CODE = "default"  # college rankings are per college, not per sub-type
 # 已領月份數 baseline (StudentReceivedMonthRecord, the 領取月份數匯入 half of the
@@ -294,9 +299,9 @@ async def _get_or_create_application(
         sub_type_selection_mode=SubTypeSelectionMode.multiple,
         sub_scholarship_type=sub_type,
         is_renewal=is_renewal,
-        # Self-renew convention (renewal.py): renewal_year = the prior award's year,
-        # linked through previous_application_id.
-        renewal_year=previous_application.academic_year if (is_renewal and previous_application) else None,
+        # renewal_year = the awarding configuration's year (113 續領生 → 113 in every
+        # renewal year), linked through previous_application_id — same as 匯入續領生.
+        renewal_year=config.academic_year if is_renewal else None,
         previous_application_id=previous_application.id if (is_renewal and previous_application) else None,
         status=ApplicationStatus.approved.value,
         review_stage=ReviewStage.quota_distributed.value,
@@ -560,7 +565,10 @@ async def _seed_closed_years(
     for entry in RENEWAL_COHORT + NEW_RECIPIENTS_114:
         await _ensure_account(session, entry)
     first_award_by_index: Dict[int, Application] = {}
+    latest_by_index: Dict[int, Application] = {}
+    entry_by_index: Dict[int, StudentEntry] = {}
     for entry, index, year, is_renewal in _closed_year_plan():
+        entry_by_index[index] = entry
         already = (
             await session.execute(select(Application.id).where(Application.app_id == _app_id(year, index)))
         ).scalar_one_or_none()
@@ -580,6 +588,7 @@ async def _seed_closed_years(
         apps_by_year[year].append(application)
         if year == FIRST_AWARD_YEAR:
             first_award_by_index[index] = application
+        latest_by_index[index] = application  # plan is ordered by year, so this ends on the 114 record
 
     for year in CLOSED_YEARS:
         config = configs[year]
@@ -622,6 +631,26 @@ async def _seed_closed_years(
                 rules=rules,
                 admin_id=admin_id,
             )
+    # 115 (open year) 續領: every awardee of both cohorts renewed and was approved —
+    # 114 得獎者的第一年續領 (114 續領生, on phd_114) and 113 得獎者的第二年續領
+    # (113 續領生, on phd_113). No 115 rosters exist yet, so each configuration's
+    # 115 segment shows 估 N 人 and the admin can 造冊 month by month.
+    config_by_id = {c.id: c for c in configs.values()}
+    for index, previous in sorted(latest_by_index.items()):
+        already = (
+            await session.execute(select(Application.id).where(Application.app_id == _app_id(OPEN_YEAR, index)))
+        ).scalar_one_or_none()
+        await _get_or_create_application(
+            session,
+            entry=entry_by_index[index],
+            index=index,
+            year=OPEN_YEAR,
+            is_renewal=True,
+            phd=phd,
+            config=config_by_id[previous.allocation_config_id],
+            previous_application=previous,
+        )
+        counts["applications"] += already is None
     return counts
 
 
