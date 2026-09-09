@@ -121,6 +121,8 @@ def _make_application(
 
     scholarship_configuration = SimpleNamespace(
         amount=config_amount,
+        # 續領的身分標「得獎配置年度」，stub 的配置要帶年度
+        academic_year=academic_year,
         scholarship_type=SimpleNamespace(name=scholarship_name),
     )
 
@@ -130,6 +132,8 @@ def _make_application(
         submitted_form_data=submitted_form_data,
         amount=amount,
         scholarship_configuration=scholarship_configuration,
+        # 名額配置：stub 不佔名額 → 退回 scholarship_configuration（同舊資料）
+        allocation_config_id=None,
         sub_scholarship_type=sub_scholarship_type,
         is_renewal=is_renewal,
         previous_application_id=previous_application_id,

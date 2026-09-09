@@ -33,6 +33,11 @@ class RosterCycle(enum.Enum):
     YEARLY = "yearly"  # 年度
 
 
+# 一張申請最多領 36 個月：新申請 12 個月 + 兩次續領各 12 個月。
+# 造冊列表固定為配置學年度起算三個年段（第一年新申請、第二/三年續領）。
+AWARD_TERM_YEARS = 3
+
+
 class RosterStatus(enum.Enum):
     """造冊狀態枚舉"""
 

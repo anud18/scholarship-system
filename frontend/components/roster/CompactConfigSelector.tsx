@@ -133,10 +133,27 @@ export function CompactConfigSelector({ onConfigSelect, disabled = false }: Comp
   const loadPeriodsForType = async (typeId: number) => {
     setIsLoadingPeriods(true)
     try {
-      const response = await api.admin.getScholarshipConfigurations({
-        scholarship_type_id: typeId,
-        is_active: true
-      })
+      // 造冊管理 lists every configuration of the type, not only the ones still
+      // accepting applications: a configuration keeps paying its cohort for
+      // three years (新申請 + 兩年續領), so phd_113 must stay selectable while
+      // its 114 / 115 續領 months are being rostered. The list endpoint filters
+      // by is_active (default true), so fetch both halves and merge.
+      const [activeResponse, inactiveResponse] = await Promise.all([
+        api.admin.getScholarshipConfigurations({ scholarship_type_id: typeId, is_active: true }),
+        api.admin.getScholarshipConfigurations({ scholarship_type_id: typeId, is_active: false })
+      ])
+      // A half-loaded list would silently hide a cohort that is still paying out,
+      // so either failure is a failure of the whole load (surfaced by the catch).
+      if (!activeResponse.success || !inactiveResponse.success) {
+        throw new Error(activeResponse.message || inactiveResponse.message || "Failed to load configurations")
+      }
+      const response = {
+        success: true,
+        data: [
+          ...((activeResponse.data as ScholarshipConfiguration[]) || []),
+          ...((inactiveResponse.data as ScholarshipConfiguration[]) || [])
+        ]
+      }
 
       if (response.success && response.data) {
         const configs = response.data as ScholarshipConfiguration[]

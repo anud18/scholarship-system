@@ -231,7 +231,9 @@ class RosterRegenerationService(RosterService):
             .filter(
                 and_(
                     Application.scholarship_type_id == config.scholarship_type_id,
-                    Application.academic_year == config.academic_year,
+                    # 冊的發放年度（roster.academic_year），不是 owner 配置年度：
+                    # phd_114 底下的 115 期間冊裝的是 academic_year=115 的續領。
+                    Application.academic_year == roster.academic_year,
                     Application.is_renewal.is_(True),
                     Application.status == "approved",
                     Application.deleted_at.is_(None),

@@ -25,7 +25,7 @@ from app.models.scholarship import ScholarshipConfiguration, ScholarshipSubTypeC
 from app.models.student import Academy
 from app.models.user import User, UserRole
 from app.services.received_months_service import (
-    calculate_received_months_bulk_async,
+    calculate_received_months_bulk_by_type_async,
     get_imported_months_bulk_async,
 )
 from app.utils.student_snapshot_fields import format_enrollment_date_roc
@@ -617,26 +617,17 @@ class ManualDistributionService:
         """
         Bulk-compute system received_months keyed by student std_stdcode.
 
-        Returns empty dict when no matching ScholarshipConfiguration exists;
-        callers fall back to showing no system value for affected students.
+        Counted across every configuration of the scholarship type: a student's
+        rosters hang under the configuration that awarded their slot (phd_113
+        for a 113 awardee's 113/114/115 months), never under the year being
+        distributed, so a per-year lookup would read 0 for exactly the
+        續領 / 補發 students the 36-month cap applies to.
         """
-        config_stmt = select(ScholarshipConfiguration.id).where(
-            and_(
-                ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
-                ScholarshipConfiguration.academic_year == academic_year,
-                _config_semester_condition(semester),
-            )
-        )
-        config_row = (await self.db.execute(config_stmt)).first()
-        if not config_row:
-            return {}
-        config_id = config_row[0]
-
         student_ids = self._student_numbers_for(items)
         if not student_ids:
             return {}
 
-        return await calculate_received_months_bulk_async(self.db, student_ids, config_id)
+        return await calculate_received_months_bulk_by_type_async(self.db, student_ids, scholarship_type_id)
 
     async def _bulk_imported_received_months(
         self,

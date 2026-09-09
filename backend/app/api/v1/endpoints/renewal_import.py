@@ -32,7 +32,7 @@ from app.schemas.renewal_import import (
     RenewalImportHistoryResponse,
     RenewalImportUploadResponse,
 )
-from app.services.renewal_import_service import RenewalImportService, _to_semester_enum
+from app.services.renewal_import_service import RenewalImportService, _to_semester_enum, find_config
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -69,18 +69,15 @@ async def _load_config_in_renewal_period(
     academic_year: int,
     semester: Optional[str],
 ) -> ScholarshipConfiguration:
-    """Load the (year, semester) config and require it to be in its renewal window."""
-    semester_enum = _to_semester_enum(semester)
-    stmt = select(ScholarshipConfiguration).where(
-        ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
-        ScholarshipConfiguration.academic_year == academic_year,
-    )
-    stmt = (
-        stmt.where(ScholarshipConfiguration.semester.is_(None))
-        if semester_enum in (None, Semester.yearly)
-        else stmt.where(ScholarshipConfiguration.semester == semester_enum)
-    )
-    config = (await db.execute(stmt)).scalar_one_or_none()
+    """Load the renewal cycle's (year, semester) config and require it to be in
+    its renewal window.
+
+    The selected year is the cycle being paid (115 = renewals for 115-09 ~
+    116-08); each student's cohort configuration (phd_113 / phd_114) is
+    resolved from their prior award by RenewalImportService, so the gate is
+    simply "the 115 續領期間 is open".
+    """
+    config = await find_config(db, scholarship_type_id, academic_year, _to_semester_enum(semester))
     if not config:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

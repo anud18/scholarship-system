@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { logger } from "@/lib/utils/logger";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -45,12 +45,32 @@ interface Period {
   total_amount?: number;
   qualified_count?: number;
   next_schedule?: string;
+  /** 等待中的期間預估可造冊人數（新申請需完成分發、續領需核准後才會 > 0） */
+  estimated_count?: number;
   period_start_date?: string;
   period_end_date?: string;
   sub_type?: string | null;
   allocation_year?: number | null;
   project_number?: string | null;
   excel_stale?: boolean;
+  /** 納入造冊的續領人數（cycle-status 隨造冊列回傳；0 或未提供則不標示） */
+  renewal_count?: number;
+  /** 這一列實際發放的學年度（第二、三年段是續領年，與 label 的年度一致） */
+  academic_year?: number;
+  /** 距配置學年度的年段偏移：0 = 第一年新申請，1/2 = 續領年段 */
+  year_offset?: number;
+  /** 年段名稱（新申請 / 續領） */
+  segment?: string;
+}
+
+const YEAR_ORDINALS = ["一", "二", "三", "四", "五"];
+
+/** 年段標題列文字：第一年 新申請（114 學年度）/ 第二年 續領（115 學年度） */
+function segmentTitle(period: Period): string {
+  const offset = period.year_offset ?? 0;
+  const ordinal = YEAR_ORDINALS[offset] ?? String(offset + 1);
+  const year = period.academic_year ?? period.label.split("-")[0];
+  return `第${ordinal}年 ${period.segment ?? ""}（${year} 學年度）`;
 }
 
 interface RosterListTableProps {
@@ -169,7 +189,8 @@ export function RosterListTable({
         scholarship_configuration_id: configId,
         period_label: period.label,
         roster_cycle: rosterCycle as never,
-        academic_year: parseInt(period.label.split("-")[0]),
+        academic_year:
+          period.academic_year ?? parseInt(period.label.split("-")[0]),
         student_verification_enabled: true,
         auto_export_excel: true,
         force_regenerate: isRegeneration,
@@ -278,9 +299,26 @@ export function RosterListTable({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {periods.map(period => (
-                  <TableRow
+                {periods.map((period, index) => {
+                  const previous = index > 0 ? periods[index - 1] : undefined;
+                  const startsSegment =
+                    period.year_offset !== undefined &&
+                    previous?.year_offset !== period.year_offset;
+                  return (
+                  <Fragment
                     key={`${period.label}-${period.sub_type ?? ""}-${period.allocation_year ?? ""}`}
+                  >
+                  {startsSegment && (
+                    <TableRow className="bg-slate-100 hover:bg-slate-100">
+                      <TableCell
+                        colSpan={7}
+                        className="py-1.5 text-xs font-medium text-slate-600"
+                      >
+                        {segmentTitle(period)}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  <TableRow
                     className={getRowClassName(period.status)}
                   >
                     {/* 期間 */}
@@ -288,7 +326,7 @@ export function RosterListTable({
                       {period.label}
                     </TableCell>
 
-                    {/* 子類型 */}
+                    {/* 子類型（含續領人數標記） */}
                     <TableCell className="whitespace-nowrap">
                       {period.sub_type ? (
                         <span className="font-mono text-sm text-blue-700">
@@ -296,6 +334,15 @@ export function RosterListTable({
                         </span>
                       ) : (
                         <span className="text-muted-foreground">-</span>
+                      )}
+                      {(period.renewal_count ?? 0) > 0 && (
+                        <Badge
+                          variant="outline"
+                          className="ml-2 border-amber-300 bg-amber-50 text-amber-700"
+                          title="此造冊內納入造冊的續領人數"
+                        >
+                          續領 {period.renewal_count} 人
+                        </Badge>
                       )}
                     </TableCell>
 
@@ -470,6 +517,13 @@ export function RosterListTable({
                           <Loader2 className="mr-1 h-4 w-4 animate-spin" />
                           處理中...
                         </Button>
+                      ) : period.estimated_count === 0 ? (
+                        <span
+                          className="text-sm text-muted-foreground"
+                          title="此期間尚無可造冊的學生：新申請需先完成分發，續領需先核准"
+                        >
+                          尚無可造冊名單
+                        </span>
                       ) : (
                         <Button
                           size="sm"
@@ -485,7 +539,9 @@ export function RosterListTable({
                       )}
                     </TableCell>
                   </TableRow>
-                ))}
+                  </Fragment>
+                  );
+                })}
               </TableBody>
             </Table>
           )}

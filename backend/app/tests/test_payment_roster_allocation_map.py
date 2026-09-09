@@ -15,9 +15,12 @@ def test_allocation_map_reads_allocation_config_id_not_year():
     source = ENDPOINT.read_text(encoding="utf-8")
     # The dropped column must not be read off a CollegeRankingItem row alias.
     assert "ri.allocation_year" not in source
-    # The map must now carry the consumed-config id.
+    # The map must now carry the consumed-config id: every ranking item goes
+    # through the shared `_allocation_entry` builder with its allocation_config_id,
+    # and that builder is what stores it under "allocation_config_id".
     assert "ri.allocation_config_id" in source
-    assert '"allocation_config_id": ri.allocation_config_id' in source
+    assert "_allocation_entry(ri.allocated_sub_type, ri.allocation_config_id)" in source
+    assert '"allocation_config_id": allocation_config_id' in source
 
 
 def test_student_info_exposes_allocation_config_id():

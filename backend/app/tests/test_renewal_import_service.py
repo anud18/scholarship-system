@@ -109,6 +109,8 @@ async def test_create_renewals_sets_approved_fields(service):
     config = Mock(spec=ScholarshipConfiguration)
     config.id = 7
     config.amount = 40000
+    config.academic_year = 114
+    config.scholarship_type_id = 1
 
     batch = Mock(spec=BatchImport)
     batch.id = 3
@@ -149,14 +151,21 @@ async def test_create_renewals_sets_approved_fields(service):
         patch.object(service.db, "flush", new=AsyncMock()),
         patch.object(service.db, "execute", new=AsyncMock()),
     ):
-        # config lookup + ApplicationSequence lookup both via execute
-        cfg_res, seq_res = Mock(), Mock()
-        cfg_res.scalar_one_or_none.return_value = config
+        # execute order: cycle config lookup, prior-award rows, cohort config load, ApplicationSequence lookup
+        cycle_config = Mock(spec=ScholarshipConfiguration)
+        cycle_config.id = 8
+        cycle_config.academic_year = 115
+        cycle_config.scholarship_type_id = 1
+        cfg_res, prior_res, cohort_res, seq_res = Mock(), Mock(), Mock(), Mock()
+        cfg_res.scalar_one_or_none.return_value = cycle_config
+        # (nycu_id, academic_year, allocation_config_id, scholarship_configuration_id): a 114 新申請 on config 7
+        prior_res.all.return_value = [("413271002", 114, 7, 7)]
+        cohort_res.scalars.return_value = [config]
         seq_res.scalar_one_or_none.return_value = None
-        service.db.execute.side_effect = [cfg_res, seq_res]
+        service.db.execute.side_effect = [cfg_res, prior_res, cohort_res, seq_res]
 
         created_ids, errors = await service.create_renewals_from_batch(
-            batch_import=batch, parsed_rows=parsed, scholarship_type_id=1, academic_year=114, semester="first"
+            batch_import=batch, parsed_rows=parsed, scholarship_type_id=1, academic_year=115, semester="first"
         )
 
     apps = [o for o in captured if isinstance(o, Application)]
@@ -166,7 +175,12 @@ async def test_create_renewals_sets_approved_fields(service):
     assert app.status == ApplicationStatus.approved.value
     assert app.review_stage == ReviewStage.quota_distributed.value
     assert app.sub_scholarship_type == "nstc"
+    # 114 續領生 imported into the 115 cycle: occupies the 114 slot (cohort config 7), paid in 115.
     assert app.allocation_config_id == 7
+    assert app.scholarship_configuration_id == 7
+    assert app.academic_year == 115
+    assert app.renewal_year == 114
+    assert app.app_id.startswith("APP-115-")
     assert app.amount == 40000
     assert app.import_source == "renewal_import"
     assert app.app_id.endswith("R")

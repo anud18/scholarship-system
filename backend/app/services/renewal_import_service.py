@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError, ServiceUnavailableError
@@ -15,6 +15,7 @@ from app.models.application import Application, ApplicationStatus
 from app.models.application_sequence import ApplicationSequence
 from app.models.batch_import import BatchImport
 from app.models.enums import BatchImportStatus, ReviewStage, Semester
+from app.models.payment_roster import AWARD_TERM_YEARS
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User
 from app.schemas.renewal_import import RenewalDataRow
@@ -30,6 +31,22 @@ APPLIED_YES = "是"
 # hardcoded-password heuristic (B105) trips on the "PASS" name prefix, hence the
 # inline nosec on the assignment below.
 PASS_MARK = "通過"  # nosec B105
+
+
+async def find_config(
+    db: AsyncSession, scholarship_type_id: int, academic_year: int, semester_enum: Optional[Semester]
+) -> Optional[ScholarshipConfiguration]:
+    """The (year, semester) configuration of a scholarship; yearly cycles store semester as NULL."""
+    stmt = select(ScholarshipConfiguration).where(
+        ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
+        ScholarshipConfiguration.academic_year == academic_year,
+    )
+    stmt = (
+        stmt.where(ScholarshipConfiguration.semester.is_(None))
+        if semester_enum in (None, Semester.yearly)
+        else stmt.where(ScholarshipConfiguration.semester == semester_enum)
+    )
+    return (await db.execute(stmt)).scalar_one_or_none()
 
 
 def _to_semester_enum(semester: Optional[str]) -> Optional[Semester]:
@@ -237,16 +254,22 @@ class RenewalImportService:
                     }
                 )
 
-        # Duplicate approved/renewal check + over-quota warning.
+        # The selected 學年度 is the renewal cycle being paid (115 = renewals for
+        # 115-09 ~ 116-08). Each student's cohort (the configuration that awarded
+        # their slot, and that their 造冊 hangs under) is resolved from their
+        # latest approved award — so one sheet can carry 113 續領生 and 114 續領生.
         semester_enum = _to_semester_enum(semester)
+        config = await find_config(self.db, scholarship_type_id, academic_year, semester_enum)
+        cohorts = await self._resolve_cohorts(student_ids, scholarship_type_id, academic_year)
         users_stmt = select(User).where(User.nycu_id.in_(student_ids))
         users = (await self.db.execute(users_stmt)).scalars().all()
         user_by_nycu = {u.nycu_id: u for u in users}
+        existing: set = set()
         if user_by_nycu:
             # deleted_at IS NULL mirrors the partial unique index uq_user_renewal_app
             # (is_renewal = true AND deleted_at IS NULL); a soft-deleted prior renewal
             # does not block a fresh insert, so it must not raise a false duplicate.
-            dup_stmt = select(Application).where(
+            dup_stmt = select(Application.user_id).where(
                 Application.user_id.in_([u.id for u in users]),
                 Application.scholarship_type_id == scholarship_type_id,
                 Application.academic_year == academic_year,
@@ -258,37 +281,106 @@ class RenewalImportService:
                 if semester_enum is None
                 else dup_stmt.where(Application.semester == semester_enum)
             )
-            existing = {a.user_id for a in (await self.db.execute(dup_stmt)).scalars().all()}
-            for r in parsed_rows:
-                u = user_by_nycu.get(r["student_id"])
-                if u and u.id in existing:
-                    errors.append(
-                        {
-                            "row_number": r["row_number"],
-                            "student_id": r["student_id"],
-                            "field": "duplicate",
-                            "error_type": "duplicate_renewal",
-                            "message": f"學號 {r['student_id']} 已有此獎學金 {academic_year} 學年度的續領申請。",
-                        }
-                    )
+            existing = {user_id for (user_id,) in (await self.db.execute(dup_stmt)).all()}
+        for r in parsed_rows:
+            sid = r["student_id"]
+            u = user_by_nycu.get(sid)
+            cohort = cohorts.get(sid)
+            if u and u.id in existing:
+                errors.append(
+                    {
+                        "row_number": r["row_number"],
+                        "student_id": sid,
+                        "field": "duplicate",
+                        "error_type": "duplicate_renewal",
+                        "message": f"學號 {sid} 已有此獎學金 {academic_year} 學年度的續領申請。",
+                    }
+                )
+            elif cohort is None:
+                # 續領只開放給得獎者：{academic_year} 之前沒有核准的申請就不是續領生。
+                errors.append(
+                    {
+                        "row_number": r["row_number"],
+                        "student_id": sid,
+                        "field": "學號",
+                        "error_type": "not_awardee",
+                        "message": f"學號 {sid} 在 {academic_year} 學年度之前查無核准的申請，不是得獎者，無法以續領生匯入。",
+                    }
+                )
+            elif academic_year - cohort.academic_year >= AWARD_TERM_YEARS:
+                errors.append(
+                    {
+                        "row_number": r["row_number"],
+                        "student_id": sid,
+                        "field": "學號",
+                        "error_type": "term_exhausted",
+                        "message": (
+                            f"學號 {sid} 為 {cohort.academic_year} 學年度得獎者，"
+                            f"{academic_year} 學年度已超過 {AWARD_TERM_YEARS} 年（{AWARD_TERM_YEARS * 12} 個月）領獎期限。"
+                        ),
+                    }
+                )
 
-        await self._append_quota_warnings(parsed_rows, scholarship_type_id, academic_year, semester_enum, warnings)
+        if config:
+            await self._append_quota_warnings(parsed_rows, config, warnings)
         return errors, warnings
 
-    async def _append_quota_warnings(self, parsed_rows, scholarship_type_id, academic_year, semester_enum, warnings):
+    async def _resolve_cohorts(
+        self, student_ids: List[str], scholarship_type_id: int, paying_year: int
+    ) -> Dict[str, ScholarshipConfiguration]:
+        """{學號: 得獎配置} for the renewal cycle `paying_year`.
+
+        續領只開放給得獎者：a student's cohort is the configuration whose slot
+        their latest approved application before `paying_year` occupies
+        (allocation_config_id, falling back to scholarship_configuration_id).
+        A 114 新申請 and its 115 續領 both point at phd_114, so a 116 renewal
+        resolves to the same cohort. Students with no prior approved award are
+        absent from the result.
+        """
+        rows = (
+            await self.db.execute(
+                select(
+                    User.nycu_id,
+                    Application.academic_year,
+                    Application.allocation_config_id,
+                    Application.scholarship_configuration_id,
+                )
+                .join(Application, Application.user_id == User.id)
+                .where(
+                    User.nycu_id.in_(student_ids),
+                    Application.scholarship_type_id == scholarship_type_id,
+                    Application.academic_year < paying_year,
+                    Application.status == ApplicationStatus.approved.value,
+                    Application.deleted_at.is_(None),
+                )
+                .order_by(User.nycu_id, Application.academic_year.desc())
+            )
+        ).all()
+        cohort_config_id_by_nycu: Dict[str, int] = {}
+        for nycu_id, _year, allocation_config_id, configuration_id in rows:
+            config_id = allocation_config_id or configuration_id
+            if nycu_id not in cohort_config_id_by_nycu and config_id is not None:
+                cohort_config_id_by_nycu[nycu_id] = config_id
+        if not cohort_config_id_by_nycu:
+            return {}
+        configs = (
+            await self.db.execute(
+                select(ScholarshipConfiguration).where(
+                    ScholarshipConfiguration.id.in_(set(cohort_config_id_by_nycu.values()))
+                )
+            )
+        ).scalars()
+        config_by_id = {c.id: c for c in configs}
+        return {
+            nycu_id: config_by_id[config_id]
+            for nycu_id, config_id in cohort_config_id_by_nycu.items()
+            if config_id in config_by_id
+        }
+
+    async def _append_quota_warnings(self, parsed_rows, config: ScholarshipConfiguration, warnings):
         from app.services.manual_distribution_service import ManualDistributionService
 
-        config_stmt = select(ScholarshipConfiguration).where(
-            ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
-            ScholarshipConfiguration.academic_year == academic_year,
-        )
-        config_stmt = (
-            config_stmt.where(ScholarshipConfiguration.semester.is_(None))
-            if semester_enum in (None, Semester.yearly)
-            else config_stmt.where(ScholarshipConfiguration.semester == semester_enum)
-        )
-        config = (await self.db.execute(config_stmt)).scalar_one_or_none()
-        if not config or not config.quotas:
+        if not config.quotas:
             return
         md = ManualDistributionService(self.db)
         counts: Dict[str, int] = {}
@@ -363,20 +455,16 @@ class RenewalImportService:
             raise BatchImportError(message=f"獎學金類型 ID {scholarship_type_id} 不存在", batch_id=batch_import.id)
 
         semester_enum = _to_semester_enum(semester)
-        config_stmt = select(ScholarshipConfiguration).where(
-            ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
-            ScholarshipConfiguration.academic_year == academic_year,
-        )
-        config_stmt = (
-            config_stmt.where(ScholarshipConfiguration.semester.is_(None))
-            if semester_enum in (None, Semester.yearly)
-            else config_stmt.where(ScholarshipConfiguration.semester == semester_enum)
-        )
-        config = (await self.db.execute(config_stmt)).scalar_one_or_none()
+        config = await find_config(self.db, scholarship_type_id, academic_year, semester_enum)
         if not config:
             raise BatchImportError(
                 message=f"找不到 {academic_year} 學年度的獎學金配置，請先建立配置。", batch_id=batch_import.id
             )
+
+        # 所選學年度 = 這一輪續領領錢的學年度；每位學生的得獎配置（冊掛在它底下、
+        # 佔它的名額、用它的金額）從該生最近一筆核准申請推得。
+        paying_year = academic_year
+        cohorts = await self._resolve_cohorts([r["student_id"] for r in parsed_rows], scholarship_type_id, paying_year)
 
         seq_semester = semester if semester is not None else "yearly"
         current_row = 0
@@ -388,13 +476,24 @@ class RenewalImportService:
             for idx, row in enumerate(parsed_rows):
                 current_row = row.get("row_number", idx + 2)
                 user = user_map[row["student_id"]]
+                cohort = cohorts.get(row["student_id"])
+                if cohort is None or paying_year - cohort.academic_year >= AWARD_TERM_YEARS:
+                    # The preview already rejects this; guard the confirm path too
+                    # (all-or-nothing, like the missing-snapshot case).
+                    raise BatchImportError(
+                        message=(
+                            f"學號 {row['student_id']} 不是可續領的得獎者"
+                            f"（{paying_year} 學年度之前無核准申請，或已超過 {AWARD_TERM_YEARS} 年領獎期限），無法匯入。"
+                        ),
+                        batch_id=batch_import.id,
+                    )
 
                 # Inline sequential app_id with 'R' (renewal) suffix — same lock pattern as batch import.
                 seq_stmt = (
                     select(ApplicationSequence)
                     .where(
                         and_(
-                            ApplicationSequence.academic_year == academic_year,
+                            ApplicationSequence.academic_year == paying_year,
                             ApplicationSequence.semester == seq_semester,
                         )
                     )
@@ -402,18 +501,16 @@ class RenewalImportService:
                 )
                 seq_record = (await self.db.execute(seq_stmt)).scalar_one_or_none()
                 if not seq_record:
-                    seq_record = ApplicationSequence(
-                        academic_year=academic_year, semester=seq_semester, last_sequence=0
-                    )
+                    seq_record = ApplicationSequence(academic_year=paying_year, semester=seq_semester, last_sequence=0)
                     self.db.add(seq_record)
                     await self.db.flush()
                 seq_record.last_sequence += 1
-                app_id = f"{ApplicationSequence.format_app_id(academic_year, seq_semester, seq_record.last_sequence)}R"
+                app_id = f"{ApplicationSequence.format_app_id(paying_year, seq_semester, seq_record.last_sequence)}R"
 
                 student_data = None
                 try:
                     student_data = await self.student_service.get_student_snapshot(
-                        row["student_id"], academic_year=str(academic_year), semester=semester
+                        row["student_id"], academic_year=str(paying_year), semester=semester
                     )
                 except (NotFoundError, ServiceUnavailableError):
                     logger.warning("SIS snapshot unavailable for %s", row["student_id"], exc_info=True)
@@ -435,17 +532,17 @@ class RenewalImportService:
                     app_id=app_id,
                     user_id=user.id,
                     scholarship_type_id=scholarship_type_id,
-                    scholarship_configuration_id=config.id,
-                    allocation_config_id=config.id,
+                    scholarship_configuration_id=cohort.id,  # 得獎配置：冊掛在它底下
+                    allocation_config_id=cohort.id,  # 佔的是得獎年度的名額（同自助續領）
                     scholarship_name=scholarship.name,
-                    amount=config.amount,
+                    amount=cohort.amount,
                     sub_scholarship_type=row["sub_type"],
                     scholarship_subtype_list=[row["sub_type"]],
                     sub_type_selection_mode=scholarship.sub_type_selection_mode,
-                    academic_year=academic_year,
+                    academic_year=paying_year,
                     semester=semester_enum,
                     is_renewal=True,
-                    renewal_year=academic_year,
+                    renewal_year=cohort.academic_year,  # 得獎配置年度（114 續領生 → 114）
                     status=ApplicationStatus.approved.value,
                     review_stage=ReviewStage.quota_distributed.value,
                     quota_allocation_status="allocated",

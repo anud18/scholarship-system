@@ -441,6 +441,11 @@ export function RenewalImportPanel({ locale = "zh" }: RenewalImportPanelProps) {
                     ))}
                   </select>
                 )}
+                <p className="mt-1 text-xs text-gray-500">
+                  {locale === "zh"
+                    ? "選擇這一輪續領領獎的學年度（115 = 115-09 起的續領）。每位學生的得獎年度依其最近一筆核准申請判定：114 得獎者匯入後是 114 續領生、掛在 114 配置底下；查無得獎紀錄或已滿三年者會被擋下。"
+                    : "Pick the renewal cycle being paid (115 = renewals from 115-09). Each student's cohort follows their latest approved award: a 114 awardee becomes a 114 續領生 under the 114 configuration; students without an award, or past the three-year term, are rejected."}
+                </p>
               </div>
             </div>
 
