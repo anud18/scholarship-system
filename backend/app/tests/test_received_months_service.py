@@ -47,6 +47,7 @@ from app.models.payment_roster import (  # noqa: E402
     PaymentRoster,
     PaymentRosterItem,
     RosterCycle,
+    RosterStatus,
     RosterTriggerType,
 )
 
@@ -82,6 +83,7 @@ def _make_roster(
     period_label: str,
     roster_cycle: RosterCycle,
     sub_type: str | None = None,
+    status: RosterStatus = RosterStatus.COMPLETED,
 ) -> PaymentRoster:
     roster = PaymentRoster(
         roster_code=roster_code,
@@ -90,6 +92,7 @@ def _make_roster(
         period_label=period_label,
         roster_cycle=roster_cycle,
         sub_type=sub_type,
+        status=status,
         trigger_type=RosterTriggerType.MANUAL,
         created_by=1,
         started_at=datetime.now(timezone.utc),
@@ -322,3 +325,37 @@ class TestCalculateReceivedMonthsBulk:
         assert bulk["S002"] == calculate_received_months(db, "S002", scholarship_config_id=1)
         assert bulk["S001"] == 18  # 6 + 12
         assert bulk["S002"] == 6
+
+
+class TestCountedRosterStatuses:
+    """Only 已完成 / 已鎖定 rosters paid anybody; the rest contribute no months."""
+
+    def test_completed_and_locked_count_but_draft_processing_failed_do_not(self, db):
+        from app.services.received_months_service import (
+            calculate_received_months,
+            calculate_received_months_bulk,
+        )
+
+        for idx, status in enumerate(
+            (
+                RosterStatus.COMPLETED,
+                RosterStatus.LOCKED,
+                RosterStatus.DRAFT,
+                RosterStatus.PROCESSING,
+                RosterStatus.FAILED,
+            )
+        ):
+            roster = _make_roster(
+                db,
+                roster_code=f"R-STATUS-{idx}",
+                scholarship_config_id=1,
+                academic_year=114,
+                period_label=f"114-{idx + 1:02d}",
+                roster_cycle=RosterCycle.MONTHLY,
+                status=status,
+            )
+            _make_item(db, roster_id=roster.id, student_nycu_id="S001")
+        db.commit()
+
+        assert calculate_received_months(db, "S001", scholarship_config_id=1) == 2
+        assert calculate_received_months_bulk(db, ["S001"], scholarship_config_id=1) == {"S001": 2}

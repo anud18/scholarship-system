@@ -26,7 +26,9 @@
 
 **跨 sub_type 合併**：不篩選 `sub_type`，所以同一配置下的 `nstc`、`moe_1w`、`moe_2w` 一併計入。
 
-**不跨學年度**：`scholarship_configuration_id` 是年度專屬鍵，因此只統計指定配置年度的 roster。若需跨年度加總，需呼叫端自行聚合。
+**只算已完成 / 已鎖定的造冊**：`payment_rosters.status IN ('completed','locked')`。草稿、處理中、失敗的冊沒有發錢，不計。
+
+**一個配置涵蓋整批人的 36 個月**：114 配置的新申請（114-09~115-08）、這批人的第一年續領（115-09~116-08）與第二年續領（116-09~117-08）、以及補發到 114 剩餘名額的他年新申請，造冊都掛在 114 配置底下（`allocation_config_id` = 114）。因此以 `scholarship_configuration_id` 加總就是該生在這張申請下實際領的 12 / 24 / 36 個月，不需跨配置聚合。
 
 ## `roster_cycle` 換算月數
 

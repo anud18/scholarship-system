@@ -22,6 +22,7 @@ from app.core.path_security import validate_object_name_minio
 from app.core.security import check_user_roles
 from app.db.deps import get_db, get_sync_db
 from app.models.payment_roster import (
+    AWARD_TERM_YEARS,
     MANUAL_EXCLUSION_CATEGORY_LABELS,
     PaymentRoster,
     PaymentRosterItem,
@@ -182,6 +183,81 @@ def _roster_period_entry(
         **dates,
         **_roster_status_fields(roster),
     }
+
+
+def _period_label_year(label: str) -> Optional[int]:
+    """Leading ROC year of a period label ("115-09" → 115, "115" → 115); None if unparseable."""
+    try:
+        return int(str(label).split("-")[0])
+    except ValueError:
+        return None
+
+
+def _segment_years(config_year: int, term_years: int, roster_groups: dict) -> list[int]:
+    """Academic years a configuration's 造冊列表 shows.
+
+    Fixed `term_years` segments from the configuration's own year (新申請 year
+    plus the 續領 years), extended by any later year an existing roster already
+    sits in (a 補發 recipient's renewal can run past the cohort's third year).
+    """
+    years = set(range(config_year, config_year + term_years))
+    for label in roster_groups:
+        year = _period_label_year(label)
+        if year is not None and year > config_year:
+            years.add(year)
+    return sorted(years)
+
+
+def _segment_fields(year: int, config_year: int) -> dict:
+    """Which year segment of the configuration a period row belongs to."""
+    offset = year - config_year
+    return {"academic_year": year, "year_offset": offset, "segment": "新申請" if offset == 0 else "續領"}
+
+
+def _semester_for_month(month: int) -> Optional[str]:
+    """Map a month to a semester for semester-based scholarships (8-1 → first, 2-7 → second)."""
+    if month in (2, 3, 4, 5, 6, 7):
+        return "second"
+    if month in (8, 9, 10, 11, 12, 1):
+        return "first"
+    return None
+
+
+def _period_specs(cycle: str, year: int, is_yearly: bool, semester_value: Optional[str]) -> list[dict]:
+    """Period rows one academic year contributes under a roster cycle.
+
+    Each spec: label (period_label), semester_filter for the eligible-count
+    estimate, and extra display fields. Yearly scholarships run September to
+    August; semester scholarships list calendar months.
+    """
+    if cycle == "monthly":
+        months = [9, 10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8] if is_yearly else list(range(1, 13))
+        western_year = year + 1911
+        specs = []
+        for month in months:
+            label = f"{year}-{month:02d}"
+            calendar_year = western_year if month >= 9 else western_year + 1
+            specs.append(
+                {
+                    "label": label,
+                    "semester_filter": None if is_yearly else _semester_for_month(month),
+                    "extra": {
+                        "western_date": f"{calendar_year}-{month:02d}",
+                        "display_label": f"{label} ({calendar_year}年{month}月)",
+                    },
+                }
+            )
+        return specs
+    if cycle == "semi_yearly":
+        return [
+            {
+                "label": f"{year}-{half}",
+                "semester_filter": None if semester_value is None else ("first" if half == "H1" else "second"),
+                "extra": {},
+            }
+            for half in ("H1", "H2")
+        ]
+    return [{"label": str(year), "semester_filter": None, "extra": {}}]
 
 
 async def _count_included_renewals(db: AsyncSession, roster_ids: list[int]) -> dict[int, int]:
@@ -1041,139 +1117,109 @@ async def get_roster_cycle_status(
         periods = []
         academic_year = config.academic_year
 
-        # Resolve ranking for matrix-based scholarships (used for eligible-count estimation)
         from app.models.application import Application
         from app.models.college_review import CollegeRanking, CollegeRankingItem
         from app.models.enums import QuotaManagementMode
 
-        ranking_id_for_estimate: Optional[int] = None
         is_matrix_based = config.quota_management_mode == QuotaManagementMode.matrix_based
-        if is_matrix_based:
-            ranking_stmt = (
-                select(CollegeRanking.id)
-                .where(
-                    and_(
-                        CollegeRanking.scholarship_type_id == config.scholarship_type_id,
-                        CollegeRanking.academic_year == academic_year,
-                        CollegeRanking.is_finalized.is_(True),
-                        CollegeRanking.distribution_executed.is_(True),
-                    )
-                )
-                .order_by(CollegeRanking.finalized_at.desc())
-                .limit(1)
-            )
-            ranking_id_for_estimate = (await db.execute(ranking_stmt)).scalar_one_or_none()
+        is_yearly = config.semester is None or config.semester.value == "annual"
+        semester_value = config.semester.value if config.semester else None
+        cycle = schedule.roster_cycle.value
 
-        # Cache counts by semester filter to avoid duplicate queries across periods
+        # 年段：配置學年度起固定 AWARD_TERM_YEARS 年 —— 第一年新申請、第二/三年續領，
+        # 都掛在同一個配置（同一個計畫編號）底下。沒有續領制度的獎學金（該類型
+        # 沒有任何配置設定過續領申請期間）只有第一年。已存在但落在更後面年度的冊
+        # （補發者的續領）也列進來。
+        has_renewal_scheme = (
+            await db.execute(
+                select(func.count(ScholarshipConfiguration.id)).where(
+                    ScholarshipConfiguration.scholarship_type_id == config.scholarship_type_id,
+                    ScholarshipConfiguration.renewal_application_start_date.isnot(None),
+                )
+            )
+        ).scalar() > 0
+        term_years = AWARD_TERM_YEARS if has_renewal_scheme else 1
+        segment_years = _segment_years(academic_year, term_years, roster_groups)
+
+        # 誰佔這個配置的名額（mirrors RosterService._get_eligible_applications）
+        consumes_config = or_(
+            Application.allocation_config_id == config_id,
+            and_(
+                Application.allocation_config_id.is_(None),
+                or_(
+                    Application.scholarship_configuration_id == config_id,
+                    and_(
+                        Application.scholarship_configuration_id.is_(None),
+                        Application.scholarship_type_id == config.scholarship_type_id,
+                    ),
+                ),
+            ),
+        )
+
+        # Cache counts by (year, semester filter) to avoid duplicate queries across periods
         estimate_cache: dict = {}
 
-        async def _estimate_eligible_count(semester_filter: Optional[str]) -> int:
-            """Count approved applications eligible for the given period semester."""
-            if semester_filter in estimate_cache:
-                return estimate_cache[semester_filter]
+        async def _estimate_eligible_count(year: int, semester_filter: Optional[str]) -> int:
+            """Count approved applications payable in `year` out of this config's slots."""
+            key = (year, semester_filter)
+            if key in estimate_cache:
+                return estimate_cache[key]
 
             count_stmt = select(func.count(Application.id)).where(
                 and_(
                     Application.status == "approved",
-                    Application.academic_year == academic_year,
+                    Application.academic_year == year,
                     Application.deleted_at.is_(None),
+                    consumes_config,
                 )
             )
-            config_match = or_(
-                Application.scholarship_configuration_id == config_id,
-                and_(
-                    Application.scholarship_configuration_id.is_(None),
-                    Application.scholarship_type_id == config.scholarship_type_id,
-                ),
-            )
-            # 續領跟新申請一樣每期造冊：mirrors RosterService._get_eligible_applications.
-            # 續領沒有 CollegeRankingItem，且自助續領掛在前一年度的配置底下，
-            # 故以「同獎學金類型 + 同學年度」認定。
-            renewal_match = and_(
-                Application.is_renewal.is_(True),
-                Application.scholarship_type_id == config.scholarship_type_id,
-            )
-
             if is_matrix_based:
-                # Matrix 模式的新申請必須已在執行分發的排名中正取；尚無排名時只剩續領可造冊。
-                if ranking_id_for_estimate is None:
-                    eligible_match = renewal_match
-                else:
-                    allocated_ids = select(CollegeRankingItem.application_id).where(
+                # 新申請必須在該年度已執行分發的排名中正取；續領沒有排名項，直接納入。
+                allocated_ids = (
+                    select(CollegeRankingItem.application_id)
+                    .join(CollegeRanking, CollegeRankingItem.ranking_id == CollegeRanking.id)
+                    .where(
                         and_(
-                            CollegeRankingItem.ranking_id == ranking_id_for_estimate,
+                            CollegeRanking.scholarship_type_id == config.scholarship_type_id,
+                            CollegeRanking.academic_year == year,
+                            CollegeRanking.is_finalized.is_(True),
+                            CollegeRanking.distribution_executed.is_(True),
                             CollegeRankingItem.is_allocated.is_(True),
                         )
                     )
-                    eligible_match = or_(and_(config_match, Application.id.in_(allocated_ids)), renewal_match)
-            else:
-                eligible_match = or_(config_match, renewal_match)
-            count_stmt = count_stmt.where(eligible_match)
-
+                )
+                count_stmt = count_stmt.where(or_(Application.is_renewal.is_(True), Application.id.in_(allocated_ids)))
             if semester_filter:
                 count_stmt = count_stmt.where(Application.semester == semester_filter)
 
             value = (await db.execute(count_stmt)).scalar() or 0
-            estimate_cache[semester_filter] = value
+            estimate_cache[key] = value
             return value
 
-        def _semester_for_month(month_int: int) -> Optional[str]:
-            """Map a month to a semester for semester-based scholarships."""
-            if month_int in (2, 3, 4, 5, 6, 7):
-                return "second"
-            if month_int in (8, 9, 10, 11, 12, 1):
-                return "first"
-            return None
-
-        if schedule.roster_cycle.value == "monthly":
-            # Determine if this is a yearly (academic year) scholarship
-            is_yearly = config.semester is None or config.semester.value == "annual"
-
-            # Generate 12 months
-            # For yearly scholarships: September to August (9, 10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8)
-            # For semester scholarships: January to December (1, 2, 3, ..., 12)
-            if is_yearly:
-                month_sequence = [9, 10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8]
-            else:
-                month_sequence = list(range(1, 13))
-
-            for month in month_sequence:
-                period_label = f"{academic_year}-{month:02d}"
-                rosters_for_period = roster_groups.get(period_label, [])
-
-                # Calculate period dates
+        for year in segment_years:
+            segment = _segment_fields(year, academic_year)
+            for spec in _period_specs(cycle, year, is_yearly, semester_value):
+                label = spec["label"]
+                rosters_for_period = roster_groups.get(label, [])
                 period_dates = get_roster_period_dates(
-                    academic_year=academic_year,
-                    semester=config.semester.value if config.semester else None,
-                    roster_cycle="monthly",
-                    period_label=period_label,
+                    academic_year=year, semester=semester_value, roster_cycle=cycle, period_label=label
                 )
-
-                # Calculate western calendar year-month for display
-                western_year = academic_year + 1911
-                calendar_year = western_year if month >= 9 else western_year + 1
-                western_date = f"{calendar_year}-{month:02d}"
-                display_label = f"{period_label} ({calendar_year}年{month}月)"
-
                 if rosters_for_period:
                     for roster in rosters_for_period:
                         periods.append(
                             {
-                                **_roster_period_entry(
-                                    roster, period_label, period_dates, renewal_counts.get(roster.id, 0)
-                                ),
-                                "western_date": western_date,
-                                "display_label": display_label,
+                                **_roster_period_entry(roster, label, period_dates, renewal_counts.get(roster.id, 0)),
+                                **spec["extra"],
+                                **segment,
                             }
                         )
                 else:
-                    semester_filter = None if is_yearly else _semester_for_month(month)
-                    estimated_count = await _estimate_eligible_count(semester_filter)
+                    estimated_count = await _estimate_eligible_count(year, spec["semester_filter"])
                     periods.append(
                         {
-                            "label": period_label,
-                            "western_date": western_date,
-                            "display_label": display_label,
+                            "label": label,
+                            **spec["extra"],
+                            **segment,
                             "status": "waiting",
                             "next_schedule": schedule.next_run_at.isoformat() if schedule.next_run_at else None,
                             "estimated_count": estimated_count,
@@ -1181,73 +1227,6 @@ async def get_roster_cycle_status(
                             "period_end_date": period_dates["end_date"].isoformat(),
                         }
                     )
-
-        elif schedule.roster_cycle.value == "semi_yearly":
-            # Generate 2 half-year periods
-            for half in ["H1", "H2"]:
-                period_label = f"{academic_year}-{half}"
-                rosters_for_period = roster_groups.get(period_label, [])
-
-                # Calculate period dates
-                period_dates = get_roster_period_dates(
-                    academic_year=academic_year,
-                    semester=config.semester.value if config.semester else None,
-                    roster_cycle="semi_yearly",
-                    period_label=period_label,
-                )
-
-                if rosters_for_period:
-                    for roster in rosters_for_period:
-                        periods.append(
-                            _roster_period_entry(roster, period_label, period_dates, renewal_counts.get(roster.id, 0))
-                        )
-                else:
-                    if config.semester is None:
-                        semester_filter = None
-                    else:
-                        semester_filter = "first" if half == "H1" else "second"
-                    estimated_count = await _estimate_eligible_count(semester_filter)
-                    periods.append(
-                        {
-                            "label": period_label,
-                            "status": "waiting",
-                            "next_schedule": schedule.next_run_at.isoformat() if schedule.next_run_at else None,
-                            "estimated_count": estimated_count,
-                            "period_start_date": period_dates["start_date"].isoformat(),
-                            "period_end_date": period_dates["end_date"].isoformat(),
-                        }
-                    )
-
-        elif schedule.roster_cycle.value == "yearly":
-            # Generate 1 yearly period (may expand to multiple rows for matrix distribution)
-            period_label = str(academic_year)
-            rosters_for_period = roster_groups.get(period_label, [])
-
-            # Calculate period dates
-            period_dates = get_roster_period_dates(
-                academic_year=academic_year,
-                semester=config.semester.value if config.semester else None,
-                roster_cycle="yearly",
-                period_label=period_label,
-            )
-
-            if rosters_for_period:
-                for roster in rosters_for_period:
-                    periods.append(
-                        _roster_period_entry(roster, period_label, period_dates, renewal_counts.get(roster.id, 0))
-                    )
-            else:
-                estimated_count = await _estimate_eligible_count(None)
-                periods.append(
-                    {
-                        "label": period_label,
-                        "status": "waiting",
-                        "next_schedule": schedule.next_run_at.isoformat() if schedule.next_run_at else None,
-                        "estimated_count": estimated_count,
-                        "period_start_date": period_dates["start_date"].isoformat(),
-                        "period_end_date": period_dates["end_date"].isoformat(),
-                    }
-                )
 
         # Append any distribution-generated rosters whose period_label was not covered
         # by the schedule template (e.g., yearly period_label "114" when cycle is monthly).
@@ -1263,8 +1242,14 @@ async def get_roster_cycle_status(
                         roster_cycle=roster.roster_cycle.value if roster.roster_cycle else "yearly",
                         period_label=period_label,
                     )
+                    label_year = _period_label_year(period_label)
                     periods.append(
-                        _roster_period_entry(roster, period_label, period_dates, renewal_counts.get(roster.id, 0))
+                        {
+                            **_roster_period_entry(
+                                roster, period_label, period_dates, renewal_counts.get(roster.id, 0)
+                            ),
+                            **(_segment_fields(label_year, academic_year) if label_year is not None else {}),
+                        }
                     )
 
         return ApiResponse(

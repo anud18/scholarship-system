@@ -252,7 +252,14 @@ class TestRosterServiceGenerate:
         assert item.student_number == "112550001"
         assert item.student_id_number == "A123456789"
 
-        # After generation: one MONTHLY roster ⇒ one month, matched by 學號.
+        # Still PROCESSING until the endpoint commits and marks it COMPLETED —
+        # an uncommitted roster paid nobody, so it counts for nothing yet.
+        assert roster.status == RosterStatus.PROCESSING
+        assert calculate_received_months(db_sync, "112550001", config.id) == 0
+
+        roster.status = RosterStatus.COMPLETED
+        db_sync.flush()
+        # After completion: one MONTHLY roster ⇒ one month, matched by 學號.
         assert calculate_received_months(db_sync, "112550001", config.id) == 1
         # The national ID must NOT match.
         assert calculate_received_months(db_sync, "A123456789", config.id) == 0

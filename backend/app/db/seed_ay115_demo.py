@@ -5,9 +5,12 @@ finalized, distribution executed, rosters locked) and the 115 cycle is open
 for both 新申請 and 續領. Three kinds of students exist:
 
 1. **續領生 (currently on renewal)** — awarded in 113 (`phd_113`, 新申請,
-   ranked + allocated) and renewed in 114 (`phd_114`, is_renewal). Both years
-   are approved and sit in LOCKED yearly payment rosters, so 領獎紀錄 /
-   領取月份數 show real history (12 + 12 months).
+   ranked + allocated) and renewed for 114 as 113 續領生: the renewal keeps
+   `scholarship_configuration_id` / `allocation_config_id` on `phd_113` (the
+   slot they hold) with `academic_year=114`, exactly as the self-renew path
+   creates it. Both years are approved and sit in LOCKED yearly payment rosters
+   under `phd_113` (periods "113" and "114"), so 領獎紀錄 / 領取月份數 show real
+   history (12 + 12 months) and phd_113's 造冊列表 shows its second year segment.
 2. **114 新申請得獎者** — first awarded in 114 through the college ranking +
    matrix distribution. They are what makes the 114 造冊 preview work: the
    matrix-mode roster/preview path reads *allocated ranking items*, and
@@ -403,7 +406,8 @@ def _build_roster_item(
     roster: PaymentRoster, application: Application, phd: ScholarshipType, rules: List[ScholarshipRule]
 ) -> PaymentRosterItem:
     student_data = application.student_data
-    identity = f"{application.academic_year}{'續領' if application.is_renewal else '新申請'}"
+    # 續領標得獎配置年度（113 續領生），新申請標送件年度 — 同 _create_roster_item。
+    identity = f"{roster.allocation_year}續領" if application.is_renewal else f"{application.academic_year}新申請"
     return PaymentRosterItem(
         roster_id=roster.id,
         application_id=application.id,
@@ -442,6 +446,7 @@ async def _get_or_create_locked_roster(
     session: AsyncSession,
     *,
     config: ScholarshipConfiguration,
+    year: int,
     sub_type: str,
     applications: List[Application],
     ranking_id: Optional[int],
@@ -449,10 +454,9 @@ async def _get_or_create_locked_roster(
     rules: List[ScholarshipRule],
     admin_id: int,
 ) -> bool:
-    """One LOCKED yearly roster per (config, sub_type), shaped like
-    RosterService.generate_rosters_from_distribution output (matrix path)."""
-    year = config.academic_year
-    roster_code = f"ROSTER-{year}-{sub_type}-{config.config_code}-{config.config_code}"
+    """One LOCKED yearly roster per (slot-owning config, paying year, sub_type),
+    shaped like RosterService.generate_rosters_from_distribution output."""
+    roster_code = f"ROSTER-{year}-{sub_type}-{config.config_code}"
     existing = (
         await session.execute(select(PaymentRoster).where(PaymentRoster.roster_code == roster_code))
     ).scalar_one_or_none()
@@ -470,7 +474,7 @@ async def _get_or_create_locked_roster(
         academic_year=year,
         roster_cycle=RosterCycle.YEARLY,
         sub_type=sub_type,
-        allocation_year=year,
+        allocation_year=config.academic_year,
         project_number=(config.project_numbers or {}).get(sub_type),
         status=RosterStatus.LOCKED,
         trigger_type=RosterTriggerType.MANUAL,
@@ -544,6 +548,8 @@ async def _seed_closed_years(
         already = (
             await session.execute(select(Application.id).where(Application.app_id == _app_id(year, index)))
         ).scalar_one_or_none()
+        # A renewal stays on the configuration that awarded the slot (113 續領生
+        # renew phd_113 for 114); only 新申請 belong to their own year's config.
         application = await _get_or_create_application(
             session,
             entry=entry,
@@ -551,7 +557,7 @@ async def _seed_closed_years(
             year=year,
             is_renewal=is_renewal,
             phd=phd,
-            config=configs[year],
+            config=configs[FIRST_AWARD_YEAR] if is_renewal else configs[year],
             previous_application=first_award_by_index.get(index) if is_renewal else None,
         )
         counts["applications"] += already is None
@@ -585,15 +591,25 @@ async def _seed_closed_years(
             if ranking:
                 counts["rankings"] += 1
                 ranking_ids.append(ranking.id)
-        sub_types = sorted({app.sub_scholarship_type for app in apps_by_year[year]})
-        for sub_type in sub_types:
-            group = [app for app in apps_by_year[year] if app.sub_scholarship_type == sub_type]
+        # One roster per (slot-owning config, sub_type) paid in `year` — the shape
+        # RosterService.generate_rosters_from_distribution produces: the 114 rosters
+        # under phd_113 hold the 113 續領生, the ones under phd_114 the 114 新申請.
+        config_by_id = {c.id: c for c in configs.values()}
+        groups = sorted({(app.allocation_config_id, app.sub_scholarship_type) for app in apps_by_year[year]})
+        for consumed_config_id, sub_type in groups:
+            consumed = config_by_id[consumed_config_id]
+            group = [
+                app
+                for app in apps_by_year[year]
+                if app.allocation_config_id == consumed_config_id and app.sub_scholarship_type == sub_type
+            ]
             counts["rosters"] += await _get_or_create_locked_roster(
                 session,
-                config=config,
+                config=consumed,
+                year=year,
                 sub_type=sub_type,
                 applications=group,
-                ranking_id=ranking_ids[0] if ranking_ids else None,
+                ranking_id=ranking_ids[0] if ranking_ids and consumed is config else None,
                 phd=phd,
                 rules=rules,
                 admin_id=admin_id,

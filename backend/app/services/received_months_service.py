@@ -28,7 +28,11 @@ on its roster_cycle:
     SEMI_YEARLY   -> 6 months
     YEARLY        -> 12 months
 
-Only rosters with PaymentRosterItem.is_included=True are counted.
+Only rosters with PaymentRosterItem.is_included=True are counted, and only
+COMPLETED / LOCKED rosters (a draft, processing or failed roster paid nobody).
+A configuration owns all 36 months of its cohort — 新申請 plus the two 續領
+years sit in the same configuration's rosters — so the per-config sum is
+12 / 24 / 36 without any cross-year aggregation.
 
 Students are matched on PaymentRosterItem.student_number (學號 / std_stdcode),
 the canonical student identifier. NOT student_id_number — that column holds the
@@ -44,7 +48,10 @@ from sqlalchemy import Select, and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from app.models.payment_roster import PaymentRoster, PaymentRosterItem, RosterCycle
+from app.models.payment_roster import PaymentRoster, PaymentRosterItem, RosterCycle, RosterStatus
+
+# 只有「已完成」與「已鎖定」的造冊算領到的月份；草稿、處理中、失敗的冊不算。
+COUNTED_ROSTER_STATUSES = (RosterStatus.COMPLETED, RosterStatus.LOCKED)
 from app.models.received_months import StudentReceivedMonthRecord
 
 _CYCLE_MONTHS: dict[RosterCycle, int] = {
@@ -77,6 +84,7 @@ def _single_stmt(student_nycu_id: str, scholarship_config_id: int) -> Select:
         .where(
             and_(
                 PaymentRoster.scholarship_configuration_id == scholarship_config_id,
+                PaymentRoster.status.in_(COUNTED_ROSTER_STATUSES),
                 PaymentRosterItem.student_number == student_nycu_id,
                 PaymentRosterItem.is_included.is_(True),
             )
@@ -96,6 +104,7 @@ def _bulk_stmt(student_nycu_ids: list[str], scholarship_config_id: int) -> Selec
         .where(
             and_(
                 PaymentRoster.scholarship_configuration_id == scholarship_config_id,
+                PaymentRoster.status.in_(COUNTED_ROSTER_STATUSES),
                 PaymentRosterItem.student_number.in_(student_nycu_ids),
                 PaymentRosterItem.is_included.is_(True),
             )

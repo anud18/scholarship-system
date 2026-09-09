@@ -109,6 +109,8 @@ async def test_create_renewals_sets_approved_fields(service):
     config = Mock(spec=ScholarshipConfiguration)
     config.id = 7
     config.amount = 40000
+    config.academic_year = 114
+    config.scholarship_type_id = 1
 
     batch = Mock(spec=BatchImport)
     batch.id = 3
@@ -149,11 +151,12 @@ async def test_create_renewals_sets_approved_fields(service):
         patch.object(service.db, "flush", new=AsyncMock()),
         patch.object(service.db, "execute", new=AsyncMock()),
     ):
-        # config lookup + ApplicationSequence lookup both via execute
-        cfg_res, seq_res = Mock(), Mock()
+        # execute order: config lookup, prior-award lookup (paying year), ApplicationSequence lookup
+        cfg_res, prior_res, seq_res = Mock(), Mock(), Mock()
         cfg_res.scalar_one_or_none.return_value = config
+        prior_res.all.return_value = [("413271002", 114)]  # 114 新申請 on this config → renews for 115
         seq_res.scalar_one_or_none.return_value = None
-        service.db.execute.side_effect = [cfg_res, seq_res]
+        service.db.execute.side_effect = [cfg_res, prior_res, seq_res]
 
         created_ids, errors = await service.create_renewals_from_batch(
             batch_import=batch, parsed_rows=parsed, scholarship_type_id=1, academic_year=114, semester="first"
@@ -166,7 +169,12 @@ async def test_create_renewals_sets_approved_fields(service):
     assert app.status == ApplicationStatus.approved.value
     assert app.review_stage == ReviewStage.quota_distributed.value
     assert app.sub_scholarship_type == "nstc"
+    # 114 續領生: occupies the 114 slot, paid in the year after the latest award.
     assert app.allocation_config_id == 7
+    assert app.scholarship_configuration_id == 7
+    assert app.academic_year == 115
+    assert app.renewal_year == 114
+    assert app.app_id.startswith("APP-115-")
     assert app.amount == 40000
     assert app.import_source == "renewal_import"
     assert app.app_id.endswith("R")

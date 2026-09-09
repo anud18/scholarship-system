@@ -733,21 +733,24 @@ class RosterService:
                 )
             )
         )
-        config_match = or_(
-            Application.scholarship_configuration_id == scholarship_configuration_id,
+        # 造冊歸「消耗名額的配置」：114 配置的新申請、這批人之後兩年的續領
+        # （academic_year 115/116，allocation_config_id 仍是 114），以及補發到 114
+        # 剩餘名額的他年新申請，全都在 114 的造冊列表 —— 36 個月、同一個計畫編號。
+        # 舊資料 allocation_config_id 為 NULL 時退回申請本身的配置（再退回獎學金類型）。
+        consumes_config = or_(
+            Application.allocation_config_id == scholarship_configuration_id,
             and_(
-                Application.scholarship_configuration_id.is_(None),
-                Application.scholarship_type_id == config.scholarship_type_id,
+                Application.allocation_config_id.is_(None),
+                or_(
+                    Application.scholarship_configuration_id == scholarship_configuration_id,
+                    and_(
+                        Application.scholarship_configuration_id.is_(None),
+                        Application.scholarship_type_id == config.scholarship_type_id,
+                    ),
+                ),
             ),
         )
-        # 續領跟新申請一樣每期造冊。續領沒有 CollegeRankingItem（不參與名額分發），
-        # 且自助續領的 scholarship_configuration_id 指向前一年度得獎的配置
-        # （application_service.create_renewal），所以改以「同獎學金類型 + 同學年度」
-        # 認定 —— 與 generate_rosters_from_distribution 撈續領的條件一致。
-        renewal_match = and_(
-            Application.is_renewal.is_(True),
-            Application.scholarship_type_id == config.scholarship_type_id,
-        )
+        query = query.filter(consumes_config)
 
         logger.info(
             f"Querying applications for config {scholarship_configuration_id} "
@@ -755,6 +758,7 @@ class RosterService:
         )
 
         # 3. 根據配額管理模式使用不同的過濾邏輯
+        has_executed_ranking = True
         if config.quota_management_mode == QuotaManagementMode.matrix_based:
             # Matrix 模式：必須使用 ranking + is_allocated 過濾
             logger.info(f"Using matrix-based filtering for scholarship config {scholarship_configuration_id}")
@@ -776,17 +780,20 @@ class RosterService:
                     .all()
                 )
 
-                if not rankings:
-                    raise ValueError(
-                        f"找不到已執行分發的排名。Matrix 模式獎學金必須先執行矩陣分發才能產生造冊。"
-                        f"獎學金類型ID: {config.scholarship_type_id}, 學年度: {academic_year}"
-                    )
-
+                # 該學年度尚未執行分發 ⇒ 沒有正取的新申請；續領年段（第二、三年）
+                # 本來就只有續領，所以不視為錯誤，讓 .in_([]) 自然為空。
                 ranking_ids = [r.id for r in rankings]
-                logger.info(
-                    f"Aggregating {len(ranking_ids)} executed ranking(s) {ranking_ids} for "
-                    f"all-college roster (type {config.scholarship_type_id}, year {academic_year})"
-                )
+                has_executed_ranking = bool(ranking_ids)
+                if ranking_ids:
+                    logger.info(
+                        f"Aggregating {len(ranking_ids)} executed ranking(s) {ranking_ids} for "
+                        f"all-college roster (type {config.scholarship_type_id}, year {academic_year})"
+                    )
+                else:
+                    logger.info(
+                        f"No executed ranking for type {config.scholarship_type_id} year {academic_year}; "
+                        "only approved renewals are eligible for this period"
+                    )
 
                 # 聚合所有排名：一個申請最多屬於一份排名，故 .in_() 不會重複。
                 ranking_filter = CollegeRankingItem.ranking_id.in_(ranking_ids)
@@ -794,16 +801,11 @@ class RosterService:
                 # 明確指定排名：僅該排名（管理員刻意選擇單一排名）。
                 ranking_filter = CollegeRankingItem.ranking_id == ranking_id
 
-            # 只選取 ranking 中已分配(正取)的申請，加上已核准的續領。
+            # 新申請必須是 ranking 中已分配(正取)；續領沒有 CollegeRankingItem，直接納入。
             allocated_application_ids = select(CollegeRankingItem.application_id).where(
                 and_(ranking_filter, CollegeRankingItem.is_allocated.is_(True))
             )
-            query = query.filter(
-                or_(
-                    and_(config_match, Application.id.in_(allocated_application_ids)),
-                    renewal_match,
-                )
-            )
+            query = query.filter(or_(Application.is_renewal.is_(True), Application.id.in_(allocated_application_ids)))
         else:
             # 非 Matrix 模式 (none/simple/college_based)：直接從 approved 狀態選取
             logger.info(
@@ -817,7 +819,6 @@ class RosterService:
                     f"ranking_id {ranking_id} provided for non-matrix scholarship mode "
                     f"'{config.quota_management_mode.value}', will be ignored"
                 )
-            query = query.filter(or_(config_match, renewal_match))
 
         # 4. 根據期間標記進行額外篩選
         # 重要：只有當獎學金配置本身是學期制時才應用學期過濾
@@ -862,7 +863,14 @@ class RosterService:
                 f"not applying semester filter for period {period_label}"
             )
 
-        return query.order_by(Application.is_renewal.desc(), Application.submitted_at).all()
+        applications = query.order_by(Application.is_renewal.desc(), Application.submitted_at).all()
+        if not applications and not has_executed_ranking:
+            # 第一年段沒分發就沒有正取名單；續領年段才允許「只有續領」的空排名。
+            raise ValueError(
+                f"找不到已執行分發的排名，也沒有已核准的續領。Matrix 模式獎學金必須先執行矩陣分發才能產生造冊。"
+                f"獎學金類型ID: {config.scholarship_type_id}, 學年度: {academic_year}"
+            )
+        return applications
 
     def _extract_semester_from_period(self, period_label: str) -> Optional[str]:
         """從期間標記提取學期資訊"""
@@ -997,6 +1005,10 @@ class RosterService:
         allocation_config_id = roster.allocation_config_id
         if allocation_config_id is None and alloc_ranking_item is not None:
             allocation_config_id = alloc_ranking_item.allocation_config_id
+        # 月結／一般路徑的續領沒有排名項：名額配置記在申請本身（自助續領與匯入
+        # 都寫 allocation_config_id），否則 113 續領生在 114-09 會被標成 114 年名額。
+        if allocation_config_id is None:
+            allocation_config_id = application.allocation_config_id
 
         # 載入消耗配置 (consumed config) — 借用前年度配額時不同於發放配置。
         # allocation_config_id NULL ⇒ 全期 sentinel，退回造冊自身的發放配置。
@@ -1011,10 +1023,11 @@ class RosterService:
         if allocation_year is None and allocation_config_id is not None and consumed_config is not None:
             allocation_year = consumed_config.academic_year
 
-        # 計算申請身分別
-        application_identity = None
+        # 申請身分：續領只開放給該配置的得獎者，所以標「{得獎配置年度}續領」——
+        # 114 得獎者在 115、116 的續領都是「114續領」；新申請標送件年度，
+        # 補發到 114 名額的 115 新申請在 114 列表裡就看得出是「115新申請」。
         if application.is_renewal:
-            application_identity = f"{application.academic_year}續領"
+            application_identity = f"{consumed_config.academic_year}續領"
         else:
             application_identity = f"{application.academic_year}新申請"
 
@@ -1622,10 +1635,12 @@ class RosterService:
         """
         從矩陣分發結果批次產生造冊
 
-        針對每個唯一的 (allocation_config_id, sub_type) 組合建立獨立的造冊。
+        針對每個唯一的 (allocation_config_id, sub_type) 組合建立獨立的造冊，
+        冊歸「消耗配置」的造冊列表、期間為本次發放學年度。
         例如：
           - 115 學年度分發完成後，若 nstc 借用了 phd_114/phd_113 的配額，
-            產生 nstc·115、nstc·114、nstc·113、moe_1w·115 四個造冊，各自記錄消耗配置。
+            產生 nstc·115（掛 phd_115）、nstc·114（掛 phd_114，內含 114 批的
+            115 續領與補發者）、nstc·113（掛 phd_113）、moe_1w·115 四個「115 期間」造冊。
 
         Args:
             scholarship_type_id: 獎學金類型 ID
@@ -1812,19 +1827,17 @@ class RosterService:
         """
         為特定 (consumed_config, sub_type) 組合產生一個造冊。
 
-        計畫編號 / 金額 / allocation_year 顯示快照取自「消耗配置」(consumed_config)；
-        造冊歸屬於發放配置 (requesting_config)。借用前年度配額時兩者不同。
-
-        期間 (period_label) 一律取「發放配置」的學年度：續領與借用前年度配額的
-        學生消耗的是舊年度的名額，但領的是本年度的錢 —— 114 年度申請領
-        114-08~115-07，115 年度續領就領 115-08~116-07。若以消耗配置年度當期間，
-        續領造冊會掛在舊年度底下、造冊列表對不上任何排程期間、也顯示不出造冊月份。
+        造冊歸屬於「消耗配置」(consumed_config)：計畫編號 / 金額 / allocation_year
+        都取自它，冊也掛在它的造冊列表底下。requesting_config 只提供發放學年度
+        （= 期間）。一張 114 配置的申請領 36 個月：114 新申請、115/116 的續領、
+        補發到 114 剩餘名額的他年新申請，全在 114 的列表，同一個計畫編號；
+        115 年分發只是產生「115 期間」的那一冊。
 
         Returns:
             PaymentRoster: 已建立的造冊
         """
-        academic_year = requesting_config.academic_year
-        period_label = str(academic_year)  # 期間 = 發放配置學年度（續領/補發亦同）
+        academic_year = requesting_config.academic_year  # 發放學年度 = 期間
+        period_label = str(academic_year)
         allocation_year = consumed_config.academic_year  # 顯示快照（消耗哪個年度的名額）
 
         # 取得計畫編號（扁平：consumed_config.project_numbers[sub_type]，無年度 key）
@@ -1832,8 +1845,8 @@ class RosterService:
         if consumed_config.project_numbers:
             project_number = consumed_config.project_numbers.get(sub_type)
 
-        # 產生造冊代碼（包含 sub_type 與消耗配置代碼以確保唯一性）
-        roster_code = f"ROSTER-{academic_year}-{sub_type}-{consumed_config.config_code}-{requesting_config.config_code}"
+        # 產生造冊代碼（期間 + sub_type + 消耗配置代碼即唯一）
+        roster_code = f"ROSTER-{academic_year}-{sub_type}-{consumed_config.config_code}"
 
         # 檢查是否已存在（unique key: scholarship_configuration_id + period_label
         # + allocation_config_id + sub_type）
@@ -1846,7 +1859,7 @@ class RosterService:
             self.db.query(PaymentRoster)
             .filter(
                 and_(
-                    PaymentRoster.scholarship_configuration_id == requesting_config.id,
+                    PaymentRoster.scholarship_configuration_id == consumed_config.id,
                     PaymentRoster.period_label == period_label,
                     PaymentRoster.sub_type == sub_type,
                     PaymentRoster.allocation_config_id == consumed_config.id,
@@ -1900,7 +1913,7 @@ class RosterService:
         else:
             roster = PaymentRoster(
                 roster_code=roster_code,
-                scholarship_configuration_id=requesting_config.id,
+                scholarship_configuration_id=consumed_config.id,  # 冊歸消耗名額的配置
                 allocation_config_id=consumed_config.id,
                 ranking_id=ranking_ids[0] if ranking_ids else None,  # Use first ranking_id for reference
                 period_label=period_label,

@@ -141,10 +141,15 @@ def test_generate_groups_by_allocation_config(db_sync):
     # Own-config roster: snapshot year = 115, project_number from own config.
     assert by_config[own.id].allocation_year == 115
     assert by_config[own.id].project_number == "115R000001"
-    # Borrowed-slot roster: consumed = prior config → year 114, prior project_number.
+    # Borrowed-slot roster: consumed = prior config → year 114, prior project_number,
+    # and it hangs under the prior config's 造冊列表 (the config owning the slot),
+    # as the 115 period of that configuration.
     assert by_config[prior.id].allocation_year == 114
     assert by_config[prior.id].project_number == "114R000001"
-    assert by_config[prior.id].scholarship_configuration_id == own.id
+    assert by_config[prior.id].scholarship_configuration_id == prior.id
+    assert by_config[prior.id].period_label == "115"
+    assert by_config[own.id].scholarship_configuration_id == own.id
+    assert by_config[own.id].period_label == "115"
 
 
 def test_regenerate_reports_existing_as_skipped_not_silent(db_sync):

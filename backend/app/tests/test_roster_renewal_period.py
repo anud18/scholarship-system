@@ -1,15 +1,16 @@
-"""續領跟新申請一樣每期造冊，期間往後延伸。
+"""A configuration owns all 36 months of its cohort.
 
-A 115 renewal of a 114 award keeps consuming the 114 slot
-(allocation_config_id = phd_114, application_service.create_renewal), but it is
-paid in the 115 period. The roster it lands in must therefore carry
-period_label "115" (with allocation_year 114 recording the consumed slot) and
-its item must be marked 115續領 — not sit in a "114" roster that matches no
-115 schedule period.
+續領只開放給該配置的得獎者：a 114 awardee's renewals for 115 and 116 are
+「114 續領生」. They keep consuming the 114 slot (allocation_config_id =
+phd_114, as application_service.create_renewal sets it) and are paid in the
+115 / 116 periods — so their rosters hang under phd_114 (period_label "115",
+allocation_year 114, the 114 計畫編號) and the item is marked 114續領, never
+under phd_115.
 
-The per-period path (generate_roster → _get_eligible_applications) must also
-pick renewals up: they never hold a CollegeRankingItem, and a self-renewal's
-scholarship_configuration_id points at the prior year's config.
+The per-period path (generate_roster → _get_eligible_applications) selects by
+"who consumes this configuration's slots in the paying year": renewals need
+no CollegeRankingItem, 新申請 must be allocated in that year's executed
+ranking, and a 115 新申請 補發 onto a 114 slot belongs to phd_114's list too.
 """
 
 from app.models.application import Application, ApplicationStatus
@@ -54,14 +55,14 @@ def _config(db_sync, scholarship, *, academic_year, code, project_number):
     return config
 
 
-def _application(db_sync, user, scholarship, config, *, app_id, std_code, alloc_config, is_renewal):
+def _application(db_sync, user, scholarship, config, *, app_id, std_code, alloc_config, is_renewal, academic_year=115):
     application = Application(
         user_id=user.id,
         app_id=app_id,
         scholarship_type_id=scholarship.id,
         scholarship_configuration_id=config.id,
         allocation_config_id=alloc_config.id,
-        academic_year=115,
+        academic_year=academic_year,
         semester=None,
         status=ApplicationStatus.approved,
         review_stage=ReviewStage.quota_distributed,
@@ -69,7 +70,7 @@ def _application(db_sync, user, scholarship, config, *, app_id, std_code, alloc_
         scholarship_subtype_list=["nstc"],
         sub_scholarship_type="nstc",
         is_renewal=is_renewal,
-        renewal_year=114 if is_renewal else None,
+        renewal_year=alloc_config.academic_year if is_renewal else None,
         student_data={"std_stdcode": std_code, "std_pid": f"A{std_code}", "std_cname": f"學生{std_code}"},
         submitted_form_data={"fields": {"postal_account": {"value": "0001234567"}}},
         amount=40000,
@@ -79,9 +80,24 @@ def _application(db_sync, user, scholarship, config, *, app_id, std_code, alloc_
     return application
 
 
+def _allocate(db_sync, ranking, application, config):
+    db_sync.add(
+        CollegeRankingItem(
+            ranking_id=ranking.id,
+            application_id=application.id,
+            rank_position=1,
+            is_allocated=True,
+            allocated_sub_type="nstc",
+            allocation_config_id=config.id,
+            status="allocated",
+        )
+    )
+
+
 def _setup(db_sync):
-    """115 config + prior 114 config; one 115 新申請 allocated on the 115 slot
-    and one 115 續領 of a 114 award (consumes the 114 slot, config FK = 114)."""
+    """phd_115 + phd_114. In the 115 paying year: a 115 新申請 on a 115 slot, a
+    114 續領生 (114 awardee renewing, still on the 114 slot) and a 115 新申請
+    補發 onto a freed 114 slot."""
     admin = _user(db_sync, "period_admin", role=UserRole.admin, user_type=UserType.employee)
     scholarship = ScholarshipType(
         code="period_phd",
@@ -115,6 +131,16 @@ def _setup(db_sync):
         alloc_config=prior,
         is_renewal=True,
     )
+    borrower = _application(
+        db_sync,
+        _user(db_sync, "period_borrow"),
+        scholarship,
+        current,
+        app_id="APP-PERIOD-BORROW",
+        std_code="115B",
+        alloc_config=prior,
+        is_renewal=False,
+    )
 
     ranking = CollegeRanking(
         scholarship_type_id=scholarship.id,
@@ -128,23 +154,14 @@ def _setup(db_sync):
     )
     db_sync.add(ranking)
     db_sync.flush()
-    db_sync.add(
-        CollegeRankingItem(
-            ranking_id=ranking.id,
-            application_id=new_app.id,
-            rank_position=1,
-            is_allocated=True,
-            allocated_sub_type="nstc",
-            allocation_config_id=current.id,
-            status="allocated",
-        )
-    )
+    _allocate(db_sync, ranking, new_app, current)
+    _allocate(db_sync, ranking, borrower, prior)
     db_sync.commit()
-    return admin, scholarship, current, prior, new_app, renewal
+    return admin, scholarship, current, prior, new_app, renewal, borrower
 
 
-def test_renewal_roster_uses_requesting_year_as_period(db_sync):
-    admin, scholarship, current, prior, new_app, renewal = _setup(db_sync)
+def test_distribution_rosters_hang_under_the_slot_owning_config(db_sync):
+    admin, scholarship, current, prior, new_app, renewal, borrower = _setup(db_sync)
 
     result = RosterService(db_sync).generate_rosters_from_distribution(
         scholarship_type_id=scholarship.id,
@@ -154,47 +171,46 @@ def test_renewal_roster_uses_requesting_year_as_period(db_sync):
         student_verification_enabled=False,
     )
 
-    by_config = {r.allocation_config_id: r for r in result.created}
-    assert set(by_config) == {current.id, prior.id}
+    by_owner = {r.scholarship_configuration_id: r for r in result.created}
+    assert set(by_owner) == {current.id, prior.id}
 
-    renewal_roster = by_config[prior.id]
-    # 期間 = 發放年度（115-09~116-08），名額仍記錄消耗 114 年度的 slot / 計畫編號。
-    assert renewal_roster.period_label == "115"
-    assert renewal_roster.academic_year == 115
-    assert renewal_roster.allocation_year == 114
-    assert renewal_roster.project_number == "114R000001"
-    assert renewal_roster.sub_type == "nstc"
-    assert renewal_roster.scholarship_configuration_id == current.id
+    # phd_114's 115 roster: the 114 續領生 + the 補發 borrower, on the 114 計畫編號.
+    roster_114 = by_owner[prior.id]
+    assert roster_114.period_label == "115"
+    assert roster_114.academic_year == 115
+    assert roster_114.allocation_config_id == prior.id
+    assert roster_114.allocation_year == 114
+    assert roster_114.project_number == "114R000001"
+    assert roster_114.roster_code == "ROSTER-115-nstc-PERIOD-114"
+    identities = {item.application_id: item.application_identity for item in roster_114.items}
+    assert identities == {renewal.id: "114續領", borrower.id: "115新申請"}
+    assert all(item.allocation_year == 114 for item in roster_114.items)
 
-    (item,) = renewal_roster.items
-    assert item.application_id == renewal.id
-    assert item.application_identity == "115續領"
-    assert item.allocated_sub_type == "nstc"
-    assert item.allocation_year == 114
-
-    new_roster = by_config[current.id]
-    assert new_roster.period_label == "115"
-    assert new_roster.allocation_year == 115
-    (new_item,) = new_roster.items
-    assert new_item.application_identity == "115新申請"
+    # phd_115's 115 roster: only the 新申請 on its own slot.
+    roster_115 = by_owner[current.id]
+    assert roster_115.period_label == "115"
+    assert roster_115.allocation_year == 115
+    assert [item.application_identity for item in roster_115.items] == ["115新申請"]
 
 
-def test_per_period_eligibility_includes_renewals_in_matrix_mode(db_sync):
-    _admin, _scholarship, current, _prior, new_app, renewal = _setup(db_sync)
+def test_per_period_eligibility_selects_by_consumed_slot(db_sync):
+    _admin, _scholarship, current, prior, new_app, renewal, borrower = _setup(db_sync)
+    service = RosterService(db_sync)
 
-    eligible = RosterService(db_sync)._get_eligible_applications(
-        scholarship_configuration_id=current.id,
-        period_label="115",
-        academic_year=115,
+    on_114 = service._get_eligible_applications(
+        scholarship_configuration_id=prior.id, period_label="115", academic_year=115
+    )
+    on_115 = service._get_eligible_applications(
+        scholarship_configuration_id=current.id, period_label="115", academic_year=115
     )
 
-    # Renewal first (ordered by is_renewal desc), then the allocated 新申請 —
-    # the renewal is found by type + year even though its config FK is phd_114.
-    assert [a.id for a in eligible] == [renewal.id, new_app.id]
+    # Renewal first (ordered by is_renewal desc), then the allocated borrower.
+    assert [a.id for a in on_114] == [renewal.id, borrower.id]
+    assert [a.id for a in on_115] == [new_app.id]
 
 
 def test_per_period_eligibility_excludes_unallocated_new_applications(db_sync):
-    admin, scholarship, current, _prior, new_app, renewal = _setup(db_sync)
+    _admin, scholarship, current, _prior, new_app, _renewal, _borrower = _setup(db_sync)
     waitlisted = _application(
         db_sync,
         _user(db_sync, "period_wait"),
@@ -208,11 +224,59 @@ def test_per_period_eligibility_excludes_unallocated_new_applications(db_sync):
     db_sync.commit()
 
     eligible = RosterService(db_sync)._get_eligible_applications(
-        scholarship_configuration_id=current.id,
-        period_label="115",
-        academic_year=115,
+        scholarship_configuration_id=current.id, period_label="115", academic_year=115
     )
-
     ids = {a.id for a in eligible}
-    assert ids == {renewal.id, new_app.id}
+    assert ids == {new_app.id}
     assert waitlisted.id not in ids
+
+
+def test_renewal_year_without_executed_ranking_still_lists_renewals(db_sync):
+    """Second-year period on phd_114 before the 116 distribution ran: no ranking
+    for 116 exists, which used to raise; now only the renewals are eligible."""
+    _admin, scholarship, _current, prior, _new_app, _renewal, _borrower = _setup(db_sync)
+    second_renewal = _application(
+        db_sync,
+        _user(db_sync, "period_renew2"),
+        scholarship,
+        prior,
+        app_id="APP-PERIOD-RENEW2",
+        std_code="116R",
+        alloc_config=prior,
+        is_renewal=True,
+        academic_year=116,
+    )
+    db_sync.commit()
+
+    eligible = RosterService(db_sync)._get_eligible_applications(
+        scholarship_configuration_id=prior.id, period_label="116-09", academic_year=116
+    )
+    assert [a.id for a in eligible] == [second_renewal.id]
+
+
+def test_monthly_roster_items_snapshot_the_slot_year_not_the_paying_year(db_sync):
+    """phd_114's 115-09 monthly roster: no ranking item and no roster-level
+    allocation snapshot, so the item must fall back to the application's own
+    slot config — 114 續領生 shows 114年 國科會 on the 114 計畫, not 115."""
+    from app.models.payment_roster import RosterCycle, RosterTriggerType
+
+    admin, _scholarship, _current, prior, _new_app, renewal, borrower = _setup(db_sync)
+
+    roster = RosterService(db_sync).generate_roster(
+        scholarship_configuration_id=prior.id,
+        period_label="115-09",
+        roster_cycle=RosterCycle.MONTHLY,
+        academic_year=115,
+        created_by_user_id=admin.id,
+        trigger_type=RosterTriggerType.MANUAL,
+        student_verification_enabled=False,
+    )
+    db_sync.flush()
+
+    by_app = {item.application_id: item for item in roster.items}
+    assert set(by_app) == {renewal.id, borrower.id}
+    assert by_app[renewal.id].application_identity == "114續領"
+    assert by_app[borrower.id].application_identity == "115新申請"
+    assert all(item.allocation_config_id == prior.id for item in by_app.values())
+    assert all(item.allocation_year == 114 for item in by_app.values())
+    assert all(item.allocated_sub_type == "nstc" for item in by_app.values())
