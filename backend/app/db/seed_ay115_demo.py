@@ -19,8 +19,9 @@ for both 新申請 and 續領. Three kinds of students exist:
 3. **115 新申請** — plain student accounts for the application wizard.
 
 Groups 1 and 2 also carry an APPROVED 115 續領 each (`APP-115-0-002xx`): the
-113 續領生 on `phd_113` (second renewal) and the 114 續領生 on `phd_114`
-(first renewal), with no 115 rosters yet — so 造冊管理 shows both
+113 續領生 on `phd_113` (second renewal; 鄭宇軒 excepted — 領獎期滿 at the
+36-month ceiling) and the 114 續領生 on `phd_114` (first renewal), with no
+115 rosters yet — so 造冊管理 shows both
 configurations' 115 segment ready to roster month by month. The 匯入續領生
 workbook from `backend/scripts/generate_ay115_import_samples.py` therefore
 previews as duplicates against this seed; use it against a database without
@@ -97,11 +98,22 @@ StudentEntry = tuple
 # sub_type = the category awarded; the last one hits the award ceiling in 114
 # and does NOT renew in 115 (the 115 續領 sheet marks them 否).
 RENEWAL_COHORT = [
-    ("313551201", "續領-林承翰", "LIN,CHENG-HAN", 1, "C", "資訊學院", "1550", "資訊工程學系", 113, "nstc"),
-    ("313551202", "續領-張雅婷", "CHANG,YA-TING", 2, "C", "資訊學院", "155", "資訊科學與工程研究所", 113, "moe_1w"),
-    ("312551203", "續領-黃冠宇", "HUANG,KUAN-YU", 1, "E", "電機學院", "3511", "電機工程學系", 112, "nstc"),
-    ("313551204", "續領-吳佩珊", "WU,PEI-SHAN", 2, "E", "電機學院", "183", "電機學院博士班", 113, "moe_1w"),
-    ("311551205", "續領-鄭宇軒", "CHENG,YU-HSUAN", 1, "C", "資訊學院", "1550", "資訊工程學系", 111, "nstc"),
+    ("313551201", "113續領生-林承翰", "LIN,CHENG-HAN", 1, "C", "資訊學院", "1550", "資訊工程學系", 113, "nstc"),
+    (
+        "313551202",
+        "113續領生-張雅婷",
+        "CHANG,YA-TING",
+        2,
+        "C",
+        "資訊學院",
+        "155",
+        "資訊科學與工程研究所",
+        113,
+        "moe_1w",
+    ),
+    ("312551203", "113續領生-黃冠宇", "HUANG,KUAN-YU", 1, "E", "電機學院", "3511", "電機工程學系", 112, "nstc"),
+    ("313551204", "113續領生-吳佩珊", "WU,PEI-SHAN", 2, "E", "電機學院", "183", "電機學院博士班", 113, "moe_1w"),
+    ("311551205", "113續領生-鄭宇軒", "CHENG,YU-HSUAN", 1, "C", "資訊學院", "1550", "資訊工程學系", 111, "nstc"),
 ]
 
 # --- 114 新申請得獎者：114 經學院排名 + 矩陣分發核准，115 亦為續領候選 ------------
@@ -637,6 +649,8 @@ async def _seed_closed_years(
     # 115 segment shows 估 N 人 and the admin can 造冊 month by month.
     config_by_id = {c.id: c for c in configs.values()}
     for index, previous in sorted(latest_by_index.items()):
+        if entry_by_index[index][0] == RECEIVED_MONTHS_CEILING_STUDENT:
+            continue  # 領獎期滿 (36 months by 114) — no 115 renewal, matches the 續領 sheet's 否
         already = (
             await session.execute(select(Application.id).where(Application.app_id == _app_id(OPEN_YEAR, index)))
         ).scalar_one_or_none()
