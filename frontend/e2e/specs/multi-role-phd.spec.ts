@@ -50,7 +50,7 @@ const PROFESSOR_NYCU_ID = "professor";
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("博士生多角色審核鏈", { tag: [MODE.browser, ROLE.student, ROLE.professor, ROLE.college, ROLE.admin, FEATURE.apply, FEATURE.review, FEATURE.ranking] }, () => {
+test.describe("博士生多角色審核鏈 | Multi-role PhD review chain", { tag: [MODE.browser, ROLE.student, ROLE.professor, ROLE.college, ROLE.admin, FEATURE.apply, FEATURE.review, FEATURE.ranking] }, () => {
   let runState: RunState;
   let createdAppId: string | undefined;
 

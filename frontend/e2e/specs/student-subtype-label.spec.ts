@@ -48,7 +48,7 @@ interface EligibleScholarship {
   eligible_sub_types: EligibleSubType[];
 }
 
-test.describe("博士生 moe_1w 子類型標籤文案", { tag: [MODE.api, ROLE.student, FEATURE.label] }, () => {
+test.describe("博士生 moe_1w 子類型標籤文案 | phd moe_1w sub-type label wording", { tag: [MODE.api, ROLE.student, FEATURE.label] }, () => {
   let runState: RunState;
 
   test.beforeEach(() => {

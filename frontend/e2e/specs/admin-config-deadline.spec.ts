@@ -95,7 +95,7 @@ async function purgeE2EConfig(): Promise<void> {
   }
 }
 
-test.describe("管理員設定申請截止日並強制生效", { tag: [MODE.api, ROLE.admin, FEATURE.config, FEATURE.apply] }, () => {
+test.describe("管理員設定申請截止日並強制生效 | Admin config CRUD pins application_end_date deadline enforcement", { tag: [MODE.api, ROLE.admin, FEATURE.config, FEATURE.apply] }, () => {
   let runState: RunState;
   let createdConfigId: number | undefined;
   let createdAppId: string | undefined;

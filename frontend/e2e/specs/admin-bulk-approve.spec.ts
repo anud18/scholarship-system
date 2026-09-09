@@ -70,7 +70,7 @@ const SUB_TYPE = "nstc";
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("管理員批次核准已送出申請", { tag: [MODE.api, ROLE.admin, ROLE.student, FEATURE.review] }, () => {
+test.describe("管理員批次核准已送出申請 | Admin bulk-approves a submitted application", { tag: [MODE.api, ROLE.admin, ROLE.student, FEATURE.review] }, () => {
   let runState: RunState;
   let createdAppId: string | undefined;
 

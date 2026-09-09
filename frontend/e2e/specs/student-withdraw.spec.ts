@@ -61,7 +61,7 @@ const SUB_TYPE = "nstc";
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("學生撤回已送出申請", { tag: [MODE.api, ROLE.student, FEATURE.withdraw] }, () => {
+test.describe("學生撤回已送出申請 | Student withdraws a submitted application", { tag: [MODE.api, ROLE.student, FEATURE.withdraw] }, () => {
   let runState: RunState;
   let createdAppId: string | undefined;
 

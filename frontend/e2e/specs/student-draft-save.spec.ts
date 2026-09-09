@@ -66,7 +66,7 @@ const SUB_TYPE = "nstc";
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("學生儲存草稿、更新後送出申請", { tag: [MODE.api, ROLE.student, FEATURE.draft, FEATURE.apply] }, () => {
+test.describe("學生儲存草稿、更新後送出申請 | Student saves draft, updates, then submits an application", { tag: [MODE.api, ROLE.student, FEATURE.draft, FEATURE.apply] }, () => {
   let runState: RunState;
   let createdAppId: string | undefined;
 

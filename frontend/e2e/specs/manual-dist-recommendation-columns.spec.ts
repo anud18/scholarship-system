@@ -264,7 +264,7 @@ function collegeCell(row: Locator): Locator {
   return row.locator("td").nth(3);
 }
 
-test.describe("手動分發表格的教授推薦／學院推薦欄位", { tag: [MODE.browser, ROLE.admin, FEATURE.distribution, FEATURE.review] }, () => {
+test.describe("手動分發表格的教授推薦／學院推薦欄位 | Admin manual distribution — 教授推薦 / 學院推薦 columns", { tag: [MODE.browser, ROLE.admin, FEATURE.distribution, FEATURE.review] }, () => {
   test.beforeAll(async () => {
     fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
     await seed();

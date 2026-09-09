@@ -65,7 +65,7 @@ async function purgeStudentApps(studentNycuId: string, scholarshipCode: string):
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("系所申請總表匯出 XLSX", { tag: [MODE.api, ROLE.admin, ROLE.college, FEATURE.export] }, () => {
+test.describe("系所申請總表匯出 XLSX | Admin department-summary-export returns XLSX for dept with submissions", { tag: [MODE.api, ROLE.admin, ROLE.college, FEATURE.export] }, () => {
   let runState: RunState;
   let createdAppId: string | undefined;
 

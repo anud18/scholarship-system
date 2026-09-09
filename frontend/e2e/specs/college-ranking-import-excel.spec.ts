@@ -63,7 +63,7 @@ async function getApiToken(nycuId: string): Promise<string> {
   return body.data.access_token;
 }
 
-test.describe("學院排名 Excel 匯入 @nightly", { tag: [MODE.api, ROLE.college, FEATURE.ranking] }, () => {
+test.describe("學院排名 Excel 匯入 | College ranking import-excel @nightly", { tag: [MODE.api, ROLE.college, FEATURE.ranking] }, () => {
   let runState: RunState;
   let rankingId: number | undefined;
   let fixtureAppId: string | undefined;

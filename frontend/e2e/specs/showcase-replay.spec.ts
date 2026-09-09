@@ -28,7 +28,7 @@ import { authContext } from "../helpers/auth";
 test.use({ video: "on", trace: "on" });
 
 test(
-  "示範：管理員查詢學生領獎紀錄",
+  "示範：管理員查詢學生領獎紀錄 | showcase: admin looks up a student's scholarship history",
   { tag: [MODE.browser, ROLE.admin, FEATURE.history] },
   async ({ page }) => {
     await authContext(page.context(), "admin");

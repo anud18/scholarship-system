@@ -69,7 +69,7 @@ async function purgeStudentApps(
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("管理員軟刪除與還原申請", { tag: [MODE.api, ROLE.admin, ROLE.student, FEATURE.apply] }, () => {
+test.describe("管理員軟刪除與還原申請 | Admin soft-delete + restore: submitted app → deleted → under_review", { tag: [MODE.api, ROLE.admin, ROLE.student, FEATURE.apply] }, () => {
   let runState: RunState;
   let createdAppId: string | undefined;
   let createdNumericId: number | undefined;

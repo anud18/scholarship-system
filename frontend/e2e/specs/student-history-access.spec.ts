@@ -12,7 +12,7 @@ import { test, expect } from "@playwright/test";
 import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { loginAs } from "../helpers/auth";
 
-test.describe("學院學生領獎紀錄查詢", { tag: [MODE.browser, ROLE.college, FEATURE.history] }, () => {
+test.describe("學院學生領獎紀錄查詢 | College student history lookup", { tag: [MODE.browser, ROLE.college, FEATURE.history] }, () => {
   test("college tab renders panel without admin import action", async ({
     browser,
   }) => {
@@ -46,7 +46,7 @@ test.describe("學院學生領獎紀錄查詢", { tag: [MODE.browser, ROLE.colle
   });
 });
 
-test.describe("學生累計領取月數", { tag: [MODE.browser, ROLE.student, FEATURE.history] }, () => {
+test.describe("學生累計領取月數 | Student total received months", { tag: [MODE.browser, ROLE.student, FEATURE.history] }, () => {
   test("我的申請 tab shows the 總月數 card", async ({ browser }) => {
     const { context } = await loginAs(browser, "stuphd001");
     const page = await context.newPage();
