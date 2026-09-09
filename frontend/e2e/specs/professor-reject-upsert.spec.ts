@@ -38,6 +38,7 @@
  *                             (upsert, not insert) with recommendation='approve'
  */
 import { test, expect } from "@playwright/test";
+import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { loginAs } from "../helpers/auth";
 import { apiAs } from "../helpers/api";
 import {
@@ -79,7 +80,7 @@ const PROFESSOR_NYCU_ID = "professor";
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Professor reject recommendation + upsert", () => {
+test.describe("教授拒絕推薦與重複審核限制 | Professor reject recommendation + upsert", { tag: [MODE.api, ROLE.professor, FEATURE.review] }, () => {
   let runState: RunState;
   let createdAppId: string | undefined;
 

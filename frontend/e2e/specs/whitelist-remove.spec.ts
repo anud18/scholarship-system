@@ -14,6 +14,7 @@
  *   student → GET /scholarships/eligible → undergraduate_freshman GONE
  */
 import { test, expect } from "@playwright/test";
+import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { loginAs } from "../helpers/auth";
 import { apiAs } from "../helpers/api";
 import { getActiveConfig, getWhitelist } from "../helpers/db";
@@ -32,7 +33,7 @@ interface EligibleScholarship {
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Whitelist removal revokes access to undergraduate_freshman", () => {
+test.describe("移除白名單後撤銷申請資格 | Whitelist removal revokes access to undergraduate_freshman", { tag: [MODE.api, ROLE.admin, ROLE.student, FEATURE.whitelist] }, () => {
   let runState: RunState;
   let configId: number | undefined;
   let whitelisted = false;

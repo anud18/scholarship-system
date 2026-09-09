@@ -28,6 +28,7 @@
  * Auth: require_admin (admin or super_admin).
  */
 import { test, expect } from "@playwright/test";
+import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { loginAs } from "../helpers/auth";
 import { apiAs } from "../helpers/api";
 import {
@@ -67,7 +68,7 @@ async function purgeStudentApps(
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Admin PATCH /admin/applications/{id}/status: approve then reject", () => {
+test.describe("管理員核准後再駁回申請 | Admin PATCH /admin/applications/{id}/status: approve then reject", { tag: [MODE.api, ROLE.admin, ROLE.student, FEATURE.review, FEATURE.apply] }, () => {
   let runState: RunState;
   let createdAppId: string | undefined;
 

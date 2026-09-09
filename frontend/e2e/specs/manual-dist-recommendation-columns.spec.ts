@@ -26,6 +26,7 @@
  * finalize is triggered, so it leaves distribution state untouched.
  */
 import { test, expect, type Locator, type Page } from "@playwright/test";
+import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { authContext } from "../helpers/auth";
 import { FRONTEND_URL } from "../helpers/env";
 import { pool } from "../helpers/db";
@@ -263,7 +264,7 @@ function collegeCell(row: Locator): Locator {
   return row.locator("td").nth(3);
 }
 
-test.describe("Admin manual distribution — 教授推薦 / 學院推薦 columns", () => {
+test.describe("手動分發表格的教授推薦／學院推薦欄位 | Admin manual distribution — 教授推薦 / 學院推薦 columns", { tag: [MODE.browser, ROLE.admin, FEATURE.distribution, FEATURE.review] }, () => {
   test.beforeAll(async () => {
     fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
     await seed();

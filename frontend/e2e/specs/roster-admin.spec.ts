@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { loginAs } from "../helpers/auth";
 import { apiAs } from "../helpers/api";
 import { getActiveConfig, pool } from "../helpers/db";
@@ -25,7 +26,7 @@ test.describe.configure({ mode: "serial" });
 // §1 — Roster admin management flows
 // ---------------------------------------------------------------------------
 
-test.describe("Admin roster management flows @nightly", () => {
+test.describe("管理員造冊管理流程 | Admin roster management flows @nightly", { tag: [MODE.api, ROLE.admin, FEATURE.roster] }, () => {
   let runState: RunState;
   let adminToken: string;
   let rosterId: number | undefined;
@@ -245,7 +246,7 @@ test.describe("Admin roster management flows @nightly", () => {
 // §2 — Roster schedule management flows
 // ---------------------------------------------------------------------------
 
-test.describe("Admin roster schedule management @nightly", () => {
+test.describe("管理員造冊排程管理 | Admin roster schedule management @nightly", { tag: [MODE.api, ROLE.admin, FEATURE.roster, FEATURE.config] }, () => {
   let runState: RunState;
   let scheduleId: number | undefined;
   let configId: number;

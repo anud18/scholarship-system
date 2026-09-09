@@ -25,6 +25,7 @@
  *   Uses the same locked-roster fixture as describe #2.
  */
 import { test, expect } from "@playwright/test";
+import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { loginAs } from "../helpers/auth";
 import { apiAs } from "../helpers/api";
 import { deleteApplicationCascade, getActiveConfig, pool } from "../helpers/db";
@@ -71,7 +72,7 @@ async function getApiToken(nycuId: string): Promise<string> {
 // Test 1: 撤 button → dialog → disabled confirm until reason filled
 // ---------------------------------------------------------------------------
 
-test.describe("admin revoke dialog — confirm disabled until reason filled", () => {
+test.describe("撤銷對話框：未填原因前不可確認 | admin revoke dialog — confirm disabled until reason filled", { tag: [MODE.browser, ROLE.admin, FEATURE.revokeSuspend, FEATURE.distribution] }, () => {
   let runState: RunState;
   let fixtureAppId: string | undefined;
   let fixtureRankingId: number | undefined;
@@ -433,7 +434,7 @@ const SETUP_FORM_DATA = {
   documents: [],
 };
 
-test.describe("locked roster dialog — revoked student panel + item removal", () => {
+test.describe("已鎖定造冊：撤銷／停發名單與項目移除 | locked roster dialog — revoked student panel + item removal", { tag: [MODE.api, ROLE.admin, FEATURE.revokeSuspend, FEATURE.roster, FEATURE.notification, FEATURE.history] }, () => {
   let runState: RunState;
   let lockedFixtureAppId: string | undefined;
   let lockedFixtureAppDbId: number | undefined;
