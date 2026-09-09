@@ -8,9 +8,10 @@ for both 新申請 and 續領. Three kinds of students exist:
    ranked + allocated) and renewed for 114 as 113 續領生: the renewal keeps
    `scholarship_configuration_id` / `allocation_config_id` on `phd_113` (the
    slot they hold) with `academic_year=114`, exactly as the self-renew path
-   creates it. Both years are approved and sit in LOCKED yearly payment rosters
-   under `phd_113` (periods "113" and "114"), so 領獎紀錄 / 領取月份數 show real
-   history (12 + 12 months) and phd_113's 造冊列表 shows its second year segment.
+   creates it. Both years are approved and sit in LOCKED **monthly** payment
+   rosters under `phd_113` (113-09 … 114-08; 博士生是月度造冊), so 領獎紀錄 /
+   領取月份數 show real history (12 + 12 months) and phd_113's 造冊列表 shows
+   its second year segment.
 2. **114 新申請得獎者** — first awarded in 114 through the college ranking +
    matrix distribution. They are what makes the 114 造冊 preview work: the
    matrix-mode roster/preview path reads *allocated ranking items*, and
@@ -65,7 +66,7 @@ CLOSED_YEARS = (FIRST_AWARD_YEAR, RENEWAL_YEAR)
 CONFIG_CODE_BY_YEAR = {FIRST_AWARD_YEAR: "phd_113", RENEWAL_YEAR: "phd_114"}
 # The 造冊 dashboard (payment-rosters/cycle-status) lists a config's periods ONLY
 # when the config has a RosterSchedule — without one, 114-整學年 shows nothing
-# even though its locked rosters exist. Seed a yearly schedule for every PhD year.
+# even though its locked rosters exist. 博士生是月度造冊: seed a monthly schedule for every PhD year.
 SCHEDULE_CONFIG_CODES = ("phd_113", "phd_114", "phd_115")
 APP_SEQUENCE_BASE = 200  # APP-<year>-0-002xx, clear of the sequence counter and other demo seeds
 MONTHS_BEFORE_NOW_BY_YEAR = {FIRST_AWARD_YEAR: 24, RENEWAL_YEAR: 12}
@@ -403,11 +404,17 @@ def _rule_details(rules: List[ScholarshipRule]) -> Dict[str, Any]:
 
 
 def _build_roster_item(
-    roster: PaymentRoster, application: Application, phd: ScholarshipType, rules: List[ScholarshipRule]
+    roster: PaymentRoster,
+    application: Application,
+    config: ScholarshipConfiguration,
+    phd: ScholarshipType,
+    rules: List[ScholarshipRule],
 ) -> PaymentRosterItem:
+    """`config` is the slot-owning configuration the item snapshots (per-period
+    rosters carry no roster-level allocation snapshot, exactly like the service)."""
     student_data = application.student_data
     # 續領標得獎配置年度（113 續領生），新申請標送件年度 — 同 _create_roster_item。
-    identity = f"{roster.allocation_year}續領" if application.is_renewal else f"{application.academic_year}新申請"
+    identity = f"{config.academic_year}續領" if application.is_renewal else f"{application.academic_year}新申請"
     return PaymentRosterItem(
         roster_id=roster.id,
         application_id=application.id,
@@ -420,8 +427,8 @@ def _build_roster_item(
         scholarship_name=phd.name,
         scholarship_amount=application.amount,
         scholarship_subtype=application.sub_scholarship_type,
-        allocation_config_id=roster.allocation_config_id,
-        allocation_year=roster.allocation_year,
+        allocation_config_id=config.id,
+        allocation_year=config.academic_year,
         allocated_sub_type=application.sub_scholarship_type,
         application_identity=identity,
         verification_status=StudentVerificationStatus.VERIFIED,
@@ -442,63 +449,72 @@ def _build_roster_item(
     )
 
 
-async def _get_or_create_locked_roster(
+ACADEMIC_YEAR_MONTHS = (9, 10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8)  # 學年度 9 月起，同 cycle-status
+
+
+def _month_completed_at(year: int, month: int) -> datetime:
+    """A plausible 造冊 completion timestamp inside the paid month."""
+    western_year = year + 1911
+    calendar_year = western_year if month >= 9 else western_year + 1
+    return datetime(calendar_year, month, 5, 9, 0, tzinfo=timezone.utc)
+
+
+async def _get_or_create_locked_monthly_rosters(
     session: AsyncSession,
     *,
     config: ScholarshipConfiguration,
     year: int,
-    sub_type: str,
     applications: List[Application],
-    ranking_id: Optional[int],
     phd: ScholarshipType,
     rules: List[ScholarshipRule],
     admin_id: int,
-) -> bool:
-    """One LOCKED yearly roster per (slot-owning config, paying year, sub_type),
-    shaped like RosterService.generate_rosters_from_distribution output."""
-    roster_code = f"ROSTER-{year}-{sub_type}-{config.config_code}"
-    existing = (
-        await session.execute(select(PaymentRoster).where(PaymentRoster.roster_code == roster_code))
-    ).scalar_one_or_none()
-    if existing:
-        return False
-
-    completed_at = _submitted_at(year) + timedelta(days=45)
+) -> int:
+    """博士生是月度造冊：twelve LOCKED monthly rosters for one (slot-owning config,
+    paying year), shaped like RosterService.generate_roster output — one roster
+    per period holding every sub_type (the Excel splits them into sheets), no
+    roster-level allocation snapshot (the items carry it). Returns rosters created."""
+    created = 0
     total_amount = sum(float(app.amount or 0) for app in applications)
-    roster = PaymentRoster(
-        roster_code=roster_code,
-        scholarship_configuration_id=config.id,
-        allocation_config_id=config.id,
-        ranking_id=ranking_id,
-        period_label=str(year),
-        academic_year=year,
-        roster_cycle=RosterCycle.YEARLY,
-        sub_type=sub_type,
-        allocation_year=config.academic_year,
-        project_number=(config.project_numbers or {}).get(sub_type),
-        status=RosterStatus.LOCKED,
-        trigger_type=RosterTriggerType.MANUAL,
-        created_by=admin_id,
-        started_at=completed_at - timedelta(minutes=5),
-        completed_at=completed_at,
-        locked_at=completed_at + timedelta(days=1),
-        locked_by=admin_id,
-        total_applications=len(applications),
-        qualified_count=len(applications),
-        disqualified_count=0,
-        total_amount=total_amount,
-        student_verification_enabled=True,
-        notes="開發環境示範資料（seed_ay115_demo）",
-    )
-    session.add(roster)
-    await session.flush()
-    for application in applications:
-        session.add(_build_roster_item(roster, application, phd, rules))
-    return True
+    for month in ACADEMIC_YEAR_MONTHS:
+        period_label = f"{year}-{month:02d}"
+        roster_code = f"ROSTER-{year}-{period_label}-{config.config_code}"
+        existing = (
+            await session.execute(select(PaymentRoster.id).where(PaymentRoster.roster_code == roster_code))
+        ).scalar_one_or_none()
+        if existing:
+            continue
+
+        completed_at = _month_completed_at(year, month)
+        roster = PaymentRoster(
+            roster_code=roster_code,
+            scholarship_configuration_id=config.id,
+            period_label=period_label,
+            academic_year=year,
+            roster_cycle=RosterCycle.MONTHLY,
+            status=RosterStatus.LOCKED,
+            trigger_type=RosterTriggerType.SCHEDULED,
+            created_by=admin_id,
+            started_at=completed_at - timedelta(minutes=5),
+            completed_at=completed_at,
+            locked_at=completed_at + timedelta(days=1),
+            locked_by=admin_id,
+            total_applications=len(applications),
+            qualified_count=len(applications),
+            disqualified_count=0,
+            total_amount=total_amount,
+            student_verification_enabled=True,
+            notes="開發環境示範資料（seed_ay115_demo）",
+        )
+        session.add(roster)
+        await session.flush()
+        for application in applications:
+            session.add(_build_roster_item(roster, application, config, phd, rules))
+        created += 1
+    return created
 
 
-async def _ensure_yearly_schedule(session: AsyncSession, config: ScholarshipConfiguration, admin_id: int) -> bool:
-    """Active yearly 造冊 schedule for `config`, as the admin would create it in 造冊管理."""
+async def _ensure_monthly_schedule(session: AsyncSession, config: ScholarshipConfiguration, admin_id: int) -> bool:
+    """Active monthly 造冊 schedule for `config`, as the admin would create it in 造冊管理."""
     # roster_schedules has no unique constraint on the config FK: an admin can add a
     # second schedule in 造冊管理, so never assume a single row.
     existing = (
@@ -508,10 +524,10 @@ async def _ensure_yearly_schedule(session: AsyncSession, config: ScholarshipConf
         return False
     session.add(
         RosterSchedule(
-            schedule_name=f"{config.config_name} 年度造冊",
+            schedule_name=f"{config.config_name} 月度造冊",
             description="開發環境示範排程（seed_ay115_demo）",
             scholarship_configuration_id=config.id,
-            roster_cycle=RosterCycle.YEARLY,
+            roster_cycle=RosterCycle.MONTHLY,
             auto_lock=False,
             student_verification_enabled=True,
             notification_enabled=False,
@@ -591,25 +607,17 @@ async def _seed_closed_years(
             if ranking:
                 counts["rankings"] += 1
                 ranking_ids.append(ranking.id)
-        # One roster per (slot-owning config, sub_type) paid in `year` — the shape
-        # RosterService.generate_rosters_from_distribution produces: the 114 rosters
-        # under phd_113 hold the 113 續領生, the ones under phd_114 the 114 新申請.
+        # Twelve monthly rosters per (slot-owning config) paid in `year`: the 114
+        # months under phd_113 hold the 113 續領生, the ones under phd_114 the 114 新申請.
         config_by_id = {c.id: c for c in configs.values()}
-        groups = sorted({(app.allocation_config_id, app.sub_scholarship_type) for app in apps_by_year[year]})
-        for consumed_config_id, sub_type in groups:
+        for consumed_config_id in sorted({app.allocation_config_id for app in apps_by_year[year]}):
             consumed = config_by_id[consumed_config_id]
-            group = [
-                app
-                for app in apps_by_year[year]
-                if app.allocation_config_id == consumed_config_id and app.sub_scholarship_type == sub_type
-            ]
-            counts["rosters"] += await _get_or_create_locked_roster(
+            group = [app for app in apps_by_year[year] if app.allocation_config_id == consumed_config_id]
+            counts["rosters"] += await _get_or_create_locked_monthly_rosters(
                 session,
                 config=consumed,
                 year=year,
-                sub_type=sub_type,
                 applications=group,
-                ranking_id=ranking_ids[0] if ranking_ids and consumed is config else None,
                 phd=phd,
                 rules=rules,
                 admin_id=admin_id,
@@ -682,7 +690,7 @@ async def seed_ay115_demo(session: AsyncSession) -> None:
     for code in SCHEDULE_CONFIG_CODES:
         config = await _load_config(session, code)
         if config:
-            schedules += await _ensure_yearly_schedule(session, config, admin.id)
+            schedules += await _ensure_monthly_schedule(session, config, admin.id)
     await session.commit()
 
     logger.info(

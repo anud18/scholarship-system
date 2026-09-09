@@ -45,6 +45,8 @@ interface Period {
   total_amount?: number;
   qualified_count?: number;
   next_schedule?: string;
+  /** 等待中的期間預估可造冊人數（新申請需完成分發、續領需核准後才會 > 0） */
+  estimated_count?: number;
   period_start_date?: string;
   period_end_date?: string;
   sub_type?: string | null;
@@ -515,6 +517,13 @@ export function RosterListTable({
                           <Loader2 className="mr-1 h-4 w-4 animate-spin" />
                           處理中...
                         </Button>
+                      ) : period.estimated_count === 0 ? (
+                        <span
+                          className="text-sm text-muted-foreground"
+                          title="此期間尚無可造冊的學生：新申請需先完成分發，續領需先核准"
+                        >
+                          尚無可造冊名單
+                        </span>
                       ) : (
                         <Button
                           size="sm"

@@ -59,4 +59,34 @@ describe("RosterListTable 續領 badge", () => {
     renderTable({ renewal_count: 0 });
     expect(screen.queryByText(/續領 \d+ 人/)).toBeNull();
   });
+
+  it("shows 尚無可造冊名單 instead of 立即產生 when nothing is eligible yet", () => {
+    render(
+      <RosterListTable
+        periods={[
+          {
+            label: "115-09",
+            status: "waiting",
+            academic_year: 115,
+            year_offset: 1,
+            segment: "續領",
+            estimated_count: 0,
+          },
+          {
+            label: "115-10",
+            status: "waiting",
+            academic_year: 115,
+            year_offset: 1,
+            segment: "續領",
+            estimated_count: 3,
+          },
+        ]}
+        configId={1}
+        rosterCycle="monthly"
+      />
+    );
+    expect(screen.getByText("尚無可造冊名單")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /立即產生/ })).toHaveLength(1);
+    expect(screen.getByText("第二年 續領（115 學年度）")).toBeInTheDocument();
+  });
 });

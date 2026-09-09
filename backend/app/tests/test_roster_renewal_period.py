@@ -254,6 +254,37 @@ def test_renewal_year_without_executed_ranking_still_lists_renewals(db_sync):
     assert [a.id for a in eligible] == [second_renewal.id]
 
 
+def test_period_with_nobody_to_roster_leaves_no_failed_roster_row(db_sync):
+    """phd_115's 116-09 before the 116 distribution and before any 115 awardee
+    renewed: the service must refuse up front (ValueError → 400 at the endpoint)
+    instead of creating a roster row that is then flipped to FAILED."""
+    import pytest
+
+    from app.core.exceptions import RosterGenerationError
+    from app.models.payment_roster import PaymentRoster, RosterCycle, RosterTriggerType
+
+    admin, _scholarship, current, _prior, _new_app, _renewal, _borrower = _setup(db_sync)
+    before = db_sync.query(PaymentRoster).count()
+
+    # generate_roster wraps the cause in RosterGenerationError; the endpoint
+    # re-dispatches ValueError causes as 400 with the curated message.
+    with pytest.raises(RosterGenerationError) as ei:
+        RosterService(db_sync).generate_roster(
+            scholarship_configuration_id=current.id,
+            period_label="116-09",
+            roster_cycle=RosterCycle.MONTHLY,
+            academic_year=116,
+            created_by_user_id=admin.id,
+            trigger_type=RosterTriggerType.MANUAL,
+            student_verification_enabled=False,
+        )
+    assert isinstance(ei.value.__cause__, ValueError)
+    assert "找不到已執行分發的排名，也沒有已核准的續領" in str(ei.value.__cause__)
+    assert ei.value.roster_id is None  # no roster row was created, nothing to mark FAILED
+    db_sync.rollback()
+    assert db_sync.query(PaymentRoster).count() == before
+
+
 def test_monthly_roster_items_snapshot_the_slot_year_not_the_paying_year(db_sync):
     """phd_114's 115-09 monthly roster: no ranking item and no roster-level
     allocation snapshot, so the item must fall back to the application's own

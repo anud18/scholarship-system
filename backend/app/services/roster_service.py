@@ -227,6 +227,12 @@ class RosterService:
                     # 將 ranking_id 設為 None 以確保不會被使用
                     ranking_id = None
 
+            # 先取得符合條件的申請，再建立造冊主檔：這一期若根本沒人可造冊
+            # （尚未分發、續領尚未核准），直接以 ValueError 回報，不留下一筆「失敗」的冊。
+            applications = self._get_eligible_applications(
+                scholarship_configuration_id, period_label, academic_year, ranking_id
+            )
+
             # 產生造冊代碼
             roster_code = self._generate_roster_code(scholarship_configuration_id, period_label, academic_year)
 
@@ -316,11 +322,6 @@ class RosterService:
                     trigger_type=trigger_type.value,
                     db=self.db,
                 )
-
-            # 取得符合條件的申請
-            applications = self._get_eligible_applications(
-                scholarship_configuration_id, period_label, academic_year, ranking_id
-            )
 
             roster.total_applications = len(applications)
             logger.info(f"Found {len(applications)} eligible applications")
