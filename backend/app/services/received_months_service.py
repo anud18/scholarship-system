@@ -49,10 +49,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from app.models.payment_roster import PaymentRoster, PaymentRosterItem, RosterCycle, RosterStatus
+from app.models.received_months import StudentReceivedMonthRecord
+from app.models.scholarship import ScholarshipConfiguration
 
 # 只有「已完成」與「已鎖定」的造冊算領到的月份；草稿、處理中、失敗的冊不算。
 COUNTED_ROSTER_STATUSES = (RosterStatus.COMPLETED, RosterStatus.LOCKED)
-from app.models.received_months import StudentReceivedMonthRecord
 
 _CYCLE_MONTHS: dict[RosterCycle, int] = {
     RosterCycle.MONTHLY: 1,
@@ -154,6 +155,48 @@ async def calculate_received_months_bulk_async(
         return result
 
     rows = (await db.execute(_bulk_stmt(ids, scholarship_config_id))).all()
+    for student_id, cycle, count in rows:
+        result[student_id] = result.get(student_id, 0) + _months_for_cycle(cycle) * count
+    return result
+
+
+def _bulk_by_type_stmt(student_nycu_ids: list[str], scholarship_type_id: int) -> Select:
+    """Same as _bulk_stmt but across every configuration of one scholarship type."""
+    return (
+        select(
+            PaymentRosterItem.student_number,
+            PaymentRoster.roster_cycle,
+            func.count(PaymentRosterItem.id),
+        )
+        .join(PaymentRoster, PaymentRoster.id == PaymentRosterItem.roster_id)
+        .join(ScholarshipConfiguration, ScholarshipConfiguration.id == PaymentRoster.scholarship_configuration_id)
+        .where(
+            and_(
+                ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
+                PaymentRoster.status.in_(COUNTED_ROSTER_STATUSES),
+                PaymentRosterItem.student_number.in_(student_nycu_ids),
+                PaymentRosterItem.is_included.is_(True),
+            )
+        )
+        .group_by(PaymentRosterItem.student_number, PaymentRoster.roster_cycle)
+    )
+
+
+async def calculate_received_months_bulk_by_type_async(
+    db: AsyncSession, student_nycu_ids: Iterable[str], scholarship_type_id: int
+) -> dict[str, int]:
+    """Months received under ANY configuration of the scholarship type.
+
+    A student's rosters hang under the configuration that awarded their slot
+    (all 36 months of a 113 awardee sit under phd_113), so a screen keyed by
+    the year being distributed (手動分發) must sum across the type to see them.
+    """
+    ids = list(student_nycu_ids)
+    result: dict[str, int] = {sid: 0 for sid in ids}
+    if not ids:
+        return result
+
+    rows = (await db.execute(_bulk_by_type_stmt(ids, scholarship_type_id))).all()
     for student_id, cycle, count in rows:
         result[student_id] = result.get(student_id, 0) + _months_for_cycle(cycle) * count
     return result

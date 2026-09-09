@@ -979,7 +979,8 @@ class RosterService:
         # distribution_executed）。其正確性依賴 _get_eligible_applications 已先以
         # 「finalized + executed」篩選過申請：一個申請在同學年度只會有一筆有效正取
         # （finalize 時會反鎖同 slot 的其他排名），故 .first() 取到的即為授權子類型。
-        if not allocated_sub_type:
+        # 續領從不持有排名項，跳過這次必空的查詢。
+        if not allocated_sub_type and not application.is_renewal:
             alloc_item = (
                 self.db.query(CollegeRankingItem)
                 .join(CollegeRanking, CollegeRankingItem.ranking_id == CollegeRanking.id)
@@ -1838,7 +1839,13 @@ class RosterService:
             PaymentRoster: 已建立的造冊
         """
         academic_year = requesting_config.academic_year  # 發放學年度 = 期間
-        period_label = str(academic_year)
+        # 學期制的兩個配置共用同一學年度，借用同一個名額配置時期間要帶學期，
+        # 否則上下學期會落在同一冊（同 owner / period / sub_type / allocation 的唯一鍵）。
+        period_label = (
+            str(academic_year)
+            if requesting_config.semester is None
+            else f"{academic_year}-{getattr(requesting_config.semester, 'value', requesting_config.semester)}"
+        )
         allocation_year = consumed_config.academic_year  # 顯示快照（消耗哪個年度的名額）
 
         # 取得計畫編號（扁平：consumed_config.project_numbers[sub_type]，無年度 key）
@@ -1847,7 +1854,7 @@ class RosterService:
             project_number = consumed_config.project_numbers.get(sub_type)
 
         # 產生造冊代碼（期間 + sub_type + 消耗配置代碼即唯一）
-        roster_code = f"ROSTER-{academic_year}-{sub_type}-{consumed_config.config_code}"
+        roster_code = f"ROSTER-{period_label}-{sub_type}-{consumed_config.config_code}"
 
         # 檢查是否已存在（unique key: scholarship_configuration_id + period_label
         # + allocation_config_id + sub_type）
@@ -2208,7 +2215,9 @@ class RosterService:
             .filter(
                 and_(
                     CollegeRanking.scholarship_type_id == config.scholarship_type_id,
-                    CollegeRanking.academic_year == config.academic_year,
+                    # 冊掛在消耗名額的配置底下，分發年度是冊自己的 academic_year（發放年），
+                    # 不是 owner 配置的年度（115 期間的 nstc·114 冊來自 115 年的排名）。
+                    CollegeRanking.academic_year == roster.academic_year,
                     sem_filter,
                     CollegeRanking.is_finalized.is_(True),
                     CollegeRanking.distribution_executed.is_(True),

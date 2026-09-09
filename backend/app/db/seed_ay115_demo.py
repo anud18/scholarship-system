@@ -79,11 +79,12 @@ MONTHS_BEFORE_NOW_BY_YEAR = {FIRST_AWARD_YEAR: 24, RENEWAL_YEAR: 12, OPEN_YEAR: 
 DAYS_PER_MONTH = 30
 RANKING_SUB_TYPE_CODE = "default"  # college rankings are per college, not per sub-type
 # 已領月份數 baseline (StudentReceivedMonthRecord, the 領取月份數匯入 half of the
-# additive rule in docs/adr/0001): the system half only counts rosters under the
-# CURRENT config (phd_115), so months paid under phd_113/phd_114 must come from
-# here or the 115 手動分發 grid shows 0 for every 續領 candidate. 鄭宇軒 sits at
-# the 36-month ceiling (2 years before the system + 113/114), which is why the
-# 115 續領 sheet marks them 領獎期滿.
+# additive rule in docs/adr/0001). The system half already counts every locked
+# monthly roster under the awarding configuration (113 + 114 = 24 months for the
+# 113 cohort, 12 for the 114 cohort), so the baseline only carries months paid
+# BEFORE this system existed: 鄭宇軒 was first awarded in 111 and sits at the
+# 36-month ceiling by the end of 114 (12 imported + 24 system), which is why the
+# 115 續領 sheet marks them 領獎期滿. Everyone else has no pre-system months.
 MONTHS_PER_YEAR = 12
 RECEIVED_MONTHS_CEILING_STUDENT = "311551205"
 RECEIVED_MONTHS_CEILING = 36
@@ -602,6 +603,7 @@ async def _seed_closed_years(
             first_award_by_index[index] = application
         latest_by_index[index] = application  # plan is ordered by year, so this ends on the 114 record
 
+    config_by_id = {c.id: c for c in configs.values()}
     for year in CLOSED_YEARS:
         config = configs[year]
         rules = list(
@@ -615,7 +617,6 @@ async def _seed_closed_years(
                 )
             ).scalars()
         )
-        ranking_ids: List[int] = []
         for college_code in sorted(COLLEGE_NAMES):
             new_apps = [
                 app
@@ -627,10 +628,8 @@ async def _seed_closed_years(
             )
             if ranking:
                 counts["rankings"] += 1
-                ranking_ids.append(ranking.id)
         # Twelve monthly rosters per (slot-owning config) paid in `year`: the 114
         # months under phd_113 hold the 113 續領生, the ones under phd_114 the 114 新申請.
-        config_by_id = {c.id: c for c in configs.values()}
         for consumed_config_id in sorted({app.allocation_config_id for app in apps_by_year[year]}):
             consumed = config_by_id[consumed_config_id]
             group = [app for app in apps_by_year[year] if app.allocation_config_id == consumed_config_id]
@@ -647,7 +646,6 @@ async def _seed_closed_years(
     # 114 得獎者的第一年續領 (114 續領生, on phd_114) and 113 得獎者的第二年續領
     # (113 續領生, on phd_113). No 115 rosters exist yet, so each configuration's
     # 115 segment shows 估 N 人 and the admin can 造冊 month by month.
-    config_by_id = {c.id: c for c in configs.values()}
     for index, previous in sorted(latest_by_index.items()):
         if entry_by_index[index][0] == RECEIVED_MONTHS_CEILING_STUDENT:
             continue  # 領獎期滿 (36 months by 114) — no 115 renewal, matches the 續領 sheet's 否
@@ -669,16 +667,19 @@ async def _seed_closed_years(
 
 
 def _received_months_for(entry: StudentEntry, years_awarded: int) -> int:
+    """Pre-system months only — the seeded rosters already supply `years_awarded` × 12."""
     if entry[0] == RECEIVED_MONTHS_CEILING_STUDENT:
-        return RECEIVED_MONTHS_CEILING
-    return years_awarded * MONTHS_PER_YEAR
+        return RECEIVED_MONTHS_CEILING - years_awarded * MONTHS_PER_YEAR
+    return 0
 
 
 async def _ensure_received_months(session: AsyncSession, phd: ScholarshipType) -> int:
-    """已領月份數 baseline rows for every closed-year recipient (see the constant note)."""
+    """已領月份數 baseline rows for recipients with pre-system months (see the constant note)."""
     created = 0
     cohort = [(entry, len(CLOSED_YEARS)) for entry in RENEWAL_COHORT] + [(entry, 1) for entry in NEW_RECIPIENTS_114]
     for entry, years_awarded in cohort:
+        if _received_months_for(entry, years_awarded) <= 0:
+            continue
         stdcode = entry[0]
         existing = (
             await session.execute(

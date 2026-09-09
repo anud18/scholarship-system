@@ -320,9 +320,18 @@ class TestRenewalImportEndpoints:
         """Confirming a pending renewal batch creates an approved is_renewal Application."""
         from app.models.scholarship import SubTypeSelectionMode
 
-        # Config for the (year, semester) is required by create_renewals_from_batch.
+        # The selected (114, first) config is the renewal CYCLE being paid; the
+        # student's cohort is the 113 config that awarded their slot.
         config = _make_config(phd_scholarship.id, renewal_open=True)
-        db.add(config)
+        cohort = ScholarshipConfiguration(
+            scholarship_type_id=phd_scholarship.id,
+            academic_year=113,
+            semester="first",
+            config_name="PhD 113-1",
+            config_code="phd_113_1",
+            amount=40000,
+        )
+        db.add_all([config, cohort])
         # Pre-create the student User so _get_or_create_users_bulk needs no SIS lookup.
         student = User(
             nycu_id="413271002",
@@ -333,16 +342,16 @@ class TestRenewalImportEndpoints:
         )
         db.add(student)
         await db.flush()
-        # 續領只開放給該配置的得獎者: the student must hold an approved award on
-        # the selected configuration, which also fixes the paying year (114 → 115).
+        # 續領只開放給得獎者: the student holds an approved 113 award, so the 114
+        # renewal is a 113 續領生 that hangs under the 113 configuration.
         db.add(
             Application(
-                app_id="APP-114-1-00001",
+                app_id="APP-113-1-00001",
                 user_id=student.id,
                 scholarship_type_id=phd_scholarship.id,
-                scholarship_configuration_id=config.id,
-                allocation_config_id=config.id,
-                academic_year=114,
+                scholarship_configuration_id=cohort.id,
+                allocation_config_id=cohort.id,
+                academic_year=113,
                 semester="first",
                 status=ApplicationStatus.approved,
                 sub_type_selection_mode=SubTypeSelectionMode.single,
@@ -410,6 +419,10 @@ class TestRenewalImportEndpoints:
         assert len(created) >= 1
         app_row = created[0]
         assert app_row.is_renewal is True
+        assert app_row.academic_year == 114  # the cycle being paid
+        assert app_row.renewal_year == 113  # 113 續領生
+        assert app_row.scholarship_configuration_id == cohort.id
+        assert app_row.allocation_config_id == cohort.id
         # Enum column: a fresh DB read yields the member; the in-session object holds the value.
         assert app_row.status in (ApplicationStatus.approved, ApplicationStatus.approved.value)
         assert app_row.import_source == "renewal_import"

@@ -142,11 +142,16 @@ export function CompactConfigSelector({ onConfigSelect, disabled = false }: Comp
         api.admin.getScholarshipConfigurations({ scholarship_type_id: typeId, is_active: true }),
         api.admin.getScholarshipConfigurations({ scholarship_type_id: typeId, is_active: false })
       ])
+      // A half-loaded list would silently hide a cohort that is still paying out,
+      // so either failure is a failure of the whole load (surfaced by the catch).
+      if (!activeResponse.success || !inactiveResponse.success) {
+        throw new Error(activeResponse.message || inactiveResponse.message || "Failed to load configurations")
+      }
       const response = {
-        success: activeResponse.success || inactiveResponse.success,
+        success: true,
         data: [
-          ...((activeResponse.success && (activeResponse.data as ScholarshipConfiguration[])) || []),
-          ...((inactiveResponse.success && (inactiveResponse.data as ScholarshipConfiguration[])) || [])
+          ...((activeResponse.data as ScholarshipConfiguration[]) || []),
+          ...((inactiveResponse.data as ScholarshipConfiguration[]) || [])
         ]
       }
 

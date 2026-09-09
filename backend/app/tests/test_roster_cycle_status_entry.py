@@ -10,7 +10,6 @@ from datetime import datetime
 from types import SimpleNamespace
 
 from app.api.v1.endpoints.payment_rosters import (
-    RENEWAL_IDENTITY_SUFFIX,
     _period_label_year,
     _period_specs,
     _roster_period_entry,
@@ -71,19 +70,14 @@ def test_failed_entry_surfaces_notes_as_error_message():
 
 
 def test_processing_and_draft_statuses():
-    assert _roster_period_entry(_roster(RosterStatus.PROCESSING), "115", None, 0)["status"] == "processing"
-    assert _roster_period_entry(_roster(RosterStatus.DRAFT), "115", None, 0)["status"] == "draft"
+    assert _roster_period_entry(_roster(RosterStatus.PROCESSING), "115", PERIOD_DATES, 0)["status"] == "processing"
+    assert _roster_period_entry(_roster(RosterStatus.DRAFT), "115", PERIOD_DATES, 0)["status"] == "draft"
 
 
-def test_missing_period_dates_omits_date_keys_instead_of_crashing():
-    entry = _roster_period_entry(_roster(), "115", None, 0)
-    assert "period_start_date" not in entry
-    assert "period_end_date" not in entry
-
-
-def test_identity_suffix_matches_roster_item_snapshot_format():
-    """_create_roster_item writes f"{year}續領"; the count query LIKEs on this suffix."""
-    assert f"114{RENEWAL_IDENTITY_SUFFIX}" == "114續領"
+def test_segment_years_extends_to_latest_payable_year():
+    """A 補發 recipient still drawing on the slots in 118 extends the list to 118."""
+    assert _segment_years(114, AWARD_TERM_YEARS, {}, latest_payable_year=118) == [114, 115, 116, 117, 118]
+    assert _segment_years(114, AWARD_TERM_YEARS, {}, latest_payable_year=113) == [114, 115, 116]
 
 
 # ─── year segments: 第一年新申請 + 兩年續領，全在同一個配置底下 ─────────────

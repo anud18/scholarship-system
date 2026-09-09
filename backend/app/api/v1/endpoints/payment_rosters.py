@@ -21,6 +21,7 @@ from app.core.exceptions import RosterAlreadyExistsError, RosterGenerationError,
 from app.core.path_security import validate_object_name_minio
 from app.core.security import check_user_roles
 from app.db.deps import get_db, get_sync_db
+from app.models.application import Application
 from app.models.payment_roster import (
     AWARD_TERM_YEARS,
     MANUAL_EXCLUSION_CATEGORY_LABELS,
@@ -123,10 +124,6 @@ def _roster_item_dict_with_display_year(item: PaymentRosterItem, roster: Payment
     return data
 
 
-# application_identity 快照格式為「{學年度}續領」/「{學年度}新申請」（roster_service._create_roster_item）
-RENEWAL_IDENTITY_SUFFIX = "續領"
-
-
 def _roster_status_fields(roster: PaymentRoster) -> dict:
     """cycle-status 列的狀態欄位；LOCKED 與 COMPLETED 同折成 completed（前端另看 roster_status）。"""
     if roster.status in (RosterStatus.COMPLETED, RosterStatus.LOCKED):
@@ -151,7 +148,7 @@ def _roster_status_fields(roster: PaymentRoster) -> dict:
 def _roster_period_entry(
     roster: PaymentRoster,
     period_label: str,
-    period_dates: Optional[dict],
+    period_dates: dict,
     renewal_count: int,
 ) -> dict:
     """One 造冊列表 row for `roster` under `period_label` (cycle-status).
@@ -162,14 +159,10 @@ def _roster_period_entry(
     and how many included rows are 續領 — the list marks renewal-bearing
     rosters instead of leaving admins to open each one to find out.
     """
-    dates = (
-        {
-            "period_start_date": period_dates["start_date"].isoformat(),
-            "period_end_date": period_dates["end_date"].isoformat(),
-        }
-        if period_dates
-        else {}
-    )
+    dates = {
+        "period_start_date": period_dates["start_date"].isoformat(),
+        "period_end_date": period_dates["end_date"].isoformat(),
+    }
     return {
         "label": period_label,
         "roster_id": roster.id,
@@ -193,14 +186,20 @@ def _period_label_year(label: str) -> Optional[int]:
         return None
 
 
-def _segment_years(config_year: int, term_years: int, roster_groups: dict) -> list[int]:
+def _segment_years(
+    config_year: int, term_years: int, roster_groups: dict, latest_payable_year: Optional[int] = None
+) -> list[int]:
     """Academic years a configuration's 造冊列表 shows.
 
     Fixed `term_years` segments from the configuration's own year (新申請 year
-    plus the 續領 years), extended by any later year an existing roster already
-    sits in (a 補發 recipient's renewal can run past the cohort's third year).
+    plus the 續領 years), extended to the latest year an approved application
+    still draws on this configuration's slots (a 補發 recipient's renewal can
+    run past the cohort's third year) and to any later year an existing roster
+    already sits in.
     """
     years = set(range(config_year, config_year + term_years))
+    if latest_payable_year is not None and latest_payable_year > config_year:
+        years.update(range(config_year, latest_payable_year + 1))
     for label in roster_groups:
         year = _period_label_year(label)
         if year is not None and year > config_year:
@@ -261,15 +260,16 @@ def _period_specs(cycle: str, year: int, is_yearly: bool, semester_value: Option
 
 
 async def _count_included_renewals(db: AsyncSession, roster_ids: list[int]) -> dict[int, int]:
-    """{roster_id: 納入造冊的續領人數}，一次查完所有造冊。"""
+    """{roster_id: 納入造冊的續領人數}，一次查完所有造冊（以 Application.is_renewal 為準，不比對顯示字串）。"""
     if not roster_ids:
         return {}
     stmt = (
         select(PaymentRosterItem.roster_id, func.count(PaymentRosterItem.id))
+        .join(Application, Application.id == PaymentRosterItem.application_id)
         .where(
             PaymentRosterItem.roster_id.in_(roster_ids),
             PaymentRosterItem.is_included.is_(True),
-            PaymentRosterItem.application_identity.like(f"%{RENEWAL_IDENTITY_SUFFIX}"),
+            Application.is_renewal.is_(True),
         )
         .group_by(PaymentRosterItem.roster_id)
     )
@@ -1138,8 +1138,8 @@ async def get_roster_cycle_status(
                 )
             )
         ).scalar() > 0
-        term_years = AWARD_TERM_YEARS if has_renewal_scheme else 1
-        segment_years = _segment_years(academic_year, term_years, roster_groups)
+        # 學期制配置的續領接在下一個學期的配置，不是同一配置的下一年，所以只有學年制才有年段。
+        term_years = AWARD_TERM_YEARS if (has_renewal_scheme and config.semester is None) else 1
 
         # 誰佔這個配置的名額（mirrors RosterService._get_eligible_applications）
         consumes_config = or_(
@@ -1155,6 +1155,20 @@ async def get_roster_cycle_status(
                 ),
             ),
         )
+
+        # 最後一個還有人領這個配置名額的年度（補發者的續領可能超過第三年）
+        latest_payable_year = (
+            await db.execute(
+                select(func.max(Application.academic_year)).where(
+                    and_(
+                        Application.status == "approved",
+                        Application.deleted_at.is_(None),
+                        consumes_config,
+                    )
+                )
+            )
+        ).scalar()
+        segment_years = _segment_years(academic_year, term_years, roster_groups, latest_payable_year)
 
         # Cache counts by (year, semester filter) to avoid duplicate queries across periods
         estimate_cache: dict = {}
@@ -1242,14 +1256,10 @@ async def get_roster_cycle_status(
                         roster_cycle=roster.roster_cycle.value if roster.roster_cycle else "yearly",
                         period_label=period_label,
                     )
-                    label_year = _period_label_year(period_label)
+                    # 沒有年段欄位：這些冊不屬於排程的任何期間（例如月排程底下的年度冊），
+                    # 照原樣列在最後，不套年段標題。
                     periods.append(
-                        {
-                            **_roster_period_entry(
-                                roster, period_label, period_dates, renewal_counts.get(roster.id, 0)
-                            ),
-                            **(_segment_fields(label_year, academic_year) if label_year is not None else {}),
-                        }
+                        _roster_period_entry(roster, period_label, period_dates, renewal_counts.get(roster.id, 0))
                     )
 
         return ApiResponse(
