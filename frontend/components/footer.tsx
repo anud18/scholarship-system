@@ -12,6 +12,7 @@ import {
   FOOTER_LINKS_CHANGED_EVENT,
   footerLinkHref,
   footerLinkLabel,
+  splitFooterLinksBySection,
   type FooterLink,
 } from "@/lib/api/modules/footer-links";
 import { logger } from "@/lib/utils/logger";
@@ -23,14 +24,17 @@ interface FooterProps {
 export function Footer({ locale = "zh" }: FooterProps) {
   const currentYear = new Date().getFullYear();
 
-  // 相關連結 are admin-managed (系統管理 → 系統文件). A fetch failure must not
-  // break the rest of the footer, so the list just stays empty.
-  const [links, setLinks] = useState<FooterLink[]>([]);
+  // 相關連結 and the bottom policy bar are both admin-managed (系統管理 →
+  // 系統文件) and come back in one request. A fetch failure must not break
+  // the rest of the footer, so both lists just stay empty.
+  const [allLinks, setAllLinks] = useState<FooterLink[]>([]);
+  const { related: links, policy: policyLinks } =
+    splitFooterLinksBySection(allLinks);
 
   const loadLinks = useCallback(async (signal?: { cancelled: boolean }) => {
     try {
       const res = await apiClient.footerLinks.list();
-      if (!signal?.cancelled && res.success && res.data) setLinks(res.data);
+      if (!signal?.cancelled && res.success && res.data) setAllLinks(res.data);
     } catch (error) {
       logger.error("Failed to load footer links", error);
     }
@@ -167,20 +171,31 @@ export function Footer({ locale = "zh" }: FooterProps) {
             </p>
           </div>
 
-          <div className="flex gap-6 text-xs text-nycu-navy-500">
-            <a href="#" className="hover:text-nycu-blue-600 transition-colors">
-              {locale === "zh" ? "隱私權政策" : "Privacy Policy"}
-            </a>
-            <a href="#" className="hover:text-nycu-blue-600 transition-colors">
-              {locale === "zh" ? "使用條款" : "Terms of Use"}
-            </a>
-            <a href="#" className="hover:text-nycu-blue-600 transition-colors">
-              {locale === "zh" ? "無障礙聲明" : "Accessibility"}
-            </a>
-            <a href="#" className="hover:text-nycu-blue-600 transition-colors">
-              {locale === "zh" ? "網站地圖" : "Sitemap"}
-            </a>
-          </div>
+          {/* Policy bar (隱私權政策 / 使用條款 / ...) — admin-managed, same
+              table as 相關連結. Omitted entirely when empty. */}
+          {policyLinks.length > 0 && (
+            <nav
+              aria-label={locale === "zh" ? "政策連結" : "Policy links"}
+              className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-xs text-nycu-navy-500"
+            >
+              {policyLinks.map((link) => (
+                <a
+                  key={link.id}
+                  href={footerLinkHref(link)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={
+                    link.link_type === "file"
+                      ? link.original_filename ?? undefined
+                      : undefined
+                  }
+                  className="hover:text-nycu-blue-600 transition-colors"
+                >
+                  {footerLinkLabel(link, locale)}
+                </a>
+              ))}
+            </nav>
+          )}
         </div>
 
         {/* System Status */}

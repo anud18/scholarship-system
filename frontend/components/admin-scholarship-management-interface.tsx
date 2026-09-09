@@ -48,6 +48,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ApplicationFieldForm } from "@/components/application-field-form";
 import { ApplicationDocumentForm } from "@/components/application-document-form";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
+import { buildExampleDocumentPreview } from "@/lib/utils/example-document-preview";
 import { api } from "@/lib/api";
 import { logger } from "@/lib/utils/logger";
 import type {
@@ -607,22 +608,16 @@ export function AdminScholarshipManagementInterface({
     }
   };
 
-  const handlePreviewExample = (documentId: number, documentName: string) => {
-    const token =
-      typeof window !== "undefined"
-        ? window.localStorage?.getItem("auth_token")
-        : null;
-
-    const encodedDocumentId = encodeURIComponent(String(documentId));
-    const encodedToken = encodeURIComponent(token || "");
-    const previewUrl = `/api/v1/preview/examples?documentId=${encodedDocumentId}&token=${encodedToken}`;
-
-    setExamplePreviewFile({
-      url: previewUrl,
-      filename: `${documentName}_範例`,
-      type: "application/pdf",
-    });
-    setShowExamplePreview(true);
+  const handlePreviewExample = (doc: ApplicationDocument) => {
+    try {
+      const preview = buildExampleDocumentPreview(doc);
+      if (!preview) return;
+      setExamplePreviewFile(preview);
+      setShowExamplePreview(true);
+    } catch (err: unknown) {
+      logger.error("Failed to build example preview URL", { err });
+      setError("無法開啟範例預覽，請稍後再試");
+    }
   };
 
   const handleCloseExamplePreview = () => {
@@ -1470,12 +1465,7 @@ export function AdminScholarshipManagementInterface({
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() =>
-                                  handlePreviewExample(
-                                    doc.id,
-                                    doc.document_name
-                                  )
-                                }
+                                onClick={() => handlePreviewExample(doc)}
                                 className="text-purple-600 hover:text-purple-700"
                                 title="預覽範例"
                               >
