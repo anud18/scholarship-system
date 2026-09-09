@@ -51,6 +51,8 @@ interface Period {
   allocation_year?: number | null;
   project_number?: string | null;
   excel_stale?: boolean;
+  /** 納入造冊的續領人數（cycle-status 隨造冊列回傳；0 或未提供則不標示） */
+  renewal_count?: number;
 }
 
 interface RosterListTableProps {
@@ -288,7 +290,7 @@ export function RosterListTable({
                       {period.label}
                     </TableCell>
 
-                    {/* 子類型 */}
+                    {/* 子類型（含續領人數標記） */}
                     <TableCell className="whitespace-nowrap">
                       {period.sub_type ? (
                         <span className="font-mono text-sm text-blue-700">
@@ -296,6 +298,15 @@ export function RosterListTable({
                         </span>
                       ) : (
                         <span className="text-muted-foreground">-</span>
+                      )}
+                      {(period.renewal_count ?? 0) > 0 && (
+                        <Badge
+                          variant="outline"
+                          className="ml-2 border-amber-300 bg-amber-50 text-amber-700"
+                          title="此造冊內納入造冊的續領人數"
+                        >
+                          續領 {period.renewal_count} 人
+                        </Badge>
                       )}
                     </TableCell>
 

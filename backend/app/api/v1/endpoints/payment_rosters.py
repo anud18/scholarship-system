@@ -122,6 +122,84 @@ def _roster_item_dict_with_display_year(item: PaymentRosterItem, roster: Payment
     return data
 
 
+# application_identity 快照格式為「{學年度}續領」/「{學年度}新申請」（roster_service._create_roster_item）
+RENEWAL_IDENTITY_SUFFIX = "續領"
+
+
+def _roster_status_fields(roster: PaymentRoster) -> dict:
+    """cycle-status 列的狀態欄位；LOCKED 與 COMPLETED 同折成 completed（前端另看 roster_status）。"""
+    if roster.status in (RosterStatus.COMPLETED, RosterStatus.LOCKED):
+        return {
+            "status": "completed",
+            "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
+            "total_amount": float(roster.total_amount) if roster.total_amount else 0,
+            "qualified_count": roster.qualified_count,
+        }
+    if roster.status == RosterStatus.FAILED:
+        return {
+            "status": "failed",
+            "error_message": roster.notes,
+            "total_amount": float(roster.total_amount) if roster.total_amount else 0,
+            "qualified_count": roster.qualified_count,
+        }
+    if roster.status == RosterStatus.PROCESSING:
+        return {"status": "processing"}
+    return {"status": "draft"}
+
+
+def _roster_period_entry(
+    roster: PaymentRoster,
+    period_label: str,
+    period_dates: Optional[dict],
+    renewal_count: int,
+) -> dict:
+    """One 造冊列表 row for `roster` under `period_label` (cycle-status).
+
+    Shared by every cycle branch so a roster generated from the distribution
+    matrix and one generated per schedule period carry the same shape: the
+    sub_type / allocation_year / project_number snapshots, the 造冊期間 dates,
+    and how many included rows are 續領 — the list marks renewal-bearing
+    rosters instead of leaving admins to open each one to find out.
+    """
+    dates = (
+        {
+            "period_start_date": period_dates["start_date"].isoformat(),
+            "period_end_date": period_dates["end_date"].isoformat(),
+        }
+        if period_dates
+        else {}
+    )
+    return {
+        "label": period_label,
+        "roster_id": roster.id,
+        "roster_code": roster.roster_code,
+        "roster_status": roster.status.value,
+        "excel_stale": roster.excel_stale,
+        "sub_type": roster.sub_type,
+        "allocation_year": roster.allocation_year,
+        "project_number": roster.project_number,
+        "renewal_count": renewal_count,
+        **dates,
+        **_roster_status_fields(roster),
+    }
+
+
+async def _count_included_renewals(db: AsyncSession, roster_ids: list[int]) -> dict[int, int]:
+    """{roster_id: 納入造冊的續領人數}，一次查完所有造冊。"""
+    if not roster_ids:
+        return {}
+    stmt = (
+        select(PaymentRosterItem.roster_id, func.count(PaymentRosterItem.id))
+        .where(
+            PaymentRosterItem.roster_id.in_(roster_ids),
+            PaymentRosterItem.is_included.is_(True),
+            PaymentRosterItem.application_identity.like(f"%{RENEWAL_IDENTITY_SUFFIX}"),
+        )
+        .group_by(PaymentRosterItem.roster_id)
+    )
+    return {roster_id: int(n) for roster_id, n in (await db.execute(stmt)).all()}
+
+
 def _generate_payment_roster_inner(
     request: RosterCreateRequest,
     db: Session,
@@ -938,6 +1016,7 @@ async def get_roster_cycle_status(
         )
         result = await db.execute(stmt)
         existing_rosters = result.scalars().all()
+        renewal_counts = await _count_included_renewals(db, [r.id for r in existing_rosters])
 
         # Create a map of period_label -> [rosters] (supports multiple rosters per period for matrix distribution)
         roster_groups: dict = {}
@@ -979,35 +1058,43 @@ async def get_roster_cycle_status(
             if semester_filter in estimate_cache:
                 return estimate_cache[semester_filter]
 
-            # Matrix-based scholarships require an executed ranking; without one, no students are eligible
-            if is_matrix_based and ranking_id_for_estimate is None:
-                estimate_cache[semester_filter] = 0
-                return 0
-
             count_stmt = select(func.count(Application.id)).where(
                 and_(
-                    or_(
-                        Application.scholarship_configuration_id == config_id,
-                        and_(
-                            Application.scholarship_configuration_id.is_(None),
-                            Application.scholarship_type_id == config.scholarship_type_id,
-                        ),
-                    ),
                     Application.status == "approved",
                     Application.academic_year == academic_year,
                     Application.deleted_at.is_(None),
                 )
             )
+            config_match = or_(
+                Application.scholarship_configuration_id == config_id,
+                and_(
+                    Application.scholarship_configuration_id.is_(None),
+                    Application.scholarship_type_id == config.scholarship_type_id,
+                ),
+            )
+            # 續領跟新申請一樣每期造冊：mirrors RosterService._get_eligible_applications.
+            # 續領沒有 CollegeRankingItem，且自助續領掛在前一年度的配置底下，
+            # 故以「同獎學金類型 + 同學年度」認定。
+            renewal_match = and_(
+                Application.is_renewal.is_(True),
+                Application.scholarship_type_id == config.scholarship_type_id,
+            )
 
             if is_matrix_based:
-                count_stmt = count_stmt.join(
-                    CollegeRankingItem, CollegeRankingItem.application_id == Application.id
-                ).where(
-                    and_(
-                        CollegeRankingItem.ranking_id == ranking_id_for_estimate,
-                        CollegeRankingItem.is_allocated.is_(True),
+                # Matrix 模式的新申請必須已在執行分發的排名中正取；尚無排名時只剩續領可造冊。
+                if ranking_id_for_estimate is None:
+                    eligible_match = renewal_match
+                else:
+                    allocated_ids = select(CollegeRankingItem.application_id).where(
+                        and_(
+                            CollegeRankingItem.ranking_id == ranking_id_for_estimate,
+                            CollegeRankingItem.is_allocated.is_(True),
+                        )
                     )
-                )
+                    eligible_match = or_(and_(config_match, Application.id.in_(allocated_ids)), renewal_match)
+            else:
+                eligible_match = or_(config_match, renewal_match)
+            count_stmt = count_stmt.where(eligible_match)
 
             if semester_filter:
                 count_stmt = count_stmt.where(Application.semester == semester_filter)
@@ -1056,43 +1143,15 @@ async def get_roster_cycle_status(
 
                 if rosters_for_period:
                     for roster in rosters_for_period:
-                        entry = {
-                            "label": period_label,
-                            "western_date": western_date,
-                            "display_label": display_label,
-                            "roster_id": roster.id,
-                            "roster_code": roster.roster_code,
-                            "roster_status": roster.status.value,
-                            "excel_stale": roster.excel_stale,
-                            "sub_type": roster.sub_type,
-                            "allocation_year": roster.allocation_year,
-                            "project_number": roster.project_number,
-                            "period_start_date": period_dates["start_date"].isoformat(),
-                            "period_end_date": period_dates["end_date"].isoformat(),
-                        }
-                        if roster.status in [RosterStatus.COMPLETED, RosterStatus.LOCKED]:
-                            entry.update(
-                                {
-                                    "status": "completed",
-                                    "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
-                                    "total_amount": float(roster.total_amount) if roster.total_amount else 0,
-                                    "qualified_count": roster.qualified_count,
-                                }
-                            )
-                        elif roster.status == RosterStatus.FAILED:
-                            entry.update(
-                                {
-                                    "status": "failed",
-                                    "error_message": roster.notes,
-                                    "total_amount": float(roster.total_amount) if roster.total_amount else 0,
-                                    "qualified_count": roster.qualified_count,
-                                }
-                            )
-                        elif roster.status == RosterStatus.PROCESSING:
-                            entry["status"] = "processing"
-                        else:
-                            entry["status"] = "draft"
-                        periods.append(entry)
+                        periods.append(
+                            {
+                                **_roster_period_entry(
+                                    roster, period_label, period_dates, renewal_counts.get(roster.id, 0)
+                                ),
+                                "western_date": western_date,
+                                "display_label": display_label,
+                            }
+                        )
                 else:
                     semester_filter = None if is_yearly else _semester_for_month(month)
                     estimated_count = await _estimate_eligible_count(semester_filter)
@@ -1125,41 +1184,9 @@ async def get_roster_cycle_status(
 
                 if rosters_for_period:
                     for roster in rosters_for_period:
-                        entry = {
-                            "label": period_label,
-                            "roster_id": roster.id,
-                            "roster_code": roster.roster_code,
-                            "roster_status": roster.status.value,
-                            "excel_stale": roster.excel_stale,
-                            "sub_type": roster.sub_type,
-                            "allocation_year": roster.allocation_year,
-                            "project_number": roster.project_number,
-                            "period_start_date": period_dates["start_date"].isoformat(),
-                            "period_end_date": period_dates["end_date"].isoformat(),
-                        }
-                        if roster.status in [RosterStatus.COMPLETED, RosterStatus.LOCKED]:
-                            entry.update(
-                                {
-                                    "status": "completed",
-                                    "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
-                                    "total_amount": float(roster.total_amount) if roster.total_amount else 0,
-                                    "qualified_count": roster.qualified_count,
-                                }
-                            )
-                        elif roster.status == RosterStatus.FAILED:
-                            entry.update(
-                                {
-                                    "status": "failed",
-                                    "error_message": roster.notes,
-                                    "total_amount": float(roster.total_amount) if roster.total_amount else 0,
-                                    "qualified_count": roster.qualified_count,
-                                }
-                            )
-                        elif roster.status == RosterStatus.PROCESSING:
-                            entry["status"] = "processing"
-                        else:
-                            entry["status"] = "draft"
-                        periods.append(entry)
+                        periods.append(
+                            _roster_period_entry(roster, period_label, period_dates, renewal_counts.get(roster.id, 0))
+                        )
                 else:
                     if config.semester is None:
                         semester_filter = None
@@ -1192,41 +1219,9 @@ async def get_roster_cycle_status(
 
             if rosters_for_period:
                 for roster in rosters_for_period:
-                    entry = {
-                        "label": period_label,
-                        "roster_id": roster.id,
-                        "roster_code": roster.roster_code,
-                        "roster_status": roster.status.value,
-                        "excel_stale": roster.excel_stale,
-                        "sub_type": roster.sub_type,
-                        "allocation_year": roster.allocation_year,
-                        "project_number": roster.project_number,
-                        "period_start_date": period_dates["start_date"].isoformat(),
-                        "period_end_date": period_dates["end_date"].isoformat(),
-                    }
-                    if roster.status in [RosterStatus.COMPLETED, RosterStatus.LOCKED]:
-                        entry.update(
-                            {
-                                "status": "completed",
-                                "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
-                                "total_amount": float(roster.total_amount) if roster.total_amount else 0,
-                                "qualified_count": roster.qualified_count,
-                            }
-                        )
-                    elif roster.status == RosterStatus.FAILED:
-                        entry.update(
-                            {
-                                "status": "failed",
-                                "error_message": roster.notes,
-                                "total_amount": float(roster.total_amount) if roster.total_amount else 0,
-                                "qualified_count": roster.qualified_count,
-                            }
-                        )
-                    elif roster.status == RosterStatus.PROCESSING:
-                        entry["status"] = "processing"
-                    else:
-                        entry["status"] = "draft"
-                    periods.append(entry)
+                    periods.append(
+                        _roster_period_entry(roster, period_label, period_dates, renewal_counts.get(roster.id, 0))
+                    )
             else:
                 estimated_count = await _estimate_eligible_count(None)
                 periods.append(
@@ -1241,44 +1236,22 @@ async def get_roster_cycle_status(
                 )
 
         # Append any distribution-generated rosters whose period_label was not covered
-        # by the schedule template (e.g., yearly period_label "114" when cycle is monthly)
+        # by the schedule template (e.g., yearly period_label "114" when cycle is monthly).
+        # 造冊期間 comes from the roster's own academic_year + cycle so these rows
+        # show the same 造冊月份 as scheduled ones instead of a blank.
         covered_roster_ids = {p["roster_id"] for p in periods if p.get("roster_id")}
         for period_label, rosters_list in roster_groups.items():
             for roster in rosters_list:
                 if roster.id not in covered_roster_ids:
-                    entry = {
-                        "label": period_label,
-                        "roster_id": roster.id,
-                        "roster_code": roster.roster_code,
-                        "roster_status": roster.status.value,
-                        "excel_stale": roster.excel_stale,
-                        "sub_type": roster.sub_type,
-                        "allocation_year": roster.allocation_year,
-                        "project_number": roster.project_number,
-                    }
-                    if roster.status in [RosterStatus.COMPLETED, RosterStatus.LOCKED]:
-                        entry.update(
-                            {
-                                "status": "completed",
-                                "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
-                                "total_amount": float(roster.total_amount) if roster.total_amount else 0,
-                                "qualified_count": roster.qualified_count,
-                            }
-                        )
-                    elif roster.status == RosterStatus.FAILED:
-                        entry.update(
-                            {
-                                "status": "failed",
-                                "error_message": roster.notes,
-                                "total_amount": float(roster.total_amount) if roster.total_amount else 0,
-                                "qualified_count": roster.qualified_count,
-                            }
-                        )
-                    elif roster.status == RosterStatus.PROCESSING:
-                        entry["status"] = "processing"
-                    else:
-                        entry["status"] = "draft"
-                    periods.append(entry)
+                    period_dates = get_roster_period_dates(
+                        academic_year=roster.academic_year,
+                        semester=config.semester.value if config.semester else None,
+                        roster_cycle=roster.roster_cycle.value if roster.roster_cycle else "yearly",
+                        period_label=period_label,
+                    )
+                    periods.append(
+                        _roster_period_entry(roster, period_label, period_dates, renewal_counts.get(roster.id, 0))
+                    )
 
         return ApiResponse(
             success=True,

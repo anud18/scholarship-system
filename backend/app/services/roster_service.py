@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import and_, case as sa_case, func, or_
+from sqlalchemy import and_, case as sa_case, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.exceptions import (
@@ -727,18 +727,26 @@ class RosterService:
             )
             .filter(
                 and_(
-                    or_(
-                        Application.scholarship_configuration_id == scholarship_configuration_id,
-                        and_(
-                            Application.scholarship_configuration_id.is_(None),
-                            Application.scholarship_type_id == config.scholarship_type_id,
-                        ),
-                    ),
                     Application.status == "approved",  # 已核准
                     Application.academic_year == academic_year,
                     Application.deleted_at.is_(None),  # 排除已退件
                 )
             )
+        )
+        config_match = or_(
+            Application.scholarship_configuration_id == scholarship_configuration_id,
+            and_(
+                Application.scholarship_configuration_id.is_(None),
+                Application.scholarship_type_id == config.scholarship_type_id,
+            ),
+        )
+        # 續領跟新申請一樣每期造冊。續領沒有 CollegeRankingItem（不參與名額分發），
+        # 且自助續領的 scholarship_configuration_id 指向前一年度得獎的配置
+        # （application_service.create_renewal），所以改以「同獎學金類型 + 同學年度」
+        # 認定 —— 與 generate_rosters_from_distribution 撈續領的條件一致。
+        renewal_match = and_(
+            Application.is_renewal.is_(True),
+            Application.scholarship_type_id == config.scholarship_type_id,
         )
 
         logger.info(
@@ -786,11 +794,14 @@ class RosterService:
                 # 明確指定排名：僅該排名（管理員刻意選擇單一排名）。
                 ranking_filter = CollegeRankingItem.ranking_id == ranking_id
 
-            # 只選取 ranking 中已分配(正取)的申請。
-            query = query.join(CollegeRankingItem, CollegeRankingItem.application_id == Application.id).filter(
-                and_(
-                    ranking_filter,
-                    CollegeRankingItem.is_allocated.is_(True),
+            # 只選取 ranking 中已分配(正取)的申請，加上已核准的續領。
+            allocated_application_ids = select(CollegeRankingItem.application_id).where(
+                and_(ranking_filter, CollegeRankingItem.is_allocated.is_(True))
+            )
+            query = query.filter(
+                or_(
+                    and_(config_match, Application.id.in_(allocated_application_ids)),
+                    renewal_match,
                 )
             )
         else:
@@ -806,6 +817,7 @@ class RosterService:
                     f"ranking_id {ranking_id} provided for non-matrix scholarship mode "
                     f"'{config.quota_management_mode.value}', will be ignored"
                 )
+            query = query.filter(or_(config_match, renewal_match))
 
         # 4. 根據期間標記進行額外篩選
         # 重要：只有當獎學金配置本身是學期制時才應用學期過濾
@@ -1803,12 +1815,17 @@ class RosterService:
         計畫編號 / 金額 / allocation_year 顯示快照取自「消耗配置」(consumed_config)；
         造冊歸屬於發放配置 (requesting_config)。借用前年度配額時兩者不同。
 
+        期間 (period_label) 一律取「發放配置」的學年度：續領與借用前年度配額的
+        學生消耗的是舊年度的名額，但領的是本年度的錢 —— 114 年度申請領
+        114-08~115-07，115 年度續領就領 115-08~116-07。若以消耗配置年度當期間，
+        續領造冊會掛在舊年度底下、造冊列表對不上任何排程期間、也顯示不出造冊月份。
+
         Returns:
             PaymentRoster: 已建立的造冊
         """
         academic_year = requesting_config.academic_year
-        period_label = str(consumed_config.academic_year)  # 以消耗配置的學年度為期間 key
-        allocation_year = consumed_config.academic_year  # 顯示快照
+        period_label = str(academic_year)  # 期間 = 發放配置學年度（續領/補發亦同）
+        allocation_year = consumed_config.academic_year  # 顯示快照（消耗哪個年度的名額）
 
         # 取得計畫編號（扁平：consumed_config.project_numbers[sub_type]，無年度 key）
         project_number = None
@@ -1841,7 +1858,8 @@ class RosterService:
 
         if existing_roster and not force_regenerate:
             raise RosterAlreadyExistsError(
-                f"造冊已存在：{sub_type} {allocation_year} 年度。使用 force_regenerate=True 可覆蓋。",
+                f"造冊已存在：{academic_year} 期間 {sub_type}（{allocation_year} 年度名額）。"
+                "使用 force_regenerate=True 可覆蓋。",
                 existing_roster=existing_roster,
             )
 
