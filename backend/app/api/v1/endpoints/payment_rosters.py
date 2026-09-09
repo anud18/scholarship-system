@@ -757,7 +757,12 @@ async def preview_roster_students(
             # Resolve the display year per allocation: the CONSUMED config's
             # academic_year (borrowing prior-year shared quota shows that year).
             # allocation_config_id NULL ⇒ own requesting config ⇒ this year.
+            # 續領沒有排名項：子類型取自申請本身、消耗配置取 application.allocation_config_id
+            # （與 RosterService._create_roster_item 同一套後備），否則預覽的「分發獎學金」
+            # 對續領會顯示空白。
+            renewals = [a for a in applications if a.is_renewal]
             consumed_ids = {ri.allocation_config_id for ri in alloc_items if ri.allocation_config_id is not None}
+            consumed_ids |= {a.allocation_config_id for a in renewals if a.allocation_config_id is not None}
             consumed_year_by_id: dict = {}
             if consumed_ids:
                 for cid, cyear in (
@@ -766,16 +771,25 @@ async def preview_roster_students(
                     .all()
                 ):
                     consumed_year_by_id[cid] = cyear
-            for ri in alloc_items:
-                allocation_map[ri.application_id] = {
-                    "allocated_sub_type": ri.allocated_sub_type,
-                    "allocation_config_id": ri.allocation_config_id,
+
+            def _allocation_entry(sub_type, allocation_config_id) -> dict:
+                return {
+                    "allocated_sub_type": sub_type,
+                    "allocation_config_id": allocation_config_id,
                     "allocation_year": (
-                        consumed_year_by_id.get(ri.allocation_config_id)
-                        if ri.allocation_config_id is not None
+                        consumed_year_by_id.get(allocation_config_id)
+                        if allocation_config_id is not None
                         else academic_year
                     ),
                 }
+
+            for ri in alloc_items:
+                allocation_map[ri.application_id] = _allocation_entry(ri.allocated_sub_type, ri.allocation_config_id)
+            for renewal in renewals:
+                if renewal.id not in allocation_map and renewal.sub_scholarship_type:
+                    allocation_map[renewal.id] = _allocation_entry(
+                        renewal.sub_scholarship_type, renewal.allocation_config_id
+                    )
 
         # Initialize summary statistics
         students = []
