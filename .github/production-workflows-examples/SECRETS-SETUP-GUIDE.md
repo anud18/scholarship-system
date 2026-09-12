@@ -433,6 +433,14 @@ These secrets are used by the FastAPI backend application.
 | `SECRET_KEY` | JWT signing secret key | `a1b2c3d4e5f6...` (64+ hex chars) | ✅ Yes |
 | `REDIS_PASSWORD` | Redis cache password | `RedisCache@2024Secure!` | ✅ Yes |
 
+> ⚠️ **`REDIS_PASSWORD` must exist as a *Repository* secret** (holding the
+> production value), not only on the `production` Environment. `health-check.yml`
+> reads it directly and deliberately has no `environment:` key (§2 above), so an
+> environment-scoped-only value resolves to an **empty string with no error** —
+> `redis-cli -a ""` then skips AUTH entirely and PING comes back `NOAUTH
+> Authentication required`, which reads exactly like a real Redis outage. This
+> is what happened on 2026-09-12 (auto-filed as a false incident).
+
 **How to generate:**
 
 ```bash
@@ -619,6 +627,14 @@ These secrets configure general application settings.
   - Frontend `NEXT_PUBLIC_API_URL`
   - Backend `FRONTEND_URL`
   - SSL certificate validation
+
+> ⚠️ **`DOMAIN` must exist as a *Repository* secret** (holding the production
+> value), not only on the `production` Environment — same trap as
+> `REDIS_PASSWORD` above. `health-check.yml`'s frontend probe sends it as the
+> `Host` header; an environment-scoped-only value resolves empty here with no
+> error, and nginx itself returns **HTTP 400** for a blank `Host` header
+> (RFC 7230 requires a non-empty value), indistinguishable from a real
+> frontend outage.
 
 **CORS_ORIGINS:**
 - List of allowed origins for Cross-Origin Resource Sharing
