@@ -10,19 +10,35 @@
 #
 # 2026-09-12 incident: this job filed a false 🚨 "production down" issue
 # (Backend/Database healthy, Frontend HTTP 400, Redis NOAUTH) even though
-# nothing was actually down. Root cause: DOMAIN and REDIS_PASSWORD were only
-# set on the `production` GitHub Environment, not as Repository secrets. This
-# job deliberately has NO `environment:` key (see Prerequisites below), so it
-# can only read Repository-level secrets — an environment-scoped-only value
-# resolves to an EMPTY STRING here with no warning. An empty Host header then
-# makes nginx itself return 400 (RFC 7230 requires a non-empty Host), and an
-# empty REDIS_PASSWORD makes redis-cli skip AUTH entirely, so PING comes back
-# "NOAUTH Authentication required" — both indistinguishable from a real outage
-# unless you already know to suspect the secret. The frontend/redis steps
-# below now guard for this explicitly and fail with a diagnostic message
-# instead of a misleading HTTP code, and the incident-issue step files a
-# non-paging "misconfigured" issue instead of a 🚨 incident when that's all
-# that's wrong.
+# nothing was actually down. Root cause: this job deliberately has NO
+# `environment:` key (see Prerequisites below), so it can only read
+# Repository-level secrets/variables — and DOMAIN/REDIS_PASSWORD were never
+# set there. In this deployment (NYCUITSC/naass) they were never even meant
+# to be GitHub secrets: `deploy-stack.yml` runs in "operator-managed ENV_FILE"
+# mode (the `production` Environment's `ENV_FILE` variable), which reads them
+# straight from a `.env` file on the VM instead. `${{ secrets.DOMAIN }}` and
+# `${{ secrets.REDIS_PASSWORD }}` therefore resolved to an EMPTY STRING with
+# no warning: an empty Host header made nginx itself return 400 (RFC 7230
+# requires a non-empty Host), and an empty password made redis-cli skip AUTH
+# entirely, so PING came back "NOAUTH Authentication required" — both
+# indistinguishable from a real outage.
+#
+# Fix: stop asking GitHub for these values at all. Both checks below now read
+# state the production containers have ALREADY computed for themselves —
+# exactly the pattern the Backend/Database checks already used (read
+# backend's own /health verdict instead of independently connecting to
+# Postgres) — so this workflow needs zero secrets, and the whole class of
+# "secret only exists in the wrong place" bug is structurally gone, not just
+# guarded against:
+#   - Frontend: nginx.prod.conf's one HTTPS server block lists `localhost` as
+#     a `server_name` right alongside the real production domain, so curl's
+#     default Host header (the URL's own "localhost") already matches the
+#     exact same block /health lives in — no need to know DOMAIN at all.
+#   - Redis: docker-compose.prod.yml already defines a Docker healthcheck for
+#     this container (`redis-cli -a $REDIS_PASSWORD ping`, run by the Docker
+#     daemon using the password baked into the CONTAINER's own environment at
+#     deploy time). Reading that verdict via `docker inspect` needs no
+#     password here at all.
 #
 # Prerequisites:
 #   - The self-hosted runner registered on the production AP VM, labels
@@ -31,11 +47,8 @@
 #     answers to [self-hosted, linux], and probes that landed there would
 #     report on the wrong stack. Scheduled, so deliberately NOT behind the
 #     `production` environment's approval gate: it only reads.
-#   - Secrets: DOMAIN, REDIS_PASSWORD — as REPOSITORY secrets holding the
-#     production values (already required by deploy-stack.yml, which reads
-#     the same names; see SECRETS-SETUP-GUIDE.md §2). Because this job has no
-#     `environment:` key, an environment-scoped-only DOMAIN/REDIS_PASSWORD is
-#     invisible to it — it must be able to read them as repository secrets.
+#   - No secrets required — see the 2026-09-12 incident note above for why
+#     that's a deliberate design choice, not an oversight.
 
 name: Production Health Check
 
@@ -72,24 +85,15 @@ jobs:
       - name: Check frontend through nginx
         id: frontend-check
         continue-on-error: true
-        env:
-          DOMAIN: ${{ secrets.DOMAIN }}
         run: |
-          # DOMAIN must be a REPOSITORY secret holding the production value —
-          # see the 2026-09-12 incident note at the top of this file. Fail
-          # loudly and specifically here instead of letting an empty Host
-          # header masquerade as a real HTTP 400 outage below.
-          if [ -z "${DOMAIN}" ]; then
-            echo "::error::DOMAIN secret is empty. It must be a REPOSITORY secret (Settings → Secrets and variables → Actions → Secrets → New repository secret), not only set on the 'production' Environment — this job intentionally has no 'environment:' key (scheduled every 12h; an environment approval gate would block that forever), so it cannot see environment-scoped secrets. See SECRETS-SETUP-GUIDE.md §2."
-            echo "status=MISCONFIGURED" >> $GITHUB_OUTPUT
-            echo "reason=secret-missing" >> $GITHUB_OUTPUT
-            exit 1
-          fi
-
-          # End-to-end through the real TLS listener; -k because the probe
-          # targets localhost while the certificate is issued for $DOMAIN.
-          STATUS=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 10 \
-            "https://localhost/" -H "Host: ${DOMAIN}" || echo "000")
+          # No Host-header override, no DOMAIN needed: nginx.prod.conf's one
+          # HTTPS server block lists `localhost` as a server_name right
+          # alongside the real production domain (and the "_" catch-all), so
+          # curl's default Host (the URL's own "localhost") already routes
+          # into the exact same block /health lives in. See the 2026-09-12
+          # incident note at the top of this file.
+          # -k: the cert is issued for the real domain, not "localhost".
+          STATUS=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 10 "https://localhost/" || echo "000")
           echo "status=$STATUS" >> $GITHUB_OUTPUT
           [ "$STATUS" = "200" ] || { echo "::error::Frontend health check failed (HTTP $STATUS)"; exit 1; }
           echo "✅ Frontend is healthy (HTTP $STATUS)"
@@ -111,67 +115,33 @@ jobs:
       - name: Check Redis cache
         id: redis-check
         continue-on-error: true
-        env:
-          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
         run: |
-          # Same repository-vs-environment secret trap as DOMAIN above — see
-          # the 2026-09-12 incident note at the top of this file. An empty
-          # REDIS_PASSWORD makes redis-cli skip AUTH entirely, so PING comes
-          # back "NOAUTH Authentication required", indistinguishable from a
-          # real Redis outage unless you already know to suspect the secret.
-          if [ -z "${REDIS_PASSWORD}" ]; then
-            echo "::error::REDIS_PASSWORD secret is empty. It must be a REPOSITORY secret (Settings → Secrets and variables → Actions → Secrets → New repository secret), not only set on the 'production' Environment — this job intentionally has no 'environment:' key (scheduled every 12h; an environment approval gate would block that forever), so it cannot see environment-scoped secrets. See SECRETS-SETUP-GUIDE.md §2."
-            echo "reason=secret-missing" >> $GITHUB_OUTPUT
-            exit 1
-          fi
-
-          PONG=$(docker exec scholarship_redis_prod \
-            redis-cli --no-auth-warning -a "$REDIS_PASSWORD" ping 2>/dev/null || echo "")
-          [ "$PONG" = "PONG" ] || { echo "::error::Redis health check failed (got '$PONG')"; exit 1; }
+          # Read Docker's own healthcheck verdict for this container instead
+          # of authenticating ourselves — docker-compose.prod.yml already
+          # runs `redis-cli -a $REDIS_PASSWORD ping` on a schedule using the
+          # password baked into the CONTAINER's own environment at deploy
+          # time, exactly the same "read the verdict, don't reconnect
+          # yourself" pattern the database check above uses. See the
+          # 2026-09-12 incident note at the top of this file.
+          STATUS=$(docker inspect --format '{{.State.Health.Status}}' scholarship_redis_prod 2>/dev/null || echo "unknown")
+          [ "$STATUS" = "healthy" ] || { echo "::error::Redis health check failed (docker health status: $STATUS)"; exit 1; }
           echo "✅ Redis is healthy"
 
       - name: Generate health report
         if: always()
-        env:
-          API_OUTCOME: ${{ steps.api-check.outcome }}
-          API_STATUS: ${{ steps.api-check.outputs.status }}
-          FRONTEND_OUTCOME: ${{ steps.frontend-check.outcome }}
-          FRONTEND_STATUS: ${{ steps.frontend-check.outputs.status }}
-          DB_OUTCOME: ${{ steps.db-check.outcome }}
-          REDIS_OUTCOME: ${{ steps.redis-check.outcome }}
         run: |
-          # A plain bash helper reads far more clearly here than nesting the
-          # MISCONFIGURED case into a wall of GitHub Actions ternaries.
-          row() {
-            local outcome="$1" label="$2" status="${3:-}"
-            if [ "$status" = "MISCONFIGURED" ]; then
-              echo "| $label | ⚠️ Misconfigured — required secret missing (see job log) |"
-            elif [ "$outcome" = "success" ]; then
-              if [ -n "$status" ]; then
-                echo "| $label | ✅ Healthy (HTTP $status) |"
-              else
-                echo "| $label | ✅ Healthy |"
-              fi
-            else
-              if [ -n "$status" ]; then
-                echo "| $label | ❌ Unhealthy (HTTP $status) |"
-              else
-                echo "| $label | ❌ Unhealthy |"
-              fi
-            fi
-          }
-          {
-            echo "# 🏥 Production Health Check Report"
-            echo ""
-            echo "| Service | Status |"
-            echo "|---------|--------|"
-            row "$API_OUTCOME" "Backend API" "$API_STATUS"
-            row "$FRONTEND_OUTCOME" "Frontend" "$FRONTEND_STATUS"
-            row "$DB_OUTCOME" "Database"
-            row "$REDIS_OUTCOME" "Redis"
-            echo ""
-            echo "**Timestamp**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-          } >> "$GITHUB_STEP_SUMMARY"
+          cat >> $GITHUB_STEP_SUMMARY <<EOF
+          # 🏥 Production Health Check Report
+
+          | Service | Status |
+          |---------|--------|
+          | Backend API | ${{ steps.api-check.outcome == 'success' && '✅ Healthy' || '❌ Unhealthy' }} (HTTP ${{ steps.api-check.outputs.status || 'N/A' }}) |
+          | Frontend | ${{ steps.frontend-check.outcome == 'success' && '✅ Healthy' || '❌ Unhealthy' }} (HTTP ${{ steps.frontend-check.outputs.status || 'N/A' }}) |
+          | Database | ${{ steps.db-check.outcome == 'success' && '✅ Healthy' || '❌ Unhealthy' }} |
+          | Redis | ${{ steps.redis-check.outcome == 'success' && '✅ Healthy' || '❌ Unhealthy' }} |
+
+          **Timestamp**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          EOF
 
       # Every probe above is continue-on-error, so the job only reaches a
       # failed conclusion via this explicit gate.
@@ -188,34 +158,16 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const results = [
-              { name: 'Backend API', outcome: '${{ steps.api-check.outcome }}', reason: '' },
-              { name: 'Frontend', outcome: '${{ steps.frontend-check.outcome }}', reason: '${{ steps.frontend-check.outputs.reason }}' },
-              { name: 'Database', outcome: '${{ steps.db-check.outcome }}', reason: '' },
-              { name: 'Redis', outcome: '${{ steps.redis-check.outcome }}', reason: '${{ steps.redis-check.outputs.reason }}' },
-            ];
-            const failedComponents = results.filter(r => r.outcome !== 'success');
-            const components = failedComponents.map(r => r.name);
+            const components = [];
+            if ('${{ steps.api-check.outcome }}' !== 'success') components.push('Backend API');
+            if ('${{ steps.frontend-check.outcome }}' !== 'success') components.push('Frontend');
+            if ('${{ steps.db-check.outcome }}' !== 'success') components.push('Database');
+            if ('${{ steps.redis-check.outcome }}' !== 'success') components.push('Redis');
 
-            // Distinguish "a required secret is only on the Environment, not
-            // the Repository" (a one-time config gap — see the 2026-09-12
-            // incident note in health-check.yml) from an actual outage, so a
-            // misconfiguration doesn't page on-call as a 🚨 production
-            // incident every 12 hours until someone notices.
-            const allMisconfigured = failedComponents.length > 0 &&
-              failedComponents.every(r => r.reason === 'secret-missing');
-
-            const title = allMisconfigured
-              ? `⚙️ Production Health Check Misconfigured: missing repository secret(s) for ${components.join(', ')}`
-              : `🚨 Production Health Check Failed: ${components.join(', ')}`;
-
-            const misconfigNote = allMisconfigured
-              ? `\n**This is NOT a service outage.** The failing check(s) above need a secret that is currently only set on the \`production\` GitHub Environment. \`health-check.yml\` deliberately has no \`environment:\` key (it is scheduled every 12h, and an environment approval gate would block that forever), so it can only read **Repository** secrets. Add the missing secret(s) as Repository secrets holding the production value (Settings → Secrets and variables → Actions → Secrets → New repository secret) — see SECRETS-SETUP-GUIDE.md §2.\n`
-              : '';
-
+            const title = `🚨 Production Health Check Failed: ${components.join(', ')}`;
             const body = `
             ## Health Check Failure
-            ${misconfigNote}
+
             **Failed Components**: ${components.join(', ')}
 
             **Timestamp**: ${new Date().toISOString()}
@@ -241,23 +193,17 @@ jobs:
             [View Workflow Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
             `;
 
-            const labels = allMisconfigured
-              ? ['production', 'config']
-              : ['production', 'incident', 'urgent'];
-
             // Don't file a fresh issue every 15 minutes during one incident.
-            // Matches both title variants ("Failed" / "Misconfigured") so a
-            // recurring misconfig also just gets a comment, not a new issue.
             const issues = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: 'open',
-              labels: 'production',
-              per_page: 20
+              labels: 'production,incident',
+              per_page: 5
             });
 
             const recentIssue = issues.data.find(issue =>
-              issue.title.includes('Production Health Check') &&
+              issue.title.includes('Production Health Check Failed') &&
               (Date.now() - new Date(issue.created_at).getTime()) < 3600000 // Within last hour
             );
 
@@ -275,7 +221,7 @@ jobs:
                 repo: context.repo.repo,
                 title: title,
                 body: body,
-                labels: labels
+                labels: ['production', 'incident', 'urgent']
               });
               console.log(`Created new issue #${issue.data.number}`);
             }
@@ -289,12 +235,11 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: 'open',
-              labels: 'production',
+              labels: 'production,incident',
               per_page: 20
             });
             for (const issue of issues.data) {
-              // Matches both title variants ("Failed" / "Misconfigured").
-              if (!issue.title.includes('Production Health Check')) continue;
+              if (!issue.title.includes('Production Health Check Failed')) continue;
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
