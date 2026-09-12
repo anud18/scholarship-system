@@ -41,6 +41,10 @@ FIXED_ADVISOR_KEYS = (
     FIXED_KEY_ADVISOR_NYCU_ID,
 )
 
+# Columns owned by a separate endpoint rather than by the admin form, so an
+# upsert of a built-in item must leave them as they are.
+OVERWRITE_EXEMPT_COLUMNS = frozenset({"example_file_url"})
+
 
 class ApplicationFieldService:
     """Service for managing application field configurations"""
@@ -106,8 +110,15 @@ class ApplicationFieldService:
         return result.scalar_one_or_none()
 
     async def _overwrite_row(self, row, values: Dict[str, Any], updated_by: int):
-        """Replace an existing row's configurable columns and commit."""
+        """Replace an existing row's configurable columns and commit.
+
+        `example_file_url` is skipped: 範例文件 is uploaded through its own
+        endpoint and never travels in the admin form's payload, so writing the
+        payload's absent value would delete an uploaded example.
+        """
         for key, value in values.items():
+            if key in OVERWRITE_EXEMPT_COLUMNS:
+                continue
             if hasattr(row, key):
                 setattr(row, key, value)
 
@@ -621,10 +632,15 @@ class ApplicationFieldService:
         try:
             self.logger.debug(f"Fetching form config for scholarship type: {scholarship_type}")
 
-            fields = await self.get_fields_by_scholarship_type(scholarship_type, include_inactive)
+            # Always read the inactive rows too, then drop them after the merge
+            # below. Filtering first would hide a DEACTIVATED built-in item from
+            # inject_fixed_fields, which would take it for "never edited" and
+            # inject the code default in its place — resurrecting a 存摺封面 the
+            # admin had switched off, as active and required.
+            fields = await self.get_fields_by_scholarship_type(scholarship_type, include_inactive=True)
             self.logger.debug(f"Found {len(fields)} fields for {scholarship_type}")
 
-            documents = await self.get_documents_by_scholarship_type(scholarship_type, include_inactive)
+            documents = await self.get_documents_by_scholarship_type(scholarship_type, include_inactive=True)
             self.logger.debug(f"Found {len(documents)} documents for {scholarship_type}")
 
             # Convert to dict format for fixed fields injection
@@ -638,6 +654,10 @@ class ApplicationFieldService:
                 documents=documents_dict,
                 user_id=user_id,
             )
+
+            if not include_inactive:
+                fields_dict = [f for f in fields_dict if f.get("is_active", True)]
+                documents_dict = [d for d in documents_dict if d.get("is_active", True)]
 
             self.logger.debug(
                 f"Fixed fields injected, total fields: {len(fields_dict)}, total documents: {len(documents_dict)}"

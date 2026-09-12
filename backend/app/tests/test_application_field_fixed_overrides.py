@@ -13,6 +13,8 @@ Covered here:
   profile, not on the row)
 - a materialised advisor row disappears again when the scholarship stops
   requiring a professor recommendation, exactly as the injected copy would
+- a DEACTIVATED materialised row is not treated as "never edited", which would
+  resurrect the built-in for students
 """
 
 import pytest
@@ -133,3 +135,27 @@ async def test_admin_created_items_are_left_alone(service, monkeypatch):
     assert len(documents) == 2
     assert documents[0]["document_name"] == "研究計畫書"
     assert documents[0].get("is_fixed") is None
+
+
+@pytest.mark.asyncio
+async def test_deactivated_materialised_row_does_not_resurrect_the_builtin(service, monkeypatch):
+    """A built-in item the admin switched off must stay off.
+
+    The student view filters inactive rows. If that filtering happened before
+    the merge, the deactivated row would be invisible to it and the code
+    default would be injected in its place — active and required again.
+    """
+    _requires_advisor(service, monkeypatch, False)
+
+    disabled = {
+        "id": 42,
+        "fixed_key": FIXED_KEY_BANK_STATEMENT,
+        "document_name": "存摺封面",
+        "display_order": 1,
+        "is_active": False,
+    }
+
+    _fields, documents = await service.inject_fixed_fields("phd", [], [disabled])
+
+    assert len(documents) == 1
+    assert documents[0]["is_active"] is False
