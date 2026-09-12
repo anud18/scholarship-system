@@ -107,9 +107,13 @@ production run。
 
 | 放在哪 | 內容 | 誰讀得到 |
 |--------|------|----------|
-| Repository secrets | **production 的值** | 所有 workflow（含沒掛 environment 的 `backup.yml`、`health-check.yml`） |
+| Repository secrets | **production 的值** | 所有 workflow（含沒掛 environment 的 `backup.yml`） |
 | Environment `production` | 可留空，fallback 到 repository 層 | `deploy-production.yml`、`setting-env.yml`(production) |
 | Environment `test` | **測試環境的值，下面清單要全部各設一份** | `deploy-test.yml`、`setting-env.yml`(test) |
+
+> `health-check.yml` 也沒掛 `environment:`，但 2026-09 起它不讀任何 secret（見
+> `health-check.yml` 檔頭的 2026-09-12 incident 說明），所以不在上面「誰讀得到」
+> 的名單裡——這是它跟 `backup.yml` 唯一的差異。
 
 > ⚠️ **fallback 陷阱**：environment 沒定義的 secret 會自動往上抓 repository 層的值。
 > 也就是說 `test` environment 少設一個 `DB_HOST`，test 部署就會連上 **production 的

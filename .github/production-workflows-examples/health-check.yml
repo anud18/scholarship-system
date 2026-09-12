@@ -38,7 +38,10 @@
 #     this container (`redis-cli -a $REDIS_PASSWORD ping`, run by the Docker
 #     daemon using the password baked into the CONTAINER's own environment at
 #     deploy time). Reading that verdict via `docker inspect` needs no
-#     password here at all.
+#     password here at all — see the Redis step for the two follow-up
+#     hardenings that reading a single `docker inspect` naively misses
+#     (a "starting" state right after a restart, and Health.Status
+#     surviving past the container actually stopping).
 #
 # Prerequisites:
 #   - The self-hosted runner registered on the production AP VM, labels
@@ -123,8 +126,31 @@ jobs:
           # time, exactly the same "read the verdict, don't reconnect
           # yourself" pattern the database check above uses. See the
           # 2026-09-12 incident note at the top of this file.
-          STATUS=$(docker inspect --format '{{.State.Health.Status}}' scholarship_redis_prod 2>/dev/null || echo "unknown")
-          [ "$STATUS" = "healthy" ] || { echo "::error::Redis health check failed (docker health status: $STATUS)"; exit 1; }
+          #
+          # Two things a single `docker inspect` read doesn't give you for
+          # free (2026-09 review):
+          #   - The healthcheck interval is 30s with no start_period, so a
+          #     probe landing right after a Redis restart can catch
+          #     "starting" before the first check has even run. Poll for a
+          #     bounded window instead of failing on that first read.
+          #   - Health.Status is independent of the container lifecycle: a
+          #     STOPPED container still reports its last-known "healthy"
+          #     result, so State.Status must also say "running".
+          max_retries=6
+          retry_count=0
+          while :; do
+            READ=$(docker inspect --format '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' scholarship_redis_prod 2>/dev/null || echo "unknown unknown")
+            CONTAINER_STATUS=${READ%% *}
+            HEALTH_STATUS=${READ#* }
+            { [ "$CONTAINER_STATUS" = "running" ] && [ "$HEALTH_STATUS" = "healthy" ]; } && break
+            [ "$HEALTH_STATUS" != "starting" ] && break
+            retry_count=$((retry_count + 1))
+            [ "$retry_count" -ge "$max_retries" ] && break
+            echo "Redis health still starting... ($retry_count/$max_retries)"
+            sleep 10
+          done
+          { [ "$CONTAINER_STATUS" = "running" ] && [ "$HEALTH_STATUS" = "healthy" ]; } \
+            || { echo "::error::Redis health check failed (container: $CONTAINER_STATUS, health: $HEALTH_STATUS)"; exit 1; }
           echo "✅ Redis is healthy"
 
       - name: Generate health report
