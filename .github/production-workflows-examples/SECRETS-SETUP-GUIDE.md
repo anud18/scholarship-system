@@ -107,9 +107,13 @@ production run。
 
 | 放在哪 | 內容 | 誰讀得到 |
 |--------|------|----------|
-| Repository secrets | **production 的值** | 所有 workflow（含沒掛 environment 的 `backup.yml`、`health-check.yml`） |
+| Repository secrets | **production 的值** | 所有 workflow（含沒掛 environment 的 `backup.yml`） |
 | Environment `production` | 可留空，fallback 到 repository 層 | `deploy-production.yml`、`setting-env.yml`(production) |
 | Environment `test` | **測試環境的值，下面清單要全部各設一份** | `deploy-test.yml`、`setting-env.yml`(test) |
+
+> `health-check.yml` 也沒掛 `environment:`，但 2026-09 起它不讀任何 secret（見
+> `health-check.yml` 檔頭的 2026-09-12 incident 說明），所以不在上面「誰讀得到」
+> 的名單裡——這是它跟 `backup.yml` 唯一的差異。
 
 > ⚠️ **fallback 陷阱**：environment 沒定義的 secret 會自動往上抓 repository 層的值。
 > 也就是說 `test` environment 少設一個 `DB_HOST`，test 部署就會連上 **production 的
@@ -433,6 +437,17 @@ These secrets are used by the FastAPI backend application.
 | `SECRET_KEY` | JWT signing secret key | `a1b2c3d4e5f6...` (64+ hex chars) | ✅ Yes |
 | `REDIS_PASSWORD` | Redis cache password | `RedisCache@2024Secure!` | ✅ Yes |
 
+> ℹ️ `health-check.yml` does **not** read this secret — it reads the Docker
+> healthcheck verdict for `scholarship_redis_prod` instead (which Docker
+> already computes using the container's own runtime password), precisely so
+> that workflow needs no secrets at all. See the 2026-09-12 incident note at
+> the top of `health-check.yml` for why that matters: an environment-scoped
+> value this table's own guidance doesn't cover resolves to an **empty
+> string with no error** in a job that has no `environment:` key, and an
+> empty `REDIS_PASSWORD` makes `redis-cli -a ""` skip AUTH entirely — PING
+> then comes back `NOAUTH Authentication required`, indistinguishable from a
+> real outage.
+
 **How to generate:**
 
 ```bash
@@ -619,6 +634,16 @@ These secrets configure general application settings.
   - Frontend `NEXT_PUBLIC_API_URL`
   - Backend `FRONTEND_URL`
   - SSL certificate validation
+
+> ℹ️ `health-check.yml` does **not** read this secret either, for the same
+> reason as `REDIS_PASSWORD` above — its frontend probe relies on
+> nginx.prod.conf already listing `localhost` as a `server_name` next to the
+> real domain, so it needs no Host-header override at all. See the
+> 2026-09-12 incident note at the top of `health-check.yml`: an
+> environment-scoped-only value used to resolve empty in that job (no
+> `environment:` key), and nginx returns **HTTP 400** for the resulting
+> blank `Host` header (RFC 7230 requires a non-empty value) — indistinguishable
+> from a real frontend outage.
 
 **CORS_ORIGINS:**
 - List of allowed origins for Cross-Origin Resource Sharing

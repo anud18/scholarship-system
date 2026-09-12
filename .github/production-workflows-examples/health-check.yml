@@ -8,6 +8,41 @@
 # a `ubuntu-latest` runner — which cannot route to the campus VMs at all, the
 # same constraint that forced the deploy workflows onto self-hosted runners.
 #
+# 2026-09-12 incident: this job filed a false 🚨 "production down" issue
+# (Backend/Database healthy, Frontend HTTP 400, Redis NOAUTH) even though
+# nothing was actually down. Root cause: this job deliberately has NO
+# `environment:` key (see Prerequisites below), so it can only read
+# Repository-level secrets/variables — and DOMAIN/REDIS_PASSWORD were never
+# set there. In this deployment (NYCUITSC/naass) they were never even meant
+# to be GitHub secrets: `deploy-stack.yml` runs in "operator-managed ENV_FILE"
+# mode (the `production` Environment's `ENV_FILE` variable), which reads them
+# straight from a `.env` file on the VM instead. `${{ secrets.DOMAIN }}` and
+# `${{ secrets.REDIS_PASSWORD }}` therefore resolved to an EMPTY STRING with
+# no warning: an empty Host header made nginx itself return 400 (RFC 7230
+# requires a non-empty Host), and an empty password made redis-cli skip AUTH
+# entirely, so PING came back "NOAUTH Authentication required" — both
+# indistinguishable from a real outage.
+#
+# Fix: stop asking GitHub for these values at all. Both checks below now read
+# state the production containers have ALREADY computed for themselves —
+# exactly the pattern the Backend/Database checks already used (read
+# backend's own /health verdict instead of independently connecting to
+# Postgres) — so this workflow needs zero secrets, and the whole class of
+# "secret only exists in the wrong place" bug is structurally gone, not just
+# guarded against:
+#   - Frontend: nginx.prod.conf's one HTTPS server block lists `localhost` as
+#     a `server_name` right alongside the real production domain, so curl's
+#     default Host header (the URL's own "localhost") already matches the
+#     exact same block /health lives in — no need to know DOMAIN at all.
+#   - Redis: docker-compose.prod.yml already defines a Docker healthcheck for
+#     this container (`redis-cli -a $REDIS_PASSWORD ping`, run by the Docker
+#     daemon using the password baked into the CONTAINER's own environment at
+#     deploy time). Reading that verdict via `docker inspect` needs no
+#     password here at all — see the Redis step for the two follow-up
+#     hardenings that reading a single `docker inspect` naively misses
+#     (a "starting" state right after a restart, and Health.Status
+#     surviving past the container actually stopping).
+#
 # Prerequisites:
 #   - The self-hosted runner registered on the production AP VM, labels
 #     [self-hosted, linux, production] (the same runner deploy-production.yml
@@ -15,7 +50,8 @@
 #     answers to [self-hosted, linux], and probes that landed there would
 #     report on the wrong stack. Scheduled, so deliberately NOT behind the
 #     `production` environment's approval gate: it only reads.
-#   - Secrets: DOMAIN, REDIS_PASSWORD (already required by deploy-stack.yml).
+#   - No secrets required — see the 2026-09-12 incident note above for why
+#     that's a deliberate design choice, not an oversight.
 
 name: Production Health Check
 
@@ -52,13 +88,15 @@ jobs:
       - name: Check frontend through nginx
         id: frontend-check
         continue-on-error: true
-        env:
-          DOMAIN: ${{ secrets.DOMAIN }}
         run: |
-          # End-to-end through the real TLS listener; -k because the probe
-          # targets localhost while the certificate is issued for $DOMAIN.
-          STATUS=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 10 \
-            "https://localhost/" -H "Host: ${DOMAIN}" || echo "000")
+          # No Host-header override, no DOMAIN needed: nginx.prod.conf's one
+          # HTTPS server block lists `localhost` as a server_name right
+          # alongside the real production domain (and the "_" catch-all), so
+          # curl's default Host (the URL's own "localhost") already routes
+          # into the exact same block /health lives in. See the 2026-09-12
+          # incident note at the top of this file.
+          # -k: the cert is issued for the real domain, not "localhost".
+          STATUS=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 10 "https://localhost/" || echo "000")
           echo "status=$STATUS" >> $GITHUB_OUTPUT
           [ "$STATUS" = "200" ] || { echo "::error::Frontend health check failed (HTTP $STATUS)"; exit 1; }
           echo "✅ Frontend is healthy (HTTP $STATUS)"
@@ -80,12 +118,39 @@ jobs:
       - name: Check Redis cache
         id: redis-check
         continue-on-error: true
-        env:
-          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
         run: |
-          PONG=$(docker exec scholarship_redis_prod \
-            redis-cli --no-auth-warning -a "$REDIS_PASSWORD" ping 2>/dev/null || echo "")
-          [ "$PONG" = "PONG" ] || { echo "::error::Redis health check failed (got '$PONG')"; exit 1; }
+          # Read Docker's own healthcheck verdict for this container instead
+          # of authenticating ourselves — docker-compose.prod.yml already
+          # runs `redis-cli -a $REDIS_PASSWORD ping` on a schedule using the
+          # password baked into the CONTAINER's own environment at deploy
+          # time, exactly the same "read the verdict, don't reconnect
+          # yourself" pattern the database check above uses. See the
+          # 2026-09-12 incident note at the top of this file.
+          #
+          # Two things a single `docker inspect` read doesn't give you for
+          # free (2026-09 review):
+          #   - The healthcheck interval is 30s with no start_period, so a
+          #     probe landing right after a Redis restart can catch
+          #     "starting" before the first check has even run. Poll for a
+          #     bounded window instead of failing on that first read.
+          #   - Health.Status is independent of the container lifecycle: a
+          #     STOPPED container still reports its last-known "healthy"
+          #     result, so State.Status must also say "running".
+          max_retries=6
+          retry_count=0
+          while :; do
+            READ=$(docker inspect --format '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' scholarship_redis_prod 2>/dev/null || echo "unknown unknown")
+            CONTAINER_STATUS=${READ%% *}
+            HEALTH_STATUS=${READ#* }
+            { [ "$CONTAINER_STATUS" = "running" ] && [ "$HEALTH_STATUS" = "healthy" ]; } && break
+            [ "$HEALTH_STATUS" != "starting" ] && break
+            retry_count=$((retry_count + 1))
+            [ "$retry_count" -ge "$max_retries" ] && break
+            echo "Redis health still starting... ($retry_count/$max_retries)"
+            sleep 10
+          done
+          { [ "$CONTAINER_STATUS" = "running" ] && [ "$HEALTH_STATUS" = "healthy" ]; } \
+            || { echo "::error::Redis health check failed (container: $CONTAINER_STATUS, health: $HEALTH_STATUS)"; exit 1; }
           echo "✅ Redis is healthy"
 
       - name: Generate health report
