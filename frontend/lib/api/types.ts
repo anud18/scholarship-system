@@ -888,6 +888,9 @@ export interface ApplicationField {
   updated_at: string;
   created_by?: number;
   updated_by?: number;
+  // Identity of the built-in ("fixed") item this row overrides; absent on the
+  // ordinary admin-created ones.
+  fixed_key?: string | null;
   // Fixed field properties
   is_fixed?: boolean;
   prefill_value?: string;
@@ -916,6 +919,9 @@ export interface ApplicationFieldCreate {
   conditional_rules?: Record<string, any>;
   include_in_college_export?: boolean;
   export_column_label?: string | null;
+  // Identity of the built-in ("fixed") item this row overrides; absent on the
+  // ordinary admin-created ones.
+  fixed_key?: string | null;
 }
 
 export interface ApplicationFieldUpdate {
@@ -963,6 +969,9 @@ export interface ApplicationDocument {
   updated_at: string;
   created_by?: number;
   updated_by?: number;
+  // Identity of the built-in ("fixed") item this row overrides; absent on the
+  // ordinary admin-created ones.
+  fixed_key?: string | null;
   // Fixed document properties
   is_fixed?: boolean;
   existing_file_url?: string;
@@ -1054,6 +1063,9 @@ export interface ApplicationDocumentCreate {
   upload_instructions?: string;
   upload_instructions_en?: string;
   validation_rules?: Record<string, any>;
+  // Identity of the built-in ("fixed") item this row overrides; absent on the
+  // ordinary admin-created ones.
+  fixed_key?: string | null;
 }
 
 export interface ApplicationDocumentUpdate {
