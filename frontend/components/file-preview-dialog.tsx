@@ -28,6 +28,9 @@ interface FilePreviewDialogProps {
   locale: Locale;
 }
 
+/** Object URLs (URL.createObjectURL) are caller-owned and never fetched. */
+const isLocalObjectUrl = (url: string) => url.startsWith("blob:");
+
 export function FilePreviewDialog({
   isOpen,
   onClose,
@@ -49,6 +52,14 @@ export function FilePreviewDialog({
   // onError, so the student saw the right caption over a blank pane. Fetching
   // first lets us show a real error message; the blob also spares the proxy a
   // second full round trip when the viewer re-requests the resource.
+  //
+  // A `blob:` URL is already local: the caller (FileUpload, for a file the
+  // student just selected and has not saved yet) created it with
+  // URL.createObjectURL and owns its lifetime. It cannot produce an HTTP
+  // error, and fetching it is refused by the CSP (`connect-src` deliberately
+  // lists no `blob:`; only frame-src/img-src do) — that refusal surfaced as
+  // 「無法載入文件」 for every not-yet-saved upload. Use it as-is and never
+  // revoke it here.
   useEffect(() => {
     if (!isOpen || !file) return;
 
@@ -59,6 +70,10 @@ export function FilePreviewDialog({
       setIsLoading(false);
       return;
     }
+    if (isLocalObjectUrl(file.url)) {
+      setObjectUrl(file.url);
+      return;
+    }
 
     let isCancelled = false;
     let createdUrl: string | null = null;
@@ -66,7 +81,9 @@ export function FilePreviewDialog({
     fetch(file.url, { credentials: "same-origin" })
       .then(async response => {
         if (!response.ok) {
-          throw new Error(`Preview request failed with HTTP ${response.status}`);
+          throw new Error(
+            `Preview request failed with HTTP ${response.status}`
+          );
         }
         const blob = await response.blob();
         if (isCancelled) return;
