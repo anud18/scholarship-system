@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AlertCircle, Eye, FileText } from "lucide-react";
 import { Locale } from "@/lib/validators";
 import { getTranslation } from "@/lib/i18n";
+import { isLocalObjectUrl } from "@/lib/file-preview";
 import { triggerFileDownload } from "@/lib/utils/download";
 import { logger } from "@/lib/utils/logger";
 
@@ -27,9 +28,6 @@ interface FilePreviewDialogProps {
   } | null;
   locale: Locale;
 }
-
-/** Object URLs (URL.createObjectURL) are caller-owned and never fetched. */
-const isLocalObjectUrl = (url: string) => url.startsWith("blob:");
 
 export function FilePreviewDialog({
   isOpen,
