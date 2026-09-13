@@ -11,7 +11,7 @@ import { Upload, File, X, CheckCircle, AlertCircle, Eye } from "lucide-react";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { Locale } from "@/lib/validators";
 import { getTranslation } from "@/lib/i18n";
-import { resolveFilePreviewUrl } from "@/lib/file-preview";
+import { isLocalObjectUrl, resolveFilePreviewUrl } from "@/lib/file-preview";
 import { toast } from "sonner";
 
 // Files passed as `initialFiles` may have been previously uploaded — the
@@ -295,7 +295,7 @@ export function FileUpload({
       // nothing to show, and opening the dialog with an empty src renders blank.
       return;
     }
-    if (previewUrl.startsWith("blob:")) {
+    if (isLocalObjectUrl(previewUrl)) {
       // Object URL freshly created by resolveFilePreviewUrl — remember it so
       // the unmount effect below can revoke it.
       createdObjectUrlsRef.current.push(previewUrl);
@@ -312,7 +312,7 @@ export function FileUpload({
 
   // 清理臨時URL
   const cleanupTempUrl = useCallback((url: string) => {
-    if (url.startsWith("blob:")) {
+    if (isLocalObjectUrl(url)) {
       URL.revokeObjectURL(url);
     }
   }, []);
