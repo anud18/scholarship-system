@@ -8325,6 +8325,11 @@ export interface components {
             validation_rules?: {
                 [key: string]: unknown;
             } | null;
+            /**
+             * Fixed Key
+             * @description Built-in document this row overrides
+             */
+            fixed_key?: string | null;
         };
         /**
          * ApplicationDocumentUpdate
@@ -8476,6 +8481,11 @@ export interface components {
             conditional_rules?: {
                 [key: string]: unknown;
             } | null;
+            /**
+             * Fixed Key
+             * @description Built-in field this row overrides
+             */
+            fixed_key?: string | null;
             /**
              * Include In College Export
              * @description Whether this field appears in the college Excel export

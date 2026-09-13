@@ -35,6 +35,11 @@ class ApplicationField(Base):
 
     # Field information
     field_name = Column(String(100), nullable=False)  # 欄位名稱 (英文)
+    # Stable identity of a system-provided ("fixed") field. NULL for the
+    # ordinary admin-created fields. A row carrying it is the admin's edited
+    # copy of the built-in definition, and the runtime injection in
+    # ApplicationFieldService.inject_fixed_fields defers to it.
+    fixed_key = Column(String(50), nullable=True, index=True)
     field_label = Column(String(200), nullable=False)  # 欄位顯示名稱 (中文)
     field_label_en = Column(String(200))  # 英文顯示名稱
     field_type = Column(String(20), nullable=False, default=FieldType.TEXT.value)
@@ -91,6 +96,9 @@ class ApplicationDocument(Base):
 
     # Document information
     document_name = Column(String(200), nullable=False)  # 文件名稱
+    # Stable identity of a system-provided ("fixed") document — see the same
+    # column on ApplicationField.
+    fixed_key = Column(String(50), nullable=True, index=True)
     document_name_en = Column(String(200))  # 英文文件名稱
     description = Column(Text)  # 文件說明
     description_en = Column(Text)  # 英文說明
