@@ -157,6 +157,22 @@ async def test_explicit_status_draft_returns_only_drafts(db: AsyncSession):
 
 
 @pytest.mark.asyncio
+async def test_scholarship_name_is_configuration_name(db: AsyncSession):
+    """The student 申請記錄 card title reads `scholarship_name`; it must carry the
+    per-year configuration name, not be left empty (older-year apps can't be
+    resolved from the currently-eligible scholarship list on the frontend)."""
+    user = await _seed_user(db, nycu_id="list_cfg_name")
+    cfg = await _seed_config(db, suffix="cfg_name")
+    await _seed_app(db, student=user, config=cfg, status=ApplicationStatus.submitted.value, suffix="cfg_name")
+
+    service = ApplicationService(db)
+    result = await service.get_user_applications(user)
+    assert len(result) == 1
+    assert result[0].scholarship_name == "List cfg cfg_name"
+    assert result[0].scholarship_type_zh == "List type cfg_name"
+
+
+@pytest.mark.asyncio
 async def test_results_ordered_by_created_at_desc(db: AsyncSession):
     user = await _seed_user(db, nycu_id="list_order")
     cfg = await _seed_config(db, suffix="order")
