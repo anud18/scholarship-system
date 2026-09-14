@@ -93,9 +93,9 @@ Comprehensive monitoring system for the Scholarship System using Grafana Stack (
 - ✅ Alert inhibition rules
 
 ### Data Retention
-- **Prometheus**: 15 days (configurable)
-- **Loki Staging**: 14 days
-- **Loki Production**: 30 days
+- **Prometheus**: 180 days (6 months)
+- **Loki Staging**: 180 days (6 months)
+- **Loki Production**: 180 days (6 months)
 
 ## Prerequisites
 

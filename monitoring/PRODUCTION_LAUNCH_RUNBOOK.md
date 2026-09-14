@@ -550,8 +550,9 @@ repo (Phase 2 spec §10 blind spot / OQ-3).
 - Review `repeat_interval` settings in Grafana alerting policies. The
   default sends a repeat notification every hour for sustained alerts;
   adjust to match oncall tolerance.
-- Review Prometheus TSDB retention (currently 15 days). If disk usage
-  approaches 80%, lower retention or expand the volume.
+- Review Prometheus TSDB retention (currently 180 days, the required
+  6-month minimum). If disk usage approaches 80%, expand the volume rather
+  than lowering retention.
 - Review Loki retention limits (`monitoring/config/loki/limits.yml`).
 
 ### When to migrate to a fine-grained PAT (OQ-1 / Phase 2 spec §8 R5)
