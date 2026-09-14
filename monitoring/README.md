@@ -73,8 +73,8 @@ Comprehensive monitoring system for the Scholarship System using Grafana Stack (
 ## Features
 
 ### Multi-Tenancy Support
-- **Staging Tenant**: 14-day log retention, 10MB ingestion rate
-- **Production Tenant**: 30-day log retention, 20MB ingestion rate
+- **Staging Tenant**: 180-day (6-month) log retention, 10MB ingestion rate
+- **Production Tenant**: 180-day (6-month) log retention, 20MB ingestion rate
 - **Dev Tenant**: 7-day log retention, 5MB ingestion rate (future use)
 
 ### Comprehensive Monitoring
