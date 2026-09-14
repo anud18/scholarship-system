@@ -20,6 +20,8 @@ Covered here:
 import pytest
 
 from app.services.application_field_service import (
+    ADVISOR_HELP_TEXT_ZH,
+    BANK_STATEMENT_DESCRIPTION_ZH,
     FIXED_KEY_ADVISOR_NAME,
     FIXED_KEY_BANK_STATEMENT,
     FIXED_KEY_POSTAL_ACCOUNT,
@@ -54,6 +56,24 @@ async def test_injects_builtin_when_no_row_exists(service, monkeypatch):
     assert [f["fixed_key"] for f in fields] == [FIXED_KEY_POSTAL_ACCOUNT]
     assert [d["fixed_key"] for d in documents] == [FIXED_KEY_BANK_STATEMENT]
     assert documents[0]["document_name"] == "存摺封面"
+
+
+@pytest.mark.asyncio
+async def test_builtin_defaults_are_the_student_facing_text(service, monkeypatch):
+    """審核管理 pre-fills the edit form with the built-in's text, so the
+    defaults must be exactly what the wizard shows a student — otherwise the
+    admin edits one wording while students keep reading another."""
+    _requires_advisor(service, monkeypatch, True)
+
+    fields, documents = await service.inject_fixed_fields("phd", [], [])
+    by_key = {f["fixed_key"]: f for f in fields}
+
+    assert by_key[FIXED_KEY_POSTAL_ACCOUNT]["field_label"] == "郵局局號加帳號共 14 碼(限本人)"
+    assert by_key[FIXED_KEY_POSTAL_ACCOUNT]["placeholder"] == "請輸入 14 碼郵局帳號"
+    assert by_key[FIXED_KEY_ADVISOR_NAME]["field_label"] == "教授姓名"
+    assert by_key[FIXED_KEY_ADVISOR_NAME]["help_text"] == ADVISOR_HELP_TEXT_ZH
+    assert "主要指導教授" in ADVISOR_HELP_TEXT_ZH
+    assert documents[0]["description"] == BANK_STATEMENT_DESCRIPTION_ZH
 
 
 @pytest.mark.asyncio
