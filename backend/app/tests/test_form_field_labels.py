@@ -68,17 +68,16 @@ class TestFixedFieldLabels:
             assert label, f"FIXED_FIELD_LABELS[{key!r}] is empty"
             assert any("一" <= c <= "鿿" for c in label), f"FIXED_FIELD_LABELS[{key!r}] = {label!r} has no CJK"
 
-    def test_application_field_service_uses_the_shared_constants(self):
-        # DRY link: the injected form-config fields and the export PDF must not
-        # drift apart into two label sources.
+    def test_every_injected_form_field_has_a_review_side_label(self):
+        # The injected form-config fields carry the student-facing wording
+        # (「郵局局號加帳號共 14 碼(限本人)」) which is deliberately NOT the
+        # reviewer's column label — but every injected id must still resolve
+        # here, or the summary PDF prints the raw English id for it.
         svc = ApplicationFieldService(db=None)
-        assert svc._create_fixed_bank_account_field()["field_label"] == FIXED_FIELD_LABELS["postal_account"]
-        advisor_labels = {f["field_name"]: f["field_label"] for f in svc._create_fixed_advisor_fields()}
-        assert advisor_labels == {
-            "advisor_name": FIXED_FIELD_LABELS["advisor_name"],
-            "advisor_email": FIXED_FIELD_LABELS["advisor_email"],
-            "advisor_nycu_id": FIXED_FIELD_LABELS["advisor_nycu_id"],
-        }
+        injected = [svc._create_fixed_bank_account_field(), *svc._create_fixed_advisor_fields()]
+        for field in injected:
+            assert field["field_name"] in FIXED_FIELD_LABELS, field["field_name"]
+            assert field["field_label"], field["field_name"]
 
 
 class TestLoadFormFieldLabels:

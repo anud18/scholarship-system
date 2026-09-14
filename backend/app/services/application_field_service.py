@@ -20,7 +20,32 @@ from app.schemas.application_field import (
     ApplicationFieldUpdate,
     ScholarshipFormConfigResponse,
 )
-from app.services.form_field_labels import FIXED_FIELD_LABELS
+
+# Default text of the built-in items, i.e. what the student sees in the
+# application wizard's 個人資料 section until an admin edits the item in
+# 審核管理. The wizard keeps the same strings as its offline fallback
+# (frontend/components/student-wizard/steps/ScholarshipApplicationStep.tsx);
+# change both together. The review-side labels (exports, summary PDF) live in
+# form_field_labels.FIXED_FIELD_LABELS and are deliberately shorter.
+ADVISOR_HELP_TEXT_ZH = "\n".join(
+    [
+        "如有超過一位指導教授或共同指導，請填寫一位主要指導教授。",
+        "申請教育部博士生獎學金之學生，請填寫可提供每月$5000元配合款的指導教授。"
+        "（每年配合款經費金額將配合教育部相關規定，採滾動式調整。）",
+        "如無指導教授或指導教授為兼任老師無單一入口網權限須請系主任或所長代為簽核。",
+    ]
+)
+ADVISOR_HELP_TEXT_EN = "\n".join(
+    [
+        "If you have more than one advisor or co-advisors, please list one primary advisor.",
+        "Applicants for the MOE PhD Scholarship should list an advisor who can provide a monthly "
+        "matching fund of $5,000 (the annual matching amount will be adjusted according to MOE regulations).",
+        "If you have no advisor, or your advisor is an adjunct instructor without single sign-on access, "
+        "please ask your department chair or institute director to sign on your behalf.",
+    ]
+)
+BANK_STATEMENT_DESCRIPTION_ZH = "支援格式：JPG, JPEG, PNG, PDF\n檔案大小限制：10MB"
+BANK_STATEMENT_DESCRIPTION_EN = "Supported formats: JPG, JPEG, PNG, PDF\nFile size limit: 10MB"
 
 # Stable identities of the built-in ("fixed") form items. They are injected
 # into the form config at request time, but an admin edit materialises a real
@@ -348,18 +373,18 @@ class ApplicationFieldService:
             "scholarship_type": scholarship_type,
             "field_name": "postal_account",
             "fixed_key": FIXED_KEY_POSTAL_ACCOUNT,
-            "field_label": FIXED_FIELD_LABELS["postal_account"],
-            "field_label_en": "Post Office/ESUN Bank Account Number",
+            "field_label": "郵局局號加帳號共 14 碼(限本人)",
+            "field_label_en": "Post Office Account (14 digits)",
             "field_type": "text",
             "is_required": True,
             "is_fixed": True,  # Mark as fixed field
-            "placeholder": "請輸入您的郵局帳號",
-            "placeholder_en": "Please enter your Post Office or ESUN Bank account number",
+            "placeholder": "請輸入 14 碼郵局帳號",
+            "placeholder_en": "Enter 14-digit post office account number",
             "max_length": 30,
             "display_order": display_order,
             "is_active": True,
-            "help_text": "請填寫正確的郵局帳號以便獎學金匯款",
-            "help_text_en": "Please provide your correct Post Office or ESUN Bank account number for scholarship remittance",
+            "help_text": "",
+            "help_text_en": "",
             "prefill_value": prefill_data.get("account_number", "") if prefill_data else "",
             "created_at": datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -381,9 +406,9 @@ class ApplicationFieldService:
             "scholarship_type": scholarship_type,
             "fixed_key": FIXED_KEY_BANK_STATEMENT,
             "document_name": "存摺封面",
-            "document_name_en": "Bank Statement Cover",
-            "description": "請上傳存摺封面",
-            "description_en": "Please upload bank statement cover",
+            "document_name_en": "Passbook Cover",
+            "description": BANK_STATEMENT_DESCRIPTION_ZH,
+            "description_en": BANK_STATEMENT_DESCRIPTION_EN,
             "is_required": True,
             "is_fixed": True,  # Mark as fixed document
             "accepted_file_types": ["PDF", "JPG", "JPEG", "PNG"],
@@ -391,8 +416,8 @@ class ApplicationFieldService:
             "max_file_count": 1,
             "display_order": display_order,
             "is_active": True,
-            "upload_instructions": "請確保存摺封面清晰可讀，包含戶名、帳號、銀行名稱等資訊",
-            "upload_instructions_en": "Please ensure the bank statement cover is clear and readable, including account name, account number, bank name, etc.",
+            "upload_instructions": "",
+            "upload_instructions_en": "",
             "existing_file_url": prefill_data.get("bank_document_photo_url", "") if prefill_data else "",
             "created_at": datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -418,18 +443,18 @@ class ApplicationFieldService:
                 "scholarship_type": scholarship_type,
                 "field_name": "advisor_name",
                 "fixed_key": FIXED_KEY_ADVISOR_NAME,
-                "field_label": FIXED_FIELD_LABELS["advisor_name"],
+                "field_label": "教授姓名",
                 "field_label_en": "Advisor Name",
                 "field_type": "text",
                 "is_required": True,
                 "is_fixed": True,  # Mark as fixed field
-                "placeholder": "請輸入指導教授的姓名",
-                "placeholder_en": "Please enter the name of the advisor",
+                "placeholder": "請輸入指導教授姓名",
+                "placeholder_en": "Enter advisor's name",
                 "max_length": 100,
                 "display_order": display_order_start,
                 "is_active": True,
-                "help_text": "請填寫指導教授的姓名",
-                "help_text_en": "Please provide the name of the advisor",
+                "help_text": ADVISOR_HELP_TEXT_ZH,
+                "help_text_en": ADVISOR_HELP_TEXT_EN,
                 "prefill_value": prefill_data.get("advisor_name", "") if prefill_data else "",
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -445,18 +470,18 @@ class ApplicationFieldService:
                 "scholarship_type": scholarship_type,
                 "field_name": "advisor_email",
                 "fixed_key": FIXED_KEY_ADVISOR_EMAIL,
-                "field_label": FIXED_FIELD_LABELS["advisor_email"],
+                "field_label": "教授 Email",
                 "field_label_en": "Advisor Email",
                 "field_type": "email",
                 "is_required": True,
                 "is_fixed": True,  # Mark as fixed field
-                "placeholder": "請輸入指導教授的Email",
-                "placeholder_en": "Please enter the email of the advisor",
+                "placeholder": "professor@nycu.edu.tw",
+                "placeholder_en": "professor@nycu.edu.tw",
                 "max_length": 100,
                 "display_order": display_order_start + 1,
                 "is_active": True,
-                "help_text": "請填寫指導教授的Email",
-                "help_text_en": "Please provide the email of the advisor",
+                "help_text": "",
+                "help_text_en": "",
                 "prefill_value": prefill_data.get("advisor_email", "") if prefill_data else "",
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -472,18 +497,18 @@ class ApplicationFieldService:
                 "scholarship_type": scholarship_type,
                 "field_name": "advisor_nycu_id",
                 "fixed_key": FIXED_KEY_ADVISOR_NYCU_ID,
-                "field_label": FIXED_FIELD_LABELS["advisor_nycu_id"],
+                "field_label": "指導教授本校人事編號（請向指導教授確認）",
                 "field_label_en": "Advisor NYCU ID",
                 "field_type": "text",
                 "is_required": True,
                 "is_fixed": True,  # Mark as fixed field
-                "placeholder": "請輸入指導教授的本校人事編號",
-                "placeholder_en": "Please enter the advisor NYCU ID",
+                "placeholder": "請輸入指導教授本校人事編號",
+                "placeholder_en": "Enter advisor's NYCU personnel ID",
                 "max_length": 20,
                 "display_order": display_order_start + 2,
                 "is_active": True,
-                "help_text": "請填寫指導教授的本校人事編號（必填）",
-                "help_text_en": "Please provide the advisor NYCU ID (required)",
+                "help_text": "",
+                "help_text_en": "",
                 "prefill_value": prefill_data.get("advisor_nycu_id", "") if prefill_data else "",
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
