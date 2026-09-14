@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     # Security
     secret_key: str  # Required: Must be set via SECRET_KEY environment variable
     algorithm: str = "HS256"
-    access_token_expire_minutes: int = 30
+    access_token_expire_minutes: int = 120
     refresh_token_expire_days: int = 7
 
     # CORS
