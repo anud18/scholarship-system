@@ -20,7 +20,8 @@
  * decision surface.
  *
  * This spec seeds four ranked applications (all college C, scholarship phd /
- * config 5 / 114 全年) plus one finalized college ranking directly via SQL,
+ * config 5 / 114 全年) appended to college C's single finalized ranking
+ * (created via SQL only when the college has none) directly via SQL,
  * logs in as admin, opens the manual-distribution grid, asserts the chips, and
  * saves labeled screenshot evidence. It only READS the grid — no allocate /
  * finalize is triggered, so it leaves distribution state untouched.
@@ -207,27 +208,59 @@ async function seed(): Promise<void> {
   const appDbId: Record<string, number> = {};
   for (const r of appRows) appDbId[r.app_id] = r.id;
 
-  // 2. One finalized college ranking (college C, phd, 114, yearly)
-  const { rows: rk } = await pool.query<{ id: number }>(
-    `INSERT INTO college_rankings
-       (scholarship_type_id, sub_type_code, academic_year, semester, college_code,
-        ranking_name, total_applications, total_quota, is_finalized, ranking_status,
-        finalized_at, finalized_by, created_by, created_at, updated_at)
-     VALUES ($1, 'default', $2, NULL, $3, $4, $5, 5, true, 'finalized',
-        now(), $6, $6, now(), now())
-     RETURNING id`,
-    [SCHOLARSHIP_TYPE_ID, ACADEMIC_YEAR, COLLEGE_CODE, RANKING_NAME, STUDENTS.length, COLLEGE_REVIEWER_ID]
+  // 2. THE college ranking (college C, phd, 114, yearly). A college owns exactly
+  //    one ranking per period (unique index), so reuse the existing one — on a
+  //    fresh seed that is C's finalized + distributed 114 ranking — and only
+  //    insert our tagged ranking when the college has none. Cleanup removes the
+  //    tagged ranking only, never a reused one.
+  const { rows: existingRk } = await pool.query<{ id: number }>(
+    `SELECT id FROM college_rankings
+      WHERE scholarship_type_id = $1
+        AND sub_type_code = 'default'
+        AND academic_year = $2
+        AND COALESCE(semester, 'yearly') = 'yearly'
+        AND college_code = $3`,
+    [SCHOLARSHIP_TYPE_ID, ACADEMIC_YEAR, COLLEGE_CODE]
   );
-  const rankingId = rk[0].id;
+  let rankingId: number;
+  if (existingRk[0]) {
+    rankingId = existingRk[0].id;
+    // The grid only reads finalized rankings; a reused draft must be finalized.
+    await pool.query(
+      `UPDATE college_rankings
+          SET is_finalized = true, ranking_status = 'finalized',
+              finalized_at = COALESCE(finalized_at, now()), finalized_by = COALESCE(finalized_by, $2)
+        WHERE id = $1`,
+      [rankingId, COLLEGE_REVIEWER_ID]
+    );
+  } else {
+    const { rows: rk } = await pool.query<{ id: number }>(
+      `INSERT INTO college_rankings
+         (scholarship_type_id, sub_type_code, academic_year, semester, college_code,
+          ranking_name, total_applications, total_quota, is_finalized, ranking_status,
+          finalized_at, finalized_by, created_by, created_at, updated_at)
+       VALUES ($1, 'default', $2, NULL, $3, $4, $5, 5, true, 'finalized',
+          now(), $6, $6, now(), now())
+       RETURNING id`,
+      [SCHOLARSHIP_TYPE_ID, ACADEMIC_YEAR, COLLEGE_CODE, RANKING_NAME, STUDENTS.length, COLLEGE_REVIEWER_ID]
+    );
+    rankingId = rk[0].id;
+  }
 
-  // 3. Ranking items (rank 1-4; App3 college_rejected)
+  // 3. Ranking items appended after the ranking's current last position
+  //    (rank 1-4 relative; App3 college_rejected)
+  const { rows: lastRank } = await pool.query<{ max: number | null }>(
+    "SELECT MAX(rank_position) AS max FROM college_ranking_items WHERE ranking_id = $1",
+    [rankingId]
+  );
+  const rankOffset = lastRank[0]?.max ?? 0;
   for (const s of STUDENTS) {
     await pool.query(
       `INSERT INTO college_ranking_items
          (ranking_id, application_id, rank_position, college_rejected, is_supplementary,
           status, created_at, updated_at)
        VALUES ($1, $2, $3, $4, false, 'ranked', now(), now())`,
-      [rankingId, appDbId[s.appId], s.rank, s.collegeRejected]
+      [rankingId, appDbId[s.appId], rankOffset + s.rank, s.collegeRejected]
     );
   }
 
