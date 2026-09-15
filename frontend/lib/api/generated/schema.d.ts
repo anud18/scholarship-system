@@ -4605,7 +4605,9 @@ export interface paths {
          *
          *     A college owns at most ONE ranking per (scholarship type, sub-type, academic
          *     year, semester). If that ranking already exists — finalized or not — it is
-         *     returned as-is with ``data.reused = true`` instead of creating a second one.
+         *     returned with ``data.reused = true`` instead of creating a second one; while
+         *     it is still a draft, applications that became eligible since it was created
+         *     are appended to it (``data.added_application_count``).
          */
         post: operations["create_ranking_api_v1_college_review_rankings_post"];
         delete?: never;

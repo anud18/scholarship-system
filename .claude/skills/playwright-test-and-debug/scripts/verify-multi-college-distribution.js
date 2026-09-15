@@ -14,7 +14,7 @@
 //  * Auth restore needs BOTH auth_token AND a user blob in localStorage
 //    (frontend/hooks/use-auth.tsx) — same contract as build-storage-state.sh.
 //    Token-only => silently bounced to /dev-login.
-//  * College "建立新排名" creates a ranking for the config's first sub-type,
+//  * College "建立排名" creates a ranking for the config's first sub-type,
 //    which is "default" (aggregates ALL sub-types). distribution reads every
 //    finalized ranking regardless of sub_type, so "default" is fine.
 //  * The admin distribution panel defaults to the FIRST semester, which often
@@ -80,7 +80,11 @@ async function finalizeCollege(browser, c, idx) {
     await page.goto(`${FE}/`, { waitUntil: 'networkidle' });
     await page.getByRole('tab', { name: '學生排序' }).first().click({ timeout: 30000 });
     await page.getByRole('heading', { name: /學生排序管理/ }).first().waitFor({ timeout: 30000 });
-    await page.getByRole('button', { name: '建立新排名' }).first().click({ timeout: 30000 });
+    // One ranking per college per period: "建立排名" only renders while the
+    // college has none; an existing ranking is auto-opened instead.
+    const create = page.getByRole('button', { name: '建立排名' }).first();
+    const needsCreate = await create.waitFor({ state: 'visible', timeout: 5000 }).then(() => true, () => false);
+    if (needsCreate) await create.click({ timeout: 30000 });
     const finalize = page.getByRole('button', { name: '確認排名' }).first();
     await finalize.waitFor({ timeout: 30000 });
     await page.waitForTimeout(1500);

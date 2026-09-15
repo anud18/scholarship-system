@@ -9,6 +9,7 @@ This service handles college-level review operations including:
 """
 
 import logging
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -62,6 +63,17 @@ class ReviewPermissionError(CollegeReviewError):
     """Raised when user lacks permission for review operation"""
 
     pass
+
+
+@dataclass(frozen=True)
+class RankingUpsertResult:
+    """Outcome of get_or_create_ranking: the college's single ranking for the period."""
+
+    ranking: CollegeRanking
+    created: bool
+    # Applications appended to an existing DRAFT ranking because they became
+    # eligible after it was created (empty on create or when finalized).
+    added_application_ids: List[int] = field(default_factory=list)
 
 
 class CollegeReviewService:
@@ -479,7 +491,95 @@ class CollegeReviewService:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def create_ranking(
+    @staticmethod
+    def _ranking_sort_key(app: Application) -> tuple:
+        """Renewal students first, then by professor rank, then earlier submission."""
+        sort_group = 0 if app.is_renewal else 1  # 0 = renewal (top), 1 = new
+        # If application has final_ranking_position, use it; otherwise use a large number (lowest priority)
+        rank = app.final_ranking_position if app.final_ranking_position else 999999
+        # Use submitted_at as secondary sort (earlier submissions get higher priority if same rank)
+        submitted_at = app.submitted_at or app.created_at
+        return (sort_group, rank, submitted_at.timestamp())
+
+    async def _eligible_applications(
+        self,
+        scholarship_type_id: int,
+        sub_type_code: str,
+        academic_year: int,
+        semester: Optional[str],
+        college_code: Optional[str],
+    ) -> List[Application]:
+        """Applications a college ranking of this key should contain right now.
+
+        Same semester logic as get_applications_for_review; ``sub_type_code == "default"``
+        spans every sub-type. ``college_code`` restricts to the college's own students via
+        the SIS snapshot (std_academyno); None (admin global ranking) means all colleges.
+        """
+        normalized_semester = self._normalize_semester_value(semester)
+
+        conditions = [
+            Application.scholarship_type_id == scholarship_type_id,
+            Application.academic_year == academic_year,
+            Application.deleted_at.is_(None),  # Exclude soft-deleted applications
+            # Valid statuses for ranking: the same reviewed/approved states the
+            # review listings surface (shared constant keeps the sites in sync).
+            Application.status.in_(REVIEWABLE_APPLICATION_STATUSES),
+        ]
+
+        if sub_type_code != "default":
+            conditions.append(Application.sub_scholarship_type == sub_type_code)
+
+        if self._is_yearly_semester(semester):
+            conditions.append(or_(Application.semester.is_(None), Application.semester == Semester.yearly.value))
+        elif normalized_semester:
+            conditions.append(
+                or_(Application.semester == Semester(normalized_semester), Application.semester.is_(None))
+            )
+
+        if college_code:
+            # std_academyno is the college field in the student_data SIS snapshot
+            conditions.append(sa_func.json_extract_path_text(Application.student_data, "std_academyno") == college_code)
+
+        result = await self.db.execute(select(Application).where(and_(*conditions)))
+        return list(result.scalars().all())
+
+    async def _sync_new_applications(self, ranking: CollegeRanking) -> List[int]:
+        """Append applications that became eligible after the ranking was created.
+
+        A college owns one ranking per period, so late professor approvals can no
+        longer be picked up by creating another ranking. New applications are appended
+        after the current last position (existing order is untouched) so the college
+        can re-rank them. Returns the appended application ids.
+        """
+        items_result = await self.db.execute(
+            select(CollegeRankingItem.application_id, CollegeRankingItem.rank_position).where(
+                CollegeRankingItem.ranking_id == ranking.id
+            )
+        )
+        rows = items_result.all()
+        existing_ids = {row[0] for row in rows}
+        last_position = max((row[1] or 0 for row in rows), default=0)
+
+        eligible = await self._eligible_applications(
+            ranking.scholarship_type_id,
+            ranking.sub_type_code,
+            ranking.academic_year,
+            ranking.semester,
+            ranking.college_code,
+        )
+        new_applications = sorted((app for app in eligible if app.id not in existing_ids), key=self._ranking_sort_key)
+        if not new_applications:
+            return []
+
+        for offset, app in enumerate(new_applications, 1):
+            self.db.add(
+                CollegeRankingItem(ranking_id=ranking.id, application_id=app.id, rank_position=last_position + offset)
+            )
+        ranking.total_applications = len(existing_ids) + len(new_applications)
+        await self.db.flush()
+        return [app.id for app in new_applications]
+
+    async def get_or_create_ranking(
         self,
         scholarship_type_id: int,
         sub_type_code: str,
@@ -487,26 +587,22 @@ class CollegeReviewService:
         semester: Optional[str],
         creator_id: int,
         ranking_name: Optional[str] = None,
-    ) -> CollegeRanking:
+    ) -> RankingUpsertResult:
         """Return the creator's college ranking for this period, creating it if absent.
 
         Idempotent: a college owns exactly one ranking per (type, sub_type, year,
-        semester), so a second call returns the existing row (even when finalized)
-        instead of creating another. The DB unique index
-        ``uq_college_rankings_single_per_college`` backs this up against races.
+        semester), so a later call returns the existing row (even when finalized)
+        instead of creating another. While that ranking is still a draft, applications
+        that became eligible since it was created are appended to it (see
+        ``_sync_new_applications``). The DB unique index
+        ``uq_college_rankings_single_per_college`` backs the rule up against races.
         """
-
-        # Normalize semester value; treat yearly cycles as NULL for storage
         normalized_semester = self._normalize_semester_value(semester)
-        is_yearly_semester = self._is_yearly_semester(semester)
 
         # Resolve the creator's college up front: rankings are scoped per college, so
         # the college owns the row and drives both the reuse lookup and the application
-        # filter below. NULL college_code means an admin/super_admin global ranking.
-        from app.models.user import User
-
-        creator_stmt = select(User).where(User.id == creator_id)
-        creator_result = await self.db.execute(creator_stmt)
+        # filter. NULL college_code means an admin/super_admin global ranking.
+        creator_result = await self.db.execute(select(User).where(User.id == creator_id))
         creator = creator_result.scalar_one_or_none()
         creator_college = creator.college_code if creator else None
 
@@ -518,106 +614,12 @@ class CollegeReviewService:
             college_code=creator_college,
         )
         if existing_ranking:
-            return existing_ranking
+            added_ids = [] if existing_ranking.is_finalized else await self._sync_new_applications(existing_ranking)
+            return RankingUpsertResult(ranking=existing_ranking, created=False, added_application_ids=added_ids)
 
-        # Get applications for this sub-type that have college reviews
-        # Use the same semester filtering logic as in get_applications_for_review
-        if is_yearly_semester:
-            semester_filter = or_(
-                Application.semester.is_(None),
-                Application.semester == Semester.yearly.value,
-            )
-        elif normalized_semester:
-            semester_enum = Semester(normalized_semester)
-            semester_filter = or_(
-                Application.semester == semester_enum,
-                Application.semester.is_(None),
-            )
-        else:
-            # If semester is None, get all applications
-            semester_filter = True
-
-        # creator_college resolved above (rankings are college-scoped)
-
-        # Get all applications for the scholarship type (if sub_type_code is "default", include all sub-types)
-        logger.debug(
-            f"Building query for sub_type_code={sub_type_code}, semester_filter type={type(semester_filter)}, semester_filter={semester_filter}, creator_college={creator_college}"
+        applications = await self._eligible_applications(
+            scholarship_type_id, sub_type_code, academic_year, semester, creator_college
         )
-
-        # Valid statuses for ranking: the same reviewed/approved states the
-        # review listings surface (shared constant keeps the three sites in sync).
-        valid_ranking_statuses = REVIEWABLE_APPLICATION_STATUSES
-
-        if sub_type_code == "default":
-            # Include all applications for this scholarship type, regardless of sub-type
-            conditions = [
-                Application.scholarship_type_id == scholarship_type_id,
-                Application.academic_year == academic_year,
-                Application.deleted_at.is_(None),  # Exclude soft-deleted applications
-                Application.status.in_(valid_ranking_statuses),
-            ]
-            logger.debug(f"Initial conditions count: {len(conditions)}")
-
-            # Add semester filter only if it's an actual SQL expression
-            if semester_filter is not True:
-                logger.debug("Adding semester_filter to conditions")
-                conditions.append(semester_filter)
-            else:
-                logger.debug("Skipping semester_filter (is True)")
-
-            # Filter by creator's college if available
-            if creator_college:
-                logger.debug(f"Adding college filter for college_code={creator_college}")
-                # Use std_academyno which is the actual field name in student_data JSON from API
-                college_condition = (
-                    sa_func.json_extract_path_text(Application.student_data, "std_academyno") == creator_college
-                )
-                conditions.append(college_condition)
-                logger.debug("College condition added successfully")
-
-            logger.debug(f"Final conditions count: {len(conditions)}, building query...")
-            apps_stmt = select(Application).where(and_(*conditions))
-            logger.debug("Query built successfully for default sub_type")
-        else:
-            # Only include applications for the specific sub-type
-            logger.debug(f"Building query for specific sub_type_code={sub_type_code}")
-            conditions = [
-                Application.scholarship_type_id == scholarship_type_id,
-                Application.sub_scholarship_type == sub_type_code,
-                Application.academic_year == academic_year,
-                Application.deleted_at.is_(None),  # Exclude soft-deleted applications
-                Application.status.in_(valid_ranking_statuses),
-            ]
-            logger.debug(f"Initial conditions count: {len(conditions)}")
-
-            # Add semester filter only if it's an actual SQL expression
-            if semester_filter is not True:
-                logger.debug("Adding semester_filter to conditions")
-                conditions.append(semester_filter)
-            else:
-                logger.debug("Skipping semester_filter (is True)")
-
-            # Filter by creator's college if available
-            if creator_college:
-                logger.debug(f"Adding college filter for college_code={creator_college}")
-                # Use std_academyno which is the actual field name in student_data JSON from API
-                college_condition = (
-                    sa_func.json_extract_path_text(Application.student_data, "std_academyno") == creator_college
-                )
-                conditions.append(college_condition)
-                logger.debug("College condition added successfully")
-
-            logger.debug(f"Final conditions count: {len(conditions)}, building query...")
-            apps_stmt = select(Application).where(and_(*conditions))
-            logger.debug("Query built successfully for specific sub_type")
-
-        # Note: CollegeReview table removed - ranking data now stored in Application.final_ranking_position
-        # Execute query to get applications
-        apps_result = await self.db.execute(apps_stmt)
-        applications = apps_result.scalars().all()
-
-        # No need to create separate college reviews - ranking data stored in Application model
-        # Applications will be sorted by final_ranking_position or other criteria
 
         # Get quota information from configuration
         config_stmt = select(ScholarshipConfiguration).where(
@@ -670,31 +672,18 @@ class CollegeReviewService:
         await self.db.refresh(ranking)
 
         # Create ranking items - renewal students always come first, then by rank/submission date
-        def sort_key(app):
-            sort_group = 0 if app.is_renewal else 1  # 0 = renewal (top), 1 = new
-            # If application has final_ranking_position, use it; otherwise use a large number (lowest priority)
-            rank = app.final_ranking_position if app.final_ranking_position else 999999
-            # Use submitted_at as secondary sort (earlier submissions get higher priority if same rank)
-            submitted_at = app.submitted_at or app.created_at
-            return (
-                sort_group,  # Renewal first, new applications after
-                rank,  # Ascending order: lower rank number comes first
-                submitted_at.timestamp(),  # Ascending: earlier submission comes first
+        for rank_position, app in enumerate(sorted(applications, key=self._ranking_sort_key), 1):
+            self.db.add(
+                CollegeRankingItem(
+                    ranking_id=ranking.id,
+                    application_id=app.id,
+                    rank_position=rank_position,
+                )
             )
-
-        applications.sort(key=sort_key, reverse=False)  # Ascending order
-
-        for rank_position, app in enumerate(applications, 1):
-            ranking_item = CollegeRankingItem(
-                ranking_id=ranking.id,
-                application_id=app.id,
-                rank_position=rank_position,
-            )
-            self.db.add(ranking_item)
 
         await self.db.flush()  # Flush changes within transaction
 
-        return ranking
+        return RankingUpsertResult(ranking=ranking, created=True, added_application_ids=[])
 
     async def get_ranking(self, ranking_id: int) -> Optional[CollegeRanking]:
         """Get a ranking with all its items and relationships using proper eager loading"""

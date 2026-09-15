@@ -7,10 +7,11 @@ that gets sent.
 
 Steps:
 1. Collapse existing duplicates. Per key group keep, in priority order, the
-   finalized ranking, else the one with distribution executed, else the newest
-   (highest id). Payment rosters that pointed at a dropped duplicate are re-pointed
-   to the survivor (same college / scholarship / period); the duplicates' items and
-   rows are deleted.
+   ranking whose distribution was executed (its items carry the live allocation
+   state rosters join on — an unfinalize does not clear that flag), else the
+   finalized one, else the newest (highest id). Payment rosters that pointed at a
+   dropped duplicate are re-pointed to the survivor (same college / scholarship /
+   period); the duplicates' items and rows are deleted.
 2. Create the unique index uq_college_rankings_single_per_college over the key,
    coalescing NULL semester (yearly) and NULL college_code (admin global ranking)
    so NULLs cannot bypass uniqueness.
@@ -44,8 +45,8 @@ _RANKED_DUPLICATES_CTE = """
                                 academic_year,
                                 COALESCE(semester, 'yearly'),
                                 COALESCE(college_code, '')
-                   ORDER BY is_finalized DESC NULLS LAST,
-                            distribution_executed DESC NULLS LAST,
+                   ORDER BY distribution_executed DESC NULLS LAST,
+                            is_finalized DESC NULLS LAST,
                             id DESC
                ) AS rn,
                FIRST_VALUE(id) OVER (
@@ -54,8 +55,8 @@ _RANKED_DUPLICATES_CTE = """
                                 academic_year,
                                 COALESCE(semester, 'yearly'),
                                 COALESCE(college_code, '')
-                   ORDER BY is_finalized DESC NULLS LAST,
-                            distribution_executed DESC NULLS LAST,
+                   ORDER BY distribution_executed DESC NULLS LAST,
+                            is_finalized DESC NULLS LAST,
                             id DESC
                ) AS keeper_id
         FROM college_rankings
