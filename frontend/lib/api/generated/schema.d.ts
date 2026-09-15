@@ -4601,7 +4601,11 @@ export interface paths {
         put?: never;
         /**
          * Create Ranking
-         * @description Create a new ranking for a scholarship sub-type
+         * @description Create the caller's college ranking for a scholarship sub-type and period.
+         *
+         *     A college owns at most ONE ranking per (scholarship type, sub-type, academic
+         *     year, semester). If that ranking already exists — finalized or not — it is
+         *     returned as-is with ``data.reused = true`` instead of creating a second one.
          */
         post: operations["create_ranking_api_v1_college_review_rankings_post"];
         delete?: never;
@@ -9017,12 +9021,6 @@ export interface components {
              * @description Custom ranking name
              */
             ranking_name?: string | null;
-            /**
-             * Force New
-             * @description Create a new ranking even if an unfinished one already exists
-             * @default false
-             */
-            force_new: boolean;
         };
         /** Body_create_supplementary_doc_api_v1_system_settings_supplementary_docs_post */
         Body_create_supplementary_doc_api_v1_system_settings_supplementary_docs_post: {

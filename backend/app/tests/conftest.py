@@ -3,14 +3,15 @@ Pytest configuration and fixtures for all tests
 """
 
 import asyncio
+import json
 import os
-from typing import AsyncGenerator, Generator
+from typing import Any, AsyncGenerator, Generator, Optional
 from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -66,6 +67,32 @@ except ImportError:
     # Fallback if aiosqlite is not available
     test_engine = None
     settings.database_url = TEST_DATABASE_URL
+
+
+def _sqlite_json_extract_path_text(document: Any, *path: str) -> Optional[str]:
+    """SQLite stand-in for Postgres json_extract_path_text(doc, key, ...).
+
+    Lets tests drive service code that filters on a JSON column in SQL (e.g.
+    create_ranking's std_academyno college filter) instead of 500-ing on an
+    unknown function. Walks nested keys; scalars come back as text like PG.
+    """
+    value: Any = json.loads(document) if isinstance(document, (str, bytes)) else document
+    for key in path:
+        if not isinstance(value, dict):
+            return None
+        value = value.get(key)
+    if value is None:
+        return None
+    return value if isinstance(value, str) else json.dumps(value)
+
+
+def _register_sqlite_functions(dbapi_connection, _connection_record) -> None:
+    dbapi_connection.create_function("json_extract_path_text", -1, _sqlite_json_extract_path_text)
+
+
+event.listen(test_engine_sync, "connect", _register_sqlite_functions)
+if test_engine:
+    event.listen(test_engine.sync_engine, "connect", _register_sqlite_functions)
 
 # Create session factories
 TestingSessionLocalSync = sessionmaker(test_engine_sync, class_=Session, expire_on_commit=False)

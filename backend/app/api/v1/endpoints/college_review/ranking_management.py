@@ -219,25 +219,37 @@ async def create_ranking(
     academic_year: int = Body(..., description="Academic year"),
     semester: Optional[str] = Body(None, description="Semester"),
     ranking_name: Optional[str] = Body(None, description="Custom ranking name"),
-    force_new: bool = Body(False, description="Create a new ranking even if an unfinished one already exists"),
     current_user: User = Depends(require_college),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create a new ranking for a scholarship sub-type"""
+    """Create the caller's college ranking for a scholarship sub-type and period.
+
+    A college owns at most ONE ranking per (scholarship type, sub-type, academic
+    year, semester). If that ranking already exists — finalized or not — it is
+    returned as-is with ``data.reused = true`` instead of creating a second one.
+    """
 
     try:
         service = CollegeReviewService(db)
         # #63: block ranking writes once college-review deadline has passed
         # (admins / super_admins bypass).
         await service.assert_ranking_within_deadline(scholarship_type_id, academic_year, semester, current_user)
-        ranking = await service.create_ranking(
+
+        existing = await service.find_ranking(
+            scholarship_type_id=scholarship_type_id,
+            sub_type_code=sub_type_code,
+            academic_year=academic_year,
+            semester=semester,
+            college_code=current_user.college_code,
+        )
+        reused = existing is not None
+        ranking = existing or await service.create_ranking(
             scholarship_type_id=scholarship_type_id,
             sub_type_code=sub_type_code,
             academic_year=academic_year,
             semester=semester,
             creator_id=current_user.id,
             ranking_name=ranking_name,
-            force_new=force_new,
         )
         # Commit before building the response so the row is visible to any
         # read-after-write query the caller makes immediately after receiving
@@ -248,7 +260,7 @@ async def create_ranking(
 
         return ApiResponse(
             success=True,
-            message="Ranking created successfully",
+            message=("本學院此期間已有排名，已回傳既有排名" if reused else "Ranking created successfully"),
             data={
                 "id": ranking.id,
                 "ranking_name": ranking.ranking_name,
@@ -258,6 +270,8 @@ async def create_ranking(
                 "sub_type_code": ranking.sub_type_code,
                 "academic_year": ranking.academic_year,
                 "semester": normalize_semester_value(ranking.semester),
+                "is_finalized": bool(ranking.is_finalized),
+                "reused": reused,
                 "created_at": ranking.created_at.isoformat(),
             },
         )

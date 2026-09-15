@@ -208,7 +208,6 @@ async def stage_rank(db, reviewers):
             semester=None,
             creator_id=uid,
             ranking_name=f"博士生獎學金 {YEAR} 全年",
-            force_new=True,
         )
         await db.commit()
         await svc.finalize_ranking(ranking_id=ranking.id, finalizer_id=uid)

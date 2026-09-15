@@ -7,7 +7,7 @@
  * and distribution execution.
  *
  * Wave 6a137 pins the dispatch invariants — URL paths, body
- * shapes, default-value preservation (force_new ?? false),
+ * shapes, verbatim createRanking payloads (no force_new escape hatch),
  * legacy-vs-unified review path distinction, and the binary-
  * export Content-Disposition filename extraction + error
  * fallback chain in fetchBinaryExport (lib/api/modules/binary-export.ts).
@@ -100,35 +100,25 @@ describe("createCollegeApi", () => {
     expect(query).toEqual({});
   });
 
-  // ─── createRanking default + force_new ?? false ───────────────────
+  // ─── createRanking posts the payload as-is (one ranking per college) ──
 
-  it("createRanking defaults force_new=false when undefined", async () => {
-    // Pin SECURITY: force_new defaults to FALSE — server-side guard
-    // against accidentally creating duplicate ranking. Use `??`
-    // (NOT `||`) so explicit-false stays false. Pin so refactor
-    // doesn't flip default to true.
+  it("createRanking posts the payload verbatim with no force_new flag", async () => {
+    // A college owns a single ranking per period: the backend hands back the
+    // existing ranking instead of creating another, so the client must not
+    // send any force_new escape hatch. Pin so it doesn't creep back in.
     mockedRaw.POST.mockResolvedValueOnce({});
     const api = createCollegeApi();
-    await api.createRanking({
+    const payload = {
       ranking_name: "114年一上初評排名",
       scholarship_type_id: 7,
+      sub_type_code: "nstc",
       academic_year: 114,
       semester: "first",
-    } as any);
-    expect(mockedRaw.POST.mock.calls[0][1].body.force_new).toBe(false);
-  });
-
-  it("createRanking preserves force_new=true when explicit", async () => {
-    mockedRaw.POST.mockResolvedValueOnce({});
-    const api = createCollegeApi();
-    await api.createRanking({
-      ranking_name: "regen",
-      scholarship_type_id: 7,
-      academic_year: 114,
-      semester: "first",
-      force_new: true,
-    } as any);
-    expect(mockedRaw.POST.mock.calls[0][1].body.force_new).toBe(true);
+    };
+    await api.createRanking(payload);
+    const body = mockedRaw.POST.mock.calls[0][1].body;
+    expect(body).toEqual(payload);
+    expect("force_new" in body).toBe(false);
   });
 
   // ─── updateRanking / updateRankingOrder body distinction ──────────
