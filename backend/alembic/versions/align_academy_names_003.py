@@ -20,9 +20,13 @@ Revision ID: align_academy_names_003
 Revises: add_fixed_key_columns_001
 """
 
+import logging
+
 import sqlalchemy as sa
 
 from alembic import op
+
+logger = logging.getLogger("alembic.runtime.migration")
 
 revision = "align_academy_names_003"
 down_revision = "add_fixed_key_columns_001"
@@ -102,9 +106,10 @@ PREVIOUS_DEPARTMENT_ACADEMY = {
     ),
 }  # fmt: skip
 
-_EXISTS_SQL = sa.text(f"SELECT 1 FROM {TABLE} WHERE code = :code")
-_UPDATE_SQL = sa.text(f"UPDATE {TABLE} SET name = :name, name_en = :name_en WHERE code = :code")
-_INSERT_SQL = sa.text(f"INSERT INTO {TABLE} (code, name, name_en) VALUES (:code, :name, :name_en)")
+_UPSERT_SQL = sa.text(
+    f"INSERT INTO {TABLE} (code, name, name_en) VALUES (:code, :name, :name_en) "
+    "ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, name_en = EXCLUDED.name_en"
+)
 _DETACH_DEPTS_SQL = sa.text(f"UPDATE {DEPT_TABLE} SET academy_code = NULL WHERE academy_code = :code")
 _ATTACH_DEPT_SQL = sa.text(
     f"UPDATE {DEPT_TABLE} SET academy_code = :code WHERE code = :dept_code AND academy_code IS NULL"
@@ -118,12 +123,7 @@ def _tables_exist(bind) -> bool:
 
 
 def _upsert(bind, rows) -> None:
-    for code, name, name_en in rows:
-        params = {"code": code, "name": name, "name_en": name_en}
-        if bind.execute(_EXISTS_SQL, {"code": code}).first():
-            bind.execute(_UPDATE_SQL, params)
-        else:
-            bind.execute(_INSERT_SQL, params)
+    bind.execute(_UPSERT_SQL, [{"code": code, "name": name, "name_en": name_en} for code, name, name_en in rows])
 
 
 def _remove_academy(bind, code: str) -> None:
@@ -140,9 +140,11 @@ def upgrade() -> None:
 
     canonical_codes = {code for code, _, _ in CANONICAL_ROWS}
     existing_codes = [row[0] for row in bind.execute(sa.text(f"SELECT code FROM {TABLE}"))]
-    for code in existing_codes:
-        if code not in canonical_codes:
-            _remove_academy(bind, code)
+    stale_codes = [code for code in existing_codes if code not in canonical_codes]
+    if stale_codes:
+        logger.info("align_academy_names_003: removing academies not in 學院代碼表: %s", stale_codes)
+    for code in stale_codes:
+        _remove_academy(bind, code)
 
 
 def downgrade() -> None:
