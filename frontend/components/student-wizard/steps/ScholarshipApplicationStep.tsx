@@ -477,6 +477,13 @@ export function ScholarshipApplicationStep({
     locale,
     fixedFormDefaults
   );
+  // 教授姓名's 說明文字 holds the 指導教授 notes, one per line. They render as
+  // the numbered list directly under the 指導教授資訊 heading — where students
+  // have always read them — not under the 教授姓名 input.
+  const advisorNotes = fixedText.fields.advisor_name.helpText
+    .split("\n")
+    .map(line => line.trim())
+    .filter(Boolean);
 
   // Populate personal info from profile
   useEffect(() => {
@@ -1253,6 +1260,13 @@ export function ScholarshipApplicationStep({
               <User className="h-4 w-4 text-violet-600" />
               {text.advisorInfo}
             </h3>
+            {advisorNotes.length > 0 && (
+              <ul className="mb-3 list-decimal list-inside space-y-1 text-sm text-gray-600">
+                {advisorNotes.map((note, i) => (
+                  <li key={i}>{note}</li>
+                ))}
+              </ul>
+            )}
             {advisorErrors.length > 0 && (
               <Alert variant="destructive" className="mb-3">
                 <AlertCircle className="h-4 w-4" />
@@ -1263,10 +1277,7 @@ export function ScholarshipApplicationStep({
                 </AlertDescription>
               </Alert>
             )}
-            {/* Single column: the advisor notes (教授姓名's 說明文字) need the
-                full width, and a 2-column grid would leave them squeezed
-                beside the email input. */}
-            <div className="space-y-4">
+            <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="advisor_name">
                   {fixedText.fields.advisor_name.label}{" "}
@@ -1282,7 +1293,6 @@ export function ScholarshipApplicationStep({
                     if (advisorErrors.length > 0) setAdvisorErrors([]);
                   }}
                 />
-                <FixedItemHelpText text={fixedText.fields.advisor_name.helpText} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="advisor_email">
@@ -1305,7 +1315,7 @@ export function ScholarshipApplicationStep({
                 )}
                 <FixedItemHelpText text={fixedText.fields.advisor_email.helpText} />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="advisor_nycu_id">
                   {fixedText.fields.advisor_nycu_id.label}{" "}
                   <span className="text-red-500">*</span>
