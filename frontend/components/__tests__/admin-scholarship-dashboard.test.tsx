@@ -49,6 +49,21 @@ jest.mock("@/hooks/use-scholarship-data", () => ({
 jest.mock("@/components/application-audit-trail", () => ({
   ApplicationAuditTrail: () => null,
 }));
+jest.mock("@/components/common/ApplicationReviewDialog", () => ({
+  ApplicationReviewDialog: () => null,
+}));
+jest.mock("@/components/delete-application-dialog", () => ({
+  DeleteApplicationDialog: () => null,
+}));
+jest.mock("@/components/professor-assignment-dropdown", () => ({
+  ProfessorAssignmentDropdown: () => null,
+}));
+jest.mock("@/components/semester-selector", () => ({
+  SemesterSelector: () => null,
+}));
+jest.mock("@/components/admin-scholarship-management-interface", () => ({
+  AdminScholarshipManagementInterface: () => null,
+}));
 jest.mock("@/lib/api", () => ({
   __esModule: true,
   default: {},
@@ -142,5 +157,65 @@ describe("AdminScholarshipDashboard", () => {
 
     expect(screen.getByText("尚無獎學金資料")).toBeInTheDocument();
     expect(screen.getByText("請先建立獎學金類型")).toBeInTheDocument();
+  });
+
+  it("shows the 刪除申請 button only for rows the server marks is_deletable", () => {
+    const row = (overrides: Record<string, unknown>) => ({
+      id: 1,
+      app_id: "APP-114-1-00001",
+      status: "under_review",
+      review_stage: "professor_reviewed",
+      academic_year: "114",
+      semester: "first",
+      student_data: { std_cname: "王小明", std_stdcode: "310460001" },
+      submitted_form_data: {},
+      scholarship_subtype_list: [],
+      created_at: "2026-09-01T00:00:00Z",
+      updated_at: "2026-09-01T00:00:00Z",
+      ...overrides,
+    });
+    mockUseScholarshipSpecificApplications.mockReturnValue({
+      applicationsByType: {
+        phd: [
+          row({
+            id: 1,
+            app_id: "APP-DELETABLE",
+            student_data: { std_cname: "可刪除生", std_stdcode: "310460001" },
+            is_deletable: true,
+          }),
+          row({
+            id: 2,
+            app_id: "APP-DISTRIBUTED",
+            status: "approved",
+            review_stage: "quota_distributed",
+            student_data: { std_cname: "已分發生", std_stdcode: "310460002" },
+            is_deletable: false,
+          }),
+          // Status alone no longer decides: a submitted row is NOT deletable when the server says so
+          row({
+            id: 3,
+            app_id: "APP-SUBMITTED-LOCKED",
+            status: "submitted",
+            student_data: { std_cname: "已配置生", std_stdcode: "310460003" },
+            is_deletable: false,
+          }),
+        ],
+      },
+      scholarshipTypes: ["phd"],
+      scholarshipStats: { phd: { total: 3 } },
+      isLoading: false,
+      error: null,
+      refetch: mockRefetch,
+      updateApplicationStatus: jest.fn(),
+    });
+
+    render(<AdminScholarshipDashboard user={baseUser as never} />);
+
+    expect(screen.getByText(/可刪除生/)).toBeInTheDocument();
+    expect(screen.getByText(/已分發生/)).toBeInTheDocument();
+    expect(screen.getByText(/已配置生/)).toBeInTheDocument();
+    expect(screen.getAllByTitle("刪除申請（分發階段前可刪除）")).toHaveLength(
+      1
+    );
   });
 });

@@ -25,6 +25,7 @@ from app.models.application import Application, ApplicationStatus
 from app.models.scholarship import ScholarshipStatus, ScholarshipSubTypeConfig, ScholarshipType
 from app.models.user import AdminScholarship, User
 from app.schemas.application import ApplicationListResponse
+from app.services.application_deletion_policy import find_distributed_application_ids, has_entered_distribution
 from app.schemas.scholarship import (
     ScholarshipSubTypeConfigCreate,
     ScholarshipSubTypeConfigResponse,
@@ -92,6 +93,10 @@ async def get_applications_by_scholarship(
     application_tuples = result.fetchall()
 
     # Convert to response format
+    # Batch-resolve which rows already hold a saved/finalized allocation or a
+    # roster entry, so each row can carry an `is_deletable` flag for the admin UI.
+    distributed_ids = await find_distributed_application_ids(db, [app.id for app, _ in application_tuples])
+
     response_list = []
     for app_tuple in application_tuples:
         app, user = app_tuple
@@ -144,6 +149,8 @@ async def get_applications_by_scholarship(
             "scholarship_subtype_list": app.scholarship_subtype_list or [],
             "status": app.status,
             "status_name": app.status_name,
+            "review_stage": app.review_stage.value if hasattr(app.review_stage, "value") else app.review_stage,
+            "is_deletable": not has_entered_distribution(app, distributed_ids),
             "academic_year": app.academic_year or str(datetime.now().year - 1911),  # Convert to ROC year
             "semester": app.semester.value if app.semester else "1",
             "student_data": app.student_data or {},
