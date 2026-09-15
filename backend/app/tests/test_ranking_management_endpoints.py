@@ -13,7 +13,8 @@ role gates and assert_can_manage_ranking scoping run unmodified.
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from app.models.application import Application, ApplicationStatus
 from app.models.college_review import CollegeRanking, CollegeRankingItem
@@ -675,3 +676,152 @@ class TestImportExcelDeadlineGuard:
         ]
         response = await client.post(f"{RANKINGS_URL}/{ranking_eng.id}/import-excel", json=payload)
         assert response.status_code == 403
+
+
+def _ranking_payload(scholarship: ScholarshipType) -> dict:
+    """Same key as the ranking_eng / ranking_sci fixtures (nstc, 114, first)."""
+    return {
+        "scholarship_type_id": scholarship.id,
+        "sub_type_code": "nstc",
+        "academic_year": 114,
+        "semester": "first",
+    }
+
+
+async def _count_rankings(db, college_code: str) -> int:
+    return await db.scalar(
+        select(func.count()).select_from(CollegeRanking).where(CollegeRanking.college_code == college_code)
+    )
+
+
+@pytest.mark.api
+class TestSingleRankingPerCollege:
+    """A college owns exactly ONE ranking per (scholarship type, sub-type, year, semester).
+
+    POST /rankings is idempotent for the caller's college: the first call creates,
+    every later call (any reviewer of that college, finalized or not) returns the
+    same row with ``reused: true``. The unique index backs this at the DB level.
+    """
+
+    async def test_first_create_then_second_call_reuses(self, client, login, db, rank_users, rank_scholarship):
+        login(rank_users["college_eng"])
+        payload = _ranking_payload(rank_scholarship)
+
+        first = await client.post(RANKINGS_URL, json=payload)
+        assert first.status_code == 200, first.text
+        first_data = first.json()["data"]
+        assert first_data["reused"] is False
+        assert first_data["is_finalized"] is False
+
+        second = await client.post(RANKINGS_URL, json={**payload, "ranking_name": "another one"})
+        assert second.status_code == 200, second.text
+        second_data = second.json()["data"]
+        assert second_data["id"] == first_data["id"]
+        assert second_data["reused"] is True
+        # The custom name of the rejected second create must not overwrite the existing row.
+        assert second_data["ranking_name"] == first_data["ranking_name"]
+
+        assert await _count_rankings(db, "ENG") == 1
+
+    async def test_second_reviewer_of_same_college_shares_ranking(
+        self, client, login, db, rank_users, rank_scholarship, ranking_eng
+    ):
+        login(rank_users["college_eng2"])
+        response = await client.post(RANKINGS_URL, json=_ranking_payload(rank_scholarship))
+        assert response.status_code == 200, response.text
+        data = response.json()["data"]
+        assert data["id"] == ranking_eng.id
+        assert data["reused"] is True
+        assert await _count_rankings(db, "ENG") == 1
+
+    async def test_finalized_ranking_is_returned_not_duplicated(
+        self, client, login, db, rank_users, rank_scholarship, ranking_eng
+    ):
+        # The old flow let a college stack a fresh draft next to its finalized
+        # ranking and pick which to send; now the finalized one IS the ranking.
+        ranking_eng.is_finalized = True
+        ranking_eng.ranking_status = "finalized"
+        await db.commit()
+
+        login(rank_users["college_eng"])
+        response = await client.post(RANKINGS_URL, json=_ranking_payload(rank_scholarship))
+        assert response.status_code == 200, response.text
+        data = response.json()["data"]
+        assert data["id"] == ranking_eng.id
+        assert data["reused"] is True
+        assert data["is_finalized"] is True
+        assert await _count_rankings(db, "ENG") == 1
+
+    async def test_each_college_gets_its_own_single_ranking(self, client, login, db, rank_users, rank_scholarship):
+        payload = _ranking_payload(rank_scholarship)
+
+        login(rank_users["college_eng"])
+        eng = await client.post(RANKINGS_URL, json=payload)
+        assert eng.status_code == 200, eng.text
+
+        login(rank_users["college_sci"])
+        sci = await client.post(RANKINGS_URL, json=payload)
+        assert sci.status_code == 200, sci.text
+
+        assert eng.json()["data"]["id"] != sci.json()["data"]["id"]
+        assert sci.json()["data"]["reused"] is False
+        assert await _count_rankings(db, "ENG") == 1
+        assert await _count_rankings(db, "SCI") == 1
+
+    async def test_list_shows_single_ranking_after_repeated_creates(self, client, login, rank_users, rank_scholarship):
+        login(rank_users["college_eng"])
+        for _ in range(3):
+            response = await client.post(RANKINGS_URL, json=_ranking_payload(rank_scholarship))
+            assert response.status_code == 200, response.text
+
+        listing = await client.get(RANKINGS_URL, params={"academic_year": 114, "semester": "first"})
+        assert listing.status_code == 200
+        assert len(listing.json()["data"]) == 1
+
+    async def test_database_rejects_second_ranking_for_same_college_period(
+        self, db, rank_users, rank_scholarship, ranking_eng
+    ):
+        duplicate = CollegeRanking(
+            scholarship_type_id=rank_scholarship.id,
+            sub_type_code="nstc",
+            academic_year=114,
+            semester="first",
+            college_code="ENG",
+            ranking_name="ENG duplicate",
+            created_by=rank_users["college_eng2"].id,
+        )
+        db.add(duplicate)
+        with pytest.raises(IntegrityError):
+            await db.commit()
+        await db.rollback()
+
+    async def test_database_treats_null_and_yearly_semester_as_same_period(self, db, rank_users, rank_scholarship):
+        # Yearly rankings are stored with semester NULL; a legacy "yearly" string
+        # must collide with it rather than slip past the index via NULL-distinctness.
+        db.add(
+            CollegeRanking(
+                scholarship_type_id=rank_scholarship.id,
+                sub_type_code="default",
+                academic_year=115,
+                semester=None,
+                college_code="ENG",
+                ranking_name="ENG yearly",
+                created_by=rank_users["college_eng"].id,
+            )
+        )
+        await db.commit()
+
+        db.add(
+            CollegeRanking(
+                scholarship_type_id=rank_scholarship.id,
+                sub_type_code="default",
+                academic_year=115,
+                semester="yearly",
+                college_code="ENG",
+                ranking_name="ENG yearly (legacy spelling)",
+                created_by=rank_users["college_eng"].id,
+            )
+        )
+        with pytest.raises(IntegrityError):
+            await db.commit()
+        await db.rollback()

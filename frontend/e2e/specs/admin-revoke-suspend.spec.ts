@@ -28,7 +28,12 @@ import { test, expect } from "@playwright/test";
 import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { loginAs } from "../helpers/auth";
 import { apiAs } from "../helpers/api";
-import { deleteApplicationCascade, getActiveConfig, pool } from "../helpers/db";
+import {
+  deleteApplicationCascade,
+  deleteCollegeRankings,
+  getActiveConfig,
+  pool,
+} from "../helpers/db";
 import {
   attachRunState,
   newRunState,
@@ -47,6 +52,7 @@ test.describe.configure({ mode: "serial" });
 const SETUP_STUDENT = "csphd0001";
 const SETUP_PROFESSOR = "professor";
 const SETUP_COLLEGE = "cs_college";
+const SETUP_COLLEGE_CODE = "C"; // cs_college.college_code in seed data
 const SETUP_SUB_TYPE = "nstc";
 const SETUP_SCHOLARSHIP = "phd";
 const SETUP_SCHOLARSHIP_NAME = "博士生獎學金"; // display name of "phd" in seed data
@@ -151,7 +157,16 @@ test.describe("撤銷對話框：未填原因前不可確認 | admin revoke dial
       throw new Error(`revoke fixture: professor review failed HTTP ${reviewRes.status}`);
     }
 
-    // 4. College creates ranking (force_new avoids reusing leftover unfinalized ranking)
+    // 4. College creates ranking. A college owns ONE ranking per period, so
+    //    drop any leftover first — otherwise the stale one (created before this
+    //    application existed) would be handed back.
+    await deleteCollegeRankings({
+      scholarshipTypeId: config.scholarship_type_id,
+      subType: SETUP_SUB_TYPE,
+      academicYear: config.academic_year,
+      semester: config.semester,
+      collegeCode: SETUP_COLLEGE_CODE,
+    });
     const rankRes = await apiAs<{ success: boolean; data: { id: number } }>(
       collegeToken,
       "POST",
@@ -161,7 +176,6 @@ test.describe("撤銷對話框：未填原因前不可確認 | admin revoke dial
         sub_type_code: SETUP_SUB_TYPE,
         academic_year: config.academic_year,
         semester: config.semester,
-        force_new: true,
       },
     );
     if (!rankRes.ok || !rankRes.body.success) {
@@ -557,6 +571,14 @@ test.describe("已鎖定造冊：撤銷／停發名單與項目移除 | locked r
     }
 
     // 3. College creates ranking — both students are now eligible and auto-included.
+    //    Drop the college's existing ranking first (one ranking per period).
+    await deleteCollegeRankings({
+      scholarshipTypeId: config.scholarship_type_id,
+      subType: SETUP_SUB_TYPE,
+      academicYear: config.academic_year,
+      semester: config.semester,
+      collegeCode: SETUP_COLLEGE_CODE,
+    });
     const rankRes = await apiAs<{ success: boolean; data: { id: number } }>(
       collegeToken,
       "POST",
@@ -566,7 +588,6 @@ test.describe("已鎖定造冊：撤銷／停發名單與項目移除 | locked r
         sub_type_code: SETUP_SUB_TYPE,
         academic_year: config.academic_year,
         semester: config.semester,
-        force_new: true,
       },
     );
     if (!rankRes.ok || !rankRes.body.success) {

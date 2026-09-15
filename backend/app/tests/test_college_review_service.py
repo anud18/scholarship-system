@@ -22,6 +22,15 @@ from app.services.college_review_service import (
 )
 
 
+def _ranking_key_queries(statements):
+    """Select statements whose WHERE targets the college_rankings key (the reuse lookup)."""
+    return [
+        s
+        for s in statements
+        if getattr(s, "whereclause", None) is not None and "college_rankings.sub_type_code" in str(s.whereclause)
+    ]
+
+
 class TestCollegeReviewService:
     """Test suite for CollegeReviewService"""
 
@@ -55,16 +64,14 @@ class TestCollegeReviewService:
         # Mock ranking query results
         result = MagicMock()
         result.scalar_one_or_none.return_value = sample_ranking
-        # second execute (conflict check) returns empty list of other finalized rankings
-        conflict_result = MagicMock()
-        conflict_result.scalars.return_value.all.return_value = []
-        service.db.execute = AsyncMock(side_effect=[result, conflict_result])
+        service.db.execute = AsyncMock(side_effect=[result])
 
         await service.finalize_ranking(ranking_id=1, finalizer_id=2001)
 
-        # finalize_ranking issues two SELECT statements: one for the target ranking
-        # (with FOR UPDATE lock) and one to check for conflicting finalized rankings.
-        assert service.db.execute.call_count == 2
+        # finalize_ranking issues exactly one SELECT: the target ranking with a
+        # FOR UPDATE lock. There is no sibling-conflict query any more because a
+        # college owns a single ranking per period.
+        assert service.db.execute.call_count == 1
         service.db.flush.assert_called_once()
 
     async def test_finalize_already_finalized_ranking(self, service):
@@ -147,12 +154,12 @@ class TestCollegeReviewService:
             creator_id=52,
         )
 
-        # The reuse-existence check is the statement whose WHERE filters on is_finalized.
+        # The reuse-existence check is the statement whose WHERE filters on the ranking key.
         # Render with literal binds so we assert the EXACT predicate (operator + value),
         # not just the substring "college_code" — a substring check would also pass for an
         # inverted `!=` or an unconditional `IS NULL`, which would be wrong.
-        existence = [s for s in captured if s.whereclause is not None and "is_finalized" in str(s.whereclause)]
-        assert existence, "expected a reuse-existence query filtering on is_finalized"
+        existence = _ranking_key_queries(captured)
+        assert existence, "expected a reuse-existence query on the college_rankings key"
         where_sql = str(existence[0].whereclause.compile(compile_kwargs={"literal_binds": True}))
         assert "college_code = 'E'" in where_sql, (
             "reuse must be scoped to the creator's college (equality), so each college "
@@ -162,6 +169,10 @@ class TestCollegeReviewService:
         assert "created_by" not in where_sql, (
             "reuse must NOT be scoped by created_by (that breaks multi-reviewer-per-college "
             f"sharing); got WHERE: {where_sql}"
+        )
+        assert "is_finalized" not in where_sql, (
+            "a college owns ONE ranking per period, finalized or not — reuse must not skip "
+            f"finalized rankings (that re-opens the multi-ranking loophole); got WHERE: {where_sql}"
         )
 
     async def test_create_ranking_reuse_admin_uses_null_college(self, service):
@@ -193,16 +204,56 @@ class TestCollegeReviewService:
             creator_id=1,
         )
 
-        existence = [s for s in captured if s.whereclause is not None and "is_finalized" in str(s.whereclause)]
+        existence = _ranking_key_queries(captured)
         assert existence, "expected a reuse-existence query"
         where_sql = str(existence[0].whereclause.compile(compile_kwargs={"literal_binds": True}))
         assert "college_code IS NULL" in where_sql, f"admin/global reuse must match IS NULL; got: {where_sql}"
 
-    async def test_finalize_unfinalizes_only_same_college(self, service):
-        """Regression (critical): finalizing one college's ranking must un-finalize only
-        OTHER rankings of the SAME college — never another college's. Without the
-        college_code predicate, college B's finalize resets college A's is_finalized,
-        re-creating issue #1034 at finalize time."""
+    async def test_create_ranking_returns_existing_even_when_finalized(self, service):
+        """Single-ranking rule: when the college already owns a ranking for this period
+        (here a finalized one) create_ranking hands it back and creates nothing."""
+        existing = CollegeRanking(
+            id=7,
+            scholarship_type_id=2,
+            sub_type_code="default",
+            academic_year=114,
+            semester=None,
+            college_code="E",
+            is_finalized=True,
+            ranking_status="finalized",
+        )
+        captured = []
+
+        def _record(stmt, *args, **kwargs):
+            captured.append(stmt)
+            result = MagicMock()
+            if len(captured) == 1:
+                creator = MagicMock()
+                creator.college_code = "E"
+                result.scalar_one_or_none.return_value = creator
+            else:
+                result.scalar_one_or_none.return_value = existing
+            return result
+
+        service.db.execute = AsyncMock(side_effect=_record)
+
+        ranking = await service.create_ranking(
+            scholarship_type_id=2,
+            sub_type_code="default",
+            academic_year=114,
+            semester="yearly",
+            creator_id=52,
+        )
+
+        assert ranking is existing
+        service.db.add.assert_not_called()
+        # creator lookup + existence check only — no application query, no insert
+        assert len(captured) == 2
+
+    async def test_finalize_touches_only_the_target_ranking(self, service):
+        """A college owns exactly one ranking per period, so finalize must not run any
+        sibling "un-finalize others" query — it locks and flips the target row only.
+        (Another college's ranking must never be affected: issue #1034.)"""
         captured = []
         target = MagicMock()
         target.id = 6
@@ -216,12 +267,7 @@ class TestCollegeReviewService:
         def _record(stmt, *args, **kwargs):
             captured.append(stmt)
             result = MagicMock()
-            # First query loads the target ranking (with_for_update); the
-            # other-rankings query returns nothing.
-            result.scalar_one_or_none.return_value = target if len(captured) == 1 else None
-            scalars = MagicMock()
-            scalars.all.return_value = []
-            result.scalars.return_value = scalars
+            result.scalar_one_or_none.return_value = target
             return result
 
         service.db.execute = AsyncMock(side_effect=_record)
@@ -229,13 +275,13 @@ class TestCollegeReviewService:
 
         await service.finalize_ranking(ranking_id=6, finalizer_id=99)
 
-        # The "un-finalize others" query is the one whose WHERE filters on is_finalized.
-        other = [s for s in captured if s.whereclause is not None and "is_finalized" in str(s.whereclause)]
-        assert other, "expected an other-rankings query filtering on is_finalized"
-        where_sql = str(other[0].whereclause.compile(compile_kwargs={"literal_binds": True}))
-        assert "college_code = 'E'" in where_sql, (
-            "finalize must only un-finalize the SAME college's other rankings; got " f"WHERE: {where_sql}"
-        )
+        assert target.is_finalized is True
+        assert target.ranking_status == "finalized"
+        assert target.finalized_by == 99
+        assert len(captured) == 1, f"finalize must issue only the target lock query; got {len(captured)}"
+        where_sql = str(captured[0].whereclause.compile(compile_kwargs={"literal_binds": True}))
+        assert "college_rankings.id = 6" in where_sql
+        assert "is_finalized" not in where_sql
 
     def test_exception_hierarchy(self):
         """Test that custom exceptions inherit properly"""

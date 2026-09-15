@@ -94,6 +94,40 @@ export async function dumpRelated(opts: {
   return out;
 }
 
+/**
+ * Remove every ranking a college owns for one scholarship period so a spec can
+ * create a fresh one. A college owns ONE ranking per (type, sub-type, year,
+ * semester) — finalized or not — so a leftover from a previous run would be
+ * handed back by POST /college-review/rankings (with a stale item set that
+ * predates the spec's application) instead of a new ranking being created.
+ */
+export async function deleteCollegeRankings(opts: {
+  scholarshipTypeId: number;
+  subType: string;
+  academicYear: number;
+  semester: string | null;
+  collegeCode: string;
+}): Promise<void> {
+  const { rows } = await pool.query<{ id: number }>(
+    `SELECT id FROM college_rankings
+      WHERE scholarship_type_id = $1
+        AND sub_type_code = $2
+        AND academic_year = $3
+        AND COALESCE(semester, 'yearly') = COALESCE($4::text, 'yearly')
+        AND college_code = $5`,
+    [opts.scholarshipTypeId, opts.subType, opts.academicYear, opts.semester, opts.collegeCode],
+  );
+  for (const { id } of rows) {
+    for (const sql of [
+      "UPDATE payment_rosters SET ranking_id = NULL WHERE ranking_id = $1",
+      "DELETE FROM college_ranking_items WHERE ranking_id = $1",
+      "DELETE FROM college_rankings WHERE id = $1",
+    ]) {
+      await pool.query(sql, [id]).catch(() => undefined);
+    }
+  }
+}
+
 export async function deleteApplicationCascade(appId: string): Promise<void> {
   // Best-effort idempotent cleanup covering every FK that points at
   // `applications` with ON DELETE NO ACTION (the default for most of the
