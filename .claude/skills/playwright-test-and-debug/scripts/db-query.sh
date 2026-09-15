@@ -5,8 +5,8 @@
 #   db-query.sh "$(cat query.sql)"
 set -e
 
-REPO_ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
-COMPOSE_FILE="$REPO_ROOT/docker-compose.dev.yml"
+# DB_NAME lets a worktree/e2e run point at an isolated clone (default: the dev DB).
+DB_NAME="${DB_NAME:-scholarship_db}"
 
 SQL="${1:-}"
 if [ -z "$SQL" ]; then
@@ -15,5 +15,7 @@ if [ -z "$SQL" ]; then
   exit 2
 fi
 
-docker compose -f "$COMPOSE_FILE" exec -T postgres \
-  psql -U scholarship_user -d scholarship_db -c "$SQL"
+# Fixed container_name (docker-compose.dev.yml) — independent of which compose
+# project / worktree brought the stack up.
+docker exec -i scholarship_postgres_dev \
+  psql -U scholarship_user -d "$DB_NAME" -c "$SQL"
