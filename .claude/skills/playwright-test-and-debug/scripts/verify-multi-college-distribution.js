@@ -80,6 +80,11 @@ async function finalizeCollege(browser, c, idx) {
     await page.goto(`${FE}/`, { waitUntil: 'networkidle' });
     await page.getByRole('tab', { name: '學生排序' }).first().click({ timeout: 30000 });
     await page.getByRole('heading', { name: /學生排序管理/ }).first().waitFor({ timeout: 30000 });
+    // The college page defaults to the CURRENT academic year (115 since the AY115
+    // seed); switch the period selector to the year/semester under test.
+    await page.getByRole('combobox').first().click({ timeout: 15000 });
+    await page.getByRole('option', { name: `${YEAR_LABEL} ${SEM_LABEL}` }).first().click({ timeout: 15000 });
+    await page.waitForTimeout(1000);
     // One ranking per college per period: "建立排名" only renders while the
     // college has none; an existing ranking is auto-opened instead.
     const create = page.getByRole('button', { name: '建立排名' }).first();
