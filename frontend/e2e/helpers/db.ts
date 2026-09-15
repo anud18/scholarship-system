@@ -60,6 +60,22 @@ export async function getActiveConfig(scholarshipCode: string): Promise<ConfigRo
   return rows[0] as ConfigRow;
 }
 
+/**
+ * Resolve a seeded configuration by its stable config_code. Specs must not
+ * hardcode serial ids — they shift whenever the seed's insertion order changes.
+ */
+export async function getConfigByCode(configCode: string): Promise<ConfigRow> {
+  const { rows } = await pool.query(
+    `SELECT id, scholarship_type_id, academic_year, semester
+     FROM scholarship_configurations WHERE config_code = $1`,
+    [configCode],
+  );
+  if (!rows[0]) {
+    throw new Error(`No scholarship_configuration for config_code: ${configCode}`);
+  }
+  return rows[0] as ConfigRow;
+}
+
 export async function dumpRelated(opts: {
   appId?: string;
   configId?: number;

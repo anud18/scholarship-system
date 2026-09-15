@@ -29,14 +29,16 @@ import fs from "node:fs";
 import path from "node:path";
 import { loginAs } from "../helpers/auth";
 import { apiAs } from "../helpers/api";
-import { pool } from "../helpers/db";
+import { getConfigByCode, pool } from "../helpers/db";
 import { attachRunState, newRunState, pushTrace, type RunState } from "../helpers/runState";
 import { captureDiagnostics } from "../helpers/diagnose";
 
 const SUPER_ADMIN = "super_admin";
 const SCHOLARSHIP_CODE = "phd";
-const SCHOLARSHIP_TYPE_ID = 2;
-const CONFIG_ID = 6;
+const CONFIG_CODE = "phd_115";
+// Resolved from config_code in beforeAll — serial ids shift with seed order.
+let SCHOLARSHIP_TYPE_ID: number;
+let CONFIG_ID: number;
 const ACADEMIC_YEAR = 115;
 const PERIOD_VALUE = "115"; // yearly period.value exposed by the panel's period <select>
 const FILE_NAME = "e2e-renewal-import.csv";
@@ -94,6 +96,9 @@ test.describe("續領生匯入：上傳→預覽→確認→造冊 | Renewal imp
 
   test.beforeAll(async () => {
     fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
+    const config = await getConfigByCode(CONFIG_CODE);
+    CONFIG_ID = config.id;
+    SCHOLARSHIP_TYPE_ID = config.scholarship_type_id;
     await resetRenewalState();
   });
 

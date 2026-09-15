@@ -29,12 +29,14 @@ import { test, expect, type Locator, type Page } from "@playwright/test";
 import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { authContext } from "../helpers/auth";
 import { FRONTEND_URL } from "../helpers/env";
-import { pool } from "../helpers/db";
+import { getConfigByCode, pool } from "../helpers/db";
 import * as fs from "fs";
 import * as path from "path";
 
-const SCHOLARSHIP_TYPE_ID = 2;
-const CONFIG_ID = 5;
+const CONFIG_CODE = "phd_114";
+// Resolved from config_code in beforeAll — serial ids shift with seed order.
+let SCHOLARSHIP_TYPE_ID: number;
+let CONFIG_ID: number;
 const ACADEMIC_YEAR = 114;
 const COLLEGE_CODE = "C";
 const RANKING_NAME = "E2E-REC-DISPLAY"; // idempotency tag for our seeded ranking
@@ -267,6 +269,9 @@ function collegeCell(row: Locator): Locator {
 test.describe("手動分發表格的教授推薦／學院推薦欄位 | Admin manual distribution — 教授推薦 / 學院推薦 columns", { tag: [MODE.browser, ROLE.admin, FEATURE.distribution, FEATURE.review] }, () => {
   test.beforeAll(async () => {
     fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
+    const config = await getConfigByCode(CONFIG_CODE);
+    CONFIG_ID = config.id;
+    SCHOLARSHIP_TYPE_ID = config.scholarship_type_id;
     await seed();
   });
 

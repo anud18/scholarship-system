@@ -412,17 +412,6 @@ async def seed_scholarships(session: AsyncSession):
     # 基本獎學金類型
     scholarships_data = [
         {
-            "code": "undergraduate_freshman",
-            "name": "學士班新生獎學金",
-            "name_en": "Undergraduate Freshman Scholarship",
-            "description": "適用於學士班新生 白名單 與 地區劃分",
-            "description_en": "For undergraduate freshmen, white list and regional",
-            "application_cycle": ApplicationCycle.semester.value,
-            "whitelist_enabled": True,
-            "sub_type_selection_mode": SubTypeSelectionMode.single.value,
-            "status": ScholarshipStatus.active.value,
-        },
-        {
             "code": "phd",
             "name": "博士生獎學金",
             "name_en": "PhD Scholarship",
@@ -432,17 +421,6 @@ async def seed_scholarships(session: AsyncSession):
             "sub_type_list": ["nstc", "moe_1w"],
             "whitelist_enabled": False,
             "sub_type_selection_mode": SubTypeSelectionMode.multiple.value,
-            "status": ScholarshipStatus.active.value,
-        },
-        {
-            "code": "direct_phd",
-            "name": "逕讀博士獎學金",
-            "name_en": "Direct PhD Scholarship",
-            "description": "適用於逕讀博士班學生，需完整研究計畫",
-            "description_en": "For direct PhD students, requires complete research plan",
-            "application_cycle": ApplicationCycle.yearly.value,
-            "whitelist_enabled": False,
-            "sub_type_selection_mode": SubTypeSelectionMode.single.value,
             "status": ScholarshipStatus.active.value,
         },
     ]
@@ -533,44 +511,6 @@ async def seed_application_fields(session: AsyncSession):
     if not admin_id:
         admin_id = 1
 
-    # 逕讀博士獎學金字段（範例）
-    direct_phd_fields = [
-        {
-            "scholarship_type": "direct_phd",
-            "field_name": "advisors",
-            "field_label": "多位指導教授資訊",
-            "field_label_en": "Multiple Advisors Information",
-            "field_type": "text",
-            "is_required": True,
-            "placeholder": "請輸入所有指導教授的姓名（如有多位請以逗號分隔）",
-            "placeholder_en": "Please enter all advisor names (separate with commas if multiple)",
-            "max_length": 200,
-            "display_order": 1,
-            "is_active": True,
-            "help_text": "請填寫所有指導教授的姓名",
-            "help_text_en": "Please provide all advisor names",
-            "created_by": admin_id,
-            "updated_by": admin_id,
-        },
-        {
-            "scholarship_type": "direct_phd",
-            "field_name": "research_topic_zh",
-            "field_label": "研究題目（中文）",
-            "field_label_en": "Research Topic (Chinese)",
-            "field_type": "text",
-            "is_required": True,
-            "placeholder": "請輸入研究題目（中文）",
-            "placeholder_en": "Please enter research topic (in Chinese)",
-            "max_length": 200,
-            "display_order": 2,
-            "is_active": True,
-            "help_text": "請填寫您的研究題目",
-            "help_text_en": "Please provide your research topic",
-            "created_by": admin_id,
-            "updated_by": admin_id,
-        },
-    ]
-
     phd_fields = [
         {
             "scholarship_type": "phd",
@@ -591,25 +531,6 @@ async def seed_application_fields(session: AsyncSession):
         },
     ]
 
-    for field_data in direct_phd_fields:
-        await session.execute(
-            text("""
-                INSERT INTO application_fields (scholarship_type, field_name, field_label, field_label_en,
-                                                field_type, is_required, placeholder, placeholder_en, max_length,
-                                                display_order, is_active, help_text, help_text_en, created_by, updated_by)
-                VALUES (:scholarship_type, :field_name, :field_label, :field_label_en,
-                        :field_type, :is_required, :placeholder, :placeholder_en, :max_length,
-                        :display_order, :is_active, :help_text, :help_text_en, :created_by, :updated_by)
-                ON CONFLICT (scholarship_type, field_name) DO NOTHING
-                -- Note: Changed from DO UPDATE to DO NOTHING to preserve manual changes in production
-            """),
-            field_data,
-        )
-
-    await session.commit()
-    print(f"  ✓ {len(direct_phd_fields)} direct PhD application fields created/skipped")
-
-    # Insert phd_fields
     for field_data in phd_fields:
         await session.execute(
             text("""
