@@ -16,6 +16,7 @@ from urllib.parse import quote as _url_quote
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -226,7 +227,9 @@ async def create_ranking(
 
     A college owns at most ONE ranking per (scholarship type, sub-type, academic
     year, semester). If that ranking already exists — finalized or not — it is
-    returned as-is with ``data.reused = true`` instead of creating a second one.
+    returned with ``data.reused = true`` instead of creating a second one; while
+    it is still a draft, applications that became eligible since it was created
+    are appended to it (``data.added_application_count``).
     """
 
     try:
@@ -235,15 +238,7 @@ async def create_ranking(
         # (admins / super_admins bypass).
         await service.assert_ranking_within_deadline(scholarship_type_id, academic_year, semester, current_user)
 
-        existing = await service.find_ranking(
-            scholarship_type_id=scholarship_type_id,
-            sub_type_code=sub_type_code,
-            academic_year=academic_year,
-            semester=semester,
-            college_code=current_user.college_code,
-        )
-        reused = existing is not None
-        ranking = existing or await service.create_ranking(
+        upsert_kwargs = dict(
             scholarship_type_id=scholarship_type_id,
             sub_type_code=sub_type_code,
             academic_year=academic_year,
@@ -251,16 +246,36 @@ async def create_ranking(
             creator_id=current_user.id,
             ranking_name=ranking_name,
         )
-        # Commit before building the response so the row is visible to any
-        # read-after-write query the caller makes immediately after receiving
-        # the HTTP 200 (e.g. direct pool.query in the E2E test suite — see
-        # issue #199). get_db will commit again on context exit but that is a
-        # no-op on an already-clean session. Mirrors the fix in PR #200.
-        await db.commit()
+        try:
+            result = await service.get_or_create_ranking(**upsert_kwargs)
+            # Commit before building the response so the row is visible to any
+            # read-after-write query the caller makes immediately after receiving
+            # the HTTP 200 (e.g. direct pool.query in the E2E test suite — see
+            # issue #199). get_db will commit again on context exit but that is a
+            # no-op on an already-clean session. Mirrors the fix in PR #200.
+            await db.commit()
+        except IntegrityError:
+            # Two reviewers of the same college raced past find_ranking and both
+            # inserted; the unique index rejected the loser. The idempotent answer
+            # is the winner's row, so retry once on a clean transaction.
+            await db.rollback()
+            logger.info("Ranking create lost a unique-index race; returning the existing ranking")
+            result = await service.get_or_create_ranking(**upsert_kwargs)
+            await db.commit()
+
+        ranking = result.ranking
+        reused = not result.created
+        added_count = len(result.added_application_ids)
+        if not reused:
+            message = "Ranking created successfully"
+        elif added_count:
+            message = f"本學院此期間已有排名，已將 {added_count} 位新申請者加入既有排名"
+        else:
+            message = "本學院此期間已有排名，已回傳既有排名"
 
         return ApiResponse(
             success=True,
-            message=("本學院此期間已有排名，已回傳既有排名" if reused else "Ranking created successfully"),
+            message=message,
             data={
                 "id": ranking.id,
                 "ranking_name": ranking.ranking_name,
@@ -272,6 +287,7 @@ async def create_ranking(
                 "semester": normalize_semester_value(ranking.semester),
                 "is_finalized": bool(ranking.is_finalized),
                 "reused": reused,
+                "added_application_count": added_count,
                 "created_at": ranking.created_at.isoformat(),
             },
         )
@@ -1016,6 +1032,11 @@ async def delete_ranking(
         # Check permissions - the owning college's reviewers or an admin can delete
         assert_can_manage_ranking(ranking, current_user)
 
+        # #63: deleting is a ranking write too — with one ranking per college the
+        # only way to regenerate is delete + create, and create is deadline-gated,
+        # so a post-deadline delete would strand the college with no ranking.
+        await CollegeReviewService(db).assert_ranking_within_deadline_by_ranking(ranking_id, current_user)
+
         # Check if ranking is finalized - cannot delete finalized rankings
         if ranking.is_finalized:
             raise HTTPException(
@@ -1070,6 +1091,10 @@ async def delete_ranking(
             data={"ranking_id": ranking_id},
         )
 
+    except AuthorizationError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except NotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except HTTPException:
         raise
     except Exception as e:

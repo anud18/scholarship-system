@@ -146,7 +146,7 @@ class TestCollegeReviewService:
 
         service.db.execute = AsyncMock(side_effect=_record)
 
-        await service.create_ranking(
+        await service.get_or_create_ranking(
             scholarship_type_id=2,
             sub_type_code="default",
             academic_year=114,
@@ -196,7 +196,7 @@ class TestCollegeReviewService:
 
         service.db.execute = AsyncMock(side_effect=_record)
 
-        await service.create_ranking(
+        await service.get_or_create_ranking(
             scholarship_type_id=2,
             sub_type_code="default",
             academic_year=114,
@@ -237,7 +237,7 @@ class TestCollegeReviewService:
 
         service.db.execute = AsyncMock(side_effect=_record)
 
-        ranking = await service.create_ranking(
+        result = await service.get_or_create_ranking(
             scholarship_type_id=2,
             sub_type_code="default",
             academic_year=114,
@@ -245,7 +245,9 @@ class TestCollegeReviewService:
             creator_id=52,
         )
 
-        assert ranking is existing
+        assert result.ranking is existing
+        assert result.created is False
+        assert result.added_application_ids == []
         service.db.add.assert_not_called()
         # creator lookup + existence check only — no application query, no insert
         assert len(captured) == 2
