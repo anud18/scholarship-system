@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { CollegeRankingTable } from "@/components/college-ranking-table";
 import { ConfigSelector } from "../shared/ConfigSelector";
 import { RankingCardList } from "../shared/RankingCardList";
-import { Plus, Loader2, Clock, AlertTriangle, Lock } from "lucide-react";
+import { RefreshCw, Loader2, Clock, AlertTriangle, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { logger } from "@/lib/utils/logger";
@@ -346,7 +346,9 @@ export function RankingManagementPanel({
 
       // A college owns ONE ranking per (scholarship, year, semester). The
       // backend returns the existing ranking (reused: true) instead of
-      // creating a second one, so this is safe to call even in a race.
+      // creating a second one, and while that ranking is still a draft it
+      // appends applications approved since it was created — so the same
+      // call doubles as 「同步申請名單」.
       const response = await apiClient.college.createRanking({
         scholarship_type_id: targetScholarshipId,
         sub_type_code: targetSubTypeCode,
@@ -364,6 +366,7 @@ export function RankingManagementPanel({
             id: number;
             ranking_name?: string;
             reused?: boolean;
+            added_application_count?: number;
           };
           setSelectedRanking(newRanking.id);
           // Load ranking details
@@ -371,11 +374,18 @@ export function RankingManagementPanel({
           // Increment data version
           incrementDataVersion();
 
-          if (newRanking.reused) {
+          const addedCount = newRanking.added_application_count ?? 0;
+          if (newRanking.reused && addedCount > 0) {
+            toast.success(
+              locale === "zh"
+                ? `已將 ${addedCount} 位新申請者加入排名末端，請重新調整順序`
+                : `${addedCount} new applicant(s) appended to the ranking; please re-order`
+            );
+          } else if (newRanking.reused) {
             toast.info(
               locale === "zh"
-                ? "本學院在此學年度與學期已有排名，已載入既有排名"
-                : "This college already has a ranking for the selected period; the existing one was loaded"
+                ? "申請名單已是最新，沒有新的申請者"
+                : "The ranking is already up to date; no new applicants"
             );
           } else {
             toast.success(
@@ -845,17 +855,21 @@ export function RankingManagementPanel({
             locale={locale}
           />
 
-          {/* One ranking per college per period: the create action only
-              exists while the college has none for the current selection. */}
-          {filteredRankings.length === 0 && (
-            <Button
-              onClick={createNewRanking}
-              disabled={deadlineInfo.state === "passed" && !isAdmin}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              建立排名
-            </Button>
-          )}
+          {/* One ranking per college per period: creation lives in the
+              empty state below; once a DRAFT ranking exists the same call
+              pulls in applications approved after it was created. */}
+          {filteredRankings.length > 0 &&
+            rankingData &&
+            !rankingData.isFinalized && (
+              <Button
+                variant="outline"
+                onClick={createNewRanking}
+                disabled={deadlineInfo.state === "passed" && !isAdmin}
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                同步申請名單
+              </Button>
+            )}
         </div>
       </div>
 
@@ -928,7 +942,7 @@ export function RankingManagementPanel({
         <CardHeader>
           <CardTitle>本學院排名</CardTitle>
           <CardDescription>
-            每個學院在同一學年度與學期只能有一份排名；如需重新產生，請先刪除現有排名
+            每個學院在同一學年度與學期只能有一份排名；教授後續核准的申請可用「同步申請名單」加入，如需整份重新產生請先刪除現有排名
           </CardDescription>
         </CardHeader>
         <CardContent>

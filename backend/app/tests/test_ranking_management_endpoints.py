@@ -778,6 +778,165 @@ class TestSingleRankingPerCollege:
         assert listing.status_code == 200
         assert len(listing.json()["data"]) == 1
 
+    async def test_draft_ranking_absorbs_applications_approved_later(
+        self, client, login, db, rank_users, rank_scholarship, ranking_eng, ranking_eng_items
+    ):
+        # With a single ranking per college, a professor approval that lands
+        # after the ranking was created must still reach the college: calling
+        # create again appends the new application after the current last rank.
+        login(rank_users["college_eng"])
+        unchanged = await client.post(RANKINGS_URL, json=_ranking_payload(rank_scholarship))
+        assert unchanged.status_code == 200, unchanged.text
+        assert unchanged.json()["data"]["added_application_count"] == 0
+
+        late_student = User(
+            nycu_id="rank_stu_late",
+            name="Late Student",
+            email="rank_stu_late@test.edu",
+            user_type=UserType.student,
+            role=UserRole.student,
+        )
+        db.add(late_student)
+        await db.commit()
+        await db.refresh(late_student)
+        late_application = Application(
+            app_id="APP-114-1-01099",
+            user_id=late_student.id,
+            scholarship_type_id=rank_scholarship.id,
+            sub_type_selection_mode=SubTypeSelectionMode.single,
+            status=ApplicationStatus.approved.value,
+            academic_year=114,
+            semester="first",
+            sub_scholarship_type="nstc",
+            scholarship_subtype_list=["nstc"],
+            student_data={"std_stdcode": "S099", "std_cname": "Late Student", "std_academyno": "ENG"},
+            submitted_form_data={},
+            agree_terms=True,
+        )
+        db.add(late_application)
+        await db.commit()
+        await db.refresh(late_application)
+
+        synced = await client.post(RANKINGS_URL, json=_ranking_payload(rank_scholarship))
+        assert synced.status_code == 200, synced.text
+        data = synced.json()["data"]
+        assert data["id"] == ranking_eng.id
+        assert data["reused"] is True
+        assert data["added_application_count"] == 1
+        assert data["total_applications"] == 3
+
+        items = (
+            (
+                await db.execute(
+                    select(CollegeRankingItem)
+                    .where(CollegeRankingItem.ranking_id == ranking_eng.id)
+                    .order_by(CollegeRankingItem.rank_position)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert [item.rank_position for item in items] == [1, 2, 3]
+        assert items[-1].application_id == late_application.id
+        # Existing order untouched
+        assert [item.id for item in items[:2]] == [item.id for item in ranking_eng_items]
+
+    async def test_finalized_ranking_does_not_absorb_new_applications(
+        self, client, login, db, rank_users, rank_scholarship, ranking_eng, ranking_eng_items
+    ):
+        ranking_eng.is_finalized = True
+        ranking_eng.ranking_status = "finalized"
+        late_student = User(
+            nycu_id="rank_stu_late2",
+            name="Late Student 2",
+            email="rank_stu_late2@test.edu",
+            user_type=UserType.student,
+            role=UserRole.student,
+        )
+        db.add(late_student)
+        await db.commit()
+        await db.refresh(late_student)
+        db.add(
+            Application(
+                app_id="APP-114-1-01098",
+                user_id=late_student.id,
+                scholarship_type_id=rank_scholarship.id,
+                sub_type_selection_mode=SubTypeSelectionMode.single,
+                status=ApplicationStatus.approved.value,
+                academic_year=114,
+                semester="first",
+                sub_scholarship_type="nstc",
+                scholarship_subtype_list=["nstc"],
+                student_data={"std_stdcode": "S098", "std_cname": "Late Student 2", "std_academyno": "ENG"},
+                submitted_form_data={},
+                agree_terms=True,
+            )
+        )
+        await db.commit()
+
+        login(rank_users["college_eng"])
+        response = await client.post(RANKINGS_URL, json=_ranking_payload(rank_scholarship))
+        assert response.status_code == 200, response.text
+        assert response.json()["data"]["added_application_count"] == 0
+        count = await db.scalar(
+            select(func.count()).select_from(CollegeRankingItem).where(CollegeRankingItem.ranking_id == ranking_eng.id)
+        )
+        assert count == 2
+
+    async def test_create_race_lost_on_unique_index_returns_existing(
+        self, client, login, db, rank_users, rank_scholarship, ranking_eng, monkeypatch
+    ):
+        # Simulate two reviewers racing: the first find_ranking misses (the other
+        # transaction has not committed yet), the INSERT then trips the unique
+        # index. The endpoint must answer with the existing ranking, not a 500.
+        from app.services.college_review_service import CollegeReviewService
+
+        real_find = CollegeReviewService.find_ranking
+        calls = {"n": 0}
+
+        async def first_lookup_misses(self, *args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return None
+            return await real_find(self, *args, **kwargs)
+
+        monkeypatch.setattr(CollegeReviewService, "find_ranking", first_lookup_misses)
+
+        login(rank_users["college_eng"])
+        response = await client.post(RANKINGS_URL, json=_ranking_payload(rank_scholarship))
+        assert response.status_code == 200, response.text
+        data = response.json()["data"]
+        assert data["id"] == ranking_eng.id
+        assert data["reused"] is True
+        assert calls["n"] == 2
+        assert await _count_rankings(db, "ENG") == 1
+
+    async def test_delete_blocked_after_deadline_for_college(
+        self, client, login, db, rank_users, rank_scholarship, ranking_eng
+    ):
+        # Delete + create is now the only way to regenerate a ranking, and create
+        # is deadline-gated, so delete must be gated too or the college is left
+        # with no ranking and no way back.
+        from datetime import datetime, timedelta, timezone
+
+        db.add(
+            ScholarshipConfiguration(
+                scholarship_type_id=rank_scholarship.id,
+                academic_year=114,
+                semester=Semester.first,
+                config_name="delete deadline cfg",
+                config_code="delete_deadline_cfg_114_1",
+                amount=10000,
+                college_review_end=datetime.now(timezone.utc) - timedelta(days=1),
+            )
+        )
+        await db.commit()
+
+        login(rank_users["college_eng"])
+        response = await client.delete(f"{RANKINGS_URL}/{ranking_eng.id}")
+        assert response.status_code == 403
+        assert await _count_rankings(db, "ENG") == 1
+
     async def test_database_rejects_second_ranking_for_same_college_period(
         self, db, rank_users, rank_scholarship, ranking_eng
     ):

@@ -118,13 +118,16 @@ export async function deleteCollegeRankings(opts: {
     [opts.scholarshipTypeId, opts.subType, opts.academicYear, opts.semester, opts.collegeCode],
   );
   for (const { id } of rows) {
+    // Child clean-up is best-effort (tolerates schema drift); the parent DELETE
+    // must surface its error, otherwise a leftover ranking would be silently
+    // handed back to the spec and the failure would show up far downstream.
     for (const sql of [
       "UPDATE payment_rosters SET ranking_id = NULL WHERE ranking_id = $1",
       "DELETE FROM college_ranking_items WHERE ranking_id = $1",
-      "DELETE FROM college_rankings WHERE id = $1",
     ]) {
       await pool.query(sql, [id]).catch(() => undefined);
     }
+    await pool.query("DELETE FROM college_rankings WHERE id = $1", [id]);
   }
 }
 
