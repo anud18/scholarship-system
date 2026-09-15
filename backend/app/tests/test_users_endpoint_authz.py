@@ -136,16 +136,22 @@ async def test_super_admin_cannot_change_own_role(db: AsyncSession):
 
 
 @pytest.mark.asyncio
-async def test_super_admin_can_change_other_user_role(db: AsyncSession):
-    sa = await _seed_user(db, nycu_id="grantor", role=UserRole.super_admin)
-    target = await _seed_user(db, nycu_id="promotee", role=UserRole.student)
+@pytest.mark.parametrize("new_role", [UserRole.professor, UserRole.college, UserRole.admin])
+async def test_super_admin_can_promote_student(db: AsyncSession, new_role: UserRole):
+    sa = await _seed_user(db, nycu_id=f"grantor_{new_role.value}", role=UserRole.super_admin)
+    target = await _seed_user(db, nycu_id=f"promotee_{new_role.value}", role=UserRole.student)
 
     async with _client_as(sa, db) as ac:
-        resp = await ac.put(f"/api/v1/users/{target.id}", json={"role": "professor"})
+        resp = await ac.put(
+            f"/api/v1/users/{target.id}",
+            json={"role": new_role.value, "college_code": "E"},
+        )
 
     assert resp.status_code == 200
+    assert resp.json()["data"]["role"] == new_role.value
     await db.refresh(target)
-    assert target.role == UserRole.professor
+    assert target.role == new_role
+    assert target.college_code == "E"
 
 
 @pytest.mark.asyncio
