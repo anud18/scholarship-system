@@ -130,7 +130,7 @@ export function RankingManagementPanel({
   // configuration matching (scholarship_type, year, semester). This ensures
   // the deadline banner appears as soon as the panel renders, even when no
   // rankings exist for the current selection (i.e. before the user clicks
-  // "建立新排名" for the first time).
+  // "建立排名" for the first time).
   const [panelDeadline, setPanelDeadline] = useState<string | null>(null);
 
   const fetchRankingDetails = useCallback(
@@ -282,6 +282,21 @@ export function RankingManagementPanel({
     selectedRankingRef.current = selectedRanking;
   }, [selectedRanking]);
 
+  // Single-ranking rule: a college has at most one ranking for the selected
+  // scholarship / year / semester, so open it as soon as it is known instead
+  // of making the user pick from a list. Re-runs when the selection changes
+  // (the previously selected ranking then no longer matches the filter).
+  useEffect(() => {
+    if (filteredRankings.length === 0) return;
+    const isSelectionValid = filteredRankings.some(
+      ranking => ranking.id === selectedRanking
+    );
+    if (isSelectionValid) return;
+    const targetId = filteredRankings[0].id;
+    setSelectedRanking(targetId);
+    fetchRankingDetails(targetId);
+  }, [filteredRankings, selectedRanking, setSelectedRanking, fetchRankingDetails]);
+
   // Auto-refresh when switching to ranking tab or when data version changes
   useEffect(() => {
     // Only refresh when:
@@ -342,33 +357,46 @@ export function RankingManagementPanel({
             ? "下學期"
             : "全年";
 
+      // A college owns ONE ranking per (scholarship, year, semester). The
+      // backend returns the existing ranking (reused: true) instead of
+      // creating a second one, so this is safe to call even in a race.
       const response = await apiClient.college.createRanking({
         scholarship_type_id: targetScholarshipId,
         sub_type_code: targetSubTypeCode,
         academic_year: useYear,
         semester: useSemester === Semester.YEARLY ? null : useSemester,
         ranking_name: `${scholarshipType.name} - ${useYear} ${semesterName}`,
-        force_new: true, // Always create a new ranking when user clicks "建立新排名"
       });
 
       if (response.success && response.data) {
         try {
           // Refresh rankings list
           await fetchRankings();
-          // Select the newly created ranking
-          const newRanking = response.data as { id: number; ranking_name?: string };
+          // Select the (new or existing) ranking
+          const newRanking = response.data as {
+            id: number;
+            ranking_name?: string;
+            reused?: boolean;
+          };
           setSelectedRanking(newRanking.id);
           // Load ranking details
           await fetchRankingDetails(newRanking.id);
           // Increment data version
           incrementDataVersion();
 
-          // Show success notification
-          toast.success(
-            locale === "zh"
-              ? `排名「${newRanking.ranking_name || "新排名"}」已成功建立`
-              : `Ranking "${newRanking.ranking_name || "New Ranking"}" has been created successfully`
-          );
+          if (newRanking.reused) {
+            toast.info(
+              locale === "zh"
+                ? "本學院在此學年度與學期已有排名，已載入既有排名"
+                : "This college already has a ranking for the selected period; the existing one was loaded"
+            );
+          } else {
+            toast.success(
+              locale === "zh"
+                ? `排名「${newRanking.ranking_name || "新排名"}」已成功建立`
+                : `Ranking "${newRanking.ranking_name || "New Ranking"}" has been created successfully`
+            );
+          }
         } catch (fetchError) {
           logger.error("Failed to load ranking after creation", { fetchError: fetchError });
           toast.error(
@@ -655,12 +683,15 @@ export function RankingManagementPanel({
         rankingToDelete.id
       );
       if (response.success) {
+        // Refresh the list BEFORE clearing the selection, otherwise the
+        // auto-select effect would re-open the just-deleted ranking from the
+        // stale list and hit a 404.
+        await fetchRankings();
         if (selectedRanking === rankingToDelete.id) {
           setSelectedRanking(null);
           setRankingData(null);
           setActiveConfigDeadline(null);
         }
-        await fetchRankings();
         incrementDataVersion();
         setShowDeleteRankingDialog(false);
         setRankingToDelete(null);
@@ -827,13 +858,17 @@ export function RankingManagementPanel({
             locale={locale}
           />
 
-          <Button
-            onClick={createNewRanking}
-            disabled={deadlineInfo.state === "passed" && !isAdmin}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            建立新排名
-          </Button>
+          {/* One ranking per college per period: the create action only
+              exists while the college has none for the current selection. */}
+          {filteredRankings.length === 0 && (
+            <Button
+              onClick={createNewRanking}
+              disabled={deadlineInfo.state === "passed" && !isAdmin}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              建立排名
+            </Button>
+          )}
         </div>
       </div>
 
@@ -904,8 +939,10 @@ export function RankingManagementPanel({
       {/* Ranking Selection */}
       <Card>
         <CardHeader>
-          <CardTitle>選擇排名</CardTitle>
-          <CardDescription>選擇要管理的排名清單</CardDescription>
+          <CardTitle>本學院排名</CardTitle>
+          <CardDescription>
+            每個學院在同一學年度與學期只能有一份排名；如需重新產生，請先刪除現有排名
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {/* #63: when deadline has passed and user isn't admin, hide
@@ -921,13 +958,13 @@ export function RankingManagementPanel({
             showActions={true}
             showOnlyDistributed={false}
             emptyStateConfig={{
-              title: "暫無符合條件的排名",
-              description: `${scholarshipType.name} 目前在選定的學年度與學期沒有排名`,
+              title: "尚未建立排名",
+              description: `${scholarshipType.name} 目前在選定的學年度與學期尚未建立排名`,
               actionButton:
                 deadlineInfo.state === "passed" && !isAdmin
                   ? undefined
                   : {
-                      label: "立即建立排名",
+                      label: "建立排名",
                       onClick: createNewRanking,
                     },
             }}

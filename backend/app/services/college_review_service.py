@@ -441,6 +441,44 @@ class CollegeReviewService:
 
         return formatted_applications
 
+    async def find_ranking(
+        self,
+        scholarship_type_id: int,
+        sub_type_code: str,
+        academic_year: int,
+        semester: Optional[str],
+        college_code: Optional[str],
+    ) -> Optional[CollegeRanking]:
+        """Return THE ranking a college owns for (type, sub_type, year, semester), or None.
+
+        A college can hold at most one ranking per period — finalized or not — so this
+        lookup ignores ``is_finalized``. Scoping by college_code (not created_by) means
+        every reviewer of a college shares that college's single ranking while different
+        colleges never collide (issue #1034). ``college_code=None`` addresses the
+        admin/super_admin global ranking.
+        """
+        normalized_semester = self._normalize_semester_value(semester)
+
+        conditions = [
+            CollegeRanking.scholarship_type_id == scholarship_type_id,
+            CollegeRanking.sub_type_code == sub_type_code,
+            CollegeRanking.academic_year == academic_year,
+        ]
+
+        if college_code is None:
+            conditions.append(CollegeRanking.college_code.is_(None))
+        else:
+            conditions.append(CollegeRanking.college_code == college_code)
+
+        if normalized_semester is None:
+            conditions.append(or_(CollegeRanking.semester.is_(None), CollegeRanking.semester == Semester.yearly.value))
+        else:
+            conditions.append(CollegeRanking.semester == normalized_semester)
+
+        stmt = select(CollegeRanking).where(and_(*conditions)).limit(1)
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def create_ranking(
         self,
         scholarship_type_id: int,
@@ -449,9 +487,14 @@ class CollegeReviewService:
         semester: Optional[str],
         creator_id: int,
         ranking_name: Optional[str] = None,
-        force_new: bool = False,
     ) -> CollegeRanking:
-        """Create a new ranking for a scholarship sub-type with race condition protection"""
+        """Return the creator's college ranking for this period, creating it if absent.
+
+        Idempotent: a college owns exactly one ranking per (type, sub_type, year,
+        semester), so a second call returns the existing row (even when finalized)
+        instead of creating another. The DB unique index
+        ``uq_college_rankings_single_per_college`` backs this up against races.
+        """
 
         # Normalize semester value; treat yearly cycles as NULL for storage
         normalized_semester = self._normalize_semester_value(semester)
@@ -467,40 +510,15 @@ class CollegeReviewService:
         creator = creator_result.scalar_one_or_none()
         creator_college = creator.college_code if creator else None
 
-        if not force_new:
-            # Reuse an existing unfinalized ranking for the same (type, sub_type, year,
-            # semester, college). Scoping by college_code — not created_by — means every
-            # reviewer of a college shares that college's single ranking, while different
-            # colleges never collide. Without college scoping the first college's ranking
-            # was handed to every other college (they could not see it and their
-            # applications were never ranked), so only one college survived into admin
-            # distribution. See issue #1034.
-            existing_conditions = [
-                CollegeRanking.scholarship_type_id == scholarship_type_id,
-                CollegeRanking.sub_type_code == sub_type_code,
-                CollegeRanking.academic_year == academic_year,
-                CollegeRanking.is_finalized.is_(False),
-            ]
-
-            if creator_college is None:
-                existing_conditions.append(CollegeRanking.college_code.is_(None))
-            else:
-                existing_conditions.append(CollegeRanking.college_code == creator_college)
-
-            if normalized_semester is None:
-                existing_conditions.append(
-                    or_(CollegeRanking.semester.is_(None), CollegeRanking.semester == Semester.yearly.value)
-                )
-            else:
-                existing_conditions.append(CollegeRanking.semester == normalized_semester)
-
-            existing_stmt = select(CollegeRanking).where(and_(*existing_conditions)).limit(1)
-
-            existing_result = await self.db.execute(existing_stmt)
-            existing_ranking = existing_result.scalar_one_or_none()
-
-            if existing_ranking:
-                return existing_ranking
+        existing_ranking = await self.find_ranking(
+            scholarship_type_id=scholarship_type_id,
+            sub_type_code=sub_type_code,
+            academic_year=academic_year,
+            semester=semester,
+            college_code=creator_college,
+        )
+        if existing_ranking:
+            return existing_ranking
 
         # Get applications for this sub-type that have college reviews
         # Use the same semester filtering logic as in get_applications_for_review
@@ -786,51 +804,10 @@ class CollegeReviewService:
             if ranking.is_finalized:
                 raise RankingModificationError("Ranking is already finalized")
 
-            # Ensure only one ranking per scholarship/sub-type/term/COLLEGE is finalized at
-            # a time. The college_code predicate is essential: rankings are per-college
-            # (issue #1034), so finalizing one college's ranking must NOT un-finalize
-            # another college's — without it college B's finalize would reset college A's
-            # is_finalized=False and admin distribution (which reads only finalized rankings)
-            # would again surface just one college.
-            semester_conditions = []
-            if self._is_yearly_semester(ranking.semester):
-                semester_conditions.append(CollegeRanking.semester.is_(None))
-                semester_conditions.append(CollegeRanking.semester == Semester.yearly.value)
-            else:
-                normalized_semester = self._normalize_semester_value(ranking.semester)
-                if normalized_semester:
-                    semester_conditions.append(CollegeRanking.semester == normalized_semester)
-                else:
-                    semester_conditions.append(CollegeRanking.semester.is_(None))
-
-            if ranking.college_code is None:
-                college_condition = CollegeRanking.college_code.is_(None)
-            else:
-                college_condition = CollegeRanking.college_code == ranking.college_code
-
-            other_rankings_stmt = (
-                select(CollegeRanking)
-                .where(
-                    CollegeRanking.id != ranking_id,
-                    CollegeRanking.scholarship_type_id == ranking.scholarship_type_id,
-                    CollegeRanking.sub_type_code == ranking.sub_type_code,
-                    CollegeRanking.academic_year == ranking.academic_year,
-                    or_(*semester_conditions),
-                    college_condition,
-                    CollegeRanking.is_finalized.is_(True),
-                )
-                .with_for_update()
-            )
-
-            other_rankings_result = await self.db.execute(other_rankings_stmt)
-            other_rankings = other_rankings_result.scalars().all()
-
-            for other in other_rankings:
-                other.is_finalized = False
-                other.finalized_at = None
-                other.finalized_by = None
-                other.ranking_status = "draft"
-
+            # A college owns exactly one ranking per period (unique index
+            # uq_college_rankings_single_per_college), so there is no sibling ranking
+            # to un-finalize here: finalizing only ever touches this row. Other
+            # colleges' rankings are never affected (issue #1034).
             ranking.is_finalized = True
             ranking.finalized_at = datetime.now(timezone.utc)
             ranking.finalized_by = finalizer_id
