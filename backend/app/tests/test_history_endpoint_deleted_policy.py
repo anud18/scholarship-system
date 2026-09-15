@@ -6,8 +6,9 @@ Policy pinned here (documented in the endpoint docstring):
     deleted_at/deletion_reason) so the UI can badge them.
   - The response also carries the revocation context the DB already stores
     (revoked_at/revoke_reason/...), which the old schema silently dropped.
-  - G30 (#992): the admin hard-delete endpoint refuses once review_stage has
-    advanced past the student stages, even while status is still 'submitted'.
+  - Admin hard-delete gate (supersedes G30 #992): the endpoint refuses once
+    the row has entered 分發階段 (review_stage >= quota_distribution), even
+    while status is still 'submitted'; review-stage rows remain deletable.
 
 Auth pattern follows test_admin_student_history_endpoint.py.
 """
@@ -109,11 +110,18 @@ async def history_fixture(db, admin_db_user):
         revoked_by=admin_db_user.id,
         revoke_reason="違反要點",
     )
-    submitted_in_review = make_app("GUARD", status="submitted", review_stage="professor_reviewed")
+    submitted_in_review = make_app("REVIEW", status="submitted", review_stage="professor_reviewed", academic_year=113)
+    submitted_distributed = make_app("GUARD", status="submitted", review_stage="quota_distributed", academic_year=112)
     await db.commit()
-    for row in (live, deleted, revoked, submitted_in_review):
+    for row in (live, deleted, revoked, submitted_in_review, submitted_distributed):
         await db.refresh(row)
-    return {"live": live, "deleted": deleted, "revoked": revoked, "guard": submitted_in_review}
+    return {
+        "live": live,
+        "deleted": deleted,
+        "revoked": revoked,
+        "in_review": submitted_in_review,
+        "guard": submitted_distributed,
+    }
 
 
 def _items(payload):
@@ -147,8 +155,8 @@ async def test_history_surfaces_revocation_context(authed_admin_client, history_
     assert rvk["revoked_by"] is not None
 
 
-async def test_admin_delete_refuses_when_review_stage_advanced(authed_admin_client, history_fixture):
-    """G30: status=submitted but review_stage=professor_reviewed → 400, row survives."""
+async def test_admin_delete_refuses_when_distribution_stage_reached(authed_admin_client, history_fixture):
+    """status=submitted but review_stage=quota_distributed → 400, row survives."""
     guard_app = history_fixture["guard"]
     response = await authed_admin_client.request(
         "DELETE",
@@ -156,4 +164,16 @@ async def test_admin_delete_refuses_when_review_stage_advanced(authed_admin_clie
         json={"reason": "should be refused"},
     )
     assert response.status_code == 400
-    assert "審核流程" in response.text
+    assert "分發階段" in response.text
+
+
+async def test_admin_delete_allows_review_stage_rows(authed_admin_client, history_fixture):
+    """status=submitted + review_stage=professor_reviewed is still pre-distribution → deletable."""
+    review_app = history_fixture["in_review"]
+    response = await authed_admin_client.request(
+        "DELETE",
+        f"/api/v1/admin/applications/{review_app.id}",
+        json={"reason": "review-stage cleanup"},
+    )
+    assert response.status_code == 200
+    assert response.json()["data"]["id"] == review_app.id

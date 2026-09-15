@@ -18,6 +18,7 @@ import pytest_asyncio
 
 from app.core.exceptions import AuthorizationError
 from app.models.application import Application, ApplicationStatus
+from app.models.enums import ReviewStage
 from app.models.user import UserRole
 
 
@@ -479,15 +480,48 @@ class TestAdminEndpoints:
         else:
             scholarship = existing
 
+        # (key, status, review_stage, quota_allocation_status, app_id prefix)
         status_specs = [
-            ("draft", ApplicationStatus.draft.value, "DEL-DRAFT"),
-            ("submitted", ApplicationStatus.submitted.value, "DEL-SUBMITTED"),
-            ("under_review", ApplicationStatus.under_review.value, "DEL-UNDERREVIEW"),
-            ("approved", ApplicationStatus.approved.value, "DEL-APPROVED"),
-            ("rejected", ApplicationStatus.rejected.value, "DEL-REJECTED"),
+            ("draft", ApplicationStatus.draft.value, ReviewStage.student_draft.value, None, "DEL-DRAFT"),
+            (
+                "submitted",
+                ApplicationStatus.submitted.value,
+                ReviewStage.student_submitted.value,
+                None,
+                "DEL-SUBMITTED",
+            ),
+            (
+                "under_review",
+                ApplicationStatus.under_review.value,
+                ReviewStage.professor_review.value,
+                None,
+                "DEL-UNDERREVIEW",
+            ),
+            (
+                "approved",
+                ApplicationStatus.approved.value,
+                ReviewStage.quota_distributed.value,
+                "allocated",
+                "DEL-APPROVED",
+            ),
+            ("rejected", ApplicationStatus.rejected.value, ReviewStage.professor_reviewed.value, None, "DEL-REJECTED"),
+            (
+                "college_ranked",
+                ApplicationStatus.under_review.value,
+                ReviewStage.college_ranked.value,
+                None,
+                "DEL-RANKED",
+            ),
+            (
+                "quota_rejected",
+                ApplicationStatus.under_review.value,
+                ReviewStage.quota_distributed.value,
+                "rejected",
+                "DEL-QUOTAREJ",
+            ),
         ]
         created: dict[str, Application] = {}
-        for i, (key, status_value, id_prefix) in enumerate(status_specs):
+        for i, (key, status_value, stage_value, quota_status, id_prefix) in enumerate(status_specs):
             user = User(
                 nycu_id=f"del_student_{i}",
                 name=f"Delete Student {i}",
@@ -504,6 +538,8 @@ class TestAdminEndpoints:
                 user_id=user.id,
                 scholarship_type_id=scholarship.id,
                 status=status_value,
+                review_stage=stage_value,
+                quota_allocation_status=quota_status,
                 academic_year=113,
                 semester="first",
                 sub_type_selection_mode="single",
@@ -582,11 +618,23 @@ class TestAdminEndpoints:
         assert meta.get("scholarship_type_id") == scholarship_type_id
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("status_key", ["under_review", "approved", "rejected"])
-    async def test_delete_application_rejects_post_review_status(
-        self, admin_client, deletable_applications, status_key
-    ):
-        """Applications that have left the student-facing stage cannot be deleted."""
+    @pytest.mark.parametrize("status_key", ["under_review", "rejected", "college_ranked"])
+    async def test_delete_application_allowed_during_review(self, admin_client, deletable_applications, status_key):
+        """Review-stage rows (professor / college / ranked) are still pre-distribution and deletable."""
+        target = deletable_applications[status_key]
+
+        response = await admin_client.request(
+            "DELETE",
+            f"/api/v1/admin/applications/{target.id}",
+            json={"reason": "review-stage cleanup"},
+        )
+        assert response.status_code == 200
+        assert response.json()["data"]["id"] == target.id
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("status_key", ["approved", "quota_rejected"])
+    async def test_delete_application_rejects_post_distribution(self, admin_client, deletable_applications, status_key):
+        """Once distribution has run (approved, or quota-rejected with status untouched) deletion is refused."""
         target = deletable_applications[status_key]
 
         response = await admin_client.request(
@@ -598,7 +646,45 @@ class TestAdminEndpoints:
         body = response.json()
         # FastAPI wraps detail under message/error depending on handler; check either.
         detail = body.get("detail") or body.get("message") or ""
-        assert "學生申請階段" in detail
+        assert "分發階段" in detail
+
+    @pytest.mark.asyncio
+    async def test_delete_application_rejects_saved_allocation(self, admin_client, deletable_applications):
+        """A saved (not yet finalized) manual-distribution allocation already counts as 分發階段."""
+        from app.db.deps import get_db
+        from app.main import app as fastapi_app
+        from app.models.college_review import CollegeRanking, CollegeRankingItem
+
+        target = deletable_applications["college_ranked"]
+        db = await fastapi_app.dependency_overrides[get_db]().__anext__()
+        ranking = CollegeRanking(
+            scholarship_type_id=target.scholarship_type_id,
+            sub_type_code="nstc",
+            academic_year=113,
+            semester="first",
+            is_finalized=True,
+        )
+        db.add(ranking)
+        await db.commit()
+        await db.refresh(ranking)
+        db.add(
+            CollegeRankingItem(
+                ranking_id=ranking.id,
+                application_id=target.id,
+                rank_position=1,
+                is_allocated=True,
+                allocated_sub_type="nstc",
+                status="allocated",
+            )
+        )
+        await db.commit()
+
+        response = await admin_client.request(
+            "DELETE",
+            f"/api/v1/admin/applications/{target.id}",
+            json={"reason": "nope"},
+        )
+        assert response.status_code == 400
 
     @pytest.mark.asyncio
     async def test_delete_application_requires_nonempty_reason(self, admin_client, deletable_applications):

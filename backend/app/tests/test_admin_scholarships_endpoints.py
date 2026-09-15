@@ -177,6 +177,46 @@ class TestAdminScholarshipsEndpoints:
         assert "message" in body
         assert isinstance(body["data"], list)
 
+    @pytest.mark.asyncio
+    async def test_applications_carry_is_deletable_flag(self, login, admin, student, scholarship):
+        """Each row exposes `is_deletable`: true until 分發階段, false once distribution ran."""
+        from datetime import datetime, timezone
+
+        from app.models.application import Application, ApplicationStatus
+        from app.models.enums import ReviewStage
+
+        db = await _shared_db()
+        # Distinct academic years: one student may hold one application per (scholarship, year, semester).
+        specs = [
+            ("LIST-DEL-OK", ApplicationStatus.submitted.value, ReviewStage.professor_reviewed.value, None, 113),
+            ("LIST-DEL-NO", ApplicationStatus.approved.value, ReviewStage.quota_distributed.value, "allocated", 114),
+        ]
+        for app_id, status_value, stage_value, quota_status, academic_year in specs:
+            db.add(
+                Application(
+                    app_id=app_id,
+                    user_id=student.id,
+                    scholarship_type_id=scholarship.id,
+                    status=status_value,
+                    review_stage=stage_value,
+                    quota_allocation_status=quota_status,
+                    academic_year=academic_year,
+                    semester="first",
+                    sub_type_selection_mode="single",
+                    student_data={"std_cname": "測試", "std_stdcode": "310460099"},
+                    created_at=datetime.now(timezone.utc),
+                )
+            )
+        await db.commit()
+
+        c = login(admin)
+        resp = await c.get(f"/api/v1/admin/scholarships/{scholarship.id}/applications")
+        assert resp.status_code == 200
+        by_app_id = {row["app_id"]: row for row in resp.json()["data"]}
+        assert by_app_id["LIST-DEL-OK"]["is_deletable"] is True
+        assert by_app_id["LIST-DEL-OK"]["review_stage"] == ReviewStage.professor_reviewed.value
+        assert by_app_id["LIST-DEL-NO"]["is_deletable"] is False
+
     # ------------------------------------------------------------------
     # GET /scholarships/{scholarship_identifier}/audit-trail
     # ------------------------------------------------------------------

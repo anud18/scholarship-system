@@ -127,6 +127,9 @@ interface DashboardApplication {
   student_email?: string;
   status: string;
   status_name?: string;
+  review_stage?: string;
+  /** Server-computed: admin may hard-delete until the application enters 分發階段 */
+  is_deletable?: boolean;
   submitted_at?: string;
   days_waiting?: number;
   scholarship_subtype_list?: string[];
@@ -238,6 +241,8 @@ const transformApplicationData = (app: any): DashboardApplication => {
     scholarship_subtype_list: app.scholarship_subtype_list || [],
     status: app.status,
     status_name: app.status_name,
+    review_stage: app.review_stage,
+    is_deletable: app.is_deletable,
     submitted_at: app.submitted_at,
     days_waiting: app.days_waiting,
     created_at: app.created_at,
@@ -1198,8 +1203,8 @@ export function AdminScholarshipDashboard({
                           )}
                         </Button>
 
-                        {/* 刪除按鈕：僅限學生申請階段（草稿 / 已送出） */}
-                        {(app.status === "draft" || app.status === "submitted") && (
+                        {/* 刪除按鈕：進入分發階段前皆可刪除（is_deletable 由後端計算） */}
+                        {app.is_deletable === true && (
                           <Button
                             variant="outline"
                             size="sm"
@@ -1208,7 +1213,7 @@ export function AdminScholarshipDashboard({
                               setShowDeleteDialog(true);
                             }}
                             className="hover:bg-red-50 hover:border-red-300 hover:text-red-600"
-                            title="刪除申請（僅限學生申請階段）"
+                            title="刪除申請（分發階段前可刪除）"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>

@@ -1334,8 +1334,9 @@ export interface paths {
          * Delete Application
          * @description Hard-delete an application (admin only).
          *
-         *     Only allowed while the application is still in the student-facing stage
-         *     (draft / submitted). Once review has started the row must be preserved.
+         *     Allowed at any point BEFORE the application enters the 配額分發 stage
+         *     (see app.services.application_deletion_policy). Once an allocation has
+         *     been saved/finalized or a roster references it, the row must be preserved.
          *
          *     Performs a cascade delete:
          *     - Removes related CollegeRankingItem and PaymentRosterItem rows explicitly.

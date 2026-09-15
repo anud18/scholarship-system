@@ -129,6 +129,10 @@ export interface Application {
    *  review but misses the quota cut keeps its original `status` and only
    *  advances `review_stage` to `quota_distributed`. */
   review_stage?: string;
+  /** Server-computed on the admin 申請案件列表: admin may hard-delete this
+   *  application until it enters 分發階段 (saved/finalized allocation or
+   *  roster entry). Absent on other list endpoints. */
+  is_deletable?: boolean;
   is_renewal?: boolean;
   /** 續領年份 (民國年，如 113)；批次匯入指定或承接自前一申請 */
   renewal_year?: number | null;
