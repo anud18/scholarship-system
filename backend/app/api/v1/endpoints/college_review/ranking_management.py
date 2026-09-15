@@ -1343,13 +1343,17 @@ async def export_ranking_excel(
     encoded = _url_quote(base_filename, safe="")
 
     # 7. Render the workbook (xlsx) or PDF — both share the same columns/rows.
+    # The blank 學院用印 column is for stamping the finished ranking, so the
+    # fill-in import template leaves it out.
     service = CollegeRankingExportService()
+    include_college_seal = not template
     if format == "pdf":
         payload = service.build_pdf(
             rows=export_rows,
             dynamic_fields=dynamic_fields,
             sub_type_labels=sub_type_labels,
             title=title,
+            include_college_seal=include_college_seal,
         )
         media_type = "application/pdf"
     else:
@@ -1359,6 +1363,7 @@ async def export_ranking_excel(
             sub_type_labels=sub_type_labels,
             title=title,
             sheet_name=sheet_name,
+            include_college_seal=include_college_seal,
         )
         media_type = XLSX_MEDIA_TYPE
 
