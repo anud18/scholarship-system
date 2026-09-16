@@ -17,7 +17,7 @@ Steps:
    so NULLs cannot bypass uniqueness.
 
 Revision ID: college_ranking_single_001
-Revises: add_fixed_key_columns_001
+Revises: align_academy_names_003
 Create Date: 2026-09-16
 """
 
@@ -27,7 +27,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "college_ranking_single_001"
-down_revision = "add_fixed_key_columns_001"
+down_revision = "align_academy_names_003"
 branch_labels = None
 depends_on = None
 
