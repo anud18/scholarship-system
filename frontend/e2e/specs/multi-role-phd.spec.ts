@@ -31,6 +31,7 @@ import { loginAs } from "../helpers/auth";
 import { apiAs } from "../helpers/api";
 import {
   deleteApplicationCascade,
+  deleteCollegeRankings,
   getActiveConfig,
   getApplication,
   getReviews,
@@ -170,6 +171,15 @@ test.describe("博士生多角色審核鏈 | Multi-role PhD review chain", { tag
     const collegeLogin = await loginAs(browser, "cs_college");
     pushTrace(runState, collegeLogin.traceId);
 
+    // A college owns ONE ranking per period: drop C's leftover from a prior
+    // run so the create below yields a fresh row that includes this app.
+    await deleteCollegeRankings({
+      scholarshipTypeId: config.scholarship_type_id,
+      subType: SUB_TYPE,
+      academicYear: config.academic_year,
+      semester: config.semester,
+      collegeCode: "C", // cs_college.college_code in seed data
+    });
     const rankingRes = await apiAs<{
       success: boolean;
       data: { id: number; sub_type_code: string };
@@ -178,7 +188,6 @@ test.describe("博士生多角色審核鏈 | Multi-role PhD review chain", { tag
       sub_type_code: SUB_TYPE,
       academic_year: config.academic_year,
       semester: config.semester,
-      force_new: true,
     });
     pushTrace(runState, rankingRes.traceId);
     expect(

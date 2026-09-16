@@ -68,8 +68,10 @@ class CollegeRanking(Base):
     academic_year = Column(Integer, nullable=False)
     semester = Column(String(20))  # Can be null for yearly scholarships
     # College that owns this ranking. A ranking is scoped per (type, sub_type, year,
-    # semester, college): each college's reviewers share one ranking of their own
-    # college's applications. NULL only for admin/super_admin global rankings.
+    # semester, college): each college's reviewers share ONE ranking of their own
+    # college's applications — a college can never hold several rankings for the
+    # same period (enforced by uq_college_rankings_single_per_college below).
+    # NULL only for admin/super_admin global rankings.
     college_code = Column(String(10), nullable=True, index=True)
 
     # Ranking metadata
@@ -303,6 +305,19 @@ Index(
     "ix_college_rankings_status_finalized",
     CollegeRanking.ranking_status,
     CollegeRanking.is_finalized,
+)
+# One ranking per college per (scholarship type, sub-type, year, semester).
+# Yearly rankings store semester as NULL (legacy rows may hold "yearly") and
+# admin global rankings store college_code as NULL, so both are coalesced to a
+# sentinel — plain NULLs would be distinct and defeat the uniqueness.
+Index(
+    "uq_college_rankings_single_per_college",
+    CollegeRanking.scholarship_type_id,
+    CollegeRanking.sub_type_code,
+    CollegeRanking.academic_year,
+    func.coalesce(CollegeRanking.semester, "yearly"),
+    func.coalesce(CollegeRanking.college_code, ""),
+    unique=True,
 )
 
 # Index for ranking items

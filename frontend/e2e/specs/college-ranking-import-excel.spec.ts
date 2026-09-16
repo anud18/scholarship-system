@@ -13,7 +13,7 @@
  * Flow:
  *   beforeAll:
  *     1. csphd0001 submits phd/nstc application
- *     2. cs_college creates ranking (force_new=true) — auto-includes the app
+ *     2. cs_college creates ranking (after dropping C's leftover) — auto-includes the app
  *   Test 1: GET ranking → items array has csphd0001, college_rejected=false
  *   Test 2: POST import-excel [rank=1, full roster] → all rows updated, rejected_count=0
  *   Test 3: POST import-excel [rank="N", full roster] → all rows updated, rejected_count=1
@@ -25,7 +25,12 @@
 import { test, expect } from "@playwright/test";
 import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { apiAs } from "../helpers/api";
-import { deleteApplicationCascade, getActiveConfig, pool } from "../helpers/db";
+import {
+  deleteApplicationCascade,
+  deleteCollegeRankings,
+  getActiveConfig,
+  pool,
+} from "../helpers/db";
 import {
   attachRunState,
   newRunState,
@@ -39,6 +44,7 @@ const STUDENT_NYCU_ID = "csphd0001";
 const STUDENT_STD_CODE = "csphd0001"; // std_stdcode returned by mock SIS API
 const STUDENT_NAME = "王博士研究生"; // std_cname returned by mock SIS API
 const COLLEGE_NYCU_ID = "cs_college";
+const COLLEGE_CODE = "C"; // cs_college.college_code in seed data
 const SCHOLARSHIP_CODE = "phd";
 const SUB_TYPE = "nstc";
 
@@ -74,8 +80,8 @@ test.describe("學院排名 Excel 匯入 | College ranking import-excel @nightly
    * Build an import payload covering EVERY student in the ranking — the
    * backend strictly requires the import set to equal the ranking's
    * application set (排名連續、學號完全吻合). Against the dev seed the ranking
-   * only contains csphd0001, but on the staging-replica lane the force_new
-   * ranking sweeps in the real staging applications for the same
+   * only contains csphd0001, but on the staging-replica lane the freshly
+   * created ranking sweeps in the real staging applications for the same
    * (scholarship, year), so a single-row payload 422s with
    * 「以下學號未包含在匯入檔案中」.
    */
@@ -129,29 +135,16 @@ test.describe("學院排名 Excel 匯入 | College ranking import-excel @nightly
       await deleteApplicationCascade(app_id).catch(() => undefined);
     }
 
-    // Pre-clean any unfinalized nstc rankings so force_new=true always
-    // creates a fresh row (avoids stale-state interference from prior runs).
-    await pool
-      .query(
-        `DELETE FROM college_ranking_items
-           WHERE ranking_id IN (
-             SELECT id FROM college_rankings
-              WHERE scholarship_type_id = $1
-                AND sub_type_code = $2
-                AND is_finalized = false
-           )`,
-        [config.scholarship_type_id, SUB_TYPE],
-      )
-      .catch(() => undefined);
-    await pool
-      .query(
-        `DELETE FROM college_rankings
-           WHERE scholarship_type_id = $1
-             AND sub_type_code = $2
-             AND is_finalized = false`,
-        [config.scholarship_type_id, SUB_TYPE],
-      )
-      .catch(() => undefined);
+    // Pre-clean college C's nstc ranking for this period. A college owns ONE
+    // ranking per period, so a leftover from a prior run would be returned
+    // (without csphd0001's new application) instead of a fresh row.
+    await deleteCollegeRankings({
+      scholarshipTypeId: config.scholarship_type_id,
+      subType: SUB_TYPE,
+      academicYear: config.academic_year,
+      semester: config.semester,
+      collegeCode: COLLEGE_CODE,
+    });
 
     const studentToken = await getApiToken(STUDENT_NYCU_ID);
     collegeToken = await getApiToken(COLLEGE_NYCU_ID);
@@ -176,7 +169,7 @@ test.describe("學院排名 Excel 匯入 | College ranking import-excel @nightly
     fixtureAppDbId = createRes.body.data.id;
     fixtureAppId = createRes.body.data.app_id;
 
-    // 2. cs_college creates ranking (force_new=true → always a fresh row).
+    // 2. cs_college creates its ranking (fresh row — pre-cleaned above).
     // The service auto-includes csphd0001's submitted application because
     // std_academyno="C" matches cs_college.college_code="C" and
     // ApplicationStatus.submitted is in the valid_ranking_statuses list.
@@ -188,7 +181,6 @@ test.describe("學院排名 Excel 匯入 | College ranking import-excel @nightly
       sub_type_code: SUB_TYPE,
       academic_year: config.academic_year,
       semester: config.semester,
-      force_new: true,
     });
     if (!rankRes.ok || !rankRes.body.success) {
       throw new Error(

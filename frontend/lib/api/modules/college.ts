@@ -45,11 +45,11 @@ async function patchScholarshipConfigToggle<T>(
   return resp.json();
 }
 
+// A college owns ONE ranking per (scholarship, sub-type, year, semester): the
+// backend returns the existing ranking (data.reused = true) instead of creating
+// another, so there is no force_new escape hatch.
 type CreateRankingRequest =
   SchemaComponents["schemas"]["Body_create_ranking_api_v1_college_review_rankings_post"];
-type CreateRankingInput = Omit<CreateRankingRequest, "force_new"> & {
-  force_new?: boolean;
-};
 
 export interface DistributionStudent {
   student_number: string;
@@ -163,16 +163,12 @@ export function createCollegeApi() {
      * Type-safe: Request body validated against OpenAPI
      */
     createRanking: async (
-      data: CreateRankingInput
+      data: CreateRankingRequest
     ): Promise<ApiResponse<unknown>> => {
-      const payload: CreateRankingRequest = {
-        ...data,
-        force_new: data.force_new ?? false,
-      };
       const response = await typedClient.raw.POST(
         "/api/v1/college-review/rankings",
         {
-          body: payload,
+          body: data,
         }
       );
       return toApiResponse<unknown>(response);
