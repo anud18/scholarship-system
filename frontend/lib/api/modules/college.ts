@@ -623,6 +623,32 @@ export function createCollegeApi() {
       ),
 
     /**
+     * College: whether admin has opened 補充匯入 on ANY active configuration.
+     * GET /api/v1/college-review/supplementary-import/enabled
+     *
+     * Drives the tab-level gate; per-period detail comes from
+     * getSupplementaryImportAvailability.
+     */
+    getSupplementaryImportEnabled: async (): Promise<
+      ApiResponse<{ enabled: boolean }>
+    > => {
+      const token = typedClient.getToken();
+      const resp = await fetch(
+        "/api/v1/college-review/supplementary-import/enabled",
+        {
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        }
+      );
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => null);
+        throw new Error(err?.message || err?.detail || "查詢補充匯入開放狀態失敗");
+      }
+      return resp.json();
+    },
+
+    /**
      * College: check whether 補充匯入 is open for a period.
      * GET /api/v1/college-review/supplementary-import/availability
      */

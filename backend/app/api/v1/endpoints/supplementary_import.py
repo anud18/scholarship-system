@@ -128,6 +128,35 @@ async def _assert_scholarship_permission(db: AsyncSession, current_user: User, s
         )
 
 
+@router.get("/enabled")
+async def get_supplementary_import_enabled(
+    current_user: User = Depends(require_college),
+    db: AsyncSession = Depends(get_db),
+):
+    """查詢是否有任一獎學金配置已開放補充匯入。
+
+    供前端決定是否顯示學院的「補充匯入」分頁：管理員未在任何配置開啟時，
+    整個入口隱藏；開啟後，各學年期的細節仍由 /availability 判斷。
+
+    **權限**: 僅限學院角色
+    """
+    stmt = (
+        select(ScholarshipConfiguration.id)
+        .where(
+            ScholarshipConfiguration.is_active.is_(True),
+            ScholarshipConfiguration.allow_supplementary_import.is_(True),
+        )
+        .limit(1)
+    )
+    is_enabled = (await db.execute(stmt)).scalar_one_or_none() is not None
+
+    return ApiResponse(
+        success=True,
+        message="查詢成功",
+        data={"enabled": is_enabled},
+    )
+
+
 @router.get("/availability")
 async def get_supplementary_import_availability(
     scholarship_type: str = _SCHOLARSHIP_TYPE_QUERY,

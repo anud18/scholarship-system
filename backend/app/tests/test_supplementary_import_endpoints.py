@@ -107,6 +107,7 @@ async def college_grant(db: AsyncSession, college_user: User, scholarship: Schol
 
 UPLOAD_URL = "/api/v1/college-review/supplementary-import/upload"
 AVAILABILITY_URL = "/api/v1/college-review/supplementary-import/availability"
+ENABLED_URL = "/api/v1/college-review/supplementary-import/enabled"
 PERIOD_QUERY = {"scholarship_type": "phd_supp_test", "academic_year": 114, "semester": "yearly"}
 
 
@@ -151,6 +152,57 @@ class TestAdminConfigToggle:
         finally:
             app.dependency_overrides.pop(require_admin, None)
         assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+class TestSupplementaryImportEnabled:
+    """The college 補充匯入 tab is shown only while admin has opened the flag on
+    at least one configuration — this endpoint is what the tab list consults."""
+
+    async def _fetch(self, client: AsyncClient, college_user: User) -> bool:
+        app.dependency_overrides[require_college] = lambda: college_user
+        try:
+            resp = await client.get(ENABLED_URL)
+        finally:
+            app.dependency_overrides.pop(require_college, None)
+        assert resp.status_code == 200, resp.text
+        return resp.json()["data"]["enabled"]
+
+    async def test_disabled_when_no_configuration_opens_it(
+        self,
+        client: AsyncClient,
+        db: AsyncSession,
+        college_user: User,
+        configuration: ScholarshipConfiguration,
+    ):
+        assert await self._fetch(client, college_user) is False
+
+    async def test_enabled_when_any_configuration_opens_it(
+        self,
+        client: AsyncClient,
+        db: AsyncSession,
+        college_user: User,
+        configuration: ScholarshipConfiguration,
+    ):
+        configuration.allow_supplementary_import = True
+        await db.commit()
+
+        assert await self._fetch(client, college_user) is True
+
+    async def test_ignores_inactive_configuration(
+        self,
+        client: AsyncClient,
+        db: AsyncSession,
+        college_user: User,
+        configuration: ScholarshipConfiguration,
+    ):
+        """An inactive configuration can never be imported into (availability
+        filters is_active too), so its stale flag must not surface the tab."""
+        configuration.allow_supplementary_import = True
+        configuration.is_active = False
+        await db.commit()
+
+        assert await self._fetch(client, college_user) is False
 
 
 @pytest.mark.asyncio

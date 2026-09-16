@@ -48,9 +48,17 @@ import { DevLoginPage } from "@/components/dev-login-page";
 import { SSOLoginPage } from "@/components/sso-login-page";
 import { useAdminDashboard } from "@/hooks/use-admin";
 import { useStudentHistoryVisibility } from "@/hooks/use-student-history-visibility";
+import { useSupplementaryImportEnabled } from "@/hooks/use-supplementary-import-enabled";
 import { User } from "@/types/user";
 import { verifySsoToken } from "@/lib/auth/verify-sso-token";
 import { logger } from "@/lib/utils/logger";
+
+// Tailwind needs the literal class names, so index by visible college tab count.
+const COLLEGE_TAB_GRID_CLASSES: Record<number, string> = {
+  1: "grid-cols-1",
+  2: "grid-cols-2",
+  3: "grid-cols-3",
+};
 
 export default function ScholarshipManagementSystem() {
   const [activeTab, setActiveTab] = useState("main");
@@ -128,6 +136,11 @@ export default function ScholarshipManagementSystem() {
   // 領獎紀錄查詢開放設定（管理者可分別關閉學生與學院的查詢入口）
   const { visibility: studentHistoryVisibility } = useStudentHistoryVisibility(
     isAuthenticated,
+  );
+
+  // 補充匯入入口：僅在管理員於任一獎學金配置開啟後才對學院顯示
+  const { isSupplementaryImportEnabled } = useSupplementaryImportEnabled(
+    isAuthenticated && user?.role === "college",
   );
 
   // 使用 admin dashboard hook
@@ -265,11 +278,14 @@ export default function ScholarshipManagementSystem() {
     }
 
     if (user.role === "college") {
-      // 領獎紀錄查詢 is admin-gated; without it the college keeps two tabs.
+      // 補充匯入 and 領獎紀錄查詢 are both admin-gated; 審核管理 is always there.
       const canQueryStudentHistory = studentHistoryVisibility.college_enabled;
+      const collegeTabCount =
+        1 + Number(isSupplementaryImportEnabled) + Number(canQueryStudentHistory);
+      const collegeGridClass = COLLEGE_TAB_GRID_CLASSES[collegeTabCount];
       return (
         <TabsList
-          className={`grid w-full ${canQueryStudentHistory ? "grid-cols-3" : "grid-cols-2"} bg-nycu-blue-50 border border-nycu-blue-200`}
+          className={`grid w-full ${collegeGridClass} bg-nycu-blue-50 border border-nycu-blue-200`}
         >
           <TabsTrigger
             value="main"
@@ -278,13 +294,15 @@ export default function ScholarshipManagementSystem() {
             <GraduationCap className="h-4 w-4" />
             審核管理
           </TabsTrigger>
-          <TabsTrigger
-            value="supplementary-import"
-            className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
-          >
-            <Upload className="h-4 w-4" />
-            補充匯入
-          </TabsTrigger>
+          {isSupplementaryImportEnabled && (
+            <TabsTrigger
+              value="supplementary-import"
+              className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
+            >
+              <Upload className="h-4 w-4" />
+              補充匯入
+            </TabsTrigger>
+          )}
           {canQueryStudentHistory && (
             <TabsTrigger
               value="student-history"
@@ -572,8 +590,8 @@ export default function ScholarshipManagementSystem() {
             </TabsContent>
           )}
 
-          {/* 補充匯入 - college 角色；匯入範圍由後端限制在本學院學生 */}
-          {user.role === "college" && (
+          {/* 補充匯入 - college 角色；需管理者於任一獎學金配置開放，匯入範圍由後端限制在本學院學生 */}
+          {user.role === "college" && isSupplementaryImportEnabled && (
             <TabsContent value="supplementary-import" className="space-y-4">
               <SupplementaryImportPanel locale={locale} />
             </TabsContent>

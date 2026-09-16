@@ -5598,6 +5598,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/college-review/supplementary-import/enabled": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Supplementary Import Enabled
+         * @description 查詢是否有任一獎學金配置已開放補充匯入。
+         *
+         *     供前端決定是否顯示學院的「補充匯入」分頁：管理員未在任何配置開啟時，
+         *     整個入口隱藏；開啟後，各學年期的細節仍由 /availability 判斷。
+         *
+         *     **權限**: 僅限學院角色
+         */
+        get: operations["get_supplementary_import_enabled_api_v1_college_review_supplementary_import_enabled_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/college-review/supplementary-import/availability": {
         parameters: {
             query?: never;
@@ -20723,6 +20748,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_supplementary_import_enabled_api_v1_college_review_supplementary_import_enabled_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };
