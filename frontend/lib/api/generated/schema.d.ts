@@ -5607,10 +5607,14 @@ export interface paths {
         };
         /**
          * Get Supplementary Import Enabled
-         * @description 查詢是否有任一獎學金配置已開放補充匯入。
+         * @description 查詢是否有任一「本學院可操作」的獎學金配置已開放補充匯入。
          *
          *     供前端決定是否顯示學院的「補充匯入」分頁：管理員未在任何配置開啟時，
          *     整個入口隱藏；開啟後，各學年期的細節仍由 /availability 判斷。
+         *
+         *     只看呼叫者有權限（AdminScholarship）且啟用中的獎學金類型——其他獎學金的
+         *     開關對這個學院來說無法使用，顯示分頁只會導向空的下拉選單。未綁定學院的
+         *     帳號同理回 enabled=false，而非 403，讓前端安靜地隱藏入口。
          *
          *     **權限**: 僅限學院角色
          */

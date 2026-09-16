@@ -72,7 +72,7 @@ describe("useSupplementaryImportEnabled", () => {
     expect(result.current.isSupplementaryImportEnabled).toBe(false);
   });
 
-  it("falls back to shown when the lookup fails", async () => {
+  it("stays hidden when the lookup fails, matching the server default", async () => {
     getEnabled.mockRejectedValue(new Error("network down"));
 
     const { result } = renderHook(() => useSupplementaryImportEnabled(), {
@@ -80,9 +80,9 @@ describe("useSupplementaryImportEnabled", () => {
     });
 
     await waitFor(() => expect(result.current.error).toBeTruthy());
-    // The panel re-checks every period server-side, so a blip costs an
-    // explanatory message rather than removing the college's tab.
-    expect(result.current.isSupplementaryImportEnabled).toBe(true);
+    // The flag is off unless admin opted in, so a failed lookup must not
+    // surface a tab the admin may have deliberately closed.
+    expect(result.current.isSupplementaryImportEnabled).toBe(false);
     expect(result.current.isLoaded).toBe(false);
   });
 

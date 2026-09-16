@@ -157,7 +157,8 @@ class TestAdminConfigToggle:
 @pytest.mark.asyncio
 class TestSupplementaryImportEnabled:
     """The college 補充匯入 tab is shown only while admin has opened the flag on
-    at least one configuration — this endpoint is what the tab list consults."""
+    at least one configuration the college may operate — this endpoint is what
+    the tab list consults."""
 
     async def _fetch(self, client: AsyncClient, college_user: User) -> bool:
         app.dependency_overrides[require_college] = lambda: college_user
@@ -174,20 +175,36 @@ class TestSupplementaryImportEnabled:
         db: AsyncSession,
         college_user: User,
         configuration: ScholarshipConfiguration,
+        college_grant: None,
     ):
         assert await self._fetch(client, college_user) is False
 
-    async def test_enabled_when_any_configuration_opens_it(
+    async def test_enabled_when_a_granted_configuration_opens_it(
+        self,
+        client: AsyncClient,
+        db: AsyncSession,
+        college_user: User,
+        configuration: ScholarshipConfiguration,
+        college_grant: None,
+    ):
+        configuration.allow_supplementary_import = True
+        await db.commit()
+
+        assert await self._fetch(client, college_user) is True
+
+    async def test_ignores_configuration_the_college_is_not_granted(
         self,
         client: AsyncClient,
         db: AsyncSession,
         college_user: User,
         configuration: ScholarshipConfiguration,
     ):
+        """Without an AdminScholarship grant the scholarship never appears in the
+        panel's dropdown, so its open flag must not surface the tab."""
         configuration.allow_supplementary_import = True
         await db.commit()
 
-        assert await self._fetch(client, college_user) is True
+        assert await self._fetch(client, college_user) is False
 
     async def test_ignores_inactive_configuration(
         self,
@@ -195,6 +212,7 @@ class TestSupplementaryImportEnabled:
         db: AsyncSession,
         college_user: User,
         configuration: ScholarshipConfiguration,
+        college_grant: None,
     ):
         """An inactive configuration can never be imported into (availability
         filters is_active too), so its stale flag must not surface the tab."""
@@ -203,6 +221,31 @@ class TestSupplementaryImportEnabled:
         await db.commit()
 
         assert await self._fetch(client, college_user) is False
+
+    async def test_disabled_for_unbound_college_without_403(
+        self,
+        client: AsyncClient,
+        db: AsyncSession,
+        configuration: ScholarshipConfiguration,
+        scholarship: ScholarshipType,
+    ):
+        """An unbound account 403s on every import action, so showing it the tab
+        would be a dead end — answer enabled=false quietly instead."""
+        configuration.allow_supplementary_import = True
+        unbound = User(
+            nycu_id="col_unbound_enabled",
+            name="Unbound",
+            email="unbound_enabled@nycu.edu.tw",
+            user_type=UserType.employee,
+            role=UserRole.college,
+            college_code=None,
+        )
+        db.add(unbound)
+        await db.flush()
+        db.add(AdminScholarship(admin_id=unbound.id, scholarship_id=scholarship.id))
+        await db.commit()
+
+        assert await self._fetch(client, unbound) is False
 
 
 @pytest.mark.asyncio

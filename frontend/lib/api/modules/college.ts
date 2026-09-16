@@ -632,20 +632,11 @@ export function createCollegeApi() {
     getSupplementaryImportEnabled: async (): Promise<
       ApiResponse<{ enabled: boolean }>
     > => {
-      const token = typedClient.getToken();
-      const resp = await fetch(
+      const response = await typedClient.raw.GET(
         "/api/v1/college-review/supplementary-import/enabled",
-        {
-          headers: {
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-        }
+        {}
       );
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => null);
-        throw new Error(err?.message || err?.detail || "查詢補充匯入開放狀態失敗");
-      }
-      return resp.json();
+      return toApiResponse<{ enabled: boolean }>(response);
     },
 
     /**

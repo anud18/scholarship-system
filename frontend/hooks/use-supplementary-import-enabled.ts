@@ -7,12 +7,15 @@ const ENABLED_KEY = "/college-review/supplementary-import/enabled";
 
 /**
  * Whether admin has opened 補充匯入 on at least one active scholarship
- * configuration. The college 補充匯入 tab exists only while this is true.
+ * configuration this college may operate. The college 補充匯入 tab exists only
+ * while this is true.
  *
- * Hidden while the request is in flight so the tab never flashes in for a
- * college the admin has shut out, but shown if the lookup itself failed: the
- * panel behind it re-checks every period server-side (/availability and the
- * upload's 403), so a network blip costs an explanatory message, never access.
+ * Fails closed: the flag defaults to off server-side and the tab exists only
+ * after a deliberate admin opt-in, so while loading and on a failed lookup the
+ * tab stays hidden rather than flashing in against the admin's decision.
+ *
+ * Focus revalidation is inherited from the global SWR config so an admin
+ * toggle reaches an already-open college session on the next focus.
  */
 export function useSupplementaryImportEnabled(isEnabled: boolean = true) {
   const { data, error, isLoading, mutate } = useSWR<boolean>(
@@ -23,14 +26,11 @@ export function useSupplementaryImportEnabled(isEnabled: boolean = true) {
         throw new Error(response.message || "無法取得補充匯入開放狀態");
       }
       return response.data.enabled;
-    },
-    { revalidateOnFocus: false }
+    }
   );
 
   return {
-    // SWR keeps the last good `data` across a failed revalidation, so the
-    // error fallback only applies when nothing was ever fetched.
-    isSupplementaryImportEnabled: data ?? (error ? true : false),
+    isSupplementaryImportEnabled: data ?? false,
     /** True only once a real answer has arrived. */
     isLoaded: data !== undefined,
     isLoading,
@@ -38,7 +38,3 @@ export function useSupplementaryImportEnabled(isEnabled: boolean = true) {
     mutate,
   };
 }
-
-export const supplementaryImportEnabledKeys = {
-  enabled: ENABLED_KEY,
-};

@@ -134,14 +134,32 @@ export default function ScholarshipManagementSystem() {
     useLanguagePreference(user?.role || "student", "zh");
 
   // 領獎紀錄查詢開放設定（管理者可分別關閉學生與學院的查詢入口）
-  const { visibility: studentHistoryVisibility } = useStudentHistoryVisibility(
-    isAuthenticated,
-  );
+  const {
+    visibility: studentHistoryVisibility,
+    isLoaded: isStudentHistoryGateLoaded,
+  } = useStudentHistoryVisibility(isAuthenticated);
 
   // 補充匯入入口：僅在管理員於任一獎學金配置開啟後才對學院顯示
-  const { isSupplementaryImportEnabled } = useSupplementaryImportEnabled(
-    isAuthenticated && user?.role === "college",
-  );
+  const {
+    isSupplementaryImportEnabled,
+    isLoaded: isSupplementaryImportGateLoaded,
+  } = useSupplementaryImportEnabled(isAuthenticated && user?.role === "college");
+
+  // 若目前所在的學院分頁已確認被管理員關閉，退回審核管理，避免留下空白內容區
+  // （只在拿到真正的答案後判斷，讓 hash 導向在載入期間不會被打斷）
+  const isOnHiddenCollegeTab =
+    user?.role === "college" &&
+    ((activeTab === "supplementary-import" &&
+      isSupplementaryImportGateLoaded &&
+      !isSupplementaryImportEnabled) ||
+      (activeTab === "student-history" &&
+        isStudentHistoryGateLoaded &&
+        !studentHistoryVisibility.college_enabled));
+  useEffect(() => {
+    if (isOnHiddenCollegeTab) {
+      setActiveTab("main");
+    }
+  }, [isOnHiddenCollegeTab]);
 
   // 使用 admin dashboard hook
   const {
@@ -282,7 +300,8 @@ export default function ScholarshipManagementSystem() {
       const canQueryStudentHistory = studentHistoryVisibility.college_enabled;
       const collegeTabCount =
         1 + Number(isSupplementaryImportEnabled) + Number(canQueryStudentHistory);
-      const collegeGridClass = COLLEGE_TAB_GRID_CLASSES[collegeTabCount];
+      const collegeGridClass =
+        COLLEGE_TAB_GRID_CLASSES[collegeTabCount] ?? "grid-cols-1";
       return (
         <TabsList
           className={`grid w-full ${collegeGridClass} bg-nycu-blue-50 border border-nycu-blue-200`}
