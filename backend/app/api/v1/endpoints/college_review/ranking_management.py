@@ -437,14 +437,12 @@ async def get_ranking(
                 for dept in departments
             }
 
-        # Batch load review status for all applications (performance optimization)
+        # Load review status for every application in ONE query. This used to be
+        # one round-trip per ranking item, which made large rankings slow to open.
         review_service = ReviewService(db)
-        review_status_cache = {}
-        for item in ranking.items:
-            if item.application_id and item.application_id not in review_status_cache:
-                review_status_cache[item.application_id] = await review_service.get_subtype_cumulative_status(
-                    item.application_id
-                )
+        review_status_cache = await review_service.get_subtype_cumulative_status_bulk(
+            item.application_id for item in ranking.items if item.application_id
+        )
 
         logger.info(f"Loaded review status for {len(review_status_cache)} applications in ranking {ranking_id}")
 
