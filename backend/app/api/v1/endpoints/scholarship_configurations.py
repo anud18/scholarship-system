@@ -37,11 +37,20 @@ from app.schemas.scholarship_configuration import (
     WhitelistResponse,
     WhitelistStudentInfo,
 )
+from app.services.sub_type_labels import normalize_sub_type_labels
 from app.services.whitelist_excel_service import whitelist_excel_service
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _parse_sub_type_labels(raw: Any) -> Optional[Dict[str, Dict[str, str]]]:
+    """Validate the admin payload's per-year sub-type labels; malformed → HTTP 400."""
+    try:
+        return normalize_sub_type_labels(raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 async def _validate_shared_quota_sources(
@@ -930,6 +939,7 @@ async def create_scholarship_configuration(
             effective_end_date=parse_date_field(config_data.get("effective_end_date")),
             version=config_data.get("version", "1.0"),
             project_numbers=config_data.get("project_numbers"),
+            sub_type_labels=_parse_sub_type_labels(config_data.get("sub_type_labels")),
             shared_quota_sources=config_data.get("shared_quota_sources"),
             created_by=current_user.id,
         )
@@ -1009,6 +1019,7 @@ async def get_scholarship_configuration(
             "total_quota": config.total_quota,
             "quotas": config.quotas,
             "project_numbers": config.project_numbers,
+            "sub_type_labels": config.sub_type_labels,
             "shared_quota_sources": config.shared_quota_sources,
             "renewal_application_start_date": (
                 config.renewal_application_start_date.isoformat() if config.renewal_application_start_date else None
@@ -1184,6 +1195,9 @@ async def update_scholarship_configuration(
         if "project_numbers" in config_data:
             config.project_numbers = config_data["project_numbers"]
             flag_modified(config, "project_numbers")
+        if "sub_type_labels" in config_data:
+            config.sub_type_labels = _parse_sub_type_labels(config_data["sub_type_labels"])
+            flag_modified(config, "sub_type_labels")
         if "shared_quota_sources" in config_data:
             # Validate links against the config's (possibly updated) academic_year.
             requesting_year = config_data.get("academic_year", config.academic_year)
@@ -1412,6 +1426,11 @@ async def duplicate_scholarship_configuration(
             total_quota=source_config.total_quota,
             quotas=(source_config.quotas.copy() if source_config.quotas else None),
             project_numbers=(source_config.project_numbers.copy() if source_config.project_numbers else None),
+            sub_type_labels=(
+                {code: dict(label) for code, label in source_config.sub_type_labels.items()}
+                if source_config.sub_type_labels
+                else None
+            ),
             shared_quota_sources=(
                 [dict(s) for s in source_config.shared_quota_sources] if source_config.shared_quota_sources else None
             ),
@@ -1518,6 +1537,7 @@ async def list_scholarship_configurations(
                 "total_quota": config.total_quota,
                 "quotas": config.quotas,
                 "project_numbers": config.project_numbers,
+                "sub_type_labels": config.sub_type_labels,
                 "shared_quota_sources": config.shared_quota_sources,
                 "is_active": config.is_active,
                 "allow_supplementary_import": config.allow_supplementary_import,

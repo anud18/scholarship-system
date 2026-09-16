@@ -159,6 +159,8 @@ async def export_department_summary_single(
         db,
         scholarship_type=stype,
         applications=apps,
+        academic_year=academic_year,
+        semester=normalised_semester,
     )
 
     # Build rows with rank_position=None — empty cell in column 2
@@ -356,6 +358,8 @@ async def export_department_summary_bulk(
         db,
         scholarship_type=stype,
         applications=apps,
+        academic_year=academic_year,
+        semester=normalised_semester,
     )
 
     scholarship_name = stype.name or "獎學金"

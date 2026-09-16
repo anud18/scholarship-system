@@ -1305,6 +1305,8 @@ async def export_ranking_excel(
         db,
         scholarship_type=ranking.scholarship_type,
         applications=apps_in_ranking,
+        academic_year=ranking.academic_year,
+        semester=normalize_semester_value(ranking.semester),
     )
 
     export_rows = [
