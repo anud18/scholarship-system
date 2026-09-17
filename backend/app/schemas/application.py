@@ -575,6 +575,10 @@ class ApplicationListResponse(BaseModel):
     status: str
     status_name: Optional[str]
     review_stage: Optional[str] = None  # 審核階段（用於前端進度顯示）
+    is_deletable: Optional[bool] = Field(
+        None,
+        description="管理員是否可刪除此申請（尚未進入分發階段）；僅 admin 申請案件列表填寫",
+    )
     is_renewal: bool = Field(False, description="是否為續領申請")
     renewal_year: Optional[int] = Field(None, description="續領年份 (民國年，如 113)；批次匯入指定，或承接自前一申請")
     previous_application_id: Optional[int] = Field(None, description="承接的前一份核可申請 ID（續領申請填）")

@@ -63,6 +63,11 @@ _STATIC_COLUMNS: List[Tuple[str, float]] = [
 STATIC_HEADERS: List[str] = [label for label, _ in _STATIC_COLUMNS]
 _STATIC_COL_WEIGHTS: List[float] = [weight for _, weight in _STATIC_COLUMNS]
 
+# Trailing blank column the college stamps on the printed ranking. Only the
+# ranking export opts in (include_college_seal=True); 申請總表 exports omit it.
+COLLEGE_SEAL_HEADER = "學院用印"
+_COLLEGE_SEAL_COL_WEIGHT = 1.5
+
 
 # std_enrolltype codes that indicate 逕讀博士 (direct-track PhD)
 DIRECT_PHD_ENROLLTYPE_CODES = {8, 9, 10, 11}
@@ -97,13 +102,14 @@ class CollegeRankingExportService:
         sub_type_labels: Dict[str, str],
         title: str,
         sheet_name: str,
+        include_college_seal: bool = False,
     ) -> bytes:
         wb = Workbook()
         ws = wb.active
         ws.title = sheet_name
 
         sorted_dynamic = self._sort_dynamic(dynamic_fields)
-        headers = self._headers(sorted_dynamic)
+        headers = self._headers(sorted_dynamic, include_college_seal)
         total_cols = len(headers)
 
         # Row 1: title (merged across all columns)
@@ -124,7 +130,8 @@ class CollegeRankingExportService:
         # Data rows — written from the same _row_cells used by the PDF export
         for idx, row in enumerate(rows, start=1):
             excel_row = idx + 2  # +2 because rows 1-2 are title/header
-            for col_idx, value in enumerate(self._row_cells(row, idx, sub_type_labels, sorted_dynamic), start=1):
+            cells = self._row_cells(row, idx, sub_type_labels, sorted_dynamic, include_college_seal)
+            for col_idx, value in enumerate(cells, start=1):
                 # SECURITY (#1081 G): neutralize spreadsheet formula injection from
                 # student-supplied free-text values before writing the cell.
                 ws.cell(row=excel_row, column=col_idx, value=sanitize_excel_cell(value))
@@ -145,6 +152,7 @@ class CollegeRankingExportService:
         dynamic_fields: List[DynamicFieldSpec],
         sub_type_labels: Dict[str, str],
         title: str,
+        include_college_seal: bool = False,
     ) -> bytes:
         """Render the same 學生資料彙整表 as an A4-landscape PDF.
 
@@ -156,11 +164,11 @@ class CollegeRankingExportService:
         ensure_cjk_font()
 
         sorted_dynamic = self._sort_dynamic(dynamic_fields)
-        headers = self._headers(sorted_dynamic)
+        headers = self._headers(sorted_dynamic, include_college_seal)
 
         page_width, page_height = landscape(A4)
         usable_width = page_width - (self._PDF_MARGIN_PT * 2)
-        col_widths = self._pdf_col_widths(headers, usable_width)
+        col_widths = self._pdf_col_widths(headers, usable_width, include_college_seal)
         # A reportlab Table cannot split ONE row across pages, so a single very
         # long free-text cell (e.g. a verbose dynamic field) would raise
         # LayoutError and fail the whole export. Cap each cell to the usable
@@ -192,7 +200,7 @@ class CollegeRankingExportService:
 
         data: List[list] = [[Paragraph(xml_escape(h), header_style) for h in headers]]
         for idx, row in enumerate(rows, start=1):
-            values = self._row_cells(row, idx, sub_type_labels, sorted_dynamic)
+            values = self._row_cells(row, idx, sub_type_labels, sorted_dynamic, include_college_seal)
             data.append(
                 [
                     KeepInFrame(
@@ -243,13 +251,17 @@ class CollegeRankingExportService:
     # weights in _STATIC_COL_WEIGHTS (derived from _STATIC_COLUMNS).
     _PDF_COL_WEIGHT_DEFAULT = 1.2
 
-    def _pdf_col_widths(self, headers: List[str], usable_width: float) -> List[float]:
-        # headers is always STATIC_HEADERS + dynamic, so the first N columns map
-        # index-for-index onto _STATIC_COL_WEIGHTS; the rest are dynamic.
+    def _pdf_col_widths(
+        self, headers: List[str], usable_width: float, include_college_seal: bool = False
+    ) -> List[float]:
+        # headers is always STATIC_HEADERS + dynamic (+ the seal column last when
+        # included), so the first N columns map index-for-index onto
+        # _STATIC_COL_WEIGHTS; the rest are dynamic.
         n_static = len(_STATIC_COL_WEIGHTS)
-        weights = [
-            _STATIC_COL_WEIGHTS[i] if i < n_static else self._PDF_COL_WEIGHT_DEFAULT for i in range(len(headers))
-        ]
+        n_dynamic = len(headers) - n_static - (1 if include_college_seal else 0)
+        weights = _STATIC_COL_WEIGHTS[: len(headers)] + [self._PDF_COL_WEIGHT_DEFAULT] * max(n_dynamic, 0)
+        if include_college_seal:
+            weights.append(_COLLEGE_SEAL_COL_WEIGHT)
         total = sum(weights) or 1.0
         return [usable_width * w / total for w in weights]
 
@@ -259,8 +271,9 @@ class CollegeRankingExportService:
     def _sort_dynamic(dynamic_fields: List[DynamicFieldSpec]) -> List[DynamicFieldSpec]:
         return sorted(dynamic_fields, key=lambda f: (f.display_order, f.field_name))
 
-    def _headers(self, sorted_dynamic: List[DynamicFieldSpec]) -> List[str]:
-        return STATIC_HEADERS + [(f.export_column_label or f.field_label) for f in sorted_dynamic]
+    def _headers(self, sorted_dynamic: List[DynamicFieldSpec], include_college_seal: bool = False) -> List[str]:
+        seal = [COLLEGE_SEAL_HEADER] if include_college_seal else []
+        return STATIC_HEADERS + [(f.export_column_label or f.field_label) for f in sorted_dynamic] + seal
 
     def _row_cells(
         self,
@@ -268,14 +281,16 @@ class CollegeRankingExportService:
         row_index: int,
         sub_type_labels: Dict[str, str],
         sorted_dynamic: List[DynamicFieldSpec],
+        include_college_seal: bool = False,
     ) -> List[Any]:
-        """Ordered cell values for one row: static columns then dynamic columns.
+        """Ordered cell values for one row: static, dynamic, then the blank seal column.
 
         The xlsx writer keeps the native int values (NO., rank, grade) for proper
         Excel typing; the PDF renderer stringifies them. Both share this list so
         the two formats render identical content.
         """
-        return self._static_values(row, row_index, sub_type_labels) + self._dynamic_values(row, sorted_dynamic)
+        seal = [""] if include_college_seal else []
+        return self._static_values(row, row_index, sub_type_labels) + self._dynamic_values(row, sorted_dynamic) + seal
 
     def _static_values(
         self,

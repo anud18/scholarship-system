@@ -25,9 +25,39 @@ from app.schemas.document_request import (
     StudentDocumentRequestResponse,
 )
 from app.services.application_audit_service import ApplicationAuditService
+from app.utils.college_scope import college_user_may_access
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _assert_staff_may_access_application(current_user: User, application: Application) -> None:
+    """Scope a staff user to the applications they are responsible for (#1404).
+
+    ``require_staff`` only proves the caller is staff. Without this guard any
+    professor or 學院 user could create, list and cancel 補件 requests on every
+    application by walking ids.
+
+    - admin / super_admin: unrestricted
+    - college: applications of their own college only
+    - professor: applications they are the assigned professor of only
+    """
+    if current_user.is_admin() or current_user.is_super_admin():
+        return
+    if current_user.is_college() and college_user_may_access(current_user, application):
+        return
+    if current_user.is_professor() and application.professor_id == current_user.id:
+        return
+
+    logger.warning(
+        "SECURITY: staff user attempted document-request access outside their scope",
+        extra={
+            "user_id": current_user.id,
+            "role": current_user.role.value,
+            "application_id": application.id,
+        },
+    )
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="您無權存取此申請的補件要求")
 
 
 @router.post("/applications/{application_id}/document-requests", status_code=status.HTTP_201_CREATED)
@@ -51,6 +81,8 @@ async def create_document_request(
 
     if not application:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+
+    _assert_staff_may_access_application(current_user, application)
 
     # Create document request
     document_request = DocumentRequest(
@@ -116,6 +148,8 @@ async def list_application_document_requests(
 
     if not application:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+
+    _assert_staff_may_access_application(current_user, application)
 
     # Build query for document requests
     stmt = (
@@ -304,7 +338,9 @@ async def cancel_document_request(
     """
     # Get document request with application
     stmt = (
-        select(DocumentRequest).options(joinedload(DocumentRequest.application)).where(DocumentRequest.id == request_id)
+        select(DocumentRequest)
+        .options(joinedload(DocumentRequest.application), joinedload(DocumentRequest.requested_by))
+        .where(DocumentRequest.id == request_id)
     )
     result = await db.execute(stmt)
     document_request = result.scalar_one_or_none()
@@ -312,12 +348,19 @@ async def cancel_document_request(
     if not document_request:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document request not found")
 
+    _assert_staff_may_access_application(current_user, document_request.application)
+
     # Verify request is in pending status
     if document_request.status != DocumentRequestStatus.pending.value:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot cancel request with status: {document_request.status}",
         )
+
+    # Read relationship data before commit: the commit expires the loaded User and
+    # re-loading it lazily afterwards is async IO outside a greenlet (MissingGreenlet).
+    requested_by_name = document_request.requested_by.name if document_request.requested_by else "Unknown"
+    app_id = document_request.application.app_id
 
     # Update status to cancelled
     document_request.status = DocumentRequestStatus.cancelled.value
@@ -333,7 +376,7 @@ async def cancel_document_request(
     # Create a custom audit log for cancellation
     await audit_service.log_status_update(
         application_id=document_request.application_id,
-        app_id=document_request.application.app_id,
+        app_id=app_id,
         old_status="document_request_pending",
         new_status="document_request_cancelled",
         user=current_user,
@@ -343,9 +386,9 @@ async def cancel_document_request(
 
     # Build response
     response_data = DocumentRequestResponse.model_validate(document_request)
-    response_data.requested_by_name = document_request.requested_by.name if document_request.requested_by else "Unknown"
+    response_data.requested_by_name = requested_by_name
     response_data.cancelled_by_name = current_user.name
-    response_data.application_app_id = document_request.application.app_id
+    response_data.application_app_id = app_id
 
     return {
         "success": True,

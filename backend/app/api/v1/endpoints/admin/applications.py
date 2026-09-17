@@ -29,7 +29,7 @@ from app.core.security import require_admin
 from app.db.deps import get_db
 from app.models.application import Application, ApplicationStatus
 from app.models.college_review import CollegeRankingItem
-from app.models.enums import Semester, ReviewStage
+from app.models.enums import Semester
 from app.models.payment_roster import PaymentRosterItem
 from app.models.scholarship import ScholarshipType
 from app.models.user import User
@@ -42,6 +42,7 @@ from app.schemas.application import (
 )
 from app.schemas.common import PaginatedResponse
 from app.services.application_audit_service import ApplicationAuditService
+from app.services.application_deletion_policy import DELETE_BLOCKED_MESSAGE, is_application_deletable
 from app.services.application_service import ApplicationService
 from app.services.bulk_approval_service import BulkApprovalService
 from app.utils.excel_safety import sanitize_excel_cell
@@ -606,17 +607,6 @@ class DeleteApplicationRequest(BaseModel):
     reason: str = Field(..., min_length=1, max_length=500)
 
 
-# Only applications still in the student-facing stage can be deleted.
-# Once review has started or a final decision is recorded, the application
-# must be preserved for audit/history purposes.
-DELETABLE_APPLICATION_STATUSES: frozenset[str] = frozenset(
-    {
-        ApplicationStatus.draft.value,
-        ApplicationStatus.submitted.value,
-    }
-)
-
-
 @router.delete("/applications/{id}")
 async def delete_application(
     id: int,
@@ -628,8 +618,9 @@ async def delete_application(
     """
     Hard-delete an application (admin only).
 
-    Only allowed while the application is still in the student-facing stage
-    (draft / submitted). Once review has started the row must be preserved.
+    Allowed at any point BEFORE the application enters the 配額分發 stage
+    (see app.services.application_deletion_policy). Once an allocation has
+    been saved/finalized or a roster references it, the row must be preserved.
 
     Performs a cascade delete:
     - Removes related CollegeRankingItem and PaymentRosterItem rows explicitly.
@@ -646,23 +637,8 @@ async def delete_application(
     if not app:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
 
-    app_status_value = app.status.value if hasattr(app.status, "value") else str(app.status)
-    if app_status_value not in DELETABLE_APPLICATION_STATUSES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="只有在學生申請階段（草稿或已送出）的申請才可刪除",
-        )
-
-    # G30 (#992): status alone is not enough — an application can sit at
-    # status=submitted while review_stage already advanced (e.g.
-    # professor_reviewed). Once ANY review work exists the row is part of the
-    # decision chain and must be preserved, exactly as the docstring promises.
-    stage_value = app.review_stage.value if hasattr(app.review_stage, "value") else app.review_stage
-    if stage_value and stage_value not in (ReviewStage.student_draft.value, ReviewStage.student_submitted.value):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="申請已進入審核流程（review_stage 已推進），不可刪除",
-        )
+    if not await is_application_deletable(db, app):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=DELETE_BLOCKED_MESSAGE)
 
     app_id_str = app.app_id
     reason = payload.reason.strip()

@@ -67,7 +67,7 @@ export default function ApplicationSubmitted({
           <strong>2. 學院審查</strong> - 學院將進行審核
         </Text>
         <Text className="text-sm text-gray-700 m-0">
-          <strong>3. 結果通知</strong> - 審核完成後將以電子郵件通知您
+          <strong>3. 結果通知</strong> - 審核完成後，相關結果將由各學院通知您
         </Text>
       </div>
 

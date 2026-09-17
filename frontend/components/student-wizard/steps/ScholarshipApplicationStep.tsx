@@ -51,9 +51,15 @@ import {
 } from "lucide-react";
 import api, {
   ScholarshipType,
+  ScholarshipFormConfig,
   ApplicationCreate,
   Application,
 } from "@/lib/api";
+import {
+  resolveFixedFormText,
+  type FixedFormText,
+} from "@/lib/utils/fixed-form-text";
+import { logger } from "@/lib/utils/logger";
 import { isApplyableScholarship } from "@/lib/scholarship-eligibility";
 import { clsx } from "@/lib/utils";
 import {
@@ -124,6 +130,23 @@ const applyForcedPreferenceOrder = (prefs: string[]): string[] => {
   ];
 };
 
+// 說明文字 of one built-in 個人資料 item, mirroring the help text rendering of
+// DynamicApplicationForm. Multi-line (the advisor notes are one per line).
+const FixedItemHelpText = ({
+  text,
+  className = "text-sm",
+}: {
+  text: string;
+  className?: string;
+}) => {
+  if (!text) return null;
+  return (
+    <p className={`${className} text-muted-foreground whitespace-pre-line`}>
+      {text}
+    </p>
+  );
+};
+
 export function ScholarshipApplicationStep({
   onBack,
   onComplete,
@@ -148,6 +171,10 @@ export function ScholarshipApplicationStep({
   >({});
   const [formProgress, setFormProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  // Form config of the scholarship whose 固定欄位/固定文件 text the 個人資料
+  // section shows — see the loader effect below.
+  const [fixedFormConfig, setFixedFormConfig] =
+    useState<ScholarshipFormConfig | null>(null);
 
   // Personal info states
   const {
@@ -222,7 +249,7 @@ export function ScholarshipApplicationStep({
       bankInfo: "郵局帳號資訊",
       accountNumber: "郵局局號加帳號共 14 碼(限本人)",
       accountNumberPlaceholder: "請輸入 14 碼郵局帳號",
-      bankDocument: "存摺封面照片",
+      bankDocument: "存摺封面",
       documentUploaded: "已上傳文件",
       preview: "預覽",
       deleteBankDoc: "刪除",
@@ -282,12 +309,7 @@ export function ScholarshipApplicationStep({
         degree: "學位",
         enrollment: "入學年度學期",
         personalInfo: "個人資料",
-        advisor: "指導教授",
-        advisorEmail: "教授 Email",
-        advisorNycuId: "指導教授本校人事編號",
-        postOfficeAccount: "郵局局號加帳號共 14 碼",
         uploadedDocuments: "上傳文件",
-        passbookCover: "存摺封面",
         uploaded: "已上傳",
         notUploaded: "未上傳",
         pending: "待上傳",
@@ -326,7 +348,7 @@ export function ScholarshipApplicationStep({
       bankInfo: "Post Office Account",
       accountNumber: "Post Office Account (14 digits)",
       accountNumberPlaceholder: "Enter 14-digit post office account number",
-      bankDocument: "Passbook Cover Photo",
+      bankDocument: "Passbook Cover",
       documentUploaded: "Document Uploaded",
       preview: "Preview",
       deleteBankDoc: "Delete",
@@ -391,12 +413,7 @@ export function ScholarshipApplicationStep({
         degree: "Degree",
         enrollment: "Enrollment",
         personalInfo: "Personal Information",
-        advisor: "Advisor",
-        advisorEmail: "Advisor Email",
-        advisorNycuId: "Advisor NYCU ID",
-        postOfficeAccount: "Post Office Account",
         uploadedDocuments: "Uploaded Documents",
-        passbookCover: "Passbook Cover",
         uploaded: "Uploaded",
         notUploaded: "Not uploaded",
         pending: "Pending",
@@ -420,6 +437,53 @@ export function ScholarshipApplicationStep({
   };
 
   const text = t[locale];
+
+  // The 個人資料 section is rendered here, not by DynamicApplicationForm (which
+  // skips `is_fixed` items), so the admin's edits of the 固定欄位/固定文件 in
+  // 審核管理 have to be read off the form config explicitly. The i18n table
+  // above is only the offline fallback — the backend's built-in defaults
+  // (ApplicationFieldService._create_fixed_*) carry the same strings, so the
+  // admin edits exactly what the student reads.
+  const fixedFormDefaults: FixedFormText = {
+    fields: {
+      postal_account: {
+        label: text.accountNumber,
+        placeholder: text.accountNumberPlaceholder,
+        helpText: "",
+      },
+      advisor_name: {
+        label: text.advisorName,
+        placeholder: text.advisorNamePlaceholder,
+        helpText: text.advisorInfoNotes.join("\n"),
+      },
+      advisor_email: {
+        label: text.advisorEmail,
+        placeholder: text.advisorEmailPlaceholder,
+        helpText: "",
+      },
+      advisor_nycu_id: {
+        label: text.advisorId,
+        placeholder: text.advisorIdPlaceholder,
+        helpText: "",
+      },
+    },
+    bankDocument: {
+      label: text.bankDocument,
+      description: `${text.fileFormats}\n${text.fileSizeLimit}`,
+    },
+  };
+  const fixedText = resolveFixedFormText(
+    fixedFormConfig,
+    locale,
+    fixedFormDefaults
+  );
+  // 教授姓名's 說明文字 holds the 指導教授 notes, one per line. They render as
+  // the numbered list directly under the 指導教授資訊 heading — where students
+  // have always read them — not under the 教授姓名 input.
+  const advisorNotes = fixedText.fields.advisor_name.helpText
+    .split("\n")
+    .map(line => line.trim())
+    .filter(Boolean);
 
   // Populate personal info from profile
   useEffect(() => {
@@ -551,6 +615,41 @@ export function ScholarshipApplicationStep({
   useEffect(() => {
     calculateProgress();
   }, [selectedScholarship, selectedSubTypes, dynamicFormData, dynamicFileData]);
+
+  // The 個人資料 section sits above the scholarship picker, so before a choice
+  // is made it shows the first eligible scholarship's fixed-item text rather
+  // than the built-in defaults — the admin's renames are per scholarship type
+  // and a real config is the better guess. A failed fetch keeps the defaults:
+  // the labels are cosmetic and must never block the wizard.
+  const fixedTextScholarshipCode =
+    selectedScholarship?.code ?? eligibleScholarships[0]?.code ?? null;
+  useEffect(() => {
+    if (!fixedTextScholarshipCode) {
+      setFixedFormConfig(null);
+      return;
+    }
+    let isStale = false;
+    api.applicationFields
+      .getFormConfig(fixedTextScholarshipCode)
+      .then(response => {
+        if (isStale) return;
+        if (!response.success || !response.data) {
+          throw new Error(response.message || "empty form config");
+        }
+        setFixedFormConfig(response.data);
+      })
+      .catch((err: unknown) => {
+        if (isStale) return;
+        logger.warn("Failed to load fixed-field text from form config", {
+          scholarshipType: fixedTextScholarshipCode,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        setFixedFormConfig(null);
+      });
+    return () => {
+      isStale = true;
+    };
+  }, [fixedTextScholarshipCode]);
 
   useEffect(() => {
     setSubTypePreferences(prev => {
@@ -1161,9 +1260,9 @@ export function ScholarshipApplicationStep({
               <User className="h-4 w-4 text-violet-600" />
               {text.advisorInfo}
             </h3>
-            {text.advisorInfoNotes && text.advisorInfoNotes.length > 0 && (
+            {advisorNotes.length > 0 && (
               <ul className="mb-3 list-decimal list-inside space-y-1 text-sm text-gray-600">
-                {text.advisorInfoNotes.map((note, i) => (
+                {advisorNotes.map((note, i) => (
                   <li key={i}>{note}</li>
                 ))}
               </ul>
@@ -1181,11 +1280,12 @@ export function ScholarshipApplicationStep({
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="advisor_name">
-                  {text.advisorName} <span className="text-red-500">*</span>
+                  {fixedText.fields.advisor_name.label}{" "}
+                  <span className="text-red-500">*</span>
                 </Label>
                 <Input
                   id="advisor_name"
-                  placeholder={text.advisorNamePlaceholder}
+                  placeholder={fixedText.fields.advisor_name.placeholder}
                   value={advisorName}
                   onChange={e => {
                     setAdvisorName(e.target.value);
@@ -1196,12 +1296,13 @@ export function ScholarshipApplicationStep({
               </div>
               <div className="space-y-2">
                 <Label htmlFor="advisor_email">
-                  {text.advisorEmail} <span className="text-red-500">*</span>
+                  {fixedText.fields.advisor_email.label}{" "}
+                  <span className="text-red-500">*</span>
                 </Label>
                 <Input
                   id="advisor_email"
                   type="email"
-                  placeholder={text.advisorEmailPlaceholder}
+                  placeholder={fixedText.fields.advisor_email.placeholder}
                   value={advisorEmail}
                   onChange={e => handleAdvisorEmailChange(e.target.value)}
                   className={emailValidationError ? "border-red-500" : ""}
@@ -1212,20 +1313,25 @@ export function ScholarshipApplicationStep({
                     {emailValidationError}
                   </div>
                 )}
+                <FixedItemHelpText text={fixedText.fields.advisor_email.helpText} />
               </div>
               <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="advisor_nycu_id">
-                  {text.advisorId} <span className="text-red-500">*</span>
+                  {fixedText.fields.advisor_nycu_id.label}{" "}
+                  <span className="text-red-500">*</span>
                 </Label>
                 <Input
                   id="advisor_nycu_id"
-                  placeholder={text.advisorIdPlaceholder}
+                  placeholder={fixedText.fields.advisor_nycu_id.placeholder}
                   value={advisorNycuId}
                   onChange={e => {
                     setAdvisorNycuId(e.target.value);
                     setPersonalInfoSaved(false);
                     if (advisorErrors.length > 0) setAdvisorErrors([]);
                   }}
+                />
+                <FixedItemHelpText
+                  text={fixedText.fields.advisor_nycu_id.helpText}
                 />
               </div>
             </div>
@@ -1250,11 +1356,12 @@ export function ScholarshipApplicationStep({
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="account_number">
-                  {text.accountNumber} <span className="text-red-500">*</span>
+                  {fixedText.fields.postal_account.label}{" "}
+                  <span className="text-red-500">*</span>
                 </Label>
                 <Input
                   id="account_number"
-                  placeholder={text.accountNumberPlaceholder}
+                  placeholder={fixedText.fields.postal_account.placeholder}
                   value={accountNumber}
                   onChange={e => {
                     setAccountNumber(e.target.value);
@@ -1262,9 +1369,12 @@ export function ScholarshipApplicationStep({
                     if (bankErrors.length > 0) setBankErrors([]);
                   }}
                 />
+                <FixedItemHelpText
+                  text={fixedText.fields.postal_account.helpText}
+                />
               </div>
               <div className="space-y-2">
-                <Label>{text.bankDocument}</Label>
+                <Label>{fixedText.bankDocument.label}</Label>
                 {existingBankDocument && (
                   <div className="p-3 border rounded-lg bg-green-50 border-green-200">
                     <div className="flex items-center justify-between">
@@ -1307,10 +1417,10 @@ export function ScholarshipApplicationStep({
                   fileType="bank_document"
                   locale={locale}
                 />
-                <div className="text-xs text-muted-foreground space-y-1">
-                  <p>{text.fileFormats}</p>
-                  <p>{text.fileSizeLimit}</p>
-                </div>
+                <FixedItemHelpText
+                  text={fixedText.bankDocument.description}
+                  className="text-xs"
+                />
               </div>
             </div>
           </div>
@@ -1780,25 +1890,25 @@ export function ScholarshipApplicationStep({
               <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm bg-gray-50 rounded-lg p-4">
                 <div>
                   <span className="text-gray-500">
-                    {text.submitPreview.advisor}
+                    {fixedText.fields.advisor_name.label}
                   </span>
                   <p className="font-medium">{advisorName || "-"}</p>
                 </div>
                 <div>
                   <span className="text-gray-500">
-                    {text.submitPreview.advisorEmail}
+                    {fixedText.fields.advisor_email.label}
                   </span>
                   <p className="font-medium">{advisorEmail || "-"}</p>
                 </div>
                 <div>
                   <span className="text-gray-500">
-                    {text.submitPreview.advisorNycuId}
+                    {fixedText.fields.advisor_nycu_id.label}
                   </span>
                   <p className="font-medium">{advisorNycuId || "-"}</p>
                 </div>
                 <div className="col-span-2">
                   <span className="text-gray-500">
-                    {text.submitPreview.postOfficeAccount}
+                    {fixedText.fields.postal_account.label}
                   </span>
                   <p className="font-medium">{accountNumber || "-"}</p>
                 </div>
@@ -1816,7 +1926,7 @@ export function ScholarshipApplicationStep({
                 {/* Passbook */}
                 <div className="flex items-center justify-between">
                   <span className="text-gray-500">
-                    {text.submitPreview.passbookCover}
+                    {fixedText.bankDocument.label}
                   </span>
                   <div className="flex items-center gap-2">
                     {existingBankDocument ? (

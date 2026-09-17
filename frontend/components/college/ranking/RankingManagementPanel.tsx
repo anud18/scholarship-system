@@ -2,7 +2,7 @@
 
 import { User } from "@/types/user";
 import { useCollegeManagement } from "@/contexts/college-management-context";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Semester } from "@/lib/enums";
 import {
   Card,
@@ -271,6 +271,17 @@ export function RankingManagementPanel({
     [setIsRankingLoading, setRankingData, setActiveConfigDeadline]
   );
 
+  // Latest selection, readable from the auto-refresh effect without listing
+  // `selectedRanking` as a dependency. Having it as a dependency made every
+  // ranking-card click re-fetch the rankings list AND the whole applications
+  // list (per-student SIS lookups on the backend) on top of the detail
+  // request the click handler already fires — that fan-out is what made
+  // 點擊排名 slow to render.
+  const selectedRankingRef = useRef(selectedRanking);
+  useEffect(() => {
+    selectedRankingRef.current = selectedRanking;
+  }, [selectedRanking]);
+
   // Auto-refresh when switching to ranking tab or when data version changes
   useEffect(() => {
     // Only refresh when:
@@ -292,14 +303,16 @@ export function RankingManagementPanel({
       );
 
       // If a ranking is selected, also refresh its details
-      if (selectedRanking && !isRankingLoading) {
-        fetchRankingDetails(selectedRanking);
+      const currentRanking = selectedRankingRef.current;
+      if (currentRanking && !isRankingLoading) {
+        fetchRankingDetails(currentRanking);
       }
     }
-    // Note: Removed isRankingLoading and fetchRankingDetails from deps to prevent infinite loop
-    // The condition check (!isRankingLoading) inside the effect is sufficient
+    // Note: isRankingLoading and fetchRankingDetails are deliberately not deps
+    // (infinite loop); the condition check (!isRankingLoading) inside the
+    // effect is sufficient. selectedRanking is read via ref (see above).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, dataVersion, fetchRankings, selectedRanking]);
+  }, [activeTab, dataVersion, fetchRankings]);
 
   const createNewRanking = useCallback(async () => {
     try {

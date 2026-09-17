@@ -686,6 +686,14 @@ class ApplicationService:
 
         return integrated_form_data
 
+    @staticmethod
+    def _resolve_scholarship_display_name(application: Application) -> Optional[str]:
+        """Configuration name first, scholarship type name as fallback (e.g. batch imports without a config)."""
+        config = application.scholarship_configuration
+        if config and config.config_name:
+            return config.config_name
+        return application.scholarship.name if application.scholarship else None
+
     def _create_application_list_response(
         self, application: Application, user: User, integrated_form_data: Dict[str, Any]
     ) -> ApplicationListResponse:
@@ -698,6 +706,9 @@ class ApplicationService:
             scholarship_type=application.scholarship.code if application.scholarship else None,
             scholarship_type_id=application.scholarship_type_id,
             scholarship_type_zh=application.scholarship.name if application.scholarship else None,
+            # 學生「申請記錄」卡片標題：顯示該申請所屬的配置名稱（如「博士生獎學金 115學年」），
+            # 而非只用類型代碼去比對「目前可申請」清單（舊年度申請會比對不到）。
+            scholarship_name=self._resolve_scholarship_display_name(application),
             scholarship_subtype_list=application.scholarship_subtype_list or [],
             sub_scholarship_type=application.sub_scholarship_type,
             status=application.status,

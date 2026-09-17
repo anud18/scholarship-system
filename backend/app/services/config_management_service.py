@@ -423,7 +423,7 @@ class ConfigurationService:
                 "data_type": ConfigDataType.integer,
                 "is_sensitive": False,
                 "description": "JWT access token expiry time in minutes",
-                "default_value": "30",
+                "default_value": "120",
                 "validation_regex": r"^[1-9]\d*$",
             },
             # API Integration Settings

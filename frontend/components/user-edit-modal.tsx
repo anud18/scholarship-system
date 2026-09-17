@@ -260,6 +260,7 @@ export function UserEditModal({
                 className="w-full px-3 py-2 border border-nycu-blue-200 rounded-md"
               >
                 <option value="">請選擇角色</option>
+                {isEditing && <option value="student">學生</option>}
                 <option value="professor">教授</option>
                 <option value="college">學院</option>
                 <option value="admin">管理員</option>

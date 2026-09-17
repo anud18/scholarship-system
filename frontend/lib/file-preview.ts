@@ -18,6 +18,15 @@ export interface UploadedFileLike {
   file_path?: string;
 }
 
+/**
+ * True for a URL minted by URL.createObjectURL below. Such URLs are caller-owned
+ * and local: consumers render them directly (iframe/img) and must never fetch()
+ * them — the CSP allows blob: in frame-src/img-src but not connect-src.
+ */
+export function isLocalObjectUrl(url: string): boolean {
+  return url.startsWith("blob:");
+}
+
 /** True when the object carries server-side upload metadata (id / url / file_path). */
 export function isUploadedFileLike(file: unknown): boolean {
   const f = file as UploadedFileLike | null | undefined;

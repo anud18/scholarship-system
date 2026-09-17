@@ -20,7 +20,55 @@ from app.schemas.application_field import (
     ApplicationFieldUpdate,
     ScholarshipFormConfigResponse,
 )
-from app.services.form_field_labels import FIXED_FIELD_LABELS
+
+# Default text of the built-in items, i.e. what the student sees in the
+# application wizard's 個人資料 section until an admin edits the item in
+# 審核管理. The wizard keeps the same strings as its offline fallback
+# (frontend/components/student-wizard/steps/ScholarshipApplicationStep.tsx);
+# change both together. The review-side labels (exports, summary PDF) live in
+# form_field_labels.FIXED_FIELD_LABELS and are deliberately shorter.
+ADVISOR_HELP_TEXT_ZH = "\n".join(
+    [
+        "如有超過一位指導教授或共同指導，請填寫一位主要指導教授。",
+        "申請教育部博士生獎學金之學生，請填寫可提供每月$5000元配合款的指導教授。"
+        "（每年配合款經費金額將配合教育部相關規定，採滾動式調整。）",
+        "如無指導教授或指導教授為兼任老師無單一入口網權限須請系主任或所長代為簽核。",
+    ]
+)
+ADVISOR_HELP_TEXT_EN = "\n".join(
+    [
+        "If you have more than one advisor or co-advisors, please list one primary advisor.",
+        "Applicants for the MOE PhD Scholarship should list an advisor who can provide a monthly "
+        "matching fund of $5,000 (the annual matching amount will be adjusted according to MOE regulations).",
+        "If you have no advisor, or your advisor is an adjunct instructor without single sign-on access, "
+        "please ask your department chair or institute director to sign on your behalf.",
+    ]
+)
+BANK_STATEMENT_DESCRIPTION_ZH = "支援格式：JPG, JPEG, PNG, PDF\n檔案大小限制：10MB"
+BANK_STATEMENT_DESCRIPTION_EN = "Supported formats: JPG, JPEG, PNG, PDF\nFile size limit: 10MB"
+
+# Stable identities of the built-in ("fixed") form items. They are injected
+# into the form config at request time, but an admin edit materialises a real
+# row carrying the same key — see inject_fixed_fields, which then defers to
+# that row. Keys, not names: the admin is free to rename the item.
+FIXED_KEY_POSTAL_ACCOUNT = "postal_account"
+FIXED_KEY_ADVISOR_NAME = "advisor_name"
+FIXED_KEY_ADVISOR_EMAIL = "advisor_email"
+FIXED_KEY_ADVISOR_NYCU_ID = "advisor_nycu_id"
+FIXED_KEY_BANK_STATEMENT = "bank_statement"
+
+# The advisor block only exists while the scholarship requires a professor
+# recommendation, so materialised advisor rows are dropped again when it does
+# not — exactly as the injected copies would be.
+FIXED_ADVISOR_KEYS = (
+    FIXED_KEY_ADVISOR_NAME,
+    FIXED_KEY_ADVISOR_EMAIL,
+    FIXED_KEY_ADVISOR_NYCU_ID,
+)
+
+# Columns owned by a separate endpoint rather than by the admin form, so an
+# upsert of a built-in item must leave them as they are.
+OVERWRITE_EXEMPT_COLUMNS = frozenset({"example_file_url"})
 
 
 class ApplicationFieldService:
@@ -59,14 +107,52 @@ class ApplicationFieldService:
         return None
 
     async def create_field(self, field_data: ApplicationFieldCreate, created_by: int) -> ApplicationFieldResponse:
-        """Create a new application field"""
-        field = ApplicationField(**field_data.model_dump(), created_by=created_by, updated_by=created_by)
+        """Create a new application field.
+
+        A payload carrying `fixed_key` is the first edit of a built-in field,
+        which has no row yet (審核管理 sends it with `id = 0`). Writing it a
+        second time must not mint a duplicate, so the existing row wins.
+        """
+        values = field_data.model_dump()
+
+        if values.get("fixed_key"):
+            existing = await self._get_fixed_row(ApplicationField, values["scholarship_type"], values["fixed_key"])
+            if existing is not None:
+                return ApplicationFieldResponse.model_validate(await self._overwrite_row(existing, values, created_by))
+
+        field = ApplicationField(**values, created_by=created_by, updated_by=created_by)
 
         self.db.add(field)
         await self.db.commit()
         await self.db.refresh(field)
 
         return ApplicationFieldResponse.model_validate(field)
+
+    async def _get_fixed_row(self, model, scholarship_type: str, fixed_key: str):
+        """The materialised row for one built-in item, if the admin made one."""
+        query = select(model).where(model.scholarship_type == scholarship_type, model.fixed_key == fixed_key)
+        result = await self.db.execute(query)
+        return result.scalar_one_or_none()
+
+    async def _overwrite_row(self, row, values: Dict[str, Any], updated_by: int):
+        """Replace an existing row's configurable columns and commit.
+
+        `example_file_url` is skipped: 範例文件 is uploaded through its own
+        endpoint and never travels in the admin form's payload, so writing the
+        payload's absent value would delete an uploaded example.
+        """
+        for key, value in values.items():
+            if key in OVERWRITE_EXEMPT_COLUMNS:
+                continue
+            if hasattr(row, key):
+                setattr(row, key, value)
+
+        row.updated_by = updated_by
+
+        await self.db.commit()
+        await self.db.refresh(row)
+
+        return row
 
     async def update_field(
         self, field_id: int, field_data: ApplicationFieldUpdate, updated_by: int
@@ -161,8 +247,20 @@ class ApplicationFieldService:
     async def create_document(
         self, document_data: ApplicationDocumentCreate, created_by: int
     ) -> ApplicationDocumentResponse:
-        """Create a new application document"""
-        document = ApplicationDocument(**document_data.model_dump(), created_by=created_by, updated_by=created_by)
+        """Create a new application document.
+
+        Same `fixed_key` upsert as create_field — see it for why.
+        """
+        values = document_data.model_dump()
+
+        if values.get("fixed_key"):
+            existing = await self._get_fixed_row(ApplicationDocument, values["scholarship_type"], values["fixed_key"])
+            if existing is not None:
+                return ApplicationDocumentResponse.model_validate(
+                    await self._overwrite_row(existing, values, created_by)
+                )
+
+        document = ApplicationDocument(**values, created_by=created_by, updated_by=created_by)
 
         self.db.add(document)
         await self.db.commit()
@@ -274,18 +372,19 @@ class ApplicationFieldService:
             "id": 0,  # Temporary ID for fixed field
             "scholarship_type": scholarship_type,
             "field_name": "postal_account",
-            "field_label": FIXED_FIELD_LABELS["postal_account"],
-            "field_label_en": "Post Office/ESUN Bank Account Number",
+            "fixed_key": FIXED_KEY_POSTAL_ACCOUNT,
+            "field_label": "郵局局號加帳號共 14 碼(限本人)",
+            "field_label_en": "Post Office Account (14 digits)",
             "field_type": "text",
             "is_required": True,
             "is_fixed": True,  # Mark as fixed field
-            "placeholder": "請輸入您的郵局帳號",
-            "placeholder_en": "Please enter your Post Office or ESUN Bank account number",
+            "placeholder": "請輸入 14 碼郵局帳號",
+            "placeholder_en": "Enter 14-digit post office account number",
             "max_length": 30,
             "display_order": display_order,
             "is_active": True,
-            "help_text": "請填寫正確的郵局帳號以便獎學金匯款",
-            "help_text_en": "Please provide your correct Post Office or ESUN Bank account number for scholarship remittance",
+            "help_text": "",
+            "help_text_en": "",
             "prefill_value": prefill_data.get("account_number", "") if prefill_data else "",
             "created_at": datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -305,10 +404,11 @@ class ApplicationFieldService:
         return {
             "id": 0,  # Temporary ID for fixed document
             "scholarship_type": scholarship_type,
+            "fixed_key": FIXED_KEY_BANK_STATEMENT,
             "document_name": "存摺封面",
-            "document_name_en": "Bank Statement Cover",
-            "description": "請上傳存摺封面",
-            "description_en": "Please upload bank statement cover",
+            "document_name_en": "Passbook Cover",
+            "description": BANK_STATEMENT_DESCRIPTION_ZH,
+            "description_en": BANK_STATEMENT_DESCRIPTION_EN,
             "is_required": True,
             "is_fixed": True,  # Mark as fixed document
             "accepted_file_types": ["PDF", "JPG", "JPEG", "PNG"],
@@ -316,8 +416,8 @@ class ApplicationFieldService:
             "max_file_count": 1,
             "display_order": display_order,
             "is_active": True,
-            "upload_instructions": "請確保存摺封面清晰可讀，包含戶名、帳號、銀行名稱等資訊",
-            "upload_instructions_en": "Please ensure the bank statement cover is clear and readable, including account name, account number, bank name, etc.",
+            "upload_instructions": "",
+            "upload_instructions_en": "",
             "existing_file_url": prefill_data.get("bank_document_photo_url", "") if prefill_data else "",
             "created_at": datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -342,18 +442,19 @@ class ApplicationFieldService:
                 "id": 0,  # Temporary ID for fixed field
                 "scholarship_type": scholarship_type,
                 "field_name": "advisor_name",
-                "field_label": FIXED_FIELD_LABELS["advisor_name"],
+                "fixed_key": FIXED_KEY_ADVISOR_NAME,
+                "field_label": "教授姓名",
                 "field_label_en": "Advisor Name",
                 "field_type": "text",
                 "is_required": True,
                 "is_fixed": True,  # Mark as fixed field
-                "placeholder": "請輸入指導教授的姓名",
-                "placeholder_en": "Please enter the name of the advisor",
+                "placeholder": "請輸入指導教授姓名",
+                "placeholder_en": "Enter advisor's name",
                 "max_length": 100,
                 "display_order": display_order_start,
                 "is_active": True,
-                "help_text": "請填寫指導教授的姓名",
-                "help_text_en": "Please provide the name of the advisor",
+                "help_text": ADVISOR_HELP_TEXT_ZH,
+                "help_text_en": ADVISOR_HELP_TEXT_EN,
                 "prefill_value": prefill_data.get("advisor_name", "") if prefill_data else "",
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -368,18 +469,19 @@ class ApplicationFieldService:
                 "id": 0,  # Temporary ID for fixed field
                 "scholarship_type": scholarship_type,
                 "field_name": "advisor_email",
-                "field_label": FIXED_FIELD_LABELS["advisor_email"],
+                "fixed_key": FIXED_KEY_ADVISOR_EMAIL,
+                "field_label": "教授 Email",
                 "field_label_en": "Advisor Email",
                 "field_type": "email",
                 "is_required": True,
                 "is_fixed": True,  # Mark as fixed field
-                "placeholder": "請輸入指導教授的Email",
-                "placeholder_en": "Please enter the email of the advisor",
+                "placeholder": "professor@nycu.edu.tw",
+                "placeholder_en": "professor@nycu.edu.tw",
                 "max_length": 100,
                 "display_order": display_order_start + 1,
                 "is_active": True,
-                "help_text": "請填寫指導教授的Email",
-                "help_text_en": "Please provide the email of the advisor",
+                "help_text": "",
+                "help_text_en": "",
                 "prefill_value": prefill_data.get("advisor_email", "") if prefill_data else "",
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -394,18 +496,19 @@ class ApplicationFieldService:
                 "id": 0,  # Temporary ID for fixed field
                 "scholarship_type": scholarship_type,
                 "field_name": "advisor_nycu_id",
-                "field_label": FIXED_FIELD_LABELS["advisor_nycu_id"],
+                "fixed_key": FIXED_KEY_ADVISOR_NYCU_ID,
+                "field_label": "指導教授本校人事編號（請向指導教授確認）",
                 "field_label_en": "Advisor NYCU ID",
                 "field_type": "text",
                 "is_required": True,
                 "is_fixed": True,  # Mark as fixed field
-                "placeholder": "請輸入指導教授的本校人事編號",
-                "placeholder_en": "Please enter the advisor NYCU ID",
+                "placeholder": "請輸入指導教授本校人事編號",
+                "placeholder_en": "Enter advisor's NYCU personnel ID",
                 "max_length": 20,
                 "display_order": display_order_start + 2,
                 "is_active": True,
-                "help_text": "請填寫指導教授的本校人事編號（必填）",
-                "help_text_en": "Please provide the advisor NYCU ID (required)",
+                "help_text": "",
+                "help_text_en": "",
                 "prefill_value": prefill_data.get("advisor_nycu_id", "") if prefill_data else "",
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -441,6 +544,30 @@ class ApplicationFieldService:
             self.logger.exception("Error checking professor recommendation requirement")
             return False
 
+    @staticmethod
+    def _merge_fixed_item(
+        items: List[Dict[str, Any]],
+        fixed_key: str,
+        build_default,
+        prefill: Dict[str, Any],
+    ) -> None:
+        """Put one built-in item into `items`, admin-edited copy first.
+
+        A row carrying `fixed_key` is the admin's edited copy of the built-in
+        definition, so it wins over the code default. It still has to be
+        flagged `is_fixed` (審核管理 renders it in the 系統預設 card, and the
+        student form treats it as a built-in) and to carry the per-user
+        prefill, which lives on the profile rather than on the row.
+        """
+        existing = next((item for item in items if item.get("fixed_key") == fixed_key), None)
+
+        if existing is None:
+            items.append(build_default())
+            return
+
+        existing["is_fixed"] = True
+        existing.update(prefill)
+
     async def inject_fixed_fields(
         self,
         scholarship_type: str,
@@ -455,34 +582,58 @@ class ApplicationFieldService:
             if user_id:
                 profile_data = await self.get_user_profile_data(user_id)
 
+            def prefill(key: str) -> str:
+                return profile_data.get(key, "") if profile_data else ""
+
             # Calculate display orders
             max_field_order = max([f.get("display_order", 0) for f in fields], default=0)
             max_doc_order = max([d.get("display_order", 0) for d in documents], default=0)
 
             # Always inject bank account field and bank statement document
-            bank_field = self._create_fixed_bank_account_field(
-                display_order=max_field_order + 1,
-                prefill_data=profile_data,
-                scholarship_type=scholarship_type,
+            self._merge_fixed_item(
+                fields,
+                FIXED_KEY_POSTAL_ACCOUNT,
+                lambda: self._create_fixed_bank_account_field(
+                    display_order=max_field_order + 1,
+                    prefill_data=profile_data,
+                    scholarship_type=scholarship_type,
+                ),
+                {"prefill_value": prefill("account_number")},
             )
-            fields.append(bank_field)
 
-            bank_doc = self._create_fixed_bank_statement_document(
-                display_order=max_doc_order + 1,
-                prefill_data=profile_data,
-                scholarship_type=scholarship_type,
+            self._merge_fixed_item(
+                documents,
+                FIXED_KEY_BANK_STATEMENT,
+                lambda: self._create_fixed_bank_statement_document(
+                    display_order=max_doc_order + 1,
+                    prefill_data=profile_data,
+                    scholarship_type=scholarship_type,
+                ),
+                {"existing_file_url": prefill("bank_document_photo_url")},
             )
-            documents.append(bank_doc)
 
             # Inject advisor fields if required
             requires_advisor = await self.check_requires_professor_recommendation(scholarship_type)
             if requires_advisor:
-                advisor_fields = self._create_fixed_advisor_fields(
-                    display_order_start=max_field_order + 2,
-                    prefill_data=profile_data,
-                    scholarship_type=scholarship_type,
-                )
-                fields.extend(advisor_fields)
+                defaults = {
+                    field["fixed_key"]: field
+                    for field in self._create_fixed_advisor_fields(
+                        display_order_start=max_field_order + 2,
+                        prefill_data=profile_data,
+                        scholarship_type=scholarship_type,
+                    )
+                }
+                for advisor_key in FIXED_ADVISOR_KEYS:
+                    self._merge_fixed_item(
+                        fields,
+                        advisor_key,
+                        lambda key=advisor_key: defaults[key],
+                        {"prefill_value": prefill(advisor_key)},
+                    )
+            else:
+                # A materialised advisor row outlives the setting that created
+                # it; drop it so the form matches the current configuration.
+                fields[:] = [f for f in fields if f.get("fixed_key") not in FIXED_ADVISOR_KEYS]
 
             self.logger.info(
                 f"Injected fixed fields for {scholarship_type}: bank_account, bank_statement"
@@ -506,10 +657,15 @@ class ApplicationFieldService:
         try:
             self.logger.debug(f"Fetching form config for scholarship type: {scholarship_type}")
 
-            fields = await self.get_fields_by_scholarship_type(scholarship_type, include_inactive)
+            # Always read the inactive rows too, then drop them after the merge
+            # below. Filtering first would hide a DEACTIVATED built-in item from
+            # inject_fixed_fields, which would take it for "never edited" and
+            # inject the code default in its place — resurrecting a 存摺封面 the
+            # admin had switched off, as active and required.
+            fields = await self.get_fields_by_scholarship_type(scholarship_type, include_inactive=True)
             self.logger.debug(f"Found {len(fields)} fields for {scholarship_type}")
 
-            documents = await self.get_documents_by_scholarship_type(scholarship_type, include_inactive)
+            documents = await self.get_documents_by_scholarship_type(scholarship_type, include_inactive=True)
             self.logger.debug(f"Found {len(documents)} documents for {scholarship_type}")
 
             # Convert to dict format for fixed fields injection
@@ -523,6 +679,10 @@ class ApplicationFieldService:
                 documents=documents_dict,
                 user_id=user_id,
             )
+
+            if not include_inactive:
+                fields_dict = [f for f in fields_dict if f.get("is_active", True)]
+                documents_dict = [d for d in documents_dict if d.get("is_active", True)]
 
             self.logger.debug(
                 f"Fixed fields injected, total fields: {len(fields_dict)}, total documents: {len(documents_dict)}"

@@ -5,7 +5,7 @@ Review Service
 """
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -52,6 +52,47 @@ def is_professor_review_locked(application: Application) -> bool:
     # SQLAlchemy may return either the enum instance or its string value
     stage_value = getattr(stage, "value", stage)
     return stage_value in LOCKED_STAGES_FOR_PROFESSOR_REVIEW
+
+
+def _pending_subtype_status() -> Dict[str, Any]:
+    return {"status": "pending", "rejected_by": None, "comments": None}
+
+
+def _rejected_subtype_status(review: ApplicationReview, item: ApplicationReviewItem) -> Dict[str, Any]:
+    # 正規化 role 為字符串值
+    reviewer_role = review.reviewer.role
+    role_str = reviewer_role.value if hasattr(reviewer_role, "value") else str(reviewer_role).lower()
+    return {
+        "status": "rejected",
+        "rejected_by": {
+            "role": role_str,
+            "name": review.reviewer.name,
+            "reviewed_at": review.reviewed_at.strftime("%Y-%m-%d %H:%M:%S"),
+        },
+        "comments": item.comments,
+    }
+
+
+def _fold_subtype_status(reviews: Iterable[ApplicationReview]) -> Dict[str, Dict[str, Any]]:
+    """依時間順序摺疊一個申請的所有審查記錄，得到每個子項目的累積狀態。
+
+    規則：最早的 reject 勝出且不可被後續 approve 覆蓋；approve 只把 pending 變成 approved。
+    ``reviews`` 必須已依 created_at 排序，且已預載 reviewer 與 items。
+    """
+    subtype_status: Dict[str, Dict[str, Any]] = {}
+    for review in reviews:
+        for item in review.items:
+            # 正規化子項目代碼（小寫並去除空白）
+            code = item.sub_type_code.lower().strip() if item.sub_type_code else item.sub_type_code
+            current = subtype_status.get(code) or _pending_subtype_status()
+
+            if item.recommendation == "reject" and current["status"] != "rejected":
+                subtype_status = {**subtype_status, code: _rejected_subtype_status(review, item)}
+            elif item.recommendation == "approve" and current["status"] == "pending":
+                subtype_status = {**subtype_status, code: {**current, "status": "approved"}}
+            else:
+                subtype_status = {**subtype_status, code: current}
+    return subtype_status
 
 
 class ReviewService:
@@ -109,58 +150,41 @@ class ReviewService:
                 }
             }
         """
-        # 動態導入避免循環依賴
-        from app.models.review import ApplicationReview
+        statuses = await self.get_subtype_cumulative_status_bulk([application_id])
+        return statuses.get(application_id, {})
 
-        # 查詢所有審查記錄（按時間排序）
+    async def get_subtype_cumulative_status_bulk(
+        self, application_ids: Iterable[int]
+    ) -> Dict[int, Dict[str, Dict[str, Any]]]:
+        """
+        一次查詢多個申請的子項目累積狀態（避免逐筆查詢的 N+1）
+
+        Args:
+            application_ids: 申請 ID 清單（重複的 ID 只查一次）
+
+        Returns:
+            {application_id: <get_subtype_cumulative_status 的結果>}
+            沒有任何審查記錄的申請仍會出現在結果中（值為空 dict）。
+        """
+        unique_ids = list(dict.fromkeys(app_id for app_id in application_ids if app_id is not None))
+        if not unique_ids:
+            return {}
+
+        # 查詢所有審查記錄（依申請、再依時間排序）
         stmt = (
             select(ApplicationReview)
-            .where(ApplicationReview.application_id == application_id)
+            .where(ApplicationReview.application_id.in_(unique_ids))
             .options(joinedload(ApplicationReview.reviewer), joinedload(ApplicationReview.items))
-            .order_by(ApplicationReview.created_at)
+            .order_by(ApplicationReview.application_id, ApplicationReview.created_at, ApplicationReview.id)
         )
         result = await self.db.execute(stmt)
         reviews = result.unique().scalars().all()
 
-        # 計算每個子項目的累積狀態
-        subtype_status = {}
-
+        reviews_by_app: Dict[int, List[ApplicationReview]] = {app_id: [] for app_id in unique_ids}
         for review in reviews:
-            for item in review.items:
-                # 正規化子項目代碼（小寫並去除空白）
-                code = item.sub_type_code.lower().strip() if item.sub_type_code else item.sub_type_code
+            reviews_by_app[review.application_id].append(review)
 
-                # 初始化
-                if code not in subtype_status:
-                    subtype_status[code] = {
-                        "status": "pending",
-                        "rejected_by": None,
-                        "comments": None,
-                    }
-
-                # 如果本次是 reject，且之前未被 reject 過
-                if item.recommendation == "reject" and subtype_status[code]["status"] != "rejected":
-                    # 正規化 role 為字符串值
-                    reviewer_role = review.reviewer.role
-                    if hasattr(reviewer_role, "value"):
-                        role_str = reviewer_role.value
-                    else:
-                        role_str = str(reviewer_role).lower()
-
-                    subtype_status[code] = {
-                        "status": "rejected",
-                        "rejected_by": {
-                            "role": role_str,
-                            "name": review.reviewer.name,
-                            "reviewed_at": review.reviewed_at.strftime("%Y-%m-%d %H:%M:%S"),
-                        },
-                        "comments": item.comments,
-                    }
-                # 如果本次是 approve，且之前未被 reject 過
-                elif item.recommendation == "approve" and subtype_status[code]["status"] == "pending":
-                    subtype_status[code]["status"] = "approved"
-
-        return subtype_status
+        return {app_id: _fold_subtype_status(app_reviews) for app_id, app_reviews in reviews_by_app.items()}
 
     async def get_reviewable_subtypes(self, application_id: int, current_user_role: str) -> List[str]:
         """

@@ -49,3 +49,15 @@ export function triggerBlobDownload({
 export function triggerFileDownload(url: string, filename: string): void {
   downloadViaAnchor({ href: url, filename, target: "_blank" });
 }
+
+/**
+ * Trigger a browser download of a SAME-ORIGIN URL that answers with
+ * `Content-Disposition: attachment` (e.g. the /api/v1/export-package proxy).
+ *
+ * Deliberately no `target="_blank"`: the download manager needs no new tab,
+ * and this is clicked after an `await` — the transient user activation a
+ * popup would need may already have expired by then.
+ */
+export function triggerAttachmentDownload(url: string, filename: string): void {
+  downloadViaAnchor({ href: url, filename });
+}

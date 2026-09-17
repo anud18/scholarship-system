@@ -126,10 +126,15 @@ export function UserPermissionManagement() {
     setUsersError(null);
 
     try {
-      const allowedRoles =
+      const managementRoles =
         user?.role === "admin"
           ? ["college", "admin", "professor"]
           : ["college", "admin", "super_admin", "professor"];
+      // Students are hidden from the default management view (there are
+      // thousands of them) but must be reachable so an admin can promote one
+      // to professor/college/admin: via the 學生 filter or a search term.
+      const allowedRoles = [...managementRoles, "student"];
+      const defaultRoles = userSearch ? allowedRoles : managementRoles;
 
       // The backend prefers `roles` over `role` (`if roles: ... elif role:`),
       // and we always send `roles`, so the role filter must narrow the `roles`
@@ -137,7 +142,7 @@ export function UserPermissionManagement() {
       const rolesParam =
         userRoleFilter && allowedRoles.includes(userRoleFilter)
           ? userRoleFilter
-          : allowedRoles.join(",");
+          : defaultRoles.join(",");
 
       const params: {
         page: number;
@@ -633,6 +638,7 @@ export function UserPermissionManagement() {
                 <option value="admin">管理員</option>
                 <option value="college">學院</option>
                 <option value="professor">教授</option>
+                <option value="student">學生</option>
               </select>
             </div>
             <div className="flex items-end gap-2">
@@ -806,6 +812,10 @@ export function UserPermissionManagement() {
                                   擁有所有獎學金權限
                                 </div>
                               </>
+                            ) : user.role === "student" ? (
+                              <div className="text-xs text-gray-400">
+                                學生無管理權限
+                              </div>
                             ) : user.role === "professor" ? (
                               <div className="text-xs text-amber-600 font-medium">
                                 教授無需管理權限
@@ -866,7 +876,8 @@ export function UserPermissionManagement() {
                               className="hover:bg-nycu-blue-50 hover:border-nycu-blue-300"
                             >
                               <Edit className="h-4 w-4" />
-                              {user.role === "professor"
+                              {user.role === "professor" ||
+                              user.role === "student"
                                 ? "更改角色"
                                 : "編輯權限"}
                             </Button>

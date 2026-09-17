@@ -279,6 +279,7 @@ export function AdminScholarshipManagementInterface({
           help_text_en: field.help_text_en,
           validation_rules: field.validation_rules,
           conditional_rules: field.conditional_rules,
+          fixed_key: field.fixed_key,
         })),
         documents: documentRequirements.map(doc => ({
           document_name: doc.document_name,
@@ -296,6 +297,7 @@ export function AdminScholarshipManagementInterface({
           upload_instructions: doc.upload_instructions,
           upload_instructions_en: doc.upload_instructions_en,
           validation_rules: doc.validation_rules,
+          fixed_key: doc.fixed_key,
         })),
         application_document_note: appDocNote,
         application_document_note_en: appDocNoteEn,
@@ -403,6 +405,16 @@ export function AdminScholarshipManagementInterface({
   };
 
   // Field management handlers
+  // A newly created item is appended, except when it is the first save of a
+  // built-in one: that replaces the injected copy the list already holds.
+  const mergeSavedItem = <T extends { fixed_key?: string | null }>(
+    items: T[],
+    saved: T
+  ): T[] =>
+    saved.fixed_key && items.some(item => item.fixed_key === saved.fixed_key)
+      ? items.map(item => (item.fixed_key === saved.fixed_key ? saved : item))
+      : [...items, saved];
+
   const handleCreateField = async (fieldData: ApplicationFieldCreate) => {
     try {
       const response = await api.applicationFields.createField(
@@ -413,8 +425,8 @@ export function AdminScholarshipManagementInterface({
       );
       if (response.success && response.data) {
         const newField = response.data as unknown as ApplicationField;
-        setApplicationFields(prev => [...prev, newField]);
-        setSuccessMessage("欄位新增成功");
+        setApplicationFields(prev => mergeSavedItem(prev, newField));
+        setSuccessMessage(newField.fixed_key ? "欄位更新成功" : "欄位新增成功");
         setFieldFormOpen(false);
       } else {
         setError(response.message || "新增欄位失敗");
@@ -482,8 +494,10 @@ export function AdminScholarshipManagementInterface({
       );
       if (response.success && response.data) {
         const newDocument = response.data as unknown as ApplicationDocument;
-        setDocumentRequirements(prev => [...prev, newDocument]);
-        setSuccessMessage("文件要求新增成功");
+        setDocumentRequirements(prev => mergeSavedItem(prev, newDocument));
+        setSuccessMessage(
+          newDocument.fixed_key ? "文件要求更新成功" : "文件要求新增成功"
+        );
         setDocumentFormOpen(false);
       } else {
         setError(response.message || "新增文件要求失敗");
@@ -494,9 +508,25 @@ export function AdminScholarshipManagementInterface({
     }
   };
 
+  // 固定欄位/固定文件（系統預設）are built in code and arrive from the form
+  // config with id 0 — they have no row yet, so their first edit has to create
+  // one. `fixed_key` carries the identity across, which is what makes the
+  // backend serve the edited row instead of the built-in definition.
+  const isUnsavedFixedItem = (item: { id: number; is_fixed?: boolean }) =>
+    item.is_fixed === true && item.id <= 0;
+
   const handleFieldSave = async (
     fieldData: ApplicationFieldCreate | ApplicationFieldUpdate
   ) => {
+    if (editingField && isUnsavedFixedItem(editingField)) {
+      await handleCreateField({
+        ...(fieldData as ApplicationFieldCreate),
+        field_name: editingField.field_name,
+        fixed_key: editingField.fixed_key,
+      });
+      return;
+    }
+
     if (editingField) {
       await handleUpdateField(fieldData as ApplicationFieldUpdate);
     } else {
@@ -507,6 +537,14 @@ export function AdminScholarshipManagementInterface({
   const handleDocumentSave = async (
     documentData: ApplicationDocumentCreate | ApplicationDocumentUpdate
   ) => {
+    if (editingDocument && isUnsavedFixedItem(editingDocument)) {
+      await handleCreateDocument({
+        ...(documentData as ApplicationDocumentCreate),
+        fixed_key: editingDocument.fixed_key,
+      });
+      return;
+    }
+
     if (editingDocument) {
       await handleUpdateDocument(documentData as ApplicationDocumentUpdate);
     } else {
@@ -1043,7 +1081,7 @@ export function AdminScholarshipManagementInterface({
                             >
                               <Edit className="h-4 w-4" />
                             </Button>
-                            {field.id > 0 && (
+                            {!field.is_fixed && (
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -1302,7 +1340,7 @@ export function AdminScholarshipManagementInterface({
                             >
                               <Edit className="h-4 w-4" />
                             </Button>
-                            {doc.id > 0 && (
+                            {!doc.is_fixed && (
                               <Button
                                 variant="outline"
                                 size="sm"

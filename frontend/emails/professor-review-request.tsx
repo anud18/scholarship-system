@@ -27,7 +27,7 @@ export default function ProfessorReviewRequest({
         新學生申請待推薦
       </Heading>
 
-      <Text className="text-gray-700 mb-4">尊敬的 {professor_name} 教授您好：</Text>
+      <Text className="text-gray-700 mb-4">{professor_name} 教授您好：</Text>
 
       <Text className="text-gray-700 mb-4">
         您的學生提交了一份獎學金申請，需要您的審核與推薦。
