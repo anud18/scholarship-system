@@ -25,9 +25,39 @@ from app.schemas.document_request import (
     StudentDocumentRequestResponse,
 )
 from app.services.application_audit_service import ApplicationAuditService
+from app.utils.college_scope import college_user_may_access
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _assert_staff_may_access_application(current_user: User, application: Application) -> None:
+    """Scope a staff user to the applications they are responsible for (#1404).
+
+    ``require_staff`` only proves the caller is staff. Without this guard any
+    professor or 學院 user could create, list and cancel 補件 requests on every
+    application by walking ids.
+
+    - admin / super_admin: unrestricted
+    - college: applications of their own college only
+    - professor: applications they are the assigned professor of only
+    """
+    if current_user.is_admin() or current_user.is_super_admin():
+        return
+    if current_user.is_college() and college_user_may_access(current_user, application):
+        return
+    if current_user.is_professor() and application.professor_id == current_user.id:
+        return
+
+    logger.warning(
+        "SECURITY: staff user attempted document-request access outside their scope",
+        extra={
+            "user_id": current_user.id,
+            "role": current_user.role.value,
+            "application_id": application.id,
+        },
+    )
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="您無權存取此申請的補件要求")
 
 
 @router.post("/applications/{application_id}/document-requests", status_code=status.HTTP_201_CREATED)
@@ -51,6 +81,8 @@ async def create_document_request(
 
     if not application:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+
+    _assert_staff_may_access_application(current_user, application)
 
     # Create document request
     document_request = DocumentRequest(
@@ -116,6 +148,8 @@ async def list_application_document_requests(
 
     if not application:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+
+    _assert_staff_may_access_application(current_user, application)
 
     # Build query for document requests
     stmt = (
@@ -311,6 +345,8 @@ async def cancel_document_request(
 
     if not document_request:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document request not found")
+
+    _assert_staff_may_access_application(current_user, document_request.application)
 
     # Verify request is in pending status
     if document_request.status != DocumentRequestStatus.pending.value:
