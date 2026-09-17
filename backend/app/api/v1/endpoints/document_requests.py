@@ -338,7 +338,9 @@ async def cancel_document_request(
     """
     # Get document request with application
     stmt = (
-        select(DocumentRequest).options(joinedload(DocumentRequest.application)).where(DocumentRequest.id == request_id)
+        select(DocumentRequest)
+        .options(joinedload(DocumentRequest.application), joinedload(DocumentRequest.requested_by))
+        .where(DocumentRequest.id == request_id)
     )
     result = await db.execute(stmt)
     document_request = result.scalar_one_or_none()
@@ -355,6 +357,11 @@ async def cancel_document_request(
             detail=f"Cannot cancel request with status: {document_request.status}",
         )
 
+    # Read relationship data before commit: the commit expires the loaded User and
+    # re-loading it lazily afterwards is async IO outside a greenlet (MissingGreenlet).
+    requested_by_name = document_request.requested_by.name if document_request.requested_by else "Unknown"
+    app_id = document_request.application.app_id
+
     # Update status to cancelled
     document_request.status = DocumentRequestStatus.cancelled.value
     document_request.cancelled_at = datetime.now(timezone.utc)
@@ -369,7 +376,7 @@ async def cancel_document_request(
     # Create a custom audit log for cancellation
     await audit_service.log_status_update(
         application_id=document_request.application_id,
-        app_id=document_request.application.app_id,
+        app_id=app_id,
         old_status="document_request_pending",
         new_status="document_request_cancelled",
         user=current_user,
@@ -379,9 +386,9 @@ async def cancel_document_request(
 
     # Build response
     response_data = DocumentRequestResponse.model_validate(document_request)
-    response_data.requested_by_name = document_request.requested_by.name if document_request.requested_by else "Unknown"
+    response_data.requested_by_name = requested_by_name
     response_data.cancelled_by_name = current_user.name
-    response_data.application_app_id = document_request.application.app_id
+    response_data.application_app_id = app_id
 
     return {
         "success": True,
