@@ -1186,7 +1186,8 @@ export function EnhancedStudentPortal({
                     <div className="flex items-center justify-between">
                       <div>
                         <h4 className="font-medium">
-                          {getScholarshipTypeName(app.scholarship_type)}
+                          {app.scholarship_name ||
+                            getScholarshipTypeName(app.scholarship_type)}
                         </h4>
                         <p className="text-sm text-muted-foreground">
                           {t("applications.application_id")}:{" "}

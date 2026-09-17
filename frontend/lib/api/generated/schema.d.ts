@@ -1334,8 +1334,9 @@ export interface paths {
          * Delete Application
          * @description Hard-delete an application (admin only).
          *
-         *     Only allowed while the application is still in the student-facing stage
-         *     (draft / submitted). Once review has started the row must be preserved.
+         *     Allowed at any point BEFORE the application enters the 配額分發 stage
+         *     (see app.services.application_deletion_policy). Once an allocation has
+         *     been saved/finalized or a roster references it, the row must be preserved.
          *
          *     Performs a cascade delete:
          *     - Removes related CollegeRankingItem and PaymentRosterItem rows explicitly.
@@ -4992,12 +4993,18 @@ export interface paths {
         };
         /**
          * Export Application Package
-         * @description Download a ZIP package of all application materials for a scholarship period.
+         * @description Stream a ZIP package of all application materials for a scholarship period.
+         *
+         *     ``dry_run=true`` performs the same permission checks and data validation
+         *     but answers with an ApiResponse (filename + application count) instead of
+         *     the archive, so the UI can surface a 400/403 reason before handing the real
+         *     download to the browser's download manager.
          *
          *     SECURITY: Bulk PII export. Every call is audit-logged with the actor's
-         *     user_id and role, scholarship/period filters, and the resulting file
-         *     size. 403 (permission-denied) paths are also logged at warning level
-         *     so repeated denials can be flagged as potential bypass attempts.
+         *     user_id and role, scholarship/period filters and application count, and
+         *     the end of the stream is logged with the bytes actually sent. 403
+         *     (permission-denied) paths are also logged at warning level so repeated
+         *     denials can be flagged as potential bypass attempts.
          */
         get: operations["export_application_package_api_v1_college_review_export_package_get"];
         put?: never;
@@ -5583,6 +5590,35 @@ export interface paths {
          *     **權限**: 僅限 admin / super_admin 角色。
          */
         get: operations["download_renewal_import_template_api_v1_college_review_renewal_import_template_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/supplementary-import/enabled": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Supplementary Import Enabled
+         * @description 查詢是否有任一「本學院可操作」的獎學金配置已開放補充匯入。
+         *
+         *     供前端決定是否顯示學院的「補充匯入」分頁：管理員未在任何配置開啟時，
+         *     整個入口隱藏；開啟後，各學年期的細節仍由 /availability 判斷。
+         *
+         *     只看呼叫者有權限（AdminScholarship）且啟用中的獎學金類型——其他獎學金的
+         *     開關對這個學院來說無法使用，顯示分頁只會導向空的下拉選單。未綁定學院的
+         *     帳號同理回 enabled=false，而非 403，讓前端安靜地隱藏入口。
+         *
+         *     **權限**: 僅限學院角色
+         */
+        get: operations["get_supplementary_import_enabled_api_v1_college_review_supplementary_import_enabled_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -8319,6 +8355,11 @@ export interface components {
             validation_rules?: {
                 [key: string]: unknown;
             } | null;
+            /**
+             * Fixed Key
+             * @description Built-in document this row overrides
+             */
+            fixed_key?: string | null;
         };
         /**
          * ApplicationDocumentUpdate
@@ -8470,6 +8511,11 @@ export interface components {
             conditional_rules?: {
                 [key: string]: unknown;
             } | null;
+            /**
+             * Fixed Key
+             * @description Built-in field this row overrides
+             */
+            fixed_key?: string | null;
             /**
              * Include In College Export
              * @description Whether this field appears in the college Excel export
@@ -19878,6 +19924,8 @@ export interface operations {
                 academic_year: number;
                 /** @description Semester (first/second/null for annual) */
                 semester?: string | null;
+                /** @description 只檢查匯出條件（權限、資料筆數），不產生 ZIP */
+                dry_run?: boolean;
             };
             header?: never;
             path?: never;
@@ -20704,6 +20752,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_supplementary_import_enabled_api_v1_college_review_supplementary_import_enabled_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };

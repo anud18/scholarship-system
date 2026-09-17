@@ -35,6 +35,32 @@ function getSafeBackendUrl(): URL {
   return new URL(`${protocol}//${parsed.hostname}:${port}`);
 }
 
+/**
+ * Pull a human-readable message out of a backend error body. The backend
+ * wraps HTTPException into ApiResponse `{ success, message, trace_id }`;
+ * bare FastAPI errors carry `detail`. Falls back to the raw text.
+ */
+function extractBackendError(text: string): string {
+  try {
+    const parsed = JSON.parse(text);
+    const message = parsed?.message ?? parsed?.detail;
+    return typeof message === "string" && message ? message : text;
+  } catch {
+    return text;
+  }
+}
+
+/**
+ * Proxies the college export-package download to the backend, turning the
+ * `token` query param into a Bearer header.
+ *
+ * The archive can run into the gigabytes (issue #1376), so the backend body
+ * is piped straight through: never buffered with arrayBuffer(), no invented
+ * Content-Length, and the client's abort signal is forwarded so a cancelled
+ * download stops the backend from building the rest of the ZIP.
+ * `dry_run=true` is forwarded as-is; the backend then answers with a small
+ * JSON precheck instead of the archive.
+ */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -42,6 +68,7 @@ export async function GET(request: NextRequest) {
     const scholarshipTypeId = searchParams.get("scholarship_type_id");
     const academicYear = searchParams.get("academic_year");
     const semester = searchParams.get("semester");
+    const dryRun = searchParams.get("dry_run");
 
     if (!token) {
       return NextResponse.json(
@@ -73,6 +100,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    if (dryRun !== null && !["true", "false"].includes(dryRun)) {
+      return NextResponse.json(
+        { error: "Invalid dry_run value" },
+        { status: 400 }
+      );
+    }
+
     let backendUrl: URL;
     try {
       backendUrl = getSafeBackendUrl();
@@ -89,12 +123,16 @@ export async function GET(request: NextRequest) {
     if (semester) {
       backendUrl.searchParams.set("semester", semester);
     }
+    if (dryRun === "true") {
+      backendUrl.searchParams.set("dry_run", "true");
+    }
 
     const response = await fetch(backendUrl, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${token}`,
       },
+      signal: request.signal,
     });
 
     if (!response.ok) {
@@ -103,27 +141,45 @@ export async function GET(request: NextRequest) {
         status: response.status,
       });
       return NextResponse.json(
-        { error: errorText || "Failed to generate export package" },
+        {
+          error:
+            extractBackendError(errorText) ||
+            "Failed to generate export package",
+        },
         { status: response.status }
       );
     }
 
-    const fileBuffer = await response.arrayBuffer();
-    const contentType =
-      response.headers.get("content-type") || "application/zip";
-    const contentDisposition =
-      response.headers.get("content-disposition") || "attachment";
+    if (!response.body) {
+      logger.error("Export package backend returned no body", {
+        status: response.status,
+      });
+      return NextResponse.json(
+        { error: "Failed to download export package" },
+        { status: 502 }
+      );
+    }
 
-    return new NextResponse(fileBuffer, {
-      status: 200,
-      headers: {
-        "Content-Type": contentType,
-        "Content-Disposition": contentDisposition,
-        "Content-Length": fileBuffer.byteLength.toString(),
-        "Cache-Control": "no-cache, no-store, must-revalidate",
-      },
+    // Stream the backend body through untouched. Content-Length is not
+    // forwarded: the ZIP has none (chunked), and Next may re-encode the
+    // small dry_run JSON.
+    const headers = new Headers({
+      "Content-Type":
+        response.headers.get("content-type") || "application/zip",
+      "Cache-Control": "no-cache, no-store, must-revalidate",
     });
+    const contentDisposition = response.headers.get("content-disposition");
+    if (contentDisposition) {
+      headers.set("Content-Disposition", contentDisposition);
+    }
+
+    return new NextResponse(response.body, { status: 200, headers });
   } catch (error) {
+    if (request.signal.aborted) {
+      // The browser cancelled the download; nothing to repair on our side.
+      logger.info("Export package download aborted by client", {});
+      return new NextResponse(null, { status: 499 });
+    }
     logger.error("Export package proxy error", {});
     return NextResponse.json(
       { error: "Failed to download export package" },

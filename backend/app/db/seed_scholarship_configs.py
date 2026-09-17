@@ -14,11 +14,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.base_class import Base
 from app.db.session import AsyncSessionLocal, async_engine
-from app.models.enums import QuotaManagementMode, Semester
+from app.models.enums import QuotaManagementMode
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule, ScholarshipSubTypeConfig, ScholarshipType
 from app.models.system_setting import EmailTemplate, SendingType
 
 logger = logging.getLogger(__name__)
+
+# Academic years the eligibility rules are seeded for. 115 is the current year;
+# 113/114 are the closed years whose approved applications and locked rosters
+# seed_ay115_demo creates — re-validating those rosters needs their rules too.
+RULE_ACADEMIC_YEARS = (113, 114, 115)
 
 # --- 學院送出排名通知 -------------------------------------------------------
 # The third and last automatic trigger point in the system: a college finalizes
@@ -109,70 +114,18 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
     print("  🎓 Initializing scholarship configurations...")
 
     # Get scholarship types
-    undergrad_result = await session.execute(
-        select(ScholarshipType).where(ScholarshipType.code == "undergraduate_freshman")
-    )
-    undergrad_scholarship = undergrad_result.scalar_one_or_none()
-
     phd_result = await session.execute(select(ScholarshipType).where(ScholarshipType.code == "phd"))
     phd_scholarship = phd_result.scalar_one_or_none()
 
-    direct_phd_result = await session.execute(select(ScholarshipType).where(ScholarshipType.code == "direct_phd"))
-    direct_phd_scholarship = direct_phd_result.scalar_one_or_none()
-
-    if not all([undergrad_scholarship, phd_scholarship, direct_phd_scholarship]):
+    if not phd_scholarship:
         print("  ⚠️  Scholarship types not found, skipping configuration seed")
         return
 
     # Current date for workflow testing
     now = datetime.now(timezone.utc)
 
-    # === 獎學金配置 (114學年度) ===
+    # === 獎學金配置 (115學年度為當前學年；114 及更早為前年度剩餘配額/續領來源) ===
     configurations_data = [
-        # 學士班新生獎學金配置 (114-1)
-        {
-            "scholarship_type_id": undergrad_scholarship.id,
-            "config_code": "undergraduate_freshman_114_1",
-            "config_name": "學士班新生獎學金 114學年第一學期",
-            "academic_year": 114,
-            "semester": Semester.first,
-            "description": "114學年度第一學期學士班新生獎學金配置",
-            "description_en": "Undergraduate Freshman Scholarship Configuration for 114-1",
-            "has_quota_limit": False,
-            "has_college_quota": False,
-            "quota_management_mode": QuotaManagementMode.simple,
-            "total_quota": 50,
-            "amount": 10000,
-            "currency": "TWD",
-            "application_start_date": now - timedelta(days=30),
-            "application_end_date": now + timedelta(days=30),
-            "is_active": True,
-            "effective_start_date": now - timedelta(days=60),
-            "effective_end_date": now + timedelta(days=90),
-            "version": "1.0",
-        },
-        # 學士班新生獎學金配置 (114-2)
-        {
-            "scholarship_type_id": undergrad_scholarship.id,
-            "config_code": "undergraduate_freshman_114_2",
-            "config_name": "學士班新生獎學金 114學年第二學期",
-            "academic_year": 114,
-            "semester": Semester.second,
-            "description": "114學年度第二學期學士班新生獎學金配置",
-            "description_en": "Undergraduate Freshman Scholarship Configuration for 114-2",
-            "has_quota_limit": False,
-            "has_college_quota": False,
-            "quota_management_mode": QuotaManagementMode.simple,
-            "total_quota": 50,
-            "amount": 10000,
-            "currency": "TWD",
-            "application_start_date": now - timedelta(days=30),
-            "application_end_date": now + timedelta(days=30),
-            "is_active": True,
-            "effective_start_date": now - timedelta(days=60),
-            "effective_end_date": now + timedelta(days=90),
-            "version": "1.0",
-        },
         # 博士生獎學金配置 (112學年) - 前年度剩餘配額
         {
             "scholarship_type_id": phd_scholarship.id,
@@ -223,7 +176,7 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
             "has_quota_limit": True,
             "has_college_quota": True,
             "quota_management_mode": QuotaManagementMode.matrix_based,
-            "total_quota": 30,
+            "total_quota": 36,
             "quotas": {
                 "nstc": {
                     "E": 3,
@@ -240,8 +193,12 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
                     "A": 1,
                     "K": 1,
                 },
+                # MOE is current-year only (never shared), but the 113 cohort in
+                # seed_ay115_demo holds moe_1w awards, so the pool must exist or
+                # the quota dashboard reports 113 moe_1w as permanently negative.
+                "moe_1w": {"E": 2, "C": 2, "I": 1, "S": 1},
             },
-            "project_numbers": {"nstc": "113R000001"},
+            "project_numbers": {"nstc": "113R000001", "moe_1w": "113E000001"},
             "amount": 40000,
             "currency": "TWD",
             "is_active": False,
@@ -249,15 +206,17 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
             "effective_end_date": now - timedelta(days=120),
             "version": "1.0",
         },
-        # 博士生獎學金配置 (114學年) - Matrix Quota
+        # 博士生獎學金配置 (114學年) - 前一學年（已結束申請；為 115 續領生的來源年度，
+        # 其 nstc 剩餘配額可由 115 共用）。seed_ay115_demo 會在此配置下建立已核准的
+        # 114 得獎者，讓 115 的「續領」（學生自助 / 管理員匯入續領生）有資料可續。
         {
             "scholarship_type_id": phd_scholarship.id,
             "config_code": "phd_114",
             "config_name": "博士生獎學金 114學年",
             "academic_year": 114,
             "semester": None,  # 學年制
-            "description": "114學年度博士生獎學金配置",
-            "description_en": "PhD Scholarship Configuration for Academic Year 114 with Matrix Quota",
+            "description": "114學年度博士生獎學金配置（前一學年，申請已截止）",
+            "description_en": "PhD Scholarship Configuration for Academic Year 114 (previous year, closed)",
             "has_quota_limit": True,
             "has_college_quota": True,
             "quota_management_mode": QuotaManagementMode.matrix_based,
@@ -304,6 +263,88 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
             },
             "amount": 40000,
             "currency": "TWD",
+            # Every 114 window is in the past: the year is over, its recipients
+            # are now 115 續領 candidates. The config stays is_active so its
+            # approved applications, rosters and 領獎紀錄 remain queryable.
+            "renewal_application_start_date": now - timedelta(days=410),
+            "renewal_application_end_date": now - timedelta(days=350),
+            "application_start_date": now - timedelta(days=410),
+            "application_end_date": now - timedelta(days=350),
+            "renewal_requires_professor_review": True,
+            "renewal_professor_review_start": now - timedelta(days=370),
+            "renewal_professor_review_end": now - timedelta(days=335),
+            "renewal_requires_college_review": True,
+            "renewal_college_review_start": now - timedelta(days=370),
+            "renewal_college_review_end": now - timedelta(days=305),
+            "requires_professor_recommendation": True,
+            "professor_review_start": now - timedelta(days=370),
+            "professor_review_end": now - timedelta(days=335),
+            "requires_college_review": True,
+            "college_review_start": now - timedelta(days=370),
+            "college_review_end": now - timedelta(days=305),
+            "review_deadline": now - timedelta(days=300),
+            "is_active": True,
+            "effective_start_date": now - timedelta(days=485),
+            "effective_end_date": now - timedelta(days=10),
+            "version": "1.0",
+        },
+        # 博士生獎學金配置 (115學年) - 當前學年, Matrix Quota
+        {
+            "scholarship_type_id": phd_scholarship.id,
+            "config_code": "phd_115",
+            "config_name": "博士生獎學金 115學年",
+            "academic_year": 115,
+            "semester": None,  # 學年制
+            "description": "115學年度博士生獎學金配置",
+            "description_en": "PhD Scholarship Configuration for Academic Year 115 with Matrix Quota",
+            "has_quota_limit": True,
+            "has_college_quota": True,
+            "quota_management_mode": QuotaManagementMode.matrix_based,
+            "total_quota": 100,
+            "quotas": {
+                "nstc": {
+                    "E": 15,
+                    "C": 12,
+                    "I": 10,
+                    "S": 8,
+                    "B": 6,
+                    "O": 5,
+                    "D": 4,
+                    "1": 3,
+                    "6": 3,
+                    "7": 3,
+                    "M": 5,
+                    "A": 4,
+                    "K": 2,
+                },
+                "moe_1w": {
+                    "E": 10,
+                    "C": 8,
+                    "I": 7,
+                    "S": 6,
+                    "B": 4,
+                    "O": 3,
+                    "D": 3,
+                    "1": 2,
+                    "6": 2,
+                    "7": 2,
+                    "M": 4,
+                    "A": 3,
+                    "K": 1,
+                },
+            },
+            # NSTC leftovers from prior years can still be distributed (補發);
+            # MOE is always current-year only.
+            "shared_quota_sources": [
+                {"source_config_code": "phd_114", "sub_types": ["nstc"]},
+                {"source_config_code": "phd_113", "sub_types": ["nstc"]},
+            ],
+            "project_numbers": {
+                "nstc": "115R000001",
+                "moe_1w": "115E000001",
+            },
+            "amount": 40000,
+            "currency": "TWD",
             # The renewal cycle runs alongside the general cycle (續領 and 新申請
             # open together in the real PhD process). Keeping it OPEN is what
             # makes the admin 匯入續領生 surface usable on a freshly seeded DB —
@@ -331,31 +372,6 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
             "review_deadline": now + timedelta(days=65),
             "is_active": True,
             "effective_start_date": now - timedelta(days=120),
-            "effective_end_date": now + timedelta(days=365),
-            "version": "1.0",
-        },
-        # 逕讀博士獎學金配置 (114學年)
-        {
-            "scholarship_type_id": direct_phd_scholarship.id,
-            "config_code": "direct_phd_114",
-            "config_name": "逕讀博士獎學金 114學年",
-            "academic_year": 114,
-            "semester": None,  # 學年制
-            "description": "114學年度逕讀博士獎學金配置",
-            "description_en": "Direct PhD Scholarship Configuration for Academic Year 114",
-            "has_quota_limit": False,
-            "has_college_quota": False,
-            "quota_management_mode": QuotaManagementMode.simple,
-            "total_quota": 30,
-            "amount": 35000,
-            "currency": "TWD",
-            "application_start_date": now - timedelta(days=30),
-            "application_end_date": now + timedelta(days=30),
-            "requires_professor_recommendation": True,
-            "professor_review_start": now + timedelta(days=5),
-            "professor_review_end": now + timedelta(days=35),
-            "is_active": True,
-            "effective_start_date": now - timedelta(days=60),
             "effective_end_date": now + timedelta(days=365),
             "version": "1.0",
         },
@@ -410,11 +426,21 @@ async def seed_scholarship_rules(session: AsyncSession) -> None:
     if not admin_id:
         admin_id = 1
 
-    # === 獎學金資格規則 (114學年度) ===
-    scholarship_rules_data = [
+    phd_result = await session.execute(select(ScholarshipType).where(ScholarshipType.code == "phd"))
+    phd_scholarship = phd_result.scalar_one_or_none()
+    if not phd_scholarship:
+        print("  ⚠️  PhD scholarship type not found, skipping rule seed")
+        return
+
+    # === 獎學金資格規則 ===
+    # Authored once (as 114) and emitted for every year in RULE_ACADEMIC_YEARS:
+    # the eligibility service matches rules on `academic_year == config.academic_year`
+    # (or NULL), so the 115 config would validate NOTHING without its own copy.
+    # 114 keeps its copy so prior-year rosters / 續領 re-checks still resolve.
+    base_scholarship_rules = [
         # 博士生獎學金 共同規則 - 114學年度
         {
-            "scholarship_type_id": 2,
+            "scholarship_type_id": phd_scholarship.id,
             "sub_type": None,
             "academic_year": 114,
             "semester": None,  # 學年制獎學金不需要學期
@@ -438,7 +464,7 @@ async def seed_scholarship_rules(session: AsyncSession) -> None:
             "updated_by": admin_id,
         },
         {
-            "scholarship_type_id": 2,
+            "scholarship_type_id": phd_scholarship.id,
             "sub_type": None,
             "academic_year": 114,
             "semester": None,  # 學年制獎學金不需要學期
@@ -464,7 +490,7 @@ async def seed_scholarship_rules(session: AsyncSession) -> None:
             "updated_by": admin_id,
         },
         {
-            "scholarship_type_id": 2,
+            "scholarship_type_id": phd_scholarship.id,
             "sub_type": None,
             "academic_year": 114,
             "semester": None,  # 學年制獎學金不需要學期
@@ -488,7 +514,7 @@ async def seed_scholarship_rules(session: AsyncSession) -> None:
             "updated_by": admin_id,
         },
         {
-            "scholarship_type_id": 2,
+            "scholarship_type_id": phd_scholarship.id,
             "sub_type": None,
             "academic_year": 114,
             "semester": None,  # 學年制獎學金不需要學期
@@ -513,7 +539,7 @@ async def seed_scholarship_rules(session: AsyncSession) -> None:
         },
         # 博士生獎學金 教育部獎學金 (每月 $5000 元) 5. 中華民國國籍 6. 一至三年級
         {
-            "scholarship_type_id": 2,
+            "scholarship_type_id": phd_scholarship.id,
             "sub_type": "moe_1w",
             "academic_year": 114,
             "semester": None,  # 學年制獎學金不需要學期
@@ -537,7 +563,7 @@ async def seed_scholarship_rules(session: AsyncSession) -> None:
             "updated_by": admin_id,
         },
         {
-            "scholarship_type_id": 2,
+            "scholarship_type_id": phd_scholarship.id,
             "sub_type": "moe_1w",
             "academic_year": 114,
             "semester": None,  # 學年制獎學金不需要學期
@@ -562,7 +588,7 @@ async def seed_scholarship_rules(session: AsyncSession) -> None:
         },
         # 博士生獎學金 教育部獎學金 (兩萬元) 7. 中華民國國籍 8. 一至三年級
         {
-            "scholarship_type_id": 2,
+            "scholarship_type_id": phd_scholarship.id,
             "sub_type": "moe_2w",
             "academic_year": 114,
             "semester": None,  # 學年制獎學金不需要學期
@@ -586,7 +612,7 @@ async def seed_scholarship_rules(session: AsyncSession) -> None:
             "updated_by": admin_id,
         },
         {
-            "scholarship_type_id": 2,
+            "scholarship_type_id": phd_scholarship.id,
             "sub_type": "moe_2w",
             "academic_year": 114,
             "semester": None,  # 學年制獎學金不需要學期
@@ -609,179 +635,9 @@ async def seed_scholarship_rules(session: AsyncSession) -> None:
             "created_by": admin_id,
             "updated_by": admin_id,
         },
-        # 逕博獎學金 共同規則 1. 博士生身分 2. 在學生身分 3. 非在職生身分 4. 非陸港澳生身分 5. 逕博生身分 6. 第一學年
-        {
-            "scholarship_type_id": 3,
-            "sub_type": None,
-            "academic_year": 114,
-            "semester": None,
-            "is_template": False,
-            "rule_name": "逕讀博士獎學金 博士生身分",
-            "tag": "博士生",
-            "description": "逕讀博士獎學金需要博士生身分",
-            "rule_type": "student",
-            "condition_field": "std_degree",
-            "operator": "==",
-            "expected_value": "1",
-            "message": "逕讀博士獎學金需要博士生身分",
-            "message_en": "Direct PhD scholarship requires PhD student status",
-            "is_hard_rule": True,
-            "is_warning": False,
-            "priority": 1,
-            "is_active": True,
-            "is_initial_enabled": True,
-            "is_renewal_enabled": True,
-            "created_by": admin_id,
-            "updated_by": admin_id,
-        },
-        {
-            "scholarship_type_id": 3,
-            "sub_type": None,
-            "academic_year": 114,
-            "semester": None,
-            "is_template": False,
-            "rule_name": "逕讀博士獎學金 在學生身分 1: 在學 2: 應畢 3: 延畢",
-            "rule_type": "student_term",
-            "tag": "在學生",
-            "condition_field": "trm_studystatus",
-            "operator": "in",
-            "expected_value": "1,2,3",
-            "message": "逕讀博士獎學金需要在學生身分 1: 在學 2: 應畢 3: 延畢",
-            "message_en": "Direct PhD scholarship requires active student status",
-            # 硬性規則（#1139）：休學/退學（4/5）必須在匯入預檢與造冊資格
-            # 檢查中被標記，不可静默通過
-            "is_hard_rule": True,
-            "is_warning": False,
-            "priority": 2,
-            "is_active": True,
-            "is_initial_enabled": True,
-            "is_renewal_enabled": True,
-            "created_by": admin_id,
-            "updated_by": admin_id,
-        },
-        {
-            "scholarship_type_id": 3,
-            "sub_type": None,
-            "academic_year": 114,
-            "semester": None,
-            "is_template": False,
-            "rule_name": "逕讀博士獎學金 非在職生身分 需要為一般生",
-            "rule_type": "student",
-            "tag": "非在職生",
-            "condition_field": "std_schoolid",
-            "operator": "==",
-            "expected_value": "1",
-            "message": "逕讀博士獎學金需要非在職生身分 需要為一般生",
-            "message_en": "Direct PhD scholarship requires regular student status",
-            "is_hard_rule": False,
-            "is_warning": False,
-            "priority": 3,
-            "is_active": True,
-            "is_initial_enabled": True,
-            "is_renewal_enabled": True,
-            "created_by": admin_id,
-            "updated_by": admin_id,
-        },
-        {
-            "scholarship_type_id": 3,
-            "sub_type": None,
-            "academic_year": 114,
-            "semester": None,
-            "is_template": False,
-            "rule_name": "逕讀博士獎學金 非陸港澳生身分",
-            "rule_type": "student",
-            "tag": "非陸生",
-            "description": "逕讀博士獎學金需要非陸港澳生身分",
-            "condition_field": "std_identity",
-            "operator": "!=",
-            "expected_value": "17",
-            "message": "逕讀博士獎學金需要非陸港澳生身分",
-            "message_en": "Direct PhD scholarship requires non-Mainland China, Hong Kong, or Macao student status",
-            "is_hard_rule": False,
-            "is_warning": False,
-            "priority": 4,
-            "is_active": True,
-            "is_initial_enabled": True,
-            "is_renewal_enabled": True,
-            "created_by": admin_id,
-            "updated_by": admin_id,
-        },
-        {
-            "scholarship_type_id": 3,
-            "sub_type": None,
-            "academic_year": 114,
-            "semester": None,
-            "is_template": False,
-            "rule_name": "逕讀博士獎學金 逕博生身分 8: 大學逕博 9: 碩士逕博 10: 跨校學士逕博 11: 跨校碩士逕博",
-            "rule_type": "student",
-            "tag": "逕博生",
-            "description": "逕讀博士獎學金需要逕博生身分",
-            "condition_field": "std_enrolltype",
-            "operator": "in",
-            "expected_value": "8,9,10,11",
-            "message": "逕讀博士獎學金需要逕博生身分",
-            "message_en": "Direct PhD scholarship requires direct PhD student status",
-            "is_hard_rule": True,
-            "is_warning": False,
-            "priority": 5,
-            "is_active": True,
-            "is_initial_enabled": True,
-            "is_renewal_enabled": True,
-            "created_by": admin_id,
-            "updated_by": admin_id,
-        },
-        {
-            "scholarship_type_id": 3,
-            "sub_type": None,
-            "academic_year": 114,
-            "semester": None,
-            "is_template": False,
-            "rule_name": "逕讀博士獎學金 第一學年",
-            "rule_type": "student",
-            "tag": "第一學年",
-            "description": "逕讀博士獎學金需要第一學年",
-            "condition_field": "std_termcount",
-            "operator": "in",
-            "expected_value": "1,2",
-            "message": "逕讀博士獎學金需要第一學年",
-            "message_en": "Direct PhD scholarship requires first year",
-            "is_hard_rule": False,
-            "is_warning": False,
-            "priority": 6,
-            "is_active": True,
-            "is_initial_enabled": True,
-            "is_renewal_enabled": True,
-            "created_by": admin_id,
-            "updated_by": admin_id,
-        },
-        # 學士新生獎學金 共同規則 1.學士生身分
-        {
-            "scholarship_type_id": 1,
-            "sub_type": None,
-            "academic_year": 114,
-            "semester": Semester.first,
-            "is_template": False,
-            "rule_name": "學士新生獎學金 學士生身分",
-            "tag": "學士生",
-            "description": "學士新生獎學金需要學士生身分",
-            "rule_type": "student",
-            "condition_field": "std_degree",
-            "operator": "==",
-            "expected_value": "3",
-            "message": "學士新生獎學金需要學士生身分",
-            "message_en": "Undergraduate scholarship requires undergraduate student status",
-            "is_hard_rule": True,
-            "is_warning": False,
-            "priority": 1,
-            "is_active": True,
-            "is_initial_enabled": True,
-            "is_renewal_enabled": True,
-            "created_by": admin_id,
-            "updated_by": admin_id,
-        },
         # 一般生入學管道提醒規則
         {
-            "scholarship_type_id": 2,
+            "scholarship_type_id": phd_scholarship.id,
             "sub_type": "moe_1w",
             "academic_year": 114,
             "semester": None,
@@ -805,7 +661,7 @@ async def seed_scholarship_rules(session: AsyncSession) -> None:
             "updated_by": admin_id,
         },
         {
-            "scholarship_type_id": 2,
+            "scholarship_type_id": phd_scholarship.id,
             "sub_type": "moe_2w",
             "academic_year": 114,
             "semester": None,
@@ -830,7 +686,7 @@ async def seed_scholarship_rules(session: AsyncSession) -> None:
         },
         # 中華民國國籍生身份提醒規則
         {
-            "scholarship_type_id": 2,
+            "scholarship_type_id": phd_scholarship.id,
             "sub_type": "nstc",
             "academic_year": 114,
             "semester": None,
@@ -853,6 +709,10 @@ async def seed_scholarship_rules(session: AsyncSession) -> None:
             "created_by": admin_id,
             "updated_by": admin_id,
         },
+    ]
+
+    scholarship_rules_data = [
+        {**rule, "academic_year": year} for year in RULE_ACADEMIC_YEARS for rule in base_scholarship_rules
     ]
 
     for rule_data in scholarship_rules_data:
@@ -878,10 +738,7 @@ async def seed_scholarship_sub_type_configs(session: AsyncSession) -> None:
     sub_type_configs_data = []
 
     for scholarship in scholarships:
-        if scholarship.code == "undergraduate_freshman":
-            # 學士班新生獎學金已移除地區子類型配置
-            pass
-        elif scholarship.code == "phd":
+        if scholarship.code == "phd":
             # 博士生獎學金的子類型配置
             sub_type_configs_data.extend(
                 [
@@ -1208,8 +1065,8 @@ async def init_all_scholarship_configs() -> None:
 
     print("✅ Scholarship configuration initialization completed successfully!")
     print("\n📋 Configuration Data Summary:")
-    print("- 3 scholarship configurations (114 academic year)")
-    print("- 18 scholarship rules (114 academic year)")
+    print("- scholarship configurations (115 current year + 112/113/114 prior years)")
+    print("- scholarship rules (emitted for 114 and 115)")
     print("- 3 sub-type configurations (NSTC, MOE_1W, MOE_2W)")
     print("- 7 email templates (single + bulk sending)")
 

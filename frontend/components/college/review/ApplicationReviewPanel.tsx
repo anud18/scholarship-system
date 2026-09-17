@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { logger } from "@/lib/utils/logger";
 import { buildFileProxyUrl } from "@/lib/api/modules/system-settings";
 import { previewMimeType } from "@/lib/utils";
+import { triggerAttachmentDownload } from "@/lib/utils/download";
 import { User } from "@/types/user";
 import { useCollegeManagement } from "@/contexts/college-management-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -606,24 +607,25 @@ export function ApplicationReviewPanel({
           ? selectedSemester
           : undefined;
 
-      const { blob, filename } = await apiClient.college.exportPackage({
+      const { downloadUrl, filename } = await apiClient.college.exportPackage({
         scholarship_type_id: activeConfig.id,
         academic_year: selectedAcademicYear,
         semester: normalizedSemester,
         token,
       });
 
-      // Trigger browser download using backend-provided filename
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      a.remove();
+      // Hand the (possibly multi-GB, #1376) archive to the browser's own
+      // download manager: it streams to disk with its own progress UI instead
+      // of buffering the whole ZIP in JS memory. From here on the browser
+      // owns the outcome — the precheck above caught what we could catch.
+      triggerAttachmentDownload(downloadUrl, filename);
 
-      toast.success(locale === "zh" ? "匯出成功" : "Export successful");
+      toast.info(
+        locale === "zh"
+          ? "已交由瀏覽器下載，請於下載列查看進度與結果"
+          : "Handed to your browser — check the download bar for progress and result",
+        { description: filename }
+      );
     } catch (error) {
       toast.error(locale === "zh" ? "匯出申請資料失敗" : "Export failed", {
         description: error instanceof Error ? error.message : undefined,

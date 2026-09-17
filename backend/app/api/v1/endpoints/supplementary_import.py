@@ -30,7 +30,7 @@ from app.db.deps import get_db
 from app.models.audit_log import AuditAction, AuditLog
 from app.models.enums import Semester
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
-from app.models.user import User
+from app.models.user import AdminScholarship, User
 from app.schemas.response import ApiResponse
 from app.services.batch_import_template_service import build_batch_import_template
 from app.services.supplementary_import_service import SupplementaryImportService
@@ -126,6 +126,42 @@ async def _assert_scholarship_permission(db: AsyncSession, current_user: User, s
             status_code=status.HTTP_403_FORBIDDEN,
             detail="無權限操作此獎學金",
         )
+
+
+@router.get("/enabled")
+async def get_supplementary_import_enabled(
+    current_user: User = Depends(require_college),
+    db: AsyncSession = Depends(get_db),
+):
+    """查詢是否有任一「本學院可操作」的獎學金配置已開放補充匯入。
+
+    供前端決定是否顯示學院的「補充匯入」分頁：管理員未在任何配置開啟時，
+    整個入口隱藏；開啟後，各學年期的細節仍由 /availability 判斷。
+
+    只看呼叫者有權限（AdminScholarship）且啟用中的獎學金類型——其他獎學金的
+    開關對這個學院來說無法使用，顯示分頁只會導向空的下拉選單。未綁定學院的
+    帳號同理回 enabled=false，而非 403，讓前端安靜地隱藏入口。
+
+    **權限**: 僅限學院角色
+    """
+    if not (current_user.college_code or "").strip():
+        return ApiResponse(success=True, message="查詢成功", data={"enabled": False})
+
+    stmt = (
+        select(ScholarshipConfiguration.id)
+        .join(ScholarshipType, ScholarshipType.id == ScholarshipConfiguration.scholarship_type_id)
+        .join(AdminScholarship, AdminScholarship.scholarship_id == ScholarshipType.id)
+        .where(
+            AdminScholarship.admin_id == current_user.id,
+            ScholarshipType.status == "active",
+            ScholarshipConfiguration.is_active.is_(True),
+            ScholarshipConfiguration.allow_supplementary_import.is_(True),
+        )
+        .limit(1)
+    )
+    is_enabled = (await db.execute(stmt)).scalar_one_or_none() is not None
+
+    return ApiResponse(success=True, message="查詢成功", data={"enabled": is_enabled})
 
 
 @router.get("/availability")
