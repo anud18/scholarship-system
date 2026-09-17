@@ -11,7 +11,9 @@ never disagree with each other.
 Numeric codes are the SIS 陽明-campus academy codes (std_academyno). The
 sheet's three placeholder rows (4=選讀生, *=外校生, ^=校內其他單位) are
 deliberately excluded: they are not colleges and must never be offered when
-assigning the 學院 role or labelling a quota row.
+assigning the 學院 role or labelling a quota row. Code 8 (人社院) is excluded
+too: the same college is already code A (人社院), so listing both offered a
+duplicate 人社院 option.
 """
 
 from typing import Dict, List, Optional, Tuple
@@ -34,7 +36,6 @@ ACADEMY_TABLE: Tuple[Tuple[str, str, str], ...] = (
     ("D", "半導體學院", "International College of Semiconductor Technology"),
     ("G", "綠能學院", "College of Artificial Intelligence"),
     ("Z", "國防中心", "CeNDER"),
-    ("8", "人社院", "College of Humanities and Social Sciences"),
     ("1", "醫學院", "College of Medicine"),
     ("2", "牙醫學院", "College of Dentistry"),
     ("3", "護理學院", "College of Nursing"),
