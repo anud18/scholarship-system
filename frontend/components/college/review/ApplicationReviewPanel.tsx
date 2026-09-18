@@ -252,7 +252,9 @@ export function ApplicationReviewPanel({
     // Only refresh when:
     // 1. Current tab is "review"
     // 2. Data version has changed (indicating updates from other tabs)
-    if (activeTab === "review") {
+    // Wait for the shell's auto-selection: fetching before a scholarship/year is
+    // chosen pulls the unfiltered list, only to be replaced moments later.
+    if (activeTab === "review" && activeScholarshipTab && selectedAcademicYear) {
       logger.debug(
         `[ApplicationReviewPanel] Auto-refreshing applications (dataVersion: ${dataVersion})`
       );
@@ -707,12 +709,7 @@ export function ApplicationReviewPanel({
               const [year, semester] = value.split("-");
               setSelectedAcademicYear(parseInt(year));
               setSelectedSemester(semester || undefined);
-              // 重新載入該獎學金類型的申請資料
-              fetchCollegeApplications(
-                parseInt(year),
-                semester || undefined,
-                activeScholarshipTab
-              );
+              // 申請資料由上方的 effect 依新的學年/學期自動重新載入
             }}
             locale={locale}
           />

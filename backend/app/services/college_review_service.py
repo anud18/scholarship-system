@@ -316,7 +316,6 @@ class CollegeReviewService:
                 selectinload(Application.reviews).selectinload(ApplicationReview.reviewer),
                 selectinload(Application.reviews).selectinload(ApplicationReview.items),
                 selectinload(Application.files),
-                selectinload(Application.student),  # Load student information
             )
             .where(Application.status.in_(REVIEWABLE_APPLICATION_STATUSES))
         )
@@ -326,7 +325,12 @@ class CollegeReviewService:
         if scholarship_type_id:
             stmt = stmt.where(Application.scholarship_type_id == scholarship_type_id)
 
-        # scholarship_type parameter deprecated - use scholarship_type_id instead
+        elif scholarship_type:
+            # The college UI tabs by scholarship code; without this the list pulled
+            # (and SIS-enriched) every scholarship's applications for the year.
+            stmt = stmt.join(ScholarshipType, Application.scholarship_type_id == ScholarshipType.id).where(
+                ScholarshipType.code == scholarship_type
+            )
 
         if sub_type:
             stmt = stmt.where(func.upper(Application.sub_scholarship_type) == sub_type.upper())
