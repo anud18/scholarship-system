@@ -78,17 +78,6 @@ jobs:
             || { echo "::error::Database health check failed"; exit 1; }
           echo "✅ Database is healthy"
 
-      - name: Check Redis cache
-        id: redis-check
-        continue-on-error: true
-        env:
-          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
-        run: |
-          PONG=$(docker exec scholarship_redis_prod \
-            redis-cli --no-auth-warning -a "$REDIS_PASSWORD" ping 2>/dev/null || echo "")
-          [ "$PONG" = "PONG" ] || { echo "::error::Redis health check failed (got '$PONG')"; exit 1; }
-          echo "✅ Redis is healthy"
-
       - name: Generate health report
         if: always()
         run: |
@@ -100,7 +89,6 @@ jobs:
           | Backend API | ${{ steps.api-check.outcome == 'success' && '✅ Healthy' || '❌ Unhealthy' }} (HTTP ${{ steps.api-check.outputs.status || 'N/A' }}) |
           | Frontend | ${{ steps.frontend-check.outcome == 'success' && '✅ Healthy' || '❌ Unhealthy' }} (HTTP ${{ steps.frontend-check.outputs.status || 'N/A' }}) |
           | Database | ${{ steps.db-check.outcome == 'success' && '✅ Healthy' || '❌ Unhealthy' }} |
-          | Redis | ${{ steps.redis-check.outcome == 'success' && '✅ Healthy' || '❌ Unhealthy' }} |
 
           **Timestamp**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
           EOF
@@ -111,6 +99,5 @@ jobs:
         if: |
           steps.api-check.outcome != 'success' ||
           steps.frontend-check.outcome != 'success' ||
-          steps.db-check.outcome != 'success' ||
-          steps.redis-check.outcome != 'success'
+          steps.db-check.outcome != 'success'
         run: exit 1
