@@ -31,9 +31,9 @@ describe("calculateFormProgress", () => {
   });
 
   it("stays below 100% until personal info is saved", () => {
-    expect(
-      calculateFormProgress({ ...base, isPersonalInfoSaved: false })
-    ).toBe(0);
+    expect(calculateFormProgress({ ...base, isPersonalInfoSaved: false })).toBe(
+      0
+    );
 
     const filled = {
       ...base,
@@ -91,9 +91,7 @@ describe("calculateFormProgress", () => {
   });
 
   it("requires a sub-type only when the scholarship offers a choice", () => {
-    expect(
-      calculateFormProgress({ ...base, hasSubTypeChoice: true })
-    ).toBe(50);
+    expect(calculateFormProgress({ ...base, hasSubTypeChoice: true })).toBe(50);
     expect(
       calculateFormProgress({
         ...base,

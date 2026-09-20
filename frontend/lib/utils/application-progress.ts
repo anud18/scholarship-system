@@ -48,9 +48,7 @@ export const calculateFormProgress = ({
   const completionChecks = [
     isPersonalInfoSaved,
     ...requiredFields.map(f => isFilled(formData[f.field_name])),
-    ...requiredDocuments.map(
-      d => (fileData[d.document_name]?.length ?? 0) > 0
-    ),
+    ...requiredDocuments.map(d => (fileData[d.document_name]?.length ?? 0) > 0),
     ...(hasSubTypeChoice ? [selectedSubTypeCount > 0] : []),
   ];
 

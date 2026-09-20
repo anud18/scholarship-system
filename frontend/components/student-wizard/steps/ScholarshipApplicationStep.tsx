@@ -169,7 +169,6 @@ export function ScholarshipApplicationStep({
   const [dynamicFileData, setDynamicFileData] = useState<
     Record<string, File[]>
   >({});
-  const [formProgress, setFormProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   // Form config of the scholarship whose 固定欄位/固定文件 text the 個人資料
   // section shows — see the loader effect below.
@@ -619,16 +618,6 @@ export function ScholarshipApplicationStep({
     loadEligibleScholarships();
   }, []);
 
-  useEffect(() => {
-    calculateProgress();
-  }, [
-    selectedScholarship,
-    selectedSubTypes,
-    dynamicFormData,
-    dynamicFileData,
-    personalInfoSaved,
-  ]);
-
   // The 個人資料 section sits above the scholarship picker, so before a choice
   // is made it shows the first eligible scholarship's fixed-item text rather
   // than the built-in defaults — the admin's renames are per scholarship type
@@ -808,47 +797,29 @@ export function ScholarshipApplicationStep({
     }
   };
 
-  const calculateProgress = async () => {
-    if (!selectedScholarship) {
-      setFormProgress(0);
-      return;
-    }
-
-    try {
-      const response = await api.applicationFields.getFormConfig(
-        selectedScholarship.code
-      );
-      if (!response.success || !response.data) {
-        setFormProgress(0);
-        return;
-      }
-
-      const { fields, documents } = response.data;
-
-      // Sub-type selection is required only when the scholarship offers one
-      const hasSubTypeChoice = Boolean(
-        selectedScholarship.eligible_sub_types &&
-          selectedScholarship.eligible_sub_types.length > 0 &&
-          selectedScholarship.eligible_sub_types[0]?.value !== "general" &&
-          selectedScholarship.eligible_sub_types[0]?.value !== null
-      );
-
-      setFormProgress(
-        calculateFormProgress({
-          fields,
-          documents,
-          formData: dynamicFormData,
-          fileData: dynamicFileData,
-          hasSubTypeChoice,
-          selectedSubTypeCount: selectedSubTypes.length,
-          isPersonalInfoSaved: personalInfoSaved,
-        })
-      );
-    } catch (error) {
-      // silently ignore progress calculation errors
-      setFormProgress(0);
-    }
-  };
+  // Derived synchronously from the form config the fixed-text loader already
+  // holds, so a late response can never overwrite a newer result (提交申請 is
+  // gated on this). While that config still belongs to a previously selected
+  // scholarship — or failed to load — progress reads 0.
+  const selectedFormConfig =
+    selectedScholarship &&
+    fixedFormConfig?.scholarship_type === selectedScholarship.code
+      ? fixedFormConfig
+      : null;
+  const formProgress = selectedFormConfig
+    ? calculateFormProgress({
+        fields: selectedFormConfig.fields,
+        documents: selectedFormConfig.documents,
+        formData: dynamicFormData,
+        fileData: dynamicFileData,
+        // Sub-type selection is required only when the scholarship offers one
+        hasSubTypeChoice: (selectedScholarship?.eligible_sub_types ?? []).some(
+          st => st.value && st.value !== "general"
+        ),
+        selectedSubTypeCount: selectedSubTypes.length,
+        isPersonalInfoSaved: personalInfoSaved,
+      })
+    : 0;
 
   // Auto-select the sole eligible sub-type. With exactly one real choice,
   // leaving it unselected strands the form below 100% (sub-type is a required
@@ -1657,7 +1628,7 @@ export function ScholarshipApplicationStep({
                 </span>
               </div>
               <Progress value={formProgress} className="h-2" />
-              {formProgress < 100 && (
+              {formProgress < 100 && personalInfoSaved && (
                 <p className="text-sm text-amber-600">
                   {text.completeAllRequired} ({formProgress}%)
                 </p>
