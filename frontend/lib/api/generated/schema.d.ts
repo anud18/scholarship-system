@@ -5150,11 +5150,11 @@ export interface paths {
         put?: never;
         /**
          * Submit Application Review
-         * @description Submit review for an application (professor, college, or admin)
+         * @description Submit review for an application (professor or admin)
          *
          *     Role-based permissions:
          *     - Professor: can review all sub-types
-         *     - College: can review sub-types not rejected by professor
+         *     - College: never (the college recommends through its ranking alone)
          *     - Admin: can review sub-types not rejected by professor or college
          *
          *     Permission filtering handled by ReviewService.get_reviewable_subtypes()

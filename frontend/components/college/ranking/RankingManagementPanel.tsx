@@ -463,86 +463,6 @@ export function RankingManagementPanel({
     ]
   );
 
-  const handleReviewApplication = useCallback(
-    async (
-      applicationId: number,
-      action: "approve" | "reject",
-      comments?: string
-    ) => {
-      try {
-        const response = await apiClient.college.reviewApplication(
-          applicationId,
-          {
-            recommendation: action,
-            review_comments: comments,
-          }
-        );
-
-        // 檢查是否自動重新執行了分發
-        if (response.success && response.data) {
-          const reviewResult = response.data as {
-            redistribution_info?: {
-              auto_redistributed?: boolean;
-              reason?: string;
-              total_allocated?: number;
-              roster_info?: { roster_code?: string };
-            };
-          };
-          const redistribution = reviewResult.redistribution_info;
-
-          if (redistribution?.auto_redistributed) {
-            toast.success(
-              `審核完成並已自動重新執行分發，分配 ${redistribution.total_allocated} 名學生`,
-              { duration: 5000 }
-            );
-          } else if (redistribution?.reason === "roster_exists") {
-            toast.warning(
-              `審核完成。此排名已開始造冊 (${redistribution.roster_info?.roster_code})，未重新執行分發`,
-              { duration: 6000 }
-            );
-          } else {
-            toast.success(`審核${action === "approve" ? "核准" : "駁回"}完成`);
-          }
-        }
-
-        // 刷新所有相關資料以確保 UI 同步
-        await Promise.all([
-          // 刷新當前排名的詳細資訊（包含最新的分配結果）
-          selectedRanking
-            ? fetchRankingDetails(selectedRanking)
-            : Promise.resolve(),
-          // 刷新排名列表（更新分配計數等統計資訊）
-          fetchRankings(),
-          // 刷新申請列表（更新學生狀態）
-          fetchCollegeApplications(
-            selectedAcademicYear,
-            selectedSemester,
-            activeScholarshipTab
-          ),
-        ]);
-
-        // Increment data version to notify other panels to refresh
-        incrementDataVersion();
-        logger.debug(
-          "[RankingManagementPanel] Data version incremented after review"
-        );
-      } catch (error) {
-        logger.error("Failed to review application", { error: error });
-        toast.error("審核提交失敗");
-      }
-    },
-    [
-      selectedRanking,
-      fetchRankingDetails,
-      fetchRankings,
-      fetchCollegeApplications,
-      selectedAcademicYear,
-      selectedSemester,
-      activeScholarshipTab,
-      incrementDataVersion,
-    ]
-  );
-
   const handleFinalizeRanking = useCallback(
     async (targetRankingId?: number) => {
       const rankingId = targetRankingId ?? selectedRanking;
@@ -986,7 +906,6 @@ export function RankingManagementPanel({
               }
               rankingId={selectedRanking}
               onRankingChange={handleRankingChange}
-              onReviewApplication={handleReviewApplication}
               onFinalizeRanking={handleFinalizeRanking}
               onImportExcel={handleImportExcel}
               locale={locale}

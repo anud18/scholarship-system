@@ -588,6 +588,7 @@ describe("reasonsBySuggestion / summarizeReasons", () => {
       "college_rejected",
       "no_college_quota",
       "not_applied",
+      "professor_unreviewed",
       "quota_full",
       "review_rejected",
     ]);
