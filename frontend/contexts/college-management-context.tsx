@@ -71,7 +71,6 @@ interface CollegeManagementContextType {
   applications: Application[];
   isLoading: boolean;
   error: string | null;
-  updateApplicationStatus: (applicationId: number, status: string, reviewNotes?: string) => Promise<Application | undefined>;
   fetchCollegeApplications: (academicYear?: number, semester?: string, scholarshipType?: string) => Promise<void>;
 
   // View state
@@ -183,7 +182,6 @@ export function CollegeManagementProvider({
     applications,
     isLoading,
     error,
-    updateApplicationStatus,
     fetchCollegeApplications,
   } = useCollegeApplications();
 
@@ -548,7 +546,6 @@ export function CollegeManagementProvider({
     applications,
     isLoading,
     error,
-    updateApplicationStatus,
     fetchCollegeApplications,
     viewMode,
     setViewMode,

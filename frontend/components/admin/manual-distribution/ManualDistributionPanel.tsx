@@ -21,6 +21,7 @@ import type {
 } from "@/lib/api/modules/manual-distribution";
 import { DistributionSummaryDialog } from "./DistributionSummaryDialog";
 import {
+  ALL_SUB_TYPES_UNREVIEWED,
   buildCollegeNameMap,
   getSavedAllocation,
   isCancelledAllocation,
@@ -1793,6 +1794,8 @@ export function ManualDistributionPanel({
                           {collegeStudents.map(student => {
                             const rejectedSubTypes =
                               student.rejected_sub_types || [];
+                            const unreviewedSubTypes =
+                              student.professor_unreviewed_sub_types || [];
                             const curAlloc = localAllocations.get(
                               student.ranking_item_id
                             );
@@ -1874,11 +1877,10 @@ export function ManualDistributionPanel({
                                     (student.applied_sub_types || []).length >
                                       0) ? (
                                     <div className="flex flex-col gap-0.5">
-                                      {/* Same convention as 學院推薦: a chip
-                                          per applied sub-type, and a missing
-                                          professor verdict renders as 未推薦
-                                          — it no longer blocks allocation,
-                                          the admin decides. */}
+                                      {/* A chip per applied sub-type; a
+                                          missing professor verdict renders
+                                          as 未推薦 and greys that sub-type's
+                                          核配 cell out (see isUnreviewed). */}
                                       <SubTypeVerdictChips
                                         appliedSubTypes={
                                           student.applied_sub_types || []
@@ -1909,11 +1911,10 @@ export function ManualDistributionPanel({
                                 </td>
                                 <td className="px-1.5 py-1.5 border border-slate-200 leading-snug">
                                   <div className="flex flex-col gap-0.5">
-                                    {/* The ranking IS the college's primary
-                                        verdict: rows only exist once the
+                                    {/* The ranking IS the college's verdict —
+                                        its only one: rows only exist once the
                                         college finalized its ranking, and
-                                        N (college_rejected) means 不推薦.
-                                        Review-tab verdicts supplement it. */}
+                                        N (college_rejected) means 不推薦. */}
                                     {student.college_rejected ? (
                                       <span
                                         className={VERDICT_CHIP.reject}
@@ -1929,14 +1930,6 @@ export function ManualDistributionPanel({
                                         排名: 推薦
                                       </span>
                                     )}
-                                    <SubTypeVerdictChips
-                                      appliedSubTypes={
-                                        student.applied_sub_types || []
-                                      }
-                                      items={student.college_review_items || []}
-                                      quotaStatus={quotaStatus}
-                                      noVerdictTitle="學院未對此子類型作出推薦審核"
-                                    />
                                     {/* Why the last 預設分發 left this row
                                         blank, straight from the backend.
                                         撤銷/停發 is omitted — the row's own
@@ -1955,16 +1948,28 @@ export function ManualDistributionPanel({
                                   </div>
                                 </td>
                                 {subTypeCols.map(col => {
-                                  const isApplied =
-                                    student.applied_sub_types.includes(
-                                      col.sub_type
-                                    );
                                   // rejected_sub_types arrive lowercased from
                                   // the backend; normalize the config key so
                                   // case-differing sub-type codes still match.
-                                  const isRejected = rejectedSubTypes.includes(
-                                    col.sub_type.toLowerCase().trim()
+                                  const normalizedSubType = col.sub_type
+                                    .toLowerCase()
+                                    .trim();
+                                  // applied_sub_types are free-form strings
+                                  // ("NSTC", " nstc") — compare normalized, as
+                                  // the backend does.
+                                  const isApplied = student.applied_sub_types.some(
+                                    t => t.toLowerCase().trim() === normalizedSubType
                                   );
+                                  const isRejected =
+                                    rejectedSubTypes.includes(normalizedSubType);
+                                  // 教授未推薦: a required professor verdict is
+                                  // still missing on this sub-type (decided by
+                                  // the backend, which also refuses the tick).
+                                  const isUnreviewed =
+                                    unreviewedSubTypes.includes(
+                                      ALL_SUB_TYPES_UNREVIEWED
+                                    ) ||
+                                    unreviewedSubTypes.includes(normalizedSubType);
                                   const isChecked =
                                     curAlloc?.sub_type === col.sub_type &&
                                     curAlloc?.config_id === col.config_id;
@@ -2013,15 +2018,17 @@ export function ManualDistributionPanel({
                                     isFinalizing ||
                                     isRestoring ||
                                     autoAllocatingCollege !== null;
-                                  // A rejected sub-type can't be (re)checked,
-                                  // but a cell that is ALREADY checked must
-                                  // stay clickable so the admin can uncheck it
-                                  // — finalize hard-blocks rejected
-                                  // allocations with 「請先取消該勾選」, which
-                                  // would deadlock against a disabled cell.
+                                  // A rejected or 教授未推薦 sub-type can't be
+                                  // (re)checked, but a cell that is ALREADY
+                                  // checked must stay clickable so the admin
+                                  // can uncheck it — finalize hard-blocks
+                                  // rejected allocations with 「請先取消該勾選」,
+                                  // which would deadlock against a disabled
+                                  // cell.
                                   const disabled =
                                     !isApplied ||
-                                    (isRejected && !isChecked) ||
+                                    ((isRejected || isUnreviewed) &&
+                                      !isChecked) ||
                                     atCapacity ||
                                     isFallbackColumn ||
                                     isCancelled ||
@@ -2036,9 +2043,11 @@ export function ManualDistributionPanel({
                                             ? "opacity-40 bg-red-50"
                                             : !isApplied
                                               ? "opacity-40"
-                                              : isFallbackColumn
-                                                ? "opacity-40 bg-amber-100/40"
-                                                : ""
+                                              : isUnreviewed
+                                                ? "opacity-40 bg-slate-100"
+                                                : isFallbackColumn
+                                                  ? "opacity-40 bg-amber-100/40"
+                                                  : ""
                                       }`}
                                     >
                                       <input
@@ -2057,6 +2066,10 @@ export function ManualDistributionPanel({
                                                 ? isChecked
                                                   ? `審核不同意 ${col.display_name}，請取消勾選`
                                                   : `審核不同意（不推薦）${col.display_name}`
+                                                : isUnreviewed
+                                                  ? isChecked
+                                                    ? `教授未推薦 ${col.display_name}，取消勾選後無法再勾選`
+                                                    : `教授未推薦 ${col.display_name}，無法核配`
                                                 : atCapacity
                                                   ? `${col.display_name} 名額已滿`
                                                   : collegeFull

@@ -1,23 +1,27 @@
-"""Tests for the review-reject gate on manual distribution.
+"""Tests for the review gates on manual distribution.
 
-Rule (用戶需求): 審核「不同意」的子類型，分發時絕不可被分發到 (rejection
-gate, no exemptions — renewal or not, professor step or not). A sub-type the
-professor merely has NOT approved (no review at all, or no verdict on that
-sub-type) IS allocatable: the grid renders it as 未推薦 (same convention as
-the 學院推薦 column) and the admin decides — one unreviewed application must
-not strand the whole distribution (2026-07 staging fix; the former positive
-professor-approval gate was removed).
+Rule 1 (用戶需求): 審核「不同意」的子類型，分發時絕不可被分發到 (rejection
+gate, no exemptions — renewal or not, professor step or not).
 
-The gate is enforced in ManualDistributionService._validate_allocations
+Rule 2 (用戶需求 2026-09): 教授「未推薦」(required professor step, no verdict on
+that sub-type) 的子類型在分發格反灰、不可勾選. The backend mirrors the greyed-out
+cell: a NEW tick on such a sub-type is refused, 預設分發 skips it. Exempt:
+flows with no professor step (renewal-aware), and a slot the ranking item
+ALREADY holds — the grid posts every row on save, and the former blanket
+approval gate stranded the whole distribution on earlier-saved slots (2026-07
+staging, #1199), so only new ticks are refused.
+
+The gates are enforced in ManualDistributionService._validate_allocations
 (called first by allocate()), so a violation blocks the whole allocate() call
-before any mutation. It additionally guards finalize() (rejects may arrive
-after the allocation was saved) and restore_from_history() (a snapshot may
-predate the reject).
+before any mutation. The reject gate additionally guards finalize() (rejects
+may arrive after the allocation was saved) and restore_from_history() (a
+snapshot may predate the reject).
 """
 
 from datetime import datetime, timezone
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.application import Application
@@ -164,17 +168,107 @@ async def test_allocate_allowed_when_professor_approved_that_subtype(db: AsyncSe
 
 
 @pytest.mark.asyncio
-async def test_allocate_allowed_for_subtype_professor_did_not_review(db: AsyncSession):
+async def test_allocate_blocked_for_subtype_professor_did_not_review(db: AsyncSession):
     service, item_id, sch_id = await _setup(db, suffix="wrongsub", approved_sub_types=["nstc"])
-    # Professor approved nstc only; moe_1w has no verdict → shown as 未推薦
-    # in the grid but still allocatable (no positive-approval gate).
-    await service._validate_allocations(sch_id, YEAR, SEM, [{"ranking_item_id": item_id, "sub_type_code": "moe_1w"}])
+    # Professor approved nstc only; moe_1w has no verdict → 未推薦, greyed out
+    # in the grid and refused here.
+    with pytest.raises(ValueError, match="教授尚未推薦"):
+        await service._validate_allocations(
+            sch_id, YEAR, SEM, [{"ranking_item_id": item_id, "sub_type_code": "moe_1w"}]
+        )
 
 
 @pytest.mark.asyncio
-async def test_allocate_allowed_when_no_professor_review(db: AsyncSession):
-    # No professor review at all — must NOT block the distribution.
+async def test_allocate_blocked_when_no_professor_review(db: AsyncSession):
+    # No professor review at all — every applied sub-type is 未推薦.
     service, item_id, sch_id = await _setup(db, suffix="noreview", approved_sub_types=None)
+    with pytest.raises(ValueError, match="教授尚未推薦"):
+        await service._validate_allocations(sch_id, YEAR, SEM, [{"ranking_item_id": item_id, "sub_type_code": "nstc"}])
+
+
+@pytest.mark.asyncio
+async def test_unreviewed_gate_normalizes_sub_type_codes(db: AsyncSession):
+    # Free-form codes: the stored review code and the allocation input are
+    # both normalized before comparing, so "NSTC" approves " nstc".
+    service, item_id, sch_id = await _setup(db, suffix="unrevcase", approved_sub_types=["NSTC"])
+    await service._validate_allocations(sch_id, YEAR, SEM, [{"ranking_item_id": item_id, "sub_type_code": " nstc"}])
+
+
+@pytest.mark.asyncio
+async def test_already_held_unreviewed_slot_does_not_strand_the_save(db: AsyncSession):
+    # The grid posts EVERY row on save. A slot saved before the professor step
+    # was enforced must not abort the whole allocate() call (#1199).
+    service, item_id, sch_id = await _setup(db, suffix="heldslot", approved_sub_types=None, allocated_sub_type="nstc")
+    await service._validate_allocations(sch_id, YEAR, SEM, [{"ranking_item_id": item_id, "sub_type_code": "nstc"}])
+
+
+@pytest.mark.asyncio
+async def test_moving_a_held_slot_to_another_unreviewed_subtype_is_blocked(db: AsyncSession):
+    # Only the slot the item already holds is exempt — switching it to a
+    # different unreviewed sub-type is a new tick.
+    service, item_id, sch_id = await _setup(db, suffix="heldmove", approved_sub_types=None, allocated_sub_type="nstc")
+    with pytest.raises(ValueError, match="教授尚未推薦"):
+        await service._validate_allocations(
+            sch_id, YEAR, SEM, [{"ranking_item_id": item_id, "sub_type_code": "moe_1w"}]
+        )
+
+
+@pytest.mark.asyncio
+async def test_moving_a_held_slot_onto_another_config_is_a_new_tick(db: AsyncSession):
+    # "Already holds" = the SAME cell the grid renders as checked: sub-type AND
+    # quota config. Re-pointing a held 未推薦 slot at another year's quota must
+    # not slip through the exemption.
+    service, item_id, sch_id = await _setup(db, suffix="heldcfg", approved_sub_types=None, allocated_sub_type="nstc")
+    item = await db.get(CollegeRankingItem, item_id)
+    other_config_id = item.allocation_config_id + 1000
+    with pytest.raises(ValueError, match="教授尚未推薦"):
+        await service._validate_allocations(
+            sch_id,
+            YEAR,
+            SEM,
+            [{"ranking_item_id": item_id, "sub_type_code": "nstc", "allocation_config_id": other_config_id}],
+        )
+
+
+@pytest.mark.asyncio
+async def test_held_slot_is_exempt_when_the_same_config_is_sent_explicitly(db: AsyncSession):
+    # The grid always posts the cell's config id — the exemption must hold for
+    # the explicit id as well as for the omitted (defaulted) one.
+    service, item_id, sch_id = await _setup(db, suffix="heldsame", approved_sub_types=None, allocated_sub_type="nstc")
+    item = await db.get(CollegeRankingItem, item_id)
+    await service._validate_allocations(
+        sch_id,
+        YEAR,
+        SEM,
+        [{"ranking_item_id": item_id, "sub_type_code": "nstc", "allocation_config_id": item.allocation_config_id}],
+    )
+
+
+@pytest.mark.asyncio
+async def test_application_without_sub_types_is_blocked_until_professor_reviews(db: AsyncSession):
+    # No sub-types → the professor's verdict lives under ReviewService's
+    # "default" fallback code, so "unreviewed" cannot be a set of applied codes.
+    service, item_id, sch_id = await _setup(db, suffix="nosub", approved_sub_types=None)
+    item = await db.get(CollegeRankingItem, item_id)
+    app = await db.get(Application, item.application_id)
+    app.scholarship_subtype_list = []
+    await db.commit()
+    with pytest.raises(ValueError, match="教授尚未推薦"):
+        await service._validate_allocations(sch_id, YEAR, SEM, [{"ranking_item_id": item_id, "sub_type_code": "nstc"}])
+
+    professor = (await db.execute(select(User).where(User.nycu_id == "gate_prof_nosub"))).scalar_one()
+    review = ApplicationReview(
+        application_id=app.id,
+        reviewer_id=professor.id,
+        recommendation="approve",
+        reviewed_at=datetime.now(timezone.utc),
+    )
+    db.add(review)
+    await db.commit()
+    await db.refresh(review)
+    db.add(ApplicationReviewItem(review_id=review.id, sub_type_code="default", recommendation="approve"))
+    await db.commit()
+
     await service._validate_allocations(sch_id, YEAR, SEM, [{"ranking_item_id": item_id, "sub_type_code": "nstc"}])
 
 
@@ -328,7 +422,7 @@ async def test_unallocate_allowed_for_cancelled_application(db: AsyncSession):
 @pytest.mark.asyncio
 async def test_allocate_allowed_for_normal_allocation_status(db: AsyncSession):
     # Only revoked/suspended are gated — an ordinary status still allocates.
-    service, item_id, sch_id = await _setup(db, suffix="normalstatus")
+    service, item_id, sch_id = await _setup(db, suffix="normalstatus", approved_sub_types=["nstc"])
     item = await db.get(CollegeRankingItem, item_id)
     app = await db.get(Application, item.application_id)
     app.quota_allocation_status = "waitlisted"

@@ -1019,7 +1019,7 @@ class TestUndecidedIdsOverrideThePersistedFlag:
 class TestUnallocatedReasons:
     """Every unplaced student says WHY, so the grid never has to guess."""
 
-    def _run(self, _compute_suggestions, item, quota=5, rejected_map=None):
+    def _run(self, _compute_suggestions, item, quota=5, rejected_map=None, unreviewed_map=None):
         return _compute_suggestions(
             unique_items=[item],
             default_prefs=["nstc"],
@@ -1028,6 +1028,7 @@ class TestUnallocatedReasons:
             quota_tracker=_build_quota_tracker({(115, "nstc", "A"): quota}),
             own_config_id=115,
             rejected_map=rejected_map,
+            unreviewed_map=unreviewed_map,
         )
 
     def test_successful_allocation_carries_no_reason(self, _compute_suggestions):
@@ -1049,6 +1050,39 @@ class TestUnallocatedReasons:
         results = self._run(_compute_suggestions, _make_item(101, 1, app), rejected_map={1: {"nstc"}})
 
         assert results[0]["reason"] == "review_rejected"
+
+    def test_professor_unreviewed(self, _compute_suggestions):
+        """Applied for nstc, the required professor verdict is missing (教授未推薦)
+        — the grid greys that cell out, so 預設分發 must not tick it either."""
+        app = _make_app(1, college="A", sub_type_preferences=["nstc"], scholarship_subtype_list=["nstc"])
+        results = self._run(_compute_suggestions, _make_item(101, 1, app), unreviewed_map={1: {"nstc"}})
+
+        assert results[0]["sub_type_code"] is None
+        assert results[0]["reason"] == "professor_unreviewed"
+
+    def test_unreviewed_sub_type_is_skipped_for_a_reviewed_one(self, _compute_suggestions):
+        """First choice is 未推薦 → fall through to the next reviewed preference."""
+        app = _make_app(
+            1, college="A", sub_type_preferences=["moe_1w", "nstc"], scholarship_subtype_list=["moe_1w", "nstc"]
+        )
+        results = self._run(_compute_suggestions, _make_item(101, 1, app), unreviewed_map={1: {"moe_1w"}})
+
+        assert results[0]["sub_type_code"] == "nstc"
+        assert results[0]["reason"] is None
+
+    def test_review_rejected_beats_professor_unreviewed_only_when_nothing_else_is_left(self, _compute_suggestions):
+        """nstc rejected + moe_1w 未推薦: what survived review waits on the professor."""
+        app = _make_app(
+            1, college="A", sub_type_preferences=["nstc", "moe_1w"], scholarship_subtype_list=["nstc", "moe_1w"]
+        )
+        results = self._run(
+            _compute_suggestions,
+            _make_item(101, 1, app),
+            rejected_map={1: {"nstc"}},
+            unreviewed_map={1: {"moe_1w"}},
+        )
+
+        assert results[0]["reason"] == "professor_unreviewed"
 
     def test_not_applied(self, _compute_suggestions):
         """Only applied for moe_2w, which this config has no quota row for."""

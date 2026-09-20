@@ -77,6 +77,9 @@ UNALLOCATED_COLLEGE_REJECTED = "college_rejected"
 UNALLOCATED_CANCELLED = "cancelled"
 UNALLOCATED_QUOTA_FULL = "quota_full"
 UNALLOCATED_REVIEW_REJECTED = "review_rejected"
+# Every sub-type they could draw still waits on a required professor verdict
+# (教授未推薦) — mirrors the greyed-out 核配 cells in the grid.
+UNALLOCATED_PROFESSOR_UNREVIEWED = "professor_unreviewed"
 UNALLOCATED_NOT_APPLIED = "not_applied"
 # The student's college has no cell in the quota matrix at all — an unmapped
 # 學院代碼, or a config that carries no per-college quota. Distinct from
@@ -140,23 +143,23 @@ async def load_rejected_subtype_map(db: AsyncSession, app_ids: list[int]) -> dic
     return rejected_map
 
 
-async def load_review_items_by_role(db: AsyncSession, app_ids: list[int]) -> dict[int, dict[str, list[dict[str, Any]]]]:
-    """Load per-sub-type review verdicts grouped by reviewer role for a batch of applications.
+async def load_professor_review_items(db: AsyncSession, app_ids: list[int]) -> dict[int, list[dict[str, Any]]]:
+    """Load the professor's per-sub-type review verdicts for a batch of applications.
 
-    Returns {application_id: {"professor": [...], "college": [...]}} where each
-    entry is {"sub_type_code", "recommendation", "comments"} — the same summary
-    shape the college review list exposes as professor_review_items. Admin
-    reviews are excluded on purpose: the manual-distribution grid IS the admin
-    decision surface, so only the upstream 教授/學院 verdicts are displayed.
+    Returns {application_id: [...]} where each entry is {"sub_type_code",
+    "recommendation", "comments"} — the same summary shape the college review
+    list exposes as professor_review_items. Only the professor's verdicts are
+    loaded: the college recommends through its ranking alone (college_rejected
+    on the ranking item), and the manual-distribution grid IS the admin
+    decision surface, so neither has review items to display here.
     Sub-type codes are normalized with _norm_sub_type (matches rejected_sub_types).
     """
-    review_map: dict[int, dict[str, list[dict[str, Any]]]] = {}
+    review_map: dict[int, list[dict[str, Any]]] = {}
     if not app_ids:
         return review_map
     query = (
         select(
             ApplicationReview.application_id,
-            User.role,
             ApplicationReviewItem.sub_type_code,
             ApplicationReviewItem.recommendation,
             ApplicationReviewItem.comments,
@@ -165,14 +168,13 @@ async def load_review_items_by_role(db: AsyncSession, app_ids: list[int]) -> dic
         .join(User, User.id == ApplicationReview.reviewer_id)
         .where(
             ApplicationReview.application_id.in_(app_ids),
-            User.role.in_([UserRole.professor, UserRole.college]),
+            User.role == UserRole.professor,
         )
         .order_by(ApplicationReview.reviewed_at, ApplicationReviewItem.id)
     )
     result = await db.execute(query)
-    for app_id, role, sub_type_code, recommendation, comments in result:
-        role_key = role.value if hasattr(role, "value") else str(role)
-        review_map.setdefault(app_id, {}).setdefault(role_key, []).append(
+    for app_id, sub_type_code, recommendation, comments in result:
+        review_map.setdefault(app_id, []).append(
             {
                 "sub_type_code": _norm_sub_type(sub_type_code),
                 "recommendation": recommendation,
@@ -180,6 +182,40 @@ async def load_review_items_by_role(db: AsyncSession, app_ids: list[int]) -> dic
             }
         )
     return review_map
+
+
+# Marks EVERY sub-type as 教授未推薦: an application without sub-types stores the
+# professor's verdict under ReviewService's "default" fallback code, which no
+# quota column is ever named after, so "nothing reviewed" cannot be expressed
+# as a set of applied codes.
+ALL_SUB_TYPES_UNREVIEWED = "*"
+
+
+def _professor_unreviewed_sub_types(app: Application, professor_items: list[dict[str, Any]]) -> set[str]:
+    """Applied sub-types still waiting on a REQUIRED professor verdict (教授未推薦).
+
+    Empty when the application's flow has no professor step (renewal-aware via
+    requires_professor_review_for) — there is no verdict to wait for. Otherwise
+    every applied sub-type the professor gave neither 推薦 nor 不推薦 on. Such
+    a sub-type is not allocatable: the grid greys its 核配 cell out, 預設分發
+    skips it and allocate() refuses a new tick on it. An application with no
+    sub-types at all yields {ALL_SUB_TYPES_UNREVIEWED} until the professor has
+    reviewed it. Test membership with _is_professor_unreviewed only. Codes are
+    normalized with _norm_sub_type; `app.scholarship_configuration` must be
+    eager-loaded.
+    """
+    cfg = app.scholarship_configuration
+    if not (cfg and cfg.requires_professor_review_for(bool(app.is_renewal))):
+        return set()
+    applied = {_norm_sub_type(code) for code in (app.scholarship_subtype_list or [])}
+    if not applied:
+        return set() if professor_items else {ALL_SUB_TYPES_UNREVIEWED}
+    return applied - {item["sub_type_code"] for item in professor_items}
+
+
+def _is_professor_unreviewed(unreviewed: set[str], sub_type_code: Optional[str]) -> bool:
+    """Whether `sub_type_code` is covered by a _professor_unreviewed_sub_types result."""
+    return ALL_SUB_TYPES_UNREVIEWED in unreviewed or _norm_sub_type(sub_type_code) in unreviewed
 
 
 def _canonical_sub_type(code: Optional[str], allowed_configs_by_sub_type: dict[str, list[int]]) -> str:
@@ -259,6 +295,7 @@ def _compute_suggestions(
     own_config_id: int,
     rejected_map: Optional[dict[int, set[str]]] = None,
     undecided_ids: Optional[set[int]] = None,
+    unreviewed_map: Optional[dict[int, set[str]]] = None,
 ) -> list[dict]:
     """
     Pure allocation logic (no DB access).  Extracted so it can be unit-tested
@@ -291,6 +328,10 @@ def _compute_suggestions(
         hand or saved — and is skipped (its quota was charged when the tracker
         was seeded). Omit to fall back to the persisted `is_allocated` flag,
         which is only correct when nothing is staged.
+    unreviewed_map:
+        {application_id: {sub_type_codes awaiting a required professor verdict}}
+        (see _professor_unreviewed_sub_types) — excluded from allocation, same
+        as the greyed-out 核配 cells in the grid.
 
     Returns
     -------
@@ -301,6 +342,8 @@ def _compute_suggestions(
     """
     if rejected_map is None:
         rejected_map = {}
+    if unreviewed_map is None:
+        unreviewed_map = {}
 
     def _is_undecided(item) -> bool:
         if undecided_ids is None:
@@ -359,7 +402,9 @@ def _compute_suggestions(
             for canonical in (_canonical_sub_type(p, allowed_configs_by_sub_type) for p in raw_prefs)
             if (_norm_sub_type(canonical) in applied_set if applied_set else True)
         ]
-        preferences: list[str] = [c for c in applicable if _norm_sub_type(c) not in rejected]
+        not_rejected: list[str] = [c for c in applicable if _norm_sub_type(c) not in rejected]
+        unreviewed = unreviewed_map.get(app.id, set())
+        preferences: list[str] = [c for c in not_rejected if not _is_professor_unreviewed(unreviewed, c)]
 
         allocated_sub_type: Optional[str] = None
         allocated_config: Optional[int] = None
@@ -402,6 +447,9 @@ def _compute_suggestions(
                 for cid in allowed_configs_by_sub_type.get(sub_type, [own_config_id])
             )
             results.append(_unplaced(item.id, UNALLOCATED_QUOTA_FULL if has_cell else UNALLOCATED_NO_COLLEGE_QUOTA))
+        elif not_rejected:
+            # What survived review still waits on the professor (教授未推薦).
+            results.append(_unplaced(item.id, UNALLOCATED_PROFESSOR_UNREVIEWED))
         elif applicable:
             # Every sub-type they could draw was rejected (不同意) in review.
             results.append(_unplaced(item.id, UNALLOCATED_REVIEW_REJECTED))
@@ -603,9 +651,23 @@ class ManualDistributionService:
         """See load_rejected_subtype_map (module-level, shared with the renewal path)."""
         return await load_rejected_subtype_map(self.db, app_ids)
 
-    async def _batch_load_review_items(self, app_ids: list[int]) -> dict[int, dict[str, list[dict[str, Any]]]]:
-        """See load_review_items_by_role (module-level)."""
-        return await load_review_items_by_role(self.db, app_ids)
+    async def _batch_load_review_items(self, app_ids: list[int]) -> dict[int, list[dict[str, Any]]]:
+        """See load_professor_review_items (module-level)."""
+        return await load_professor_review_items(self.db, app_ids)
+
+    async def _batch_load_unreviewed_map(self, apps: list[Application]) -> dict[int, set[str]]:
+        """{application_id: sub-types awaiting a required professor verdict}.
+
+        See _professor_unreviewed_sub_types — every app's scholarship_configuration
+        must be eager-loaded. Applications with nothing pending are omitted.
+        """
+        review_items_map = await self._batch_load_review_items([app.id for app in apps])
+        unreviewed_map: dict[int, set[str]] = {}
+        for app in apps:
+            unreviewed = _professor_unreviewed_sub_types(app, review_items_map.get(app.id, []))
+            if unreviewed:
+                unreviewed_map[app.id] = unreviewed
+        return unreviewed_map
 
     async def _bulk_system_received_months(
         self,
@@ -710,8 +772,8 @@ class ManualDistributionService:
         app_ids = [item.application.id for item in items if item.application]
         rejected_map = await self._batch_load_rejected_map(app_ids)
 
-        # Batch-load per-sub-type 教授/學院 review verdicts for the
-        # recommendation display columns.
+        # Batch-load the professor's per-sub-type verdicts for the 教授推薦
+        # display column and the 教授未推薦 cell gating.
         review_items_map = await self._batch_load_review_items(app_ids)
 
         # Bulk-load both halves of 已領月份數 in one query each — the imported
@@ -765,7 +827,7 @@ class ManualDistributionService:
                 rm_value = None
                 rm_source = None
 
-            app_reviews = review_items_map.get(app.id, {})
+            professor_items = review_items_map.get(app.id, [])
             cfg = app.scholarship_configuration
 
             student = {
@@ -774,18 +836,22 @@ class ManualDistributionService:
                 "rank_position": item.rank_position,
                 "applied_sub_types": app.scholarship_subtype_list or [],
                 "rejected_sub_types": list(rejected_map.get(app.id, set())),
-                # Per-sub-type 推薦/不推薦 verdicts from the unified review
-                # table, split by reviewer role for the 教授推薦/學院推薦
-                # display columns. The college's PRIMARY verdict is the
-                # finalized ranking itself (college_rejected below) — its
-                # review items only supplement it. requires_professor_
-                # recommendation lets the UI distinguish 未推薦 chips (step
-                # required, no verdict yet) from "—" (no professor step).
-                "professor_review_items": app_reviews.get("professor", []),
-                "college_review_items": app_reviews.get("college", []),
+                # The professor's per-sub-type 推薦/不推薦 verdicts for the
+                # 教授推薦 display column. The college's verdict is the
+                # finalized ranking itself (college_rejected below) — it has
+                # no review items. requires_professor_recommendation lets the
+                # UI distinguish 未推薦 chips (step required, no verdict yet)
+                # from "—" (no professor step).
+                "professor_review_items": professor_items,
                 "requires_professor_recommendation": bool(
                     cfg and cfg.requires_professor_review_for(bool(app.is_renewal))
                 ),
+                # Applied sub-types still waiting on a required professor
+                # verdict (教授未推薦) — the grid greys their 核配 cells out,
+                # same as rejected_sub_types ("*" = every sub-type, see
+                # ALL_SUB_TYPES_UNREVIEWED). Derived HERE so the grid, 預設
+                # 分發 and the allocate gate can never disagree.
+                "professor_unreviewed_sub_types": sorted(_professor_unreviewed_sub_types(app, professor_items)),
                 "allocated_sub_type": item.allocated_sub_type,
                 # Config whose quota this slot consumes — the frontend grid
                 # seeds the checked column from (allocated_sub_type,
@@ -1502,22 +1568,26 @@ class ManualDistributionService:
                 raise ValueError(f"Duplicate ranking item: {item_id}")
             seen_items.add(item_id)
 
-        # Both allocation gates below read the same (allocation → application)
+        # The allocation gates below all read the same (allocation → application)
         # pairs, so resolve them ONCE — a save can carry hundreds of ranking
         # item ids and each resolve is a query plus its selectin follow-up.
         resolved = await self._resolve_allocating_apps(allocations)
 
         # Review gate (審核不同意的子類型不可被分發) — an explicit reviewer
-        # reject blocks unconditionally. A MISSING professor approval does NOT
-        # block: the grid renders it as 未推薦 (matching the 學院推薦 column)
-        # and the admin decides — distribution must not strand on unreviewed
-        # applications.
+        # reject blocks unconditionally.
         await self._assert_no_rejected_sub_types(resolved)
 
         # 撤銷／停發 gate — mirrors the disabled checkbox in the UI so neither a
         # stale grid nor a crafted request can re-allocate a student the admin
         # deliberately pulled out of the distribution.
         self._assert_no_cancelled_applications(resolved)
+
+        # 教授未推薦 gate — a sub-type still waiting on a required professor
+        # verdict cannot be NEWLY ticked (mirrors the greyed-out cell). A slot
+        # the item already holds is left alone, so a save can never strand on
+        # allocations made before the professor step was enforced.
+        requesting_config = await self._load_config(scholarship_type_id, academic_year, semester)
+        await self._assert_professor_reviewed(resolved, requesting_config.id if requesting_config else None)
 
         # Server-side quota enforcement is net-new (spec §10): the lock gate in
         # allocate/finalize (_assert_round_not_oversubscribed) recounts remaining
@@ -1527,8 +1597,8 @@ class ManualDistributionService:
 
     async def _resolve_allocating_apps(
         self, allocations: list[dict[str, Any]]
-    ) -> list[tuple[dict[str, Any], Application]]:
-        """Pair each SUB-TYPE-ASSIGNING allocation with its Application.
+    ) -> list[tuple[dict[str, Any], Application, CollegeRankingItem]]:
+        """Pair each SUB-TYPE-ASSIGNING allocation with its Application and ranking item.
 
         Allocations with ``sub_type_code=None`` mean unallocate and are dropped —
         no allocation gate applies to them. Shared by the gates in
@@ -1541,43 +1611,88 @@ class ManualDistributionService:
         item_ids = [a["ranking_item_id"] for a in allocating]
         stmt = (
             select(CollegeRankingItem)
-            .options(selectinload(CollegeRankingItem.application))
+            .options(selectinload(CollegeRankingItem.application).selectinload(Application.scholarship_configuration))
             .where(CollegeRankingItem.id.in_(item_ids))
         )
         items = {it.id: it for it in (await self.db.execute(stmt)).scalars().all()}
 
-        resolved: list[tuple[dict[str, Any], Application]] = []
+        resolved: list[tuple[dict[str, Any], Application, CollegeRankingItem]] = []
         for alloc in allocating:
             item = items.get(alloc["ranking_item_id"])
             app = item.application if item else None
             if app is not None:
-                resolved.append((alloc, app))
+                resolved.append((alloc, app, item))
         return resolved
 
-    async def _assert_no_rejected_sub_types(self, resolved: list[tuple[dict[str, Any], Application]]) -> None:
+    async def _assert_no_rejected_sub_types(
+        self, resolved: list[tuple[dict[str, Any], Application, CollegeRankingItem]]
+    ) -> None:
         """Block any allocation to a sub-type an explicit reviewer reject (不同意) covers.
 
-        Takes the (allocation, application) pairs from _resolve_allocating_apps —
-        already limited to allocations that assign a sub-type. The gate is
-        unconditional — renewal or not — and mirrors the disabled checkbox in the
-        UI so a crafted request can't bypass it. A sub-type the professor merely
-        has NOT approved yet is allocatable: the grid shows it as 未推薦 and the
-        admin decides, so one unreviewed application can't strand the whole
-        distribution.
+        Takes the (allocation, application, ranking item) triples from
+        _resolve_allocating_apps — already limited to allocations that assign a
+        sub-type. The gate is unconditional — renewal or not — and mirrors the
+        disabled checkbox in the UI so a crafted request can't bypass it. A
+        sub-type merely waiting on the professor is _assert_professor_reviewed's
+        business.
         """
         if not resolved:
             return
 
-        rejected = await self._batch_load_rejected_map(list({app.id for _, app in resolved}))
+        rejected = await self._batch_load_rejected_map(list({app.id for _, app, _ in resolved}))
         rejected_violations = list(
             dict.fromkeys(
                 f"{app.app_id} → {alloc['sub_type_code']}"
-                for alloc, app in resolved
+                for alloc, app, _ in resolved
                 if _norm_sub_type(alloc["sub_type_code"]) in rejected.get(app.id, set())
             )
         )
         if rejected_violations:
             raise ValueError("以下分發之子類型審核不同意，無法分發：" + "、".join(rejected_violations))
+
+    async def _assert_professor_reviewed(
+        self,
+        resolved: list[tuple[dict[str, Any], Application, CollegeRankingItem]],
+        own_config_id: Optional[int],
+    ) -> None:
+        """Block a NEW allocation to a sub-type still waiting on a required professor verdict (教授未推薦).
+
+        Mirrors the greyed-out 核配 cell so neither a stale grid nor a crafted
+        request can tick it. Exempt by construction (see
+        _professor_unreviewed_sub_types): renewals / scholarships whose flow has
+        no professor step. Also exempt: an allocation the ranking item ALREADY
+        holds — the grid posts every row on save, and the former blanket gate
+        (#1199) stranded the whole distribution on slots saved earlier. Those
+        stay as they are (the admin can still untick them); only new ticks are
+        refused. finalize/restore are deliberately not gated for the same reason.
+
+        "Already holds" means the SAME cell the grid renders as checked — same
+        sub-type AND same quota config (``own_config_id`` stands in for an
+        omitted one, exactly as allocate() defaults it). Moving a held slot onto
+        another year's quota is a new tick.
+        """
+
+        def _holds(alloc: dict[str, Any], item: CollegeRankingItem) -> bool:
+            if not item.is_allocated:
+                return False
+            if _norm_sub_type(item.allocated_sub_type) != _norm_sub_type(alloc["sub_type_code"]):
+                return False
+            return (item.allocation_config_id or own_config_id) == (alloc.get("allocation_config_id") or own_config_id)
+
+        newly_assigned = [(alloc, app) for alloc, app, item in resolved if not _holds(alloc, item)]
+        if not newly_assigned:
+            return
+
+        unreviewed = await self._batch_load_unreviewed_map(list({app.id: app for _, app in newly_assigned}.values()))
+        violations = list(
+            dict.fromkeys(
+                f"{app.app_id} → {alloc['sub_type_code']}"
+                for alloc, app in newly_assigned
+                if _is_professor_unreviewed(unreviewed.get(app.id, set()), alloc["sub_type_code"])
+            )
+        )
+        if violations:
+            raise ValueError("以下分發之子類型教授尚未推薦，無法分發：" + "、".join(violations))
 
     async def _cancelled_ranking_item_ids(self, item_ids: list[int]) -> set[int]:
         """Ranking items whose application is 撤銷 (revoked) / 停發 (suspended)."""
@@ -1593,20 +1708,21 @@ class ManualDistributionService:
         )
         return set((await self.db.execute(stmt)).scalars().all())
 
-    def _assert_no_cancelled_applications(self, resolved: list[tuple[dict[str, Any], Application]]) -> None:
+    def _assert_no_cancelled_applications(
+        self, resolved: list[tuple[dict[str, Any], Application, CollegeRankingItem]]
+    ) -> None:
         """Block any allocation onto a 撤銷 (revoked) / 停發 (suspended) application.
 
         Cancelling frees the ranking item (``is_allocated=False``) so the slot can
         go to someone else — which also makes the student look allocatable again.
         The admin's decision wins: allocating to them is refused here, and
         restoring them is a separate explicit action (restore_allocation).
-        Takes the (allocation, application) pairs from _resolve_allocating_apps,
-        so unallocate rows (``sub_type_code=None``) are already excluded and stay
-        allowed.
+        Takes the triples from _resolve_allocating_apps, so unallocate rows
+        (``sub_type_code=None``) are already excluded and stay allowed.
         """
         violations = [
             f"{app.app_id}（{'撤銷' if app.quota_allocation_status == 'revoked' else '停發'}）"
-            for _, app in resolved
+            for _, app, _ in resolved
             if app.quota_allocation_status in CANCELLED_ALLOCATION_STATUSES
         ]
         if violations:
@@ -1766,10 +1882,11 @@ class ManualDistributionService:
 
         # Load items with eagerly loaded Application. Ordered by (rank_position,
         # id) — same as get_students_for_distribution — so the dedup below picks
-        # the SAME duplicate the grid renders.
+        # the SAME duplicate the grid renders. scholarship_configuration is
+        # eager-loaded for the 教授未推薦 exclusion (_batch_load_unreviewed_map).
         items_query = (
             select(CollegeRankingItem)
-            .options(selectinload(CollegeRankingItem.application))
+            .options(selectinload(CollegeRankingItem.application).selectinload(Application.scholarship_configuration))
             .where(CollegeRankingItem.ranking_id.in_(ranking_ids))
             .order_by(CollegeRankingItem.rank_position, CollegeRankingItem.id)
         )
@@ -1936,6 +2053,9 @@ class ManualDistributionService:
         # Load rejected sub-types from professor reviews.
         app_ids = [item.application.id for item in unique_items]
         rejected_map = await self._batch_load_rejected_map(app_ids)
+        # Sub-types still waiting on a required professor verdict (教授未推薦)
+        # are greyed out in the grid, so never suggest them either.
+        unreviewed_map = await self._batch_load_unreviewed_map([item.application for item in unique_items])
 
         return _compute_suggestions(
             unique_items=unique_items,
@@ -1946,6 +2066,7 @@ class ManualDistributionService:
             own_config_id=requesting_config.id,
             rejected_map=rejected_map,
             undecided_ids=undecided_ids,
+            unreviewed_map=unreviewed_map,
         )
 
     async def revoke_allocation(self, application_id: int, admin_user_id: int, reason: str) -> dict:

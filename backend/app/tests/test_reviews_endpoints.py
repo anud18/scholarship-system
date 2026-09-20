@@ -281,11 +281,20 @@ class TestReviewsAuthorization:
         response = await client.post(_submit_url(review_application.id), json=_approve_items("nstc"))
         assert response.status_code == 403
 
-    async def test_owning_college_can_still_submit_a_review(self, client, login, review_users, review_application):
-        """The scoping must not break the college that DOES own the application."""
+    async def test_owning_college_cannot_submit_a_review(self, client, login, review_users, review_application):
+        """The college recommends through its ranking alone — even the college
+        that owns the application has no review-submission step."""
         login(review_users["college"])
-        response = await client.post(_submit_url(review_application.id), json=_approve_items("nstc"))
-        assert response.status_code != 403
+        response = await client.post(_submit_url(review_application.id), json=_approve_items("nstc", "moe_1w"))
+        assert response.status_code == 403
+        assert "排名" in response.json()["message"]
+
+    async def test_owning_college_cannot_create_a_review(self, client, login, review_users, review_application):
+        """Same refusal on the POST /reviews twin of the submit route."""
+        login(review_users["college"])
+        payload = {"application_id": review_application.id, **_approve_items("nstc", "moe_1w")}
+        response = await client.post(f"{REVIEWS_PREFIX}/reviews", json=payload)
+        assert response.status_code == 403
 
     async def test_unbound_college_user_is_refused(self, client, login, review_users, review_application, db):
         """Fail closed: a college account with no college_code reaches nothing."""
@@ -584,20 +593,18 @@ class TestReviewSubmissionCoverage:
         assert stored.status_code == 200
         assert sorted(item["sub_type_code"] for item in stored.json()["data"]["items"]) == ["moe_1w", "nstc"]
 
-    async def test_college_must_cover_subtypes_professor_left_open(
+    async def test_college_cannot_submit_after_professor_approval(
         self, client, login, review_users, review_application
     ):
-        """College's required set is its own reviewable set, not the full applied list."""
+        """A professor approval opens nothing for the college: full sub-type
+        coverage is still refused, because the college has no review step."""
         login(review_users["professor"])
         prof = await client.post(_submit_url(review_application.id), json=_approve_items("nstc", "moe_1w"))
         assert prof.status_code == 200
 
         login(review_users["college"])
-        partial = await client.post(_submit_url(review_application.id), json=_approve_items("nstc"))
-        assert partial.status_code == 422
-
         full = await client.post(_submit_url(review_application.id), json=_approve_items("nstc", "moe_1w"))
-        assert full.status_code == 200
+        assert full.status_code == 403
 
 
 class TestReviewsValidation:

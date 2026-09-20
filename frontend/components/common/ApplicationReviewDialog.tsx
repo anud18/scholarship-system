@@ -173,9 +173,8 @@ interface ApplicationReviewDialogProps {
   academicYear?: number;
   user?: User;
 
-  // College-specific handlers (optional)
-  onApprove?: (id: number, comments?: string) => void;
-  onReject?: (id: number, comments?: string) => void;
+  // College-specific handlers (optional). The college has no review
+  // operation here — it recommends (or not) through its ranking alone.
   onRequestDocs?: (app: Application) => void;
   onDelete?: (app: Application) => void;
 
@@ -627,8 +626,6 @@ export function ApplicationReviewDialog({
   locale = "zh",
   academicYear,
   user,
-  onApprove,
-  onReject,
   onRequestDocs,
   onDelete,
   onAdminApprove,
@@ -655,7 +652,6 @@ export function ApplicationReviewDialog({
   const [isLoadingFields, setIsLoadingFields] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [reviewComment, setReviewComment] = useState("");
   const [detailedApplication, setDetailedApplication] = useState<Application | null>(null);
 
   // Sub-type review state (for unified review system)
@@ -708,6 +704,10 @@ export function ApplicationReviewDialog({
   const requiresProfessorReview =
     (detailedApplication as Application)?.scholarship_configuration?.requires_professor_recommendation ||
     false;
+
+  // 審核操作 (per-sub-type review) is an admin surface only: the college
+  // recommends — or not — through its ranking, never through a review here.
+  const canSubmitReview = role === "admin" || role === "super_admin";
 
   // Check if user can assign professors
   const canAssignProfessor =
@@ -906,14 +906,12 @@ export function ApplicationReviewDialog({
     }
   };
 
-  // Load sub-types and existing review for college and admin users
+  // Load sub-types and existing review (admin / super_admin only — the
+  // college recommends through its ranking, it has no 審核操作 tab)
   const loadSubTypesAndReview = async (applicationId: number) => {
     setIsLoadingSubTypes(true);
     try {
-      // Get available sub-types (route based on role)
-      const subTypesResponse = (role === "admin" || role === "super_admin")
-        ? await api.admin.getReviewableSubTypes(applicationId)
-        : await api.college.getSubTypes(applicationId);
+      const subTypesResponse = await api.admin.getReviewableSubTypes(applicationId);
       if (subTypesResponse.success && subTypesResponse.data) {
         const availableSubTypes = subTypesResponse.data as SubTypeOption[];
         setSubTypes(availableSubTypes);
@@ -925,11 +923,9 @@ export function ApplicationReviewDialog({
           comments: "",
         }));
 
-        // Try to get existing review (route based on role)
+        // Try to get existing review
         try {
-          const reviewResponse = (role === "admin" || role === "super_admin")
-            ? await api.admin.getApplicationReview(applicationId)
-            : await api.college.getReview(applicationId);
+          const reviewResponse = await api.admin.getApplicationReview(applicationId);
           const reviewData = reviewResponse.data as ExistingReview | undefined;
           if (reviewResponse.success && reviewData && reviewData.id > 0) {
             setExistingReview(reviewData);
@@ -989,18 +985,16 @@ export function ApplicationReviewDialog({
   useEffect(() => {
     if (open && application) {
       loadApplicationDetails(application.id);
-      // Reset review comment when opening a new application
-      setReviewComment("");
+      // Reset admin comments when opening a new application
       setAdminComments("");
 
-      // Load sub-types and existing review for college, admin, and super_admin users
-      if (["college", "admin", "super_admin"].includes(role)) {
+      // Load sub-types and existing review for admin and super_admin users
+      if (canSubmitReview) {
         loadSubTypesAndReview(application.id);
       }
     } else {
       setDetailedApplication(null);
       // Clear form state when dialog closes
-      setReviewComment("");
       setAdminComments("");
       setReviewItems([]);
       setSubTypes([]);
@@ -1230,7 +1224,7 @@ export function ApplicationReviewDialog({
     return String(error || 'Unknown error');
   };
 
-  // Submit review using unified format (multi-role: college or admin)
+  // Submit review using unified format (admin / super_admin)
   const submitReview = async () => {
     if (!detailedApplication || !reviewItems.length) return;
 
@@ -1293,10 +1287,7 @@ export function ApplicationReviewDialog({
         items: filteredItems,
       };
 
-      // Route submission based on role
-      const response = (role === "admin" || role === "super_admin")
-        ? await api.admin.submitApplicationReview(detailedApplication.id, submissionData)
-        : await api.college.submitReview(detailedApplication.id, submissionData);
+      const response = await api.admin.submitApplicationReview(detailedApplication.id, submissionData);
 
       if (response.success) {
         toast.success(
@@ -1355,39 +1346,6 @@ export function ApplicationReviewDialog({
       );
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  // Legacy handlers for backward compatibility (not used with new review system)
-  const handleApprove = async () => {
-    if (detailedApplication && onApprove && !isSubmitting) {
-      try {
-        setIsSubmitting(true);
-        await onApprove(detailedApplication.id, reviewComment);
-        // Close dialog after successful approval
-        onOpenChange(false);
-      } catch (error) {
-        logger.error('Failed to approve application:', error);
-        // Error handling is done in the parent component (toast notification)
-      } finally {
-        setIsSubmitting(false);
-      }
-    }
-  };
-
-  const handleReject = async () => {
-    if (detailedApplication && onReject && !isSubmitting) {
-      try {
-        setIsSubmitting(true);
-        await onReject(detailedApplication.id, reviewComment);
-        // Close dialog after successful rejection
-        onOpenChange(false);
-      } catch (error) {
-        logger.error('Failed to reject application:', error);
-        // Error handling is done in the parent component (toast notification)
-      } finally {
-        setIsSubmitting(false);
-      }
     }
   };
 
@@ -1467,13 +1425,7 @@ export function ApplicationReviewDialog({
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle>
-              {role === "college"
-                ? locale === "zh"
-                  ? "學院審核"
-                  : "College Review"
-                : locale === "zh"
-                  ? "申請詳情"
-                  : "Application Details"}{" "}
+              {locale === "zh" ? "申請詳情" : "Application Details"}{" "}
               - {displayData.app_id || `APP-${displayData.id}`}
             </DialogTitle>
             <DialogDescription>
@@ -1495,7 +1447,7 @@ export function ApplicationReviewDialog({
             </div>
           ) : detailedApplication ? (
             <Tabs defaultValue="basic" className="flex-1 overflow-hidden flex flex-col">
-              <TabsList className={role === "college" ? "grid w-full grid-cols-6" : "grid w-full grid-cols-7"}>
+              <TabsList className={role === "college" ? "grid w-full grid-cols-5" : "grid w-full grid-cols-7"}>
                 <TabsTrigger value="basic">
                   <Info className="h-4 w-4 mr-1" />
                   {locale === "zh" ? "基本資訊" : "Basic"}
@@ -1512,7 +1464,7 @@ export function ApplicationReviewDialog({
                   <GraduationCap className="h-4 w-4 mr-1" />
                   {locale === "zh" ? "學生資訊" : "Student"}
                 </TabsTrigger>
-                {["college", "admin", "super_admin"].includes(role) && (
+                {canSubmitReview && (
                   <TabsTrigger value="review">
                     <CheckCircle className="h-4 w-4 mr-1" />
                     {locale === "zh" ? "審核操作" : "Review"}
@@ -1935,8 +1887,8 @@ export function ApplicationReviewDialog({
                   </Card>
                 </TabsContent>
 
-                {/* Review Actions Tab (College, Admin, Super Admin) */}
-                {["college", "admin", "super_admin"].includes(role) && (
+                {/* Review Actions Tab (Admin, Super Admin) */}
+                {canSubmitReview && (
                   <TabsContent value="review" className="space-y-6 mt-4">
                     {existingReview && (
                       <Alert className="border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/20">

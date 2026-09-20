@@ -181,11 +181,6 @@ interface CollegeRankingTableProps {
   lockedByDeadline?: boolean;
   rankingId?: number;
   onRankingChange: (newOrder: Application[]) => void;
-  onReviewApplication: (
-    applicationId: number,
-    action: "approve" | "reject",
-    comments?: string
-  ) => void;
   onFinalizeRanking: () => void;
   onImportExcel?: (data: ExcelRankingImportRow[]) => Promise<void>;
   locale?: "zh" | "en";
@@ -203,7 +198,6 @@ function SortableItem({
   totalQuota,
   locale,
   isFinalized,
-  onReviewApplication,
   reviewScores,
   handleScoreUpdate,
   subTypeMeta,
@@ -215,11 +209,6 @@ function SortableItem({
   totalQuota: number;
   locale: "zh" | "en";
   isFinalized: boolean;
-  onReviewApplication: (
-    applicationId: number,
-    action: "approve" | "reject",
-    comments?: string
-  ) => void;
   reviewScores: ReviewScoresState;
   handleScoreUpdate: (appId: number, field: string, value: unknown) => void;
   subTypeMeta?: Record<
@@ -474,7 +463,6 @@ export function CollegeRankingTable({
   lockedByDeadline = false,
   rankingId,
   onRankingChange,
-  onReviewApplication,
   onFinalizeRanking,
   onImportExcel,
   locale = "zh",
@@ -968,7 +956,6 @@ export function CollegeRankingTable({
                       totalQuota={totalQuota}
                       locale={locale}
                       isFinalized={editingLocked}
-                      onReviewApplication={onReviewApplication}
                       reviewScores={reviewScores}
                       handleScoreUpdate={handleScoreUpdate}
                       subTypeMeta={subTypeMeta}
@@ -1008,12 +995,6 @@ export function CollegeRankingTable({
           onOpenChange={open => !open && setSelectedAppForDialog(null)}
           locale={locale}
           academicYear={academicYear}
-          onApprove={(id, comments) =>
-            onReviewApplication(id, "approve", comments)
-          }
-          onReject={(id, comments) =>
-            onReviewApplication(id, "reject", comments)
-          }
         />
       )}
     </div>

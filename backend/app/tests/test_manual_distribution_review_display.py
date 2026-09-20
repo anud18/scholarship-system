@@ -1,16 +1,18 @@
-"""Tests for the 教授推薦/學院推薦 display fields on manual-distribution rows.
+"""Tests for the 教授推薦 display/gating fields on manual-distribution rows.
 
 get_students_for_distribution must expose, per student row:
-  - professor_review_items / college_review_items: per-sub-type verdicts
-    ({sub_type_code, recommendation, comments}) split by reviewer role, with
-    admin reviews excluded (the grid IS the admin decision surface);
+  - professor_review_items: the professor's per-sub-type verdicts
+    ({sub_type_code, recommendation, comments}); college and admin reviews are
+    excluded (the college recommends through its ranking alone, and the grid
+    IS the admin decision surface);
   - requires_professor_recommendation: renewal-aware config flag so the UI can
     distinguish 未推薦 chips (professor step required, no verdict yet) from —
-    (no professor step at all).
+    (no professor step at all);
+  - professor_unreviewed_sub_types: applied sub-types still waiting on a
+    required professor verdict — their 核配 cells are greyed out.
 
-The college's PRIMARY verdict is the finalized ranking itself (the existing
-college_rejected field) — college review items only supplement it, so there is
-no requires_college_review flag.
+The college's verdict is the finalized ranking itself (the existing
+college_rejected field), so there is no college review field at all.
 """
 
 from datetime import datetime, timezone
@@ -170,8 +172,11 @@ async def test_rows_split_review_items_by_role_and_exclude_admin(db: AsyncSessio
         {"sub_type_code": "nstc", "recommendation": "approve", "comments": None},
         {"sub_type_code": "moe_1w", "recommendation": "reject", "comments": "名額有限"},
     ]
-    assert row["college_review_items"] == [{"sub_type_code": "nstc", "recommendation": "approve", "comments": "同意"}]
+    # The college recommends through its ranking alone — its (legacy) review
+    # rows are not part of the grid payload.
+    assert "college_review_items" not in row
     assert row["requires_professor_recommendation"] is True
+    assert row["professor_unreviewed_sub_types"] == []
 
 
 @pytest.mark.asyncio
@@ -183,8 +188,9 @@ async def test_rows_without_reviews_expose_empty_lists_and_config_flag(db: Async
     assert len(rows) == 1
     row = rows[0]
     assert row["professor_review_items"] == []
-    assert row["college_review_items"] == []
     assert row["requires_professor_recommendation"] is False
+    # No professor step → nothing to wait for, no cell is greyed out.
+    assert row["professor_unreviewed_sub_types"] == []
 
 
 @pytest.mark.asyncio
@@ -227,3 +233,49 @@ async def test_renewal_rows_use_renewal_professor_flag(db: AsyncSession):
     rows = await service.get_students_for_distribution(sch_id, YEAR, SEM)
 
     assert rows[0]["requires_professor_recommendation"] is True
+
+
+@pytest.mark.asyncio
+async def test_unreviewed_sub_types_list_what_the_professor_left_open(db: AsyncSession):
+    """未推薦 = professor step required AND no verdict on that sub-type. A
+    reject is a verdict (it surfaces through rejected_sub_types instead)."""
+    service, app, sch_id = await _setup(db, suffix="unrev")
+
+    rows = await service.get_students_for_distribution(sch_id, YEAR, SEM)
+    assert rows[0]["professor_unreviewed_sub_types"] == ["moe_1w", "nstc"]
+
+    professor = await _make_user(db, suffix="unrev", role=UserRole.professor)
+    await _add_review(db, application_id=app.id, reviewer=professor, items=[("nstc", "reject", "不同意")])
+
+    rows = await service.get_students_for_distribution(sch_id, YEAR, SEM)
+    assert rows[0]["professor_unreviewed_sub_types"] == ["moe_1w"]
+    assert rows[0]["rejected_sub_types"] == ["nstc"]
+
+
+@pytest.mark.asyncio
+async def test_college_review_does_not_count_as_a_professor_verdict(db: AsyncSession):
+    service, app, sch_id = await _setup(db, suffix="unrevcol")
+    college = await _make_user(db, suffix="unrevcol", role=UserRole.college)
+    await _add_review(db, application_id=app.id, reviewer=college, items=[("nstc", "approve", None)])
+
+    rows = await service.get_students_for_distribution(sch_id, YEAR, SEM)
+
+    assert rows[0]["professor_unreviewed_sub_types"] == ["moe_1w", "nstc"]
+
+
+@pytest.mark.asyncio
+async def test_application_without_sub_types_marks_every_sub_type_unreviewed(db: AsyncSession):
+    """No applied sub-types → the row carries the "*" wildcard until the
+    professor reviews (their verdict is stored under the "default" code)."""
+    service, app, sch_id = await _setup(db, suffix="nosub")
+    app.scholarship_subtype_list = []
+    await db.commit()
+
+    rows = await service.get_students_for_distribution(sch_id, YEAR, SEM)
+    assert rows[0]["professor_unreviewed_sub_types"] == ["*"]
+
+    professor = await _make_user(db, suffix="nosub", role=UserRole.professor)
+    await _add_review(db, application_id=app.id, reviewer=professor, items=[("default", "approve", None)])
+
+    rows = await service.get_students_for_distribution(sch_id, YEAR, SEM)
+    assert rows[0]["professor_unreviewed_sub_types"] == []

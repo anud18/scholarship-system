@@ -234,57 +234,6 @@ describe("createCollegeApi", () => {
     });
   });
 
-  // ─── reviewApplication (legacy) vs submitReview (unified) ─────────
-
-  it("reviewApplication POSTs legacy /college-review/applications/{id}/review", async () => {
-    // Pin SCOPE: this is the LEGACY college-review-only endpoint
-    // (NOT the unified multi-role /reviews/* path). Pin so refactor
-    // doesn't collapse with submitReview — they have different
-    // backend handlers and body schemas.
-    mockedRaw.POST.mockResolvedValueOnce({});
-    const api = createCollegeApi();
-    await api.reviewApplication(42, {
-      recommendation: "approve",
-      review_comments: "good candidate",
-    });
-    expect(mockedRaw.POST.mock.calls[0][0]).toBe(
-      "/api/v1/college-review/applications/{application_id}/review"
-    );
-  });
-
-  it("submitReview POSTs unified /reviews/applications/{id}/review (multi-role)", async () => {
-    // Pin: unified multi-role review system — body has `items`
-    // array with per-sub_type recommendations. Distinct from
-    // legacy reviewApplication.
-    mockedRaw.POST.mockResolvedValueOnce({});
-    const api = createCollegeApi();
-    await api.submitReview(42, {
-      items: [
-        { sub_type_code: "nstc", recommendation: "approve" },
-        { sub_type_code: "moe_1w", recommendation: "reject", comments: "..." },
-      ],
-    });
-    expect(mockedRaw.POST.mock.calls[0][0]).toBe(
-      "/api/v1/reviews/applications/{application_id}/review"
-    );
-    expect(mockedRaw.POST.mock.calls[0][1].body.items).toHaveLength(2);
-  });
-
-  it("getSubTypes + getReview use unified /reviews/* (NOT /college-review/*)", async () => {
-    // Pin: unified endpoints — pin so refactor moving them under
-    // /college-review/* breaks professor/admin reviewers.
-    mockedRaw.GET.mockResolvedValue({});
-    const api = createCollegeApi();
-    await api.getSubTypes(42);
-    await api.getReview(42);
-    expect(mockedRaw.GET.mock.calls[0][0]).toBe(
-      "/api/v1/reviews/applications/{application_id}/sub-types"
-    );
-    expect(mockedRaw.GET.mock.calls[1][0]).toBe(
-      "/api/v1/reviews/applications/{application_id}/review"
-    );
-  });
-
   // ─── Enumeration / preview endpoints ──────────────────────────────
 
   it("getAvailableCombinations GETs /available-combinations with empty options", async () => {

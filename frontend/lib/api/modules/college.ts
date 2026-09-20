@@ -429,37 +429,6 @@ export function createCollegeApi() {
     },
 
     /**
-     * Create or update college review for an application
-     * Type-safe: Path parameter and request body validated against OpenAPI
-     */
-    reviewApplication: async (
-      applicationId: number,
-      reviewData: {
-        recommendation: "approve" | "reject" | "conditional";
-        review_comments?: string;
-        academic_score?: number;
-        professor_review_score?: number;
-        college_criteria_score?: number;
-        special_circumstances_score?: number;
-        decision_reason?: string;
-        is_priority?: boolean;
-        needs_special_attention?: boolean;
-      }
-    ): Promise<ApiResponse<unknown>> => {
-      // Path is not in the generated OpenAPI schema (orphan/legacy route);
-      // the `as never` cast bypasses typed-route inference while keeping the
-      // call working at runtime. See issue #665.
-      const response = await typedClient.raw.POST(
-        "/api/v1/college-review/applications/{application_id}/review" as never,
-        {
-          params: { path: { application_id: applicationId } },
-          body: reviewData,
-        } as never
-      );
-      return toApiResponse<unknown>(response);
-    },
-
-    /**
      * Get sub-type translations from database
      * Type-safe: Response contains Chinese and English translations for sub-types
      */
@@ -518,61 +487,6 @@ export function createCollegeApi() {
             path: { student_id: studentId },
             query: { academic_year: academicYear },
           },
-        }
-      );
-      return toApiResponse<unknown>(response);
-    },
-
-    /**
-     * Get available sub-types for an application (unified review system)
-     * Uses multi-role review API endpoint
-     * Type-safe: Path parameter validated against OpenAPI
-     */
-    getSubTypes: async (applicationId: number): Promise<ApiResponse<string[]>> => {
-      const response = await typedClient.raw.GET(
-        "/api/v1/reviews/applications/{application_id}/sub-types",
-        {
-          params: { path: { application_id: applicationId } },
-        }
-      );
-      return toApiResponse<string[]>(response);
-    },
-
-    /**
-     * Get existing review for an application (unified review system)
-     * Uses multi-role review API endpoint
-     * Type-safe: Path parameter validated against OpenAPI
-     */
-    getReview: async (applicationId: number): Promise<ApiResponse<unknown>> => {
-      const response = await typedClient.raw.GET(
-        "/api/v1/reviews/applications/{application_id}/review",
-        {
-          params: { path: { application_id: applicationId } },
-        }
-      );
-      return toApiResponse<unknown>(response);
-    },
-
-    /**
-     * Submit review for an application (unified review system with sub-type items)
-     * Uses multi-role review API endpoint
-     * Type-safe: Path parameter and request body validated against OpenAPI
-     */
-    submitReview: async (
-      applicationId: number,
-      reviewData: {
-        items: Array<{
-          sub_type_code: string;
-          recommendation: "approve" | "reject";
-          comments?: string;
-        }>;
-      }
-    ): Promise<ApiResponse<unknown>> => {
-      const response = await typedClient.raw.POST(
-        "/api/v1/reviews/applications/{application_id}/review",
-        {
-          params: { path: { application_id: applicationId } },
-          body: reviewData,
         }
       );
       return toApiResponse<unknown>(response);
