@@ -688,6 +688,46 @@ def _ranking_payload(scholarship: ScholarshipType) -> dict:
     }
 
 
+async def _add_eligible_application(
+    db,
+    scholarship: ScholarshipType,
+    *,
+    nycu_id: str,
+    app_id: str,
+    college_code: str = "ENG",
+) -> Application:
+    """A submitted nstc/114/first application for one college — ranking-eligible."""
+    student = User(
+        nycu_id=nycu_id,
+        name=f"Student {nycu_id}",
+        email=f"{nycu_id}@test.edu",
+        user_type=UserType.student,
+        role=UserRole.student,
+    )
+    db.add(student)
+    await db.commit()
+    await db.refresh(student)
+
+    application = Application(
+        app_id=app_id,
+        user_id=student.id,
+        scholarship_type_id=scholarship.id,
+        sub_type_selection_mode=SubTypeSelectionMode.single,
+        status=ApplicationStatus.approved.value,
+        academic_year=114,
+        semester="first",
+        sub_scholarship_type="nstc",
+        scholarship_subtype_list=["nstc"],
+        student_data={"std_stdcode": nycu_id, "std_cname": f"Student {nycu_id}", "std_academyno": college_code},
+        submitted_form_data={},
+        agree_terms=True,
+    )
+    db.add(application)
+    await db.commit()
+    await db.refresh(application)
+    return application
+
+
 async def _count_rankings(db, college_code: str) -> int:
     return await db.scalar(
         select(func.count()).select_from(CollegeRanking).where(CollegeRanking.college_code == college_code)
@@ -777,6 +817,55 @@ class TestSingleRankingPerCollege:
         listing = await client.get(RANKINGS_URL, params={"academic_year": 114, "semester": "first"})
         assert listing.status_code == 200
         assert len(listing.json()["data"]) == 1
+
+    async def test_detail_reports_pending_application_count(
+        self, client, login, db, rank_users, rank_scholarship, ranking_eng, ranking_eng_items
+    ):
+        # The prompt above the ranking only appears when there is something to
+        # sync, so the detail endpoint has to report the count — and it must
+        # match what a subsequent sync actually appends.
+        login(rank_users["college_eng"])
+        before = await client.get(f"{RANKINGS_URL}/{ranking_eng.id}")
+        assert before.status_code == 200, before.text
+        assert before.json()["data"]["pending_application_count"] == 0
+
+        await _add_eligible_application(db, rank_scholarship, nycu_id="rank_stu_pend", app_id="APP-114-1-01097")
+
+        after = await client.get(f"{RANKINGS_URL}/{ranking_eng.id}")
+        assert after.status_code == 200, after.text
+        assert after.json()["data"]["pending_application_count"] == 1
+
+        synced = await client.post(RANKINGS_URL, json=_ranking_payload(rank_scholarship))
+        assert synced.json()["data"]["added_application_count"] == 1
+
+        settled = await client.get(f"{RANKINGS_URL}/{ranking_eng.id}")
+        assert settled.json()["data"]["pending_application_count"] == 0
+
+    async def test_finalized_ranking_reports_no_pending_applications(
+        self, client, login, db, rank_users, rank_scholarship, ranking_eng, ranking_eng_items
+    ):
+        # A locked ranking never syncs, so prompting would be a dead end.
+        await _add_eligible_application(db, rank_scholarship, nycu_id="rank_stu_pend2", app_id="APP-114-1-01096")
+        ranking_eng.is_finalized = True
+        ranking_eng.ranking_status = "finalized"
+        await db.commit()
+
+        login(rank_users["college_eng"])
+        response = await client.get(f"{RANKINGS_URL}/{ranking_eng.id}")
+        assert response.status_code == 200, response.text
+        assert response.json()["data"]["pending_application_count"] == 0
+
+    async def test_pending_count_ignores_other_colleges(
+        self, client, login, db, rank_users, rank_scholarship, ranking_eng, ranking_eng_items
+    ):
+        await _add_eligible_application(
+            db, rank_scholarship, nycu_id="rank_stu_sci", app_id="APP-114-1-01095", college_code="SCI"
+        )
+
+        login(rank_users["college_eng"])
+        response = await client.get(f"{RANKINGS_URL}/{ranking_eng.id}")
+        assert response.status_code == 200, response.text
+        assert response.json()["data"]["pending_application_count"] == 0
 
     async def test_draft_ranking_absorbs_applications_approved_later(
         self, client, login, db, rank_users, rank_scholarship, ranking_eng, ranking_eng_items

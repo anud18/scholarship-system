@@ -543,6 +543,34 @@ class CollegeReviewService:
         result = await self.db.execute(select(Application).where(and_(*conditions)))
         return list(result.scalars().all())
 
+    async def count_pending_applications(self, ranking: CollegeRanking) -> int:
+        """How many eligible applications are NOT yet in this ranking.
+
+        Mirrors what ``_sync_new_applications`` would append, without writing, so the
+        UI can prompt 「同步申請名單」 only when there is something to add. A finalized
+        ranking never syncs, so it always reports zero.
+        """
+        if ranking.is_finalized:
+            return 0
+
+        existing_ids = set(
+            (
+                await self.db.execute(
+                    select(CollegeRankingItem.application_id).where(CollegeRankingItem.ranking_id == ranking.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        eligible = await self._eligible_applications(
+            ranking.scholarship_type_id,
+            ranking.sub_type_code,
+            ranking.academic_year,
+            ranking.semester,
+            ranking.college_code,
+        )
+        return sum(1 for app in eligible if app.id not in existing_ids)
+
     async def _sync_new_applications(self, ranking: CollegeRanking) -> List[int]:
         """Append applications that became eligible after the ranking was created.
 
