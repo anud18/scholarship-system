@@ -606,6 +606,9 @@ async def get_ranking(
                 "distribution_executed": ranking.distribution_executed,
                 "sub_type_metadata": list(sub_type_metadata_map.values()),
                 "items": items,
+                # Eligible applications not yet in this ranking (0 once finalized).
+                # Drives the 「尚未加入排名的申請」 prompt that points at 同步申請名單.
+                "pending_application_count": await service.count_pending_applications(ranking),
                 "created_at": ranking.created_at.isoformat(),
                 "college_review_end": (
                     config.college_review_end.isoformat() if config and config.college_review_end else None

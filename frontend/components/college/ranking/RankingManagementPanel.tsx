@@ -193,6 +193,7 @@ export function RankingManagementPanel({
             academic_year?: number;
             semester?: string | null;
             is_finalized?: boolean;
+            pending_application_count?: number;
             college_review_end?: string | null;
           };
           const transformedApplications = (rankingPayload.items || []).map(
@@ -260,6 +261,7 @@ export function RankingManagementPanel({
             academicYear: rankingPayload.academic_year || 0,
             semester: rankingPayload.semester,
             isFinalized: rankingPayload.is_finalized || false,
+            pendingApplicationCount: rankingPayload.pending_application_count ?? 0,
           });
         }
       } catch (error) {
@@ -511,7 +513,12 @@ export function RankingManagementPanel({
         if (response.success) {
           await fetchRankings();
           if (rankingData && rankingId === selectedRanking) {
-            setRankingData({ ...rankingData, isFinalized: true });
+            // A locked ranking never syncs, so the pending prompt goes away too.
+            setRankingData({
+              ...rankingData,
+              isFinalized: true,
+              pendingApplicationCount: 0,
+            });
           }
           incrementDataVersion();
           toast.success(
@@ -546,6 +553,9 @@ export function RankingManagementPanel({
           await fetchRankings();
           if (rankingData && rankingId === selectedRanking) {
             setRankingData({ ...rankingData, isFinalized: false });
+            // Unlocking re-enables syncing; re-read so the pending count is real
+            // rather than the zero a finalized ranking always reports.
+            await fetchRankingDetails(rankingId);
           }
           incrementDataVersion();
           toast.success(
@@ -560,6 +570,7 @@ export function RankingManagementPanel({
       selectedRanking,
       rankingData,
       fetchRankings,
+      fetchRankingDetails,
       setRankingData,
       toast,
       locale,
@@ -869,6 +880,28 @@ export function RankingManagementPanel({
           </div>
         </div>
       )}
+
+      {/* Applications that became eligible after the ranking was built. A college
+          owns one ranking per period, so these can only get in via 同步申請名單 —
+          without a prompt they would sit outside the ranking unnoticed. Mirrors
+          the deadline banner's shape; hidden once the ranking is locked. */}
+      {rankingData &&
+        !rankingData.isFinalized &&
+        rankingData.pendingApplicationCount > 0 && (
+          <div className="rounded-md border p-3 text-sm flex items-start gap-2 border-sky-300 bg-sky-50 text-sky-900">
+            <RefreshCw className="h-4 w-4 mt-0.5 shrink-0" />
+            <div className="flex-1 leading-relaxed">
+              <strong>
+                {locale === "zh"
+                  ? `有 ${rankingData.pendingApplicationCount} 筆申請尚未加入排名`
+                  : `${rankingData.pendingApplicationCount} application(s) not yet in the ranking`}
+              </strong>
+              {locale === "zh"
+                ? "。請按「同步申請名單」將它們加入名單末端，再調整排序。"
+                : ' Press "同步申請名單" to append them, then adjust the order.'}
+            </div>
+          </div>
+        )}
 
       {/* Ranking Selection */}
       <Card>
