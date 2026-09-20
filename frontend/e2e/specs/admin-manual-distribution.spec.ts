@@ -11,7 +11,7 @@
  *   <test setup>                     UPDATE applications.professor_id = <professor user id>
  *                                    Same workaround as multi-role-phd.spec.ts (see header there).
  *   professor                       → POST /professor/applications/{id}/review (approve)
- *   cs_college (college C)          → POST /college-review/rankings (force_new=true)
+ *   cs_college (college C)          → POST /college-review/rankings (after dropping C's leftover ranking)
  *                                    → auto-includes csphd0001's application:
  *                                      create_ranking filters by creator college_code ('C');
  *                                      csphd0001 has std_academyno='C' in the mock SIS API.
@@ -32,6 +32,7 @@ import { loginAs } from "../helpers/auth";
 import { apiAs } from "../helpers/api";
 import {
   deleteApplicationCascade,
+  deleteCollegeRankings,
   getActiveConfig,
   getApplication,
   pool,
@@ -48,6 +49,7 @@ const SUB_TYPE = "nstc";
 const SCHOLARSHIP_CODE = "phd";
 const PROFESSOR_NYCU_ID = "professor";
 const STUDENT_NYCU_ID = "csphd0001";
+const COLLEGE_CODE = "C"; // cs_college.college_code in seed data
 
 test.describe.configure({ mode: "serial" });
 
@@ -171,12 +173,19 @@ test.describe("管理員手動分發後申請轉為核准 | Admin manual distrib
     ).toBe(true);
     expect(reviewRes.body.success).toBe(true);
 
-    // 4. College creates a ranking (force_new=true avoids reusing a leftover
-    //    unfinalized ranking from a previous run — which might not contain
-    //    our application if it was created before the application existed).
+    // 4. College creates a ranking. A college owns ONE ranking per period, so
+    //    drop any leftover from a previous run first — it would otherwise be
+    //    handed back without our application (created after that ranking).
     const collegeLogin = await loginAs(browser, "cs_college");
     pushTrace(runState, collegeLogin.traceId);
 
+    await deleteCollegeRankings({
+      scholarshipTypeId: config.scholarship_type_id,
+      subType: SUB_TYPE,
+      academicYear: config.academic_year,
+      semester: config.semester,
+      collegeCode: COLLEGE_CODE,
+    });
     const rankingRes = await apiAs<{
       success: boolean;
       data: { id: number; sub_type_code: string };
@@ -185,7 +194,6 @@ test.describe("管理員手動分發後申請轉為核准 | Admin manual distrib
       sub_type_code: SUB_TYPE,
       academic_year: config.academic_year,
       semester: config.semester,
-      force_new: true,
     });
     pushTrace(runState, rankingRes.traceId);
     expect(

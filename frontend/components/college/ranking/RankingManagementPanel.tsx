@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { CollegeRankingTable } from "@/components/college-ranking-table";
 import { ConfigSelector } from "../shared/ConfigSelector";
 import { RankingCardList } from "../shared/RankingCardList";
-import { Plus, Loader2, Clock, AlertTriangle, Lock } from "lucide-react";
+import { RefreshCw, Loader2, Clock, AlertTriangle, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { logger } from "@/lib/utils/logger";
@@ -130,7 +130,7 @@ export function RankingManagementPanel({
   // configuration matching (scholarship_type, year, semester). This ensures
   // the deadline banner appears as soon as the panel renders, even when no
   // rankings exist for the current selection (i.e. before the user clicks
-  // "建立新排名" for the first time).
+  // "建立排名" for the first time).
   const [panelDeadline, setPanelDeadline] = useState<string | null>(null);
 
   const fetchRankingDetails = useCallback(
@@ -193,6 +193,7 @@ export function RankingManagementPanel({
             academic_year?: number;
             semester?: string | null;
             is_finalized?: boolean;
+            pending_application_count?: number;
             college_review_end?: string | null;
           };
           const transformedApplications = (rankingPayload.items || []).map(
@@ -260,6 +261,7 @@ export function RankingManagementPanel({
             academicYear: rankingPayload.academic_year || 0,
             semester: rankingPayload.semester,
             isFinalized: rankingPayload.is_finalized || false,
+            pendingApplicationCount: rankingPayload.pending_application_count ?? 0,
           });
         }
       } catch (error) {
@@ -281,6 +283,21 @@ export function RankingManagementPanel({
   useEffect(() => {
     selectedRankingRef.current = selectedRanking;
   }, [selectedRanking]);
+
+  // Single-ranking rule: a college has at most one ranking for the selected
+  // scholarship / year / semester, so open it as soon as it is known instead
+  // of making the user pick from a list. Re-runs when the selection changes
+  // (the previously selected ranking then no longer matches the filter).
+  useEffect(() => {
+    if (filteredRankings.length === 0) return;
+    const isSelectionValid = filteredRankings.some(
+      ranking => ranking.id === selectedRanking
+    );
+    if (isSelectionValid) return;
+    const targetId = filteredRankings[0].id;
+    setSelectedRanking(targetId);
+    fetchRankingDetails(targetId);
+  }, [filteredRankings, selectedRanking, setSelectedRanking, fetchRankingDetails]);
 
   // Auto-refresh when switching to ranking tab or when data version changes
   useEffect(() => {
@@ -342,33 +359,56 @@ export function RankingManagementPanel({
             ? "下學期"
             : "全年";
 
+      // A college owns ONE ranking per (scholarship, year, semester). The
+      // backend returns the existing ranking (reused: true) instead of
+      // creating a second one, and while that ranking is still a draft it
+      // appends applications approved since it was created — so the same
+      // call doubles as 「同步申請名單」.
       const response = await apiClient.college.createRanking({
         scholarship_type_id: targetScholarshipId,
         sub_type_code: targetSubTypeCode,
         academic_year: useYear,
         semester: useSemester === Semester.YEARLY ? null : useSemester,
         ranking_name: `${scholarshipType.name} - ${useYear} ${semesterName}`,
-        force_new: true, // Always create a new ranking when user clicks "建立新排名"
       });
 
       if (response.success && response.data) {
         try {
           // Refresh rankings list
           await fetchRankings();
-          // Select the newly created ranking
-          const newRanking = response.data as { id: number; ranking_name?: string };
+          // Select the (new or existing) ranking
+          const newRanking = response.data as {
+            id: number;
+            ranking_name?: string;
+            reused?: boolean;
+            added_application_count?: number;
+          };
           setSelectedRanking(newRanking.id);
           // Load ranking details
           await fetchRankingDetails(newRanking.id);
           // Increment data version
           incrementDataVersion();
 
-          // Show success notification
-          toast.success(
-            locale === "zh"
-              ? `排名「${newRanking.ranking_name || "新排名"}」已成功建立`
-              : `Ranking "${newRanking.ranking_name || "New Ranking"}" has been created successfully`
-          );
+          const addedCount = newRanking.added_application_count ?? 0;
+          if (newRanking.reused && addedCount > 0) {
+            toast.success(
+              locale === "zh"
+                ? `已將 ${addedCount} 位新申請者加入排名末端，請重新調整順序`
+                : `${addedCount} new applicant(s) appended to the ranking; please re-order`
+            );
+          } else if (newRanking.reused) {
+            toast.info(
+              locale === "zh"
+                ? "申請名單已是最新，沒有新的申請者"
+                : "The ranking is already up to date; no new applicants"
+            );
+          } else {
+            toast.success(
+              locale === "zh"
+                ? `排名「${newRanking.ranking_name || "新排名"}」已成功建立`
+                : `Ranking "${newRanking.ranking_name || "New Ranking"}" has been created successfully`
+            );
+          }
         } catch (fetchError) {
           logger.error("Failed to load ranking after creation", { fetchError: fetchError });
           toast.error(
@@ -473,7 +513,12 @@ export function RankingManagementPanel({
         if (response.success) {
           await fetchRankings();
           if (rankingData && rankingId === selectedRanking) {
-            setRankingData({ ...rankingData, isFinalized: true });
+            // A locked ranking never syncs, so the pending prompt goes away too.
+            setRankingData({
+              ...rankingData,
+              isFinalized: true,
+              pendingApplicationCount: 0,
+            });
           }
           incrementDataVersion();
           toast.success(
@@ -508,6 +553,9 @@ export function RankingManagementPanel({
           await fetchRankings();
           if (rankingData && rankingId === selectedRanking) {
             setRankingData({ ...rankingData, isFinalized: false });
+            // Unlocking re-enables syncing; re-read so the pending count is real
+            // rather than the zero a finalized ranking always reports.
+            await fetchRankingDetails(rankingId);
           }
           incrementDataVersion();
           toast.success(
@@ -522,6 +570,7 @@ export function RankingManagementPanel({
       selectedRanking,
       rankingData,
       fetchRankings,
+      fetchRankingDetails,
       setRankingData,
       toast,
       locale,
@@ -575,12 +624,15 @@ export function RankingManagementPanel({
         rankingToDelete.id
       );
       if (response.success) {
+        // Refresh the list BEFORE clearing the selection, otherwise the
+        // auto-select effect would re-open the just-deleted ranking from the
+        // stale list and hit a 404.
+        await fetchRankings();
         if (selectedRanking === rankingToDelete.id) {
           setSelectedRanking(null);
           setRankingData(null);
           setActiveConfigDeadline(null);
         }
-        await fetchRankings();
         incrementDataVersion();
         setShowDeleteRankingDialog(false);
         setRankingToDelete(null);
@@ -747,13 +799,21 @@ export function RankingManagementPanel({
             locale={locale}
           />
 
-          <Button
-            onClick={createNewRanking}
-            disabled={deadlineInfo.state === "passed" && !isAdmin}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            建立新排名
-          </Button>
+          {/* One ranking per college per period: creation lives in the
+              empty state below; once a DRAFT ranking exists the same call
+              pulls in applications approved after it was created. */}
+          {filteredRankings.length > 0 &&
+            rankingData &&
+            !rankingData.isFinalized && (
+              <Button
+                variant="outline"
+                onClick={createNewRanking}
+                disabled={deadlineInfo.state === "passed" && !isAdmin}
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                同步申請名單
+              </Button>
+            )}
         </div>
       </div>
 
@@ -821,11 +881,35 @@ export function RankingManagementPanel({
         </div>
       )}
 
+      {/* Applications that became eligible after the ranking was built. A college
+          owns one ranking per period, so these can only get in via 同步申請名單 —
+          without a prompt they would sit outside the ranking unnoticed. Mirrors
+          the deadline banner's shape; hidden once the ranking is locked. */}
+      {rankingData &&
+        !rankingData.isFinalized &&
+        rankingData.pendingApplicationCount > 0 && (
+          <div className="rounded-md border p-3 text-sm flex items-start gap-2 border-sky-300 bg-sky-50 text-sky-900">
+            <RefreshCw className="h-4 w-4 mt-0.5 shrink-0" />
+            <div className="flex-1 leading-relaxed">
+              <strong>
+                {locale === "zh"
+                  ? `有 ${rankingData.pendingApplicationCount} 筆申請尚未加入排名`
+                  : `${rankingData.pendingApplicationCount} application(s) not yet in the ranking`}
+              </strong>
+              {locale === "zh"
+                ? "。請按「同步申請名單」將它們加入名單末端，再調整排序。"
+                : ' Press "同步申請名單" to append them, then adjust the order.'}
+            </div>
+          </div>
+        )}
+
       {/* Ranking Selection */}
       <Card>
         <CardHeader>
-          <CardTitle>選擇排名</CardTitle>
-          <CardDescription>選擇要管理的排名清單</CardDescription>
+          <CardTitle>本學院排名</CardTitle>
+          <CardDescription>
+            每個學院在同一學年度與學期只能有一份排名；教授後續核准的申請可用「同步申請名單」加入，如需整份重新產生請先刪除現有排名
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {/* #63: when deadline has passed and user isn't admin, hide
@@ -841,13 +925,13 @@ export function RankingManagementPanel({
             showActions={true}
             showOnlyDistributed={false}
             emptyStateConfig={{
-              title: "暫無符合條件的排名",
-              description: `${scholarshipType.name} 目前在選定的學年度與學期沒有排名`,
+              title: "尚未建立排名",
+              description: `${scholarshipType.name} 目前在選定的學年度與學期尚未建立排名`,
               actionButton:
                 deadlineInfo.state === "passed" && !isAdmin
                   ? undefined
                   : {
-                      label: "立即建立排名",
+                      label: "建立排名",
                       onClick: createNewRanking,
                     },
             }}

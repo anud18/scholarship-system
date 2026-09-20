@@ -61,6 +61,8 @@ interface RankingData {
   academicYear: number;
   semester?: string | null;
   isFinalized: boolean;
+  /** Eligible applications not yet in this ranking; drives the 同步申請名單 prompt. */
+  pendingApplicationCount: number;
 }
 
 interface CollegeManagementContextType {

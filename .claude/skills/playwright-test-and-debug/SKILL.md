@@ -263,7 +263,7 @@ SELECT created_at, action, status, description, trace_id
 | `ORDER BY role` returns unexpected order (e.g. students before admins) | Postgres enum columns sort by **declaration order**, not alphabetical. The enum is declared `student, professor, college, admin, super_admin`, so `ORDER BY role` puts students first | Either `ORDER BY role::text` (alphabetical) or live with declaration order |
 | Admin 獎學金分發 grid is empty even though finalized rankings exist | The panel's 學期 `<select>` defaults to the FIRST semester, which usually has no data | Explicitly `selectOption({label:'全年'})` (yearly) / the right semester before reading the grid — `/manual-distribution/students` returns `[]` for the wrong semester |
 | Playwright wait on a college name (`電機學院`) never resolves in the distribution panel | The 所屬學院 filter `<option>`s carry that text but are **hidden** (closed `<select>`) | Wait on the visible `儲存目前配置` button instead; read colleges from the filter's `<option>` values via `evaluateAll` |
-| College `建立新排名` makes a `sub_type_code="default"` ranking, not `nstc` | The UI uses the config's first sub-type (`subTypes[0]`), which is `default` (aggregates all sub-types) | Expected — `get_students_for_distribution` reads **every** finalized ranking regardless of `sub_type`, so distribution still works |
+| College `建立排名` makes a `sub_type_code="default"` ranking, not `nstc` | The UI uses the config's first sub-type (`subTypes[0]`), which is `default` (aggregates all sub-types) | Expected — `get_students_for_distribution` reads **every** finalized ranking regardless of `sub_type`, so distribution still works |
 
 ## Regression test scenarios
 
@@ -571,11 +571,11 @@ OUT=/tmp/mc-verify node scripts/verify-multi-college-distribution.js
 ```
 Exit 0 ⇒ all colleges stayed finalized, distribution surfaced all of them, **and** the
 distribution run completed without error. Screenshots + `result.json` + `log.txt` land in `$OUT`. The script starts from a clean slate — if rankings
-already exist (re-run), `scripts/reset-db.sh` first, since college `建立新排名` always
-`force_new`s a duplicate.
+already exist (re-run), `scripts/reset-db.sh` first: a college owns ONE ranking per
+period, so `建立排名` returns the existing (stale) ranking instead of a fresh row.
 
 **What it asserts (and the exact UI it drives):**
-1. Per college (login → tab `學生排序` → `建立新排名` → `確認排名`, toast `排名已成功鎖定`):
+1. Per college (login → tab `學生排序` → `建立排名` → `確認排名`, toast `排名已成功鎖定`):
    after each finalize, `SELECT DISTINCT college_code FROM college_rankings WHERE is_finalized`
    must be a **superset** of all colleges finalized so far. Progression should be
    `[A] → [A,B] → [A,B,C] → [A,B,C,E]` — any drop is the #1034 regression.
