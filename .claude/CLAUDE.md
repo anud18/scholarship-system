@@ -215,6 +215,14 @@ CI validates type sync automatically. Backend must be running on `localhost:8000
 
 **ALWAYS** rebuild the database with `./scripts/reset_database.sh` (`--dry-run` to preview) — never by hand. Every migration MUST include existence checks before DDL. Full rules, examples and the pre-migration test checklist: `backend/CLAUDE.md`.
 
+### Dev Seed Changes Stay Dev-Only
+
+When the user asks to change a **seed / dev env setting** (e.g. "申請所需文件新增勞保文件"), change **only the dev env seed data**. The change should appear only after the dev env is rebuilt via the init-dev-env flow (`./scripts/reset_database.sh` → `python -m app.seed`); **staging and production must not change**.
+
+- ✅ Put the change on the dev-only path: `seed_development()` in `backend/app/seed.py` or a dev-only seed module (e.g. `backend/app/db/seed_ay115_demo.py`)
+- ❌ Don't edit shared seed functions that `seed_production()` also calls (`seed_scholarships`, `seed_application_fields`, `backend/app/db/seed_scholarship_configs.py`, …) — if the target data lives there, add a dev-only override/step instead
+- ❌ No Alembic migration, no backfill, and no change to model defaults or production config for such requests
+
 ## Path Security & Backslash Handling
 
 **CRITICAL**: Always validate file paths to prevent path traversal attacks.

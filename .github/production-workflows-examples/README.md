@@ -205,8 +205,9 @@ cp /path/to/development-repo/.github/production-workflows-examples/backup.yml \
 >
 > ⚠️ **test 與 production 用的是不同的 env variable / secret**。作法是把值放進
 > GitHub **Environments**（`test` 與 `production`），而不是全部放在 repository 層。
-> Repository 層的 secret 是 **production 的值**（backup.yml / health-check.yml 這類
-> 排程 workflow 沒有 `environment:`，仍從這裡取值）；`test` environment 則把每一個
+> Repository 層的 secret 是 **production 的值**（`backup.yml` 這類排程 workflow
+> 沒有 `environment:`，仍從這裡取值——`health-check.yml` 是例外，2026-09 起它
+> 不讀任何 secret，見下面「健康檢查」一節）；`test` environment 則把每一個
 > 值覆寫成測試環境的。**沒有被 test environment 覆寫的 secret 會自動 fallback 到
 > repository 層 = production 的值**，所以 `test` environment 必須把下表的 secret
 > 全部各自設一份。deploy-stack.yml 的 "Assert stage identity" 步驟就是用來擋這個
@@ -280,7 +281,14 @@ production 只是把同一份 artifact 拉下來跑，確保上線的東西跟 s
 
 #### 健康檢查 (health-check.yml)
 
-重用 `DOMAIN` 與 `REDIS_PASSWORD`；失敗時自動開 issue，恢復後自動關閉。
+**不需要任何 secret**（2026-09 修正——舊版重用 `DOMAIN`/`REDIS_PASSWORD`，但這個
+job 刻意不掛 `environment:`，兩者若只設在 Environment 層就會讀成空字串，卻不會
+報錯：空的 `Host` header 讓 nginx 回 400、空密碼讓 `redis-cli` 直接跳過 AUTH 回
+`NOAUTH`，兩者都長得像真的當機，2026-09-12 就這樣誤發過一次事故 issue）。前端
+探測改成不帶 `Host` header（`nginx.prod.conf` 的 `server_name` 本來就把
+`localhost` 跟正式網域列在同一個 block），Redis 探測改成讀
+`docker-compose.prod.yml` 幫這個 container 定義好的 Docker healthcheck 結果
+（`docker inspect`），不用自己重新認證一次。失敗時自動開 issue，恢復後自動關閉。
 
 #### 監控儀表板 (deploy-monitoring-stack.yml)
 

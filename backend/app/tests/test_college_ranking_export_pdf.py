@@ -6,11 +6,13 @@ valid A4-landscape PDF that never overflows horizontally (column widths normalis
 to the usable page width).
 """
 
+import io
 from types import SimpleNamespace
 
 import pytest
 
 from app.services.college_ranking_export_service import (
+    COLLEGE_SEAL_HEADER,
     STATIC_HEADERS,
     CollegeRankingExportService,
     DynamicFieldSpec,
@@ -155,3 +157,57 @@ def test_pdf_col_widths_sum_to_usable_width(service, dynamic_fields):
     assert len(widths) == len(headers)
     assert sum(widths) == pytest.approx(usable)
     assert all(w > 0 for w in widths)
+
+
+# ─── 學院用印 (college seal) column ──────────────────────────────────
+
+
+def test_seal_column_omitted_by_default(service, sample_row, dynamic_fields):
+    sorted_dynamic = service._sort_dynamic(dynamic_fields)
+    assert COLLEGE_SEAL_HEADER not in service._headers(sorted_dynamic)
+    assert len(service._row_cells(sample_row, 1, {}, sorted_dynamic)) == len(STATIC_HEADERS) + len(dynamic_fields)
+
+
+def test_seal_column_appended_last_and_blank(service, sample_row, dynamic_fields):
+    sorted_dynamic = service._sort_dynamic(dynamic_fields)
+    headers = service._headers(sorted_dynamic, include_college_seal=True)
+    cells = service._row_cells(sample_row, 1, {"nstc": "國科會"}, sorted_dynamic, include_college_seal=True)
+    assert headers[-1] == COLLEGE_SEAL_HEADER
+    assert headers[-2] == "得獎理由"  # dynamic columns stay before the seal
+    assert len(cells) == len(headers)
+    assert cells[-1] == ""
+
+
+def test_seal_column_pdf_widths_sum_to_usable_width(service, dynamic_fields):
+    headers = service._headers(service._sort_dynamic(dynamic_fields), include_college_seal=True)
+    usable = 785.0
+    widths = service._pdf_col_widths(headers, usable, include_college_seal=True)
+    assert len(widths) == len(headers)
+    assert sum(widths) == pytest.approx(usable)
+    assert widths[-1] > widths[0]  # seal column wider than NO. so a stamp fits
+
+
+def test_seal_column_in_workbook_and_pdf(service, sample_row, dynamic_fields):
+    from openpyxl import load_workbook
+
+    xlsx = service.build_workbook(
+        rows=[sample_row],
+        dynamic_fields=dynamic_fields,
+        sub_type_labels={"nstc": "國科會"},
+        title="排名",
+        sheet_name="114學年",
+        include_college_seal=True,
+    )
+    ws = load_workbook(io.BytesIO(xlsx)).active
+    header_row = [c.value for c in ws[2]]
+    assert header_row[-1] == COLLEGE_SEAL_HEADER
+    assert ws.cell(row=3, column=len(header_row)).value in (None, "")
+
+    pdf = service.build_pdf(
+        rows=[sample_row],
+        dynamic_fields=dynamic_fields,
+        sub_type_labels={"nstc": "國科會"},
+        title="排名",
+        include_college_seal=True,
+    )
+    assert pdf[:5] == b"%PDF-"

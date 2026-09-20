@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import select
 
 from app.models.application import Application, ApplicationStatus
 from app.models.document_request import DocumentRequest, DocumentRequestStatus
@@ -77,6 +78,21 @@ async def doc_users(db):
             role=UserRole.college,
             college_code="ENG",
         ),
+        "other_professor": User(
+            nycu_id="dr_prof2",
+            name="Other Doc Professor",
+            email="dr_prof2@test.edu",
+            user_type=UserType.employee,
+            role=UserRole.professor,
+        ),
+        "other_college": User(
+            nycu_id="dr_college_other",
+            name="Other Doc College",
+            email="dr_college_other@test.edu",
+            user_type=UserType.employee,
+            role=UserRole.college,
+            college_code="SCI",
+        ),
         "admin": User(
             nycu_id="dr_admin",
             name="Doc Admin",
@@ -108,17 +124,18 @@ async def doc_scholarship(db) -> ScholarshipType:
 
 @pytest_asyncio.fixture
 async def student_application(db, doc_users, doc_scholarship) -> Application:
-    """Application owned by `student`."""
+    """Application owned by `student`, advised by `professor`, in college ENG."""
     application = Application(
         app_id="APP-114-1-00010",
         user_id=doc_users["student"].id,
+        professor_id=doc_users["professor"].id,
         scholarship_type_id=doc_scholarship.id,
         scholarship_name="Doc Request Scholarship",
         sub_type_selection_mode=SubTypeSelectionMode.single,
         status=ApplicationStatus.under_review.value,
         academic_year=114,
         semester="first",
-        student_data={"std_cname": "Doc Student", "email": "dr_student@test.edu"},
+        student_data={"std_cname": "Doc Student", "email": "dr_student@test.edu", "std_academyno": "ENG"},
         submitted_form_data={},
         agree_terms=True,
     )
@@ -240,6 +257,69 @@ class TestDocumentRequestsOwnershipAndNotFound:
             json={"cancellation_reason": "not needed"},
         )
         assert response.status_code == 404
+
+
+@pytest.mark.api
+class TestDocumentRequestsStaffScope:
+    """#1404: require_staff alone let any professor / 學院 user act on any application."""
+
+    @pytest.mark.parametrize("role", ["other_professor", "other_college"])
+    async def test_out_of_scope_staff_cannot_create(self, client, login, db, doc_users, student_application, role):
+        login(doc_users[role])
+        response = await client.post(_app_dr_url(student_application.id), json=_create_body())
+        assert response.status_code == 403
+        rows = (await db.execute(select(DocumentRequest))).scalars().all()
+        assert rows == []
+
+    @pytest.mark.parametrize("role", ["other_professor", "other_college"])
+    async def test_out_of_scope_staff_cannot_list(self, client, login, db, doc_users, student_application, role):
+        await _make_request(db, student_application, doc_users["professor"])
+        login(doc_users[role])
+        response = await client.get(_app_dr_url(student_application.id))
+        assert response.status_code == 403
+
+    @pytest.mark.parametrize("role", ["other_professor", "other_college"])
+    async def test_out_of_scope_staff_cannot_cancel(self, client, login, db, doc_users, student_application, role):
+        doc_req = await _make_request(db, student_application, doc_users["professor"])
+        login(doc_users[role])
+        response = await client.patch(
+            f"{PREFIX}/document-requests/{doc_req.id}/cancel",
+            json={"cancellation_reason": "cross-scope cancel attempt"},
+        )
+        assert response.status_code == 403
+        await db.refresh(doc_req)
+        assert doc_req.status == DocumentRequestStatus.pending.value
+
+    async def test_unbound_college_user_is_refused(self, client, login, db, doc_users, student_application):
+        unbound = User(
+            nycu_id="dr_college_unbound",
+            name="Unbound College",
+            email="dr_college_unbound@test.edu",
+            user_type=UserType.employee,
+            role=UserRole.college,
+            college_code=None,
+        )
+        db.add(unbound)
+        await db.commit()
+        login(unbound)
+        response = await client.post(_app_dr_url(student_application.id), json=_create_body())
+        assert response.status_code == 403
+
+    @pytest.mark.parametrize("role", ["professor", "college"])
+    async def test_in_scope_staff_can_create_list_and_cancel(self, client, login, doc_users, student_application, role):
+        login(doc_users[role])
+        created = await client.post(_app_dr_url(student_application.id), json=_create_body())
+        assert created.status_code == 201
+
+        listed = await client.get(_app_dr_url(student_application.id))
+        assert listed.status_code == 200
+        assert len(listed.json()["data"]) == 1
+
+        cancelled = await client.patch(
+            f"{PREFIX}/document-requests/{created.json()['data']['id']}/cancel",
+            json={"cancellation_reason": "documents arrived by mail"},
+        )
+        assert cancelled.status_code == 200
 
 
 @pytest.mark.api

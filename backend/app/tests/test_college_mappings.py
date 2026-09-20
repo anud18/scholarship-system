@@ -57,12 +57,31 @@ class TestMappingInvariants:
             assert name, f"Empty en name for college code {code!r}"
 
     def test_all_known_college_codes_present(self) -> None:
-        """Pin the current 16 college codes so a typo / accidental deletion
+        """Pin the 25 codes of the SIS 學院代碼表 so a typo / accidental deletion
         fails fast. If a real college is added in the future, this test gets
-        updated as part of that change. Numeric codes are the SIS 陽明-campus
-        academy codes ("4" is deliberately absent — see college_mappings.py)."""
-        expected = {"E", "C", "I", "S", "B", "O", "D", "1", "2", "3", "5", "6", "7", "M", "A", "K"}
+        updated as part of that change. The sheet's placeholder rows 4=選讀生,
+        *=外校生 and ^=校內其他單位, and the duplicate 8=人社院 (same college as
+        A), are deliberately absent — see
+        college_mappings.py."""
+        expected = {
+            "E", "Y", "C", "B", "M", "I", "S", "A", "K", "X", "O", "L", "D", "G", "Z",
+            "1", "2", "3", "5", "6", "7", "0", "F", "P", "J",
+        }  # fmt: skip
         assert set(COLLEGE_MAPPINGS.keys()) == expected
+        for code in ("4", "*", "^", "~", "8"):
+            assert code not in COLLEGE_MAPPINGS
+
+    def test_names_match_sis_sheet(self) -> None:
+        """Spot-check the codes that were wrong before align_academy_names_003."""
+        assert COLLEGE_MAPPINGS["F"] == "產創學院"
+        assert COLLEGE_MAPPINGS["L"] == "科技法律學院"
+        assert COLLEGE_MAPPINGS["J"] == "博雅書苑"
+        assert COLLEGE_MAPPINGS["X"] == "電機資訊學院"
+        assert COLLEGE_MAPPINGS["P"] == "跨院"
+        assert COLLEGE_MAPPINGS["Z"] == "國防中心"
+        assert COLLEGE_MAPPINGS["0"] == "校級"
+        assert COLLEGE_MAPPINGS["A"] == "人社院"
+        assert COLLEGE_MAPPINGS_EN["D"] == "International College of Semiconductor Technology"
 
 
 # ---------------------------------------------------------------------------
@@ -103,9 +122,9 @@ class TestGetCollegeName:
 
 
 class TestGetAllColleges:
-    def test_returns_all_16_colleges(self) -> None:
+    def test_returns_all_25_colleges(self) -> None:
         colleges = get_all_colleges()
-        assert len(colleges) == 16
+        assert len(colleges) == 25
 
     def test_each_entry_has_code_name_name_en(self) -> None:
         """Each list item must have the documented shape."""
@@ -159,7 +178,7 @@ class TestValidationHelpers:
 
     def test_get_college_codes_returns_sorted_list(self) -> None:
         codes = get_college_codes()
-        assert len(codes) == 16
+        assert len(codes) == 25
         assert codes == sorted(codes)
         assert "E" in codes
         assert "XX" not in codes

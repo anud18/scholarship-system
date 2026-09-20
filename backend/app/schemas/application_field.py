@@ -35,6 +35,11 @@ class ApplicationFieldBase(BaseModel):
     validation_rules: Optional[Dict[str, Any]] = Field(None, description="Validation rules")
     conditional_rules: Optional[Dict[str, Any]] = Field(None, description="Conditional rules")
 
+    # Identity of the built-in definition this row overrides; NULL for the
+    # ordinary admin-created fields. Not part of the Update schema on purpose:
+    # it is identity, not editable content.
+    fixed_key: Optional[str] = Field(None, max_length=50, description="Built-in field this row overrides")
+
     # College export settings
     include_in_college_export: bool = Field(
         default=False,
@@ -107,6 +112,14 @@ class ApplicationFieldResponse(ApplicationFieldBase):
 
     model_config = ConfigDict(from_attributes=True)
 
+    @model_validator(mode="after")
+    def _derive_is_fixed(self) -> "ApplicationFieldResponse":
+        # A row carrying fixed_key is an admin-edited built-in field, so it
+        # stays a fixed field everywhere it is rendered.
+        if self.is_fixed is None and self.fixed_key:
+            self.is_fixed = True
+        return self
+
 
 class ApplicationDocumentBase(BaseModel):
     """Base schema for application document"""
@@ -130,6 +143,10 @@ class ApplicationDocumentBase(BaseModel):
     upload_instructions_en: Optional[str] = Field(None, description="Upload instructions (English)")
     example_file_url: Optional[str] = Field(None, max_length=500, description="Example file MinIO object name")
     validation_rules: Optional[Dict[str, Any]] = Field(None, description="Validation rules")
+
+    # Identity of the built-in definition this row overrides — see the same
+    # field on ApplicationFieldBase.
+    fixed_key: Optional[str] = Field(None, max_length=50, description="Built-in document this row overrides")
 
 
 class ApplicationDocumentCreate(ApplicationDocumentBase):
@@ -172,6 +189,13 @@ class ApplicationDocumentResponse(ApplicationDocumentBase):
     existing_file_url: Optional[str] = Field(None, description="URL of existing file from user profile")
 
     model_config = ConfigDict(from_attributes=True)
+
+    @model_validator(mode="after")
+    def _derive_is_fixed(self) -> "ApplicationDocumentResponse":
+        # See ApplicationFieldResponse._derive_is_fixed.
+        if self.is_fixed is None and self.fixed_key:
+            self.is_fixed = True
+        return self
 
 
 class ScholarshipFormConfigResponse(BaseModel):

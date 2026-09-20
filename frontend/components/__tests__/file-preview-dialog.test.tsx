@@ -80,6 +80,39 @@ describe("FilePreviewDialog", () => {
     expect(screen.queryByTitle("test-preview.pdf")).toBeNull();
   });
 
+  it("renders a caller-owned blob: URL directly — no fetch (CSP connect-src has no blob:) and no revoke", async () => {
+    const fetchMock = mockFetch({});
+    const localFile = {
+      url: "blob:http://localhost:3000/just-selected",
+      filename: "just-selected.pdf",
+      type: "application/pdf",
+    };
+
+    const { unmount } = render(
+      <FilePreviewDialog
+        isOpen
+        onClose={() => {}}
+        file={localFile}
+        locale="zh"
+      />
+    );
+
+    const iframe = screen.getByTitle("just-selected.pdf") as HTMLIFrameElement;
+    await waitFor(() => expect(iframe.getAttribute("src")).toBe(localFile.url));
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alert")).toBeNull();
+
+    act(() => {
+      jest.advanceTimersByTime(1600);
+    });
+    expect(iframe.className).toContain("opacity-100");
+
+    // FileUpload owns the object URL and revokes it on ITS unmount.
+    unmount();
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+  });
+
   it("opens the source URL in a new window with noopener", () => {
     mockFetch({});
     const openSpy = jest.spyOn(window, "open").mockImplementation(() => null);

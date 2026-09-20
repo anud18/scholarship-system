@@ -623,6 +623,23 @@ export function createCollegeApi() {
       ),
 
     /**
+     * College: whether admin has opened 補充匯入 on ANY active configuration.
+     * GET /api/v1/college-review/supplementary-import/enabled
+     *
+     * Drives the tab-level gate; per-period detail comes from
+     * getSupplementaryImportAvailability.
+     */
+    getSupplementaryImportEnabled: async (): Promise<
+      ApiResponse<{ enabled: boolean }>
+    > => {
+      const response = await typedClient.raw.GET(
+        "/api/v1/college-review/supplementary-import/enabled",
+        {}
+      );
+      return toApiResponse<{ enabled: boolean }>(response);
+    },
+
+    /**
      * College: check whether 補充匯入 is open for a period.
      * GET /api/v1/college-review/supplementary-import/availability
      */

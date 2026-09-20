@@ -304,6 +304,19 @@ class TestReviewsAuthorization:
         response = await client.get(f"{REVIEWS_PREFIX}/applications/{review_application.id}/reviews")
         assert response.status_code == 403
 
+    async def test_unrelated_professor_cannot_read_review_status(self, client, login, review_users, review_application):
+        """#1404: review-status carries every reviewer's comments and the
+        decision_reason, so a professor who is not the assigned advisor is refused
+        exactly like on the sibling /reviews endpoint."""
+        login(review_users["unrelated_professor"])
+        response = await client.get(f"{REVIEWS_PREFIX}/applications/{review_application.id}/review-status")
+        assert response.status_code == 403
+
+    async def test_assigned_professor_can_read_review_status(self, client, login, review_users, review_application):
+        login(review_users["professor"])
+        response = await client.get(f"{REVIEWS_PREFIX}/applications/{review_application.id}/review-status")
+        assert response.status_code == 200
+
     async def test_student_cannot_read_other_application_review_status(
         self, client, login, review_users, review_application
     ):

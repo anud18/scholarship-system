@@ -358,9 +358,13 @@ async def get_application_review_status(
     if not application:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="申請不存在")
 
-    # 授權範圍 (#1081)：學生僅能查詢自己的申請；教授/管理員維持原行為。
+    # 授權範圍 (#1081)：學生僅能查詢自己的申請。
     if current_user.is_student() and application.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="您無權查詢此申請的審查狀態")
+    # SECURITY (#1404): review-status carries every reviewer's comments, so a
+    # professor is scoped exactly like the sibling /reviews endpoint.
+    if current_user.is_professor() and application.professor_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="您不是此申請的指導教授，無權查詢審查狀態")
     # SECURITY (#1223 A): this returns every ApplicationReview record, the
     # per-subtype cumulative statuses and decision_reason — the same data the
     # scoped /applications/{id}/reviews endpoint refuses. Scope 學院 identically.
