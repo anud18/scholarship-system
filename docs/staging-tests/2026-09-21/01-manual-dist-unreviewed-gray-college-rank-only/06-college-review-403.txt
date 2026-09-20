@@ -1,0 +1,6 @@
+$ curl -X POST http://localhost:8001/api/v1/reviews/applications/1/review \
+       -H 'Authorization: Bearer <cs_college token>' -H 'Content-Type: application/json' \
+       -d '{"items":[{"sub_type_code":"nstc","recommendation":"approve"}]}'
+
+HTTP/1.1 403 Forbidden
+{"success":false,"message":"學院僅能於排名中推薦或不推薦，無法提交審核","trace_id":"8124a8ab-d2fe-4d65-a913-7601002da80c"}
