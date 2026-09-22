@@ -438,6 +438,20 @@ class ApplicationService:
 
         validate_sub_type_for_submission(scholarship, sub_scholarship_type)
 
+    async def _require_bank_document(
+        self, scholarship: Optional[ScholarshipType], profile: Optional[UserProfile]
+    ) -> None:
+        """Reject a submission whose profile has no 存摺封面 while the fixed document is required."""
+        from app.services.application_field_service import ApplicationFieldService
+
+        if scholarship is not None:
+            field_service = ApplicationFieldService(self.db)
+            if not await field_service.is_fixed_bank_document_required(scholarship.code):
+                return
+
+        if profile is None or not profile.bank_document_photo_url:
+            raise ValidationError("尚未上傳存摺封面，請先於「個人資料」上傳存摺封面後再提交申請")
+
     async def _create_application_instance(
         self,
         user: User,
@@ -1279,6 +1293,15 @@ class ApplicationService:
         # to no quota slot at distribution time).
         self._validate_sub_type_for_submission(application.scholarship, application.sub_scholarship_type)
 
+        # Load user profile once (reused for the 存摺封面 check, auto-assign professor and email notification)
+        user_profile_stmt = select(UserProfile).where(UserProfile.user_id == application.user_id)
+        user_profile_result = await self.db.execute(user_profile_stmt)
+        advisor_profile = user_profile_result.scalar_one_or_none()
+
+        # 存摺封面 lives on the profile, not in submitted_form_data, so the
+        # form validation above cannot see it.
+        await self._require_bank_document(application.scholarship, advisor_profile)
+
         # 處理銀行帳戶證明文件 clone（從個人資料複製到申請）
         await self._clone_user_profile_documents(application, user)
 
@@ -1297,11 +1320,6 @@ class ApplicationService:
         # System Overview dashboard panel for new submissions starts
         # reflecting real KPIs (issue #159).
         scholarship_applications_total.labels(status=ApplicationStatus.submitted.value).inc()
-
-        # Load user profile once (reused for auto-assign professor and email notification)
-        user_profile_stmt = select(UserProfile).where(UserProfile.user_id == application.user_id)
-        user_profile_result = await self.db.execute(user_profile_stmt)
-        advisor_profile = user_profile_result.scalar_one_or_none()
 
         # 自動分配指導教授：根據 UserProfile 的 advisor_nycu_id 查找教授帳號
         from app.services.application_builder import assign_professor_from_profile

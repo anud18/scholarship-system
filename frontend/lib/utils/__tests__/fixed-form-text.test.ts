@@ -1,4 +1,5 @@
 import {
+  isFixedBankDocumentRequired,
   resolveFixedFormText,
   FixedFormText,
 } from "../fixed-form-text";
@@ -195,5 +196,35 @@ describe("resolveFixedFormText", () => {
       resolveFixedFormText({ fields: [], documents: [] }, "zh", DEFAULTS)
         .bankDocument
     ).toEqual(DEFAULTS.bankDocument);
+  });
+});
+
+describe("isFixedBankDocumentRequired", () => {
+  it("is required while the config is missing or has no bank_statement row", () => {
+    expect(isFixedBankDocumentRequired(null)).toBe(true);
+    expect(isFixedBankDocumentRequired(undefined)).toBe(true);
+    expect(isFixedBankDocumentRequired({ documents: [] })).toBe(true);
+  });
+
+  it("follows the bank_statement row's is_required / is_active", () => {
+    const withRow = (overrides: Partial<ApplicationDocument>) => ({
+      documents: [document({ fixed_key: "bank_statement", ...overrides })],
+    });
+
+    expect(isFixedBankDocumentRequired(withRow({}))).toBe(true);
+    expect(isFixedBankDocumentRequired(withRow({ is_required: false }))).toBe(
+      false
+    );
+    expect(isFixedBankDocumentRequired(withRow({ is_active: false }))).toBe(
+      false
+    );
+  });
+
+  it("ignores documents that are not the fixed bank_statement row", () => {
+    expect(
+      isFixedBankDocumentRequired({
+        documents: [document({ document_name: "存摺封面", is_required: false })],
+      })
+    ).toBe(true);
   });
 });

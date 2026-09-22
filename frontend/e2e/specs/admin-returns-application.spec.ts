@@ -40,7 +40,7 @@
 import { test, expect } from "@playwright/test";
 import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { loginAs } from "../helpers/auth";
-import { apiAs } from "../helpers/api";
+import { apiAs, ensureBankDocument } from "../helpers/api";
 import { deleteApplicationCascade, getActiveConfig, getApplication, pool } from "../helpers/db";
 import { attachRunState, newRunState, pushTrace, type RunState } from "../helpers/runState";
 import { captureDiagnostics } from "../helpers/diagnose";
@@ -104,6 +104,7 @@ test.describe("管理員退回申請，學生修改後重送 | Admin returns app
     // 1. Student creates a submitted application (no draft mode).
     const studentLogin = await loginAs(browser, STUDENT_ID);
     pushTrace(runState, studentLogin.traceId);
+    await ensureBankDocument(studentLogin.token);
 
     const config = await getActiveConfig(SCHOLARSHIP_CODE);
 

@@ -30,6 +30,21 @@ export type FixedFieldKey = (typeof FIXED_FIELD_KEYS)[number];
 
 export const FIXED_DOCUMENT_KEY_BANK_STATEMENT = "bank_statement";
 
+/**
+ * Whether the 存摺封面 must be uploaded before 儲存個人資料 / 提交申請.
+ * The built-in document is required; only the admin's `bank_statement` row
+ * can relax that, so a config that has not loaded yet counts as required.
+ */
+export const isFixedBankDocumentRequired = (
+  config: Pick<ScholarshipFormConfig, "documents"> | null | undefined
+): boolean => {
+  const bankRow = config?.documents?.find(
+    doc => doc.fixed_key === FIXED_DOCUMENT_KEY_BANK_STATEMENT
+  );
+  if (!bankRow) return true;
+  return bankRow.is_active && bankRow.is_required;
+};
+
 export interface FixedFieldText {
   label: string;
   placeholder: string;

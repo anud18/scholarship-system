@@ -36,7 +36,7 @@ import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { loginAs } from "../helpers/auth";
-import { apiAs } from "../helpers/api";
+import { apiAs, ensureBankDocument } from "../helpers/api";
 import { deleteApplicationCascade, getActiveConfig, pool } from "../helpers/db";
 import { attachRunState, newRunState, pushTrace, type RunState } from "../helpers/runState";
 import { captureDiagnostics } from "../helpers/diagnose";
@@ -123,6 +123,7 @@ test.describe("管理員預覽對話框顯示已上傳 PDF | Admin preview dialo
 
     const studentLogin = await loginAs(browser, STUDENT_ID);
     pushTrace(runState, studentLogin.traceId);
+    await ensureBankDocument(studentLogin.token);
     const config = await getActiveConfig(SCHOLARSHIP_CODE);
 
     const createRes = await apiAs<{ success: boolean; data: { id: number; app_id: string } }>(

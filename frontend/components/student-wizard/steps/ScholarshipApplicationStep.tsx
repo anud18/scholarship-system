@@ -56,6 +56,7 @@ import api, {
   Application,
 } from "@/lib/api";
 import {
+  isFixedBankDocumentRequired,
   resolveFixedFormText,
   type FixedFormText,
 } from "@/lib/utils/fixed-form-text";
@@ -253,6 +254,7 @@ export function ScholarshipApplicationStep({
       accountNumber: "郵局局號加帳號共 14 碼(限本人)",
       accountNumberPlaceholder: "請輸入 14 碼郵局帳號",
       bankDocument: "存摺封面",
+      bankDocumentRequired: "請上傳存摺封面",
       documentUploaded: "已上傳文件",
       preview: "預覽",
       deleteBankDoc: "刪除",
@@ -269,7 +271,7 @@ export function ScholarshipApplicationStep({
       formProgress: "表單完成度",
       completeAllRequired: "請完成所有必填項目",
       savePersonalInfoFirst:
-        "請先填寫上方的指導教授資訊與郵局帳號，並按「儲存個人資料」後才能提交申請",
+        "請先填寫上方的指導教授資訊、郵局帳號並上傳存摺封面，再按「儲存個人資料」後才能提交申請",
       goToPersonalInfo: "前往個人資料",
       saveDraft: "暫存草稿（請按「提交申請」才會正式送出）",
       submitApplication: "提交申請",
@@ -355,6 +357,7 @@ export function ScholarshipApplicationStep({
       accountNumber: "Post Office Account (14 digits)",
       accountNumberPlaceholder: "Enter 14-digit post office account number",
       bankDocument: "Passbook Cover",
+      bankDocumentRequired: "Please upload the passbook cover",
       documentUploaded: "Document Uploaded",
       preview: "Preview",
       deleteBankDoc: "Delete",
@@ -371,7 +374,7 @@ export function ScholarshipApplicationStep({
       formProgress: "Form Completion",
       completeAllRequired: "Please complete all required fields",
       savePersonalInfoFirst:
-        'Fill in the advisor and post office account information above and click "Save Personal Info" before submitting',
+        'Fill in the advisor and post office account information above, upload the passbook cover, and click "Save Personal Info" before submitting',
       goToPersonalInfo: "Go to personal info",
       saveDraft: 'Save Draft (Click "Submit Application" to officially submit)',
       submitApplication: "Submit Application",
@@ -486,6 +489,7 @@ export function ScholarshipApplicationStep({
     locale,
     fixedFormDefaults
   );
+  const isBankDocumentRequired = isFixedBankDocumentRequired(fixedFormConfig);
   // 教授姓名's 說明文字 holds the 指導教授 notes, one per line. They render as
   // the numbered list directly under the 指導教授資訊 heading — where students
   // have always read them — not under the 教授姓名 input.
@@ -502,11 +506,16 @@ export function ScholarshipApplicationStep({
       setAdvisorNycuId(profile.advisor_nycu_id || "");
       setAccountNumber(profile.account_number || "");
       setExistingBankDocument(profile.bank_document_photo_url || null);
+      // The 已儲存 badge on entry means the profile already satisfies every
+      // 個人資料 requirement — including the 存摺封面, which 提交申請 needs.
+      // A profile without one must go through 儲存個人資料 (where the
+      // admin-relaxed case is honoured) rather than be marked saved here.
       if (
         profile.advisor_name &&
         profile.advisor_email &&
         profile.advisor_nycu_id &&
-        profile.account_number
+        profile.account_number &&
+        profile.bank_document_photo_url
       ) {
         setPersonalInfoSaved(true);
       }
@@ -533,8 +542,17 @@ export function ScholarshipApplicationStep({
     });
     setAdvisorErrors(advisorValid.errors);
     const bankValid = validateBankInfo({ account_number: accountNumber });
-    setBankErrors(bankValid.errors);
-    if (!advisorValid.isValid || !bankValid.isValid) return;
+    const isBankDocumentMissing =
+      isBankDocumentRequired &&
+      !existingBankDocument &&
+      bankDocumentFiles.length === 0;
+    setBankErrors(
+      isBankDocumentMissing
+        ? [...bankValid.errors, text.bankDocumentRequired]
+        : bankValid.errors
+    );
+    if (!advisorValid.isValid || !bankValid.isValid || isBankDocumentMissing)
+      return;
 
     setSavingPersonalInfo(true);
     try {
@@ -608,6 +626,7 @@ export function ScholarshipApplicationStep({
       if (response.success) {
         toast.success(text.documentDeleted);
         setExistingBankDocument(null);
+        if (isBankDocumentRequired) setPersonalInfoSaved(false);
         await refreshProfile();
       } else {
         throw new Error(response.message || "Delete failed");
@@ -1317,7 +1336,15 @@ export function ScholarshipApplicationStep({
                 />
               </div>
               <div className="space-y-2">
-                <Label>{fixedText.bankDocument.label}</Label>
+                <Label>
+                  {fixedText.bankDocument.label}
+                  {isBankDocumentRequired && (
+                    <>
+                      {" "}
+                      <span className="text-red-500">*</span>
+                    </>
+                  )}
+                </Label>
                 {existingBankDocument && (
                   <div className="p-3 border rounded-lg bg-green-50 border-green-200">
                     <div className="flex items-center justify-between">

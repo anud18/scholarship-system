@@ -15,6 +15,7 @@ from app.models.application import Application, ApplicationStatus
 from app.models.enums import QuotaManagementMode, Semester
 from app.models.scholarship import ScholarshipConfiguration, SubTypeSelectionMode
 from app.models.user import User, UserRole
+from app.models.user_profile import UserProfile
 from app.schemas.application import ApplicationCreate, ApplicationFormData
 from app.services.application_service import ApplicationService
 from app.services.bulk_approval_service import BulkApprovalService
@@ -100,6 +101,13 @@ class TestCriticalApplicationWorkflow:
             agree_terms=True,
         )
         db.add(app)
+        # Submission requires the profile's 存摺封面.
+        db.add(
+            UserProfile(
+                user_id=test_user.id,
+                bank_document_photo_url="/api/v1/user-profiles/files/bank_documents/passbook.jpg",
+            )
+        )
         await db.commit()
         await db.refresh(app)
 
