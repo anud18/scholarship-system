@@ -200,10 +200,15 @@ describe("resolveFixedFormText", () => {
 });
 
 describe("isFixedBankDocumentRequired", () => {
-  it("is required while the config is missing or has no bank_statement row", () => {
+  it("keeps the built-in default (required) while the config has not loaded", () => {
     expect(isFixedBankDocumentRequired(null)).toBe(true);
     expect(isFixedBankDocumentRequired(undefined)).toBe(true);
-    expect(isFixedBankDocumentRequired({ documents: [] })).toBe(true);
+  });
+
+  it("treats a loaded config without the row as the admin having deactivated it", () => {
+    // The backend always injects the bank_statement row and only drops it
+    // from the student payload when is_active is false.
+    expect(isFixedBankDocumentRequired({ documents: [] })).toBe(false);
   });
 
   it("follows the bank_statement row's is_required / is_active", () => {
@@ -220,11 +225,14 @@ describe("isFixedBankDocumentRequired", () => {
     );
   });
 
-  it("ignores documents that are not the fixed bank_statement row", () => {
+  it("only reads the fixed bank_statement row, not a same-named admin document", () => {
     expect(
       isFixedBankDocumentRequired({
-        documents: [document({ document_name: "存摺封面", is_required: false })],
+        documents: [
+          document({ document_name: "存摺封面", is_required: true }),
+          document({ fixed_key: "bank_statement", is_required: false }),
+        ],
       })
-    ).toBe(true);
+    ).toBe(false);
   });
 });

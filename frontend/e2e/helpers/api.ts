@@ -17,7 +17,8 @@ const PASSBOOK_PNG_BASE64 =
 /**
  * Put a 存摺封面 on the student's profile. `POST /applications/{id}/submit`
  * refuses an application whose profile has none, and the seed never uploads
- * one, so API-driven specs must plant it before submitting.
+ * one, so API-driven specs must plant it before submitting — and undo it
+ * with `clearBankDocument` (helpers/db.ts) in afterAll.
  */
 export async function ensureBankDocument(token: string): Promise<void> {
   const query = new URLSearchParams({

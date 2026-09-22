@@ -41,7 +41,13 @@ import { test, expect } from "@playwright/test";
 import { FEATURE, MODE, ROLE } from "../helpers/tags";
 import { loginAs } from "../helpers/auth";
 import { apiAs, ensureBankDocument } from "../helpers/api";
-import { deleteApplicationCascade, getActiveConfig, getApplication, pool } from "../helpers/db";
+import {
+  clearBankDocument,
+  deleteApplicationCascade,
+  getActiveConfig,
+  getApplication,
+  pool,
+} from "../helpers/db";
 import { attachRunState, newRunState, pushTrace, type RunState } from "../helpers/runState";
 import { captureDiagnostics } from "../helpers/diagnose";
 
@@ -92,6 +98,7 @@ test.describe("管理員退回申請，學生修改後重送 | Admin returns app
     if (createdAppId) {
       await deleteApplicationCascade(createdAppId).catch(() => undefined);
     }
+    await clearBankDocument(STUDENT_ID).catch(() => undefined);
   });
 
   test("@nightly stuphd001 submit → admin return → student edit+resubmit → edit rejected", async ({

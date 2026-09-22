@@ -39,6 +39,7 @@ from app.models.application_field import ApplicationDocument
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User, UserRole, UserType
 from app.models.user_profile import UserProfile
+from app.services.application_field_service import FIXED_KEY_BANK_STATEMENT
 from app.services.application_service import ApplicationService
 
 
@@ -326,7 +327,7 @@ async def test_submit_allows_missing_passbook_when_admin_relaxed_fixed_document(
     db.add(
         ApplicationDocument(
             scholarship_type="submit_relax",
-            fixed_key="bank_statement",
+            fixed_key=FIXED_KEY_BANK_STATEMENT,
             document_name="存摺封面",
             is_required=False,
             is_active=True,

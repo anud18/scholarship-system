@@ -198,7 +198,7 @@ export function ScholarshipApplicationStep({
   const [bankErrors, setBankErrors] = useState<string[]>([]);
   const [emailValidationError, setEmailValidationError] = useState("");
   const [savingPersonalInfo, setSavingPersonalInfo] = useState(false);
-  const [personalInfoSaved, setPersonalInfoSaved] = useState(false);
+  const [isPersonalInfoDirty, setIsPersonalInfoDirty] = useState(false);
   const [showBankDocPreview, setShowBankDocPreview] = useState(false);
   const [bankDocPreviewFile, setBankDocPreviewFile] = useState<{
     url: string;
@@ -490,6 +490,19 @@ export function ScholarshipApplicationStep({
     fixedFormDefaults
   );
   const isBankDocumentRequired = isFixedBankDocumentRequired(fixedFormConfig);
+  // 已儲存 = the saved profile satisfies every 個人資料 requirement and nothing
+  // has been edited since. Derived rather than stored so that switching to a
+  // scholarship that requires the 存摺封面, or deleting the passbook, drops
+  // the badge (and re-disables 提交申請) without any effect ordering.
+  const personalInfoSaved =
+    !isPersonalInfoDirty &&
+    Boolean(
+      profile?.advisor_name &&
+        profile?.advisor_email &&
+        profile?.advisor_nycu_id &&
+        profile?.account_number
+    ) &&
+    (!isBankDocumentRequired || Boolean(profile?.bank_document_photo_url));
   // 教授姓名's 說明文字 holds the 指導教授 notes, one per line. They render as
   // the numbered list directly under the 指導教授資訊 heading — where students
   // have always read them — not under the 教授姓名 input.
@@ -506,26 +519,13 @@ export function ScholarshipApplicationStep({
       setAdvisorNycuId(profile.advisor_nycu_id || "");
       setAccountNumber(profile.account_number || "");
       setExistingBankDocument(profile.bank_document_photo_url || null);
-      // The 已儲存 badge on entry means the profile already satisfies every
-      // 個人資料 requirement — including the 存摺封面, which 提交申請 needs.
-      // A profile without one must go through 儲存個人資料 (where the
-      // admin-relaxed case is honoured) rather than be marked saved here.
-      if (
-        profile.advisor_name &&
-        profile.advisor_email &&
-        profile.advisor_nycu_id &&
-        profile.account_number &&
-        profile.bank_document_photo_url
-      ) {
-        setPersonalInfoSaved(true);
-      }
     }
   }, [profile]);
 
   const handleAdvisorEmailChange = (email: string) => {
     setAdvisorEmail(email);
     setEmailValidationError("");
-    setPersonalInfoSaved(false);
+    setIsPersonalInfoDirty(true);
     if (advisorErrors.length > 0) setAdvisorErrors([]);
     if (email.trim() !== "") {
       const validation = validateAdvisorEmail(email);
@@ -585,7 +585,7 @@ export function ScholarshipApplicationStep({
       }
 
       await refreshProfile();
-      setPersonalInfoSaved(true);
+      setIsPersonalInfoDirty(false);
       toast.success(text.personalInfoSaved);
     } catch (err: unknown) {
       toast.error((err instanceof Error ? err.message : text.personalInfoSaveFailed));
@@ -626,7 +626,9 @@ export function ScholarshipApplicationStep({
       if (response.success) {
         toast.success(text.documentDeleted);
         setExistingBankDocument(null);
-        if (isBankDocumentRequired) setPersonalInfoSaved(false);
+        // A file picked before the delete would otherwise satisfy the
+        // 儲存個人資料 gate and silently re-upload the document just removed.
+        setBankDocumentFiles([]);
         await refreshProfile();
       } else {
         throw new Error(response.message || "Delete failed");
@@ -1251,7 +1253,7 @@ export function ScholarshipApplicationStep({
                   value={advisorName}
                   onChange={e => {
                     setAdvisorName(e.target.value);
-                    setPersonalInfoSaved(false);
+                    setIsPersonalInfoDirty(true);
                     if (advisorErrors.length > 0) setAdvisorErrors([]);
                   }}
                 />
@@ -1288,7 +1290,7 @@ export function ScholarshipApplicationStep({
                   value={advisorNycuId}
                   onChange={e => {
                     setAdvisorNycuId(e.target.value);
-                    setPersonalInfoSaved(false);
+                    setIsPersonalInfoDirty(true);
                     if (advisorErrors.length > 0) setAdvisorErrors([]);
                   }}
                 />
@@ -1327,7 +1329,7 @@ export function ScholarshipApplicationStep({
                   value={accountNumber}
                   onChange={e => {
                     setAccountNumber(e.target.value);
-                    setPersonalInfoSaved(false);
+                    setIsPersonalInfoDirty(true);
                     if (bankErrors.length > 0) setBankErrors([]);
                   }}
                 />
@@ -1378,7 +1380,7 @@ export function ScholarshipApplicationStep({
                 <FileUpload
                   onFilesChange={files => {
                     setBankDocumentFiles(files);
-                    setPersonalInfoSaved(false);
+                    setIsPersonalInfoDirty(true);
                   }}
                   acceptedTypes={[".jpg", ".jpeg", ".png", ".pdf"]}
                   maxSize={10 * 1024 * 1024}

@@ -37,7 +37,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { loginAs } from "../helpers/auth";
 import { apiAs, ensureBankDocument } from "../helpers/api";
-import { deleteApplicationCascade, getActiveConfig, pool } from "../helpers/db";
+import { clearBankDocument, deleteApplicationCascade, getActiveConfig, pool } from "../helpers/db";
 import { attachRunState, newRunState, pushTrace, type RunState } from "../helpers/runState";
 import { captureDiagnostics } from "../helpers/diagnose";
 import { BACKEND_URL, FRONTEND_URL } from "../helpers/env";
@@ -113,6 +113,7 @@ test.describe("管理員預覽對話框顯示已上傳 PDF | Admin preview dialo
     if (createdAppId) {
       await deleteApplicationCascade(createdAppId).catch(() => undefined);
     }
+    await clearBankDocument(STUDENT_ID).catch(() => undefined);
   });
 
   test("@nightly stuphd001 upload+submit → super_admin opens 預覽 → iframe visible, no framing block", async ({

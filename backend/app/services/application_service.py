@@ -438,6 +438,10 @@ class ApplicationService:
 
         validate_sub_type_for_submission(scholarship, sub_scholarship_type)
 
+    async def _get_user_profile(self, user_id: int) -> Optional[UserProfile]:
+        result = await self.db.execute(select(UserProfile).where(UserProfile.user_id == user_id))
+        return result.scalar_one_or_none()
+
     async def _require_bank_document(
         self, scholarship: Optional[ScholarshipType], profile: Optional[UserProfile]
     ) -> None:
@@ -563,6 +567,11 @@ class ApplicationService:
         # 直接提交（非草稿）時驗證聯絡電話格式；草稿允許暫存未完成的號碼。
         if not is_draft and application_data.form_data:
             self._enforce_contact_phone_format(application_data.form_data.fields)
+
+        # A direct (non-draft) create lands in `submitted` without passing
+        # through submit_application, so it needs the same 存摺封面 gate.
+        if not is_draft:
+            await self._require_bank_document(scholarship, await self._get_user_profile(user.id))
 
         # Create application instance using helper method
         application = await self._create_application_instance(
@@ -1294,9 +1303,7 @@ class ApplicationService:
         self._validate_sub_type_for_submission(application.scholarship, application.sub_scholarship_type)
 
         # Load user profile once (reused for the 存摺封面 check, auto-assign professor and email notification)
-        user_profile_stmt = select(UserProfile).where(UserProfile.user_id == application.user_id)
-        user_profile_result = await self.db.execute(user_profile_stmt)
-        advisor_profile = user_profile_result.scalar_one_or_none()
+        advisor_profile = await self._get_user_profile(application.user_id)
 
         # 存摺封面 lives on the profile, not in submitted_form_data, so the
         # form validation above cannot see it.
