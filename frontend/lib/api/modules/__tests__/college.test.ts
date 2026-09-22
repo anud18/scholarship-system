@@ -325,6 +325,31 @@ describe("createCollegeApi", () => {
     expect(result.downloadUrl).not.toContain("semester=");
   });
 
+  it("exportPackage forwards college_code only when given", async () => {
+    // Pin: the admin 獎學金分發 page scopes the export to one college via
+    // college_code; 「全部學院」 sends nothing so the backend builds the
+    // whole-school archive with one folder per college.
+    const fetchMock = mockPrecheck();
+    const api = createCollegeApi();
+
+    const scoped = await api.exportPackage({
+      scholarship_type_id: 7,
+      academic_year: 114,
+      college_code: "E",
+      token: "abc",
+    });
+    expect(fetchMock.mock.calls[0][0]).toContain("college_code=E");
+    expect(scoped.downloadUrl).toContain("college_code=E");
+
+    const whole = await api.exportPackage({
+      scholarship_type_id: 7,
+      academic_year: 114,
+      token: "abc",
+    });
+    expect(fetchMock.mock.calls[1][0]).not.toContain("college_code=");
+    expect(whole.downloadUrl).not.toContain("college_code=");
+  });
+
   it("exportPackage throws when a 200 precheck lacks the ApiResponse filename", async () => {
     // Pin: a 200 without `data.filename` means the proxy chain is broken —
     // fail loudly rather than start a download we cannot vouch for.

@@ -30,6 +30,7 @@ def _plan(count_per_dept=(2, 1)):
         semester=None,
         college_name="資訊學院",
         dept_groups={f"{i}_系{i}": [object()] * n for i, n in enumerate(count_per_dept, start=1)},
+        college_labels={},
         field_labels={},
         summary_tables={},
         zip_filename=_FILENAME,
@@ -95,6 +96,7 @@ async def _call(user, db=None, **overrides):
         scholarship_type_id=2,
         academic_year=114,
         semester=None,
+        college_code=None,
         dry_run=False,
         current_user=user,
         db=db if db is not None else AsyncMock(),
@@ -228,6 +230,38 @@ async def test_admin_is_not_college_scoped(wire):
     await _call(admin, dry_run=True)
 
     assert stub.prepare_kwargs["college_code"] is None
+
+
+@pytest.mark.asyncio
+async def test_admin_may_scope_the_export_to_one_college(wire):
+    # The admin 獎學金分發 page picks a college from its dropdown: the export
+    # is then that college's department folders, exactly like the college's own.
+    stub = wire(_StubService(plan=_plan()))
+    admin = SimpleNamespace(id=1, role=UserRole.admin, college_code=None)
+
+    await _call(admin, college_code="E", dry_run=True)
+
+    assert stub.prepare_kwargs["college_code"] == "E"
+
+
+@pytest.mark.asyncio
+async def test_college_user_cannot_export_another_college(wire, college_user):
+    stub = wire(_StubService(plan=_plan()))
+
+    with pytest.raises(HTTPException) as exc:
+        await _call(college_user, college_code="E", dry_run=True)
+
+    assert exc.value.status_code == 403
+    assert stub.prepare_kwargs is None
+
+
+@pytest.mark.asyncio
+async def test_college_user_may_name_their_own_college(wire, college_user):
+    stub = wire(_StubService(plan=_plan()))
+
+    await _call(college_user, college_code="C", dry_run=True)
+
+    assert stub.prepare_kwargs["college_code"] == "C"
 
 
 @pytest.mark.asyncio

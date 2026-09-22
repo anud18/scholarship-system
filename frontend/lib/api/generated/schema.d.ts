@@ -5006,6 +5006,10 @@ export interface paths {
          *     the archive, so the UI can surface a 400/403 reason before handing the real
          *     download to the browser's download manager.
          *
+         *     A college reviewer is always scoped to their own college. An admin may
+         *     pick one college with ``college_code``; without it the archive covers the
+         *     whole school with one folder per college.
+         *
          *     SECURITY: Bulk PII export. Every call is audit-logged with the actor's
          *     user_id and role, scholarship/period filters and application count, and
          *     the end of the stream is logged with the bytes actually sent. 403
@@ -19924,6 +19928,8 @@ export interface operations {
                 academic_year: number;
                 /** @description Semester (first/second/null for annual) */
                 semester?: string | null;
+                /** @description 管理員限定：只匯出此學院；省略時匯出全校（每個學院一個資料夾） */
+                college_code?: string | null;
                 /** @description 只檢查匯出條件（權限、資料筆數），不產生 ZIP */
                 dry_run?: boolean;
             };

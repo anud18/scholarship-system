@@ -673,12 +673,15 @@ export function createCollegeApi() {
      * data present, under the cap) so a 400/403 reason still surfaces as a
      * thrown Error, then returns the same-origin URL the caller hands to the
      * browser's own download manager. The token rides in the query string so
-     * plain navigation works.
+     * plain navigation works. `college_code` (admin only) scopes the archive
+     * to one college; without it an admin gets the whole school with one
+     * folder per college.
      */
     exportPackage: async (params: {
       scholarship_type_id: number;
       academic_year: number;
       semester?: string;
+      college_code?: string;
       token: string;
     }): Promise<{
       downloadUrl: string;
@@ -693,6 +696,9 @@ export function createCollegeApi() {
       searchParams.set("academic_year", String(params.academic_year));
       if (params.semester) {
         searchParams.set("semester", params.semester);
+      }
+      if (params.college_code) {
+        searchParams.set("college_code", params.college_code);
       }
       searchParams.set("token", params.token);
       const downloadUrl = `/api/v1/export-package?${searchParams.toString()}`;

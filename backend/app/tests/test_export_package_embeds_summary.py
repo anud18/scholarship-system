@@ -23,7 +23,7 @@ from app.services.export_package_service import ExportPackageService
 from app.tests.export_package_fakes import collect_zip
 
 
-def _mk_app(app_id, user_id, dep_no, dep_name, std_code, cname, academy="某學院"):
+def _mk_app(app_id, user_id, dep_no, dep_name, std_code, cname, academy="某學院", academy_no="A"):
     a = Application(
         user_id=user_id,
         scholarship_type_id=1,
@@ -32,6 +32,7 @@ def _mk_app(app_id, user_id, dep_no, dep_name, std_code, cname, academy="某學�
             "trm_depno": dep_no,
             "trm_depname": dep_name,
             "trm_academyname": academy,
+            "std_academyno": academy_no,
             "std_stdcode": std_code,
             "std_cname": cname,
         },
@@ -135,3 +136,56 @@ async def test_export_zip_degrades_when_summary_build_fails_wholesale(monkeypatc
     assert "_錯誤_申請總表生成失敗.txt" in names
     # No summary workbooks were emitted
     assert not any(n.endswith(".xlsx") for n in names)
+
+
+@pytest.mark.asyncio
+async def test_whole_school_export_nests_department_folders_under_each_college(monkeypatch):
+    """Admin export with no college picked (「全部學院」): one folder per college,
+    department folders and per-department tables inside it, a college table in
+    each college folder and the 全校 table at the root. College folder names
+    come from the academies table, falling back to the snapshot name."""
+    monkeypatch.setattr("app.services.export_package_service.ensure_cjk_font", lambda: None)
+
+    async def _fake_aux(db, *, scholarship_type, applications):
+        return ([], {}, {}, {})
+
+    monkeypatch.setattr("app.services.export_summary_tables.load_export_aux_data", _fake_aux)
+    monkeypatch.setattr("app.services.export_package_service.load_form_field_labels", _coro_returning({}))
+
+    apps = [
+        _mk_app(1, 11, "1000", "A系", "001", "甲", academy="舊名資訊學院", academy_no="E"),
+        _mk_app(2, 12, "1000", "A系", "002", "乙", academy="舊名資訊學院", academy_no="E"),
+        _mk_app(3, 13, "2000", "B系", "003", "丙", academy="工學院", academy_no="W"),
+    ]
+    stype = SimpleNamespace(name="某獎學金", code="phd", sub_type_configs=[])
+
+    svc = ExportPackageService(db=None, minio_service=None)
+    monkeypatch.setattr(svc, "_get_scholarship_type", _coro_returning(stype))
+    monkeypatch.setattr(svc, "_query_applications", _coro_returning(apps))
+    # academies table knows E (authoritative name) but not W → snapshot fallback
+    monkeypatch.setattr(svc, "_load_academy_names", _coro_returning({"E": "資訊學院"}))
+    monkeypatch.setattr(svc, "_generate_summary_pdf", lambda *a, **k: b"%PDF-1.4 fake")
+
+    plan = await svc.prepare_export(
+        scholarship_type_id=1,
+        academic_year=114,
+        semester=None,
+        college_code=None,
+    )
+    assert plan.college_labels == {"E_資訊學院": "資訊學院", "W_工學院": "工學院"}
+    assert plan.zip_filename == "某獎學金_申請資料_114_0_全校.zip"
+
+    names = zipfile.ZipFile(await collect_zip(svc, plan)).namelist()
+
+    # Student folders sit under college/department
+    assert any(n.startswith("E_資訊學院/1000_A系/001_甲/") for n in names)
+    assert any(n.startswith("E_資訊學院/1000_A系/002_乙/") for n in names)
+    assert any(n.startswith("W_工學院/2000_B系/003_丙/") for n in names)
+    assert not any(n.startswith("1000_A系/") or n.startswith("2000_B系/") for n in names)
+
+    # Tables: per department (inside the college folder), per college, and 全校 at root
+    assert "E_資訊學院/1000_A系/114學年度某獎學金學生資料彙整表_A系.xlsx" in names
+    assert "W_工學院/2000_B系/114學年度某獎學金學生資料彙整表_B系.xlsx" in names
+    assert "E_資訊學院/114學年度某獎學金學生資料彙整表_資訊學院.xlsx" in names
+    assert "W_工學院/114學年度某獎學金學生資料彙整表_工學院.xlsx" in names
+    assert "114學年度某獎學金學生資料彙整表_全校.xlsx" in names
