@@ -60,7 +60,10 @@ import {
   type FixedFormText,
 } from "@/lib/utils/fixed-form-text";
 import { logger } from "@/lib/utils/logger";
-import { isApplyableScholarship } from "@/lib/scholarship-eligibility";
+import {
+  getRealSubTypes,
+  isApplyableScholarship,
+} from "@/lib/scholarship-eligibility";
 import { clsx } from "@/lib/utils";
 import {
   buildApplicationFormFields,
@@ -797,6 +800,8 @@ export function ScholarshipApplicationStep({
     }
   };
 
+  const realSubTypes = getRealSubTypes(selectedScholarship);
+
   // Derived synchronously from the form config the fixed-text loader already
   // holds, so a late response can never overwrite a newer result (提交申請 is
   // gated on this). While that config still belongs to a previously selected
@@ -813,9 +818,7 @@ export function ScholarshipApplicationStep({
         formData: dynamicFormData,
         fileData: dynamicFileData,
         // Sub-type selection is required only when the scholarship offers one
-        hasSubTypeChoice: (selectedScholarship?.eligible_sub_types ?? []).some(
-          st => st.value && st.value !== "general"
-        ),
+        hasSubTypeChoice: realSubTypes.length > 0,
         selectedSubTypeCount: selectedSubTypes.length,
         isPersonalInfoSaved: personalInfoSaved,
       })
@@ -827,9 +830,7 @@ export function ScholarshipApplicationStep({
   // category at submit. Depend on the whole scholarship object so switching to
   // a different single-sub-type scholarship re-selects correctly.
   useEffect(() => {
-    const realSubTypes = (selectedScholarship?.eligible_sub_types ?? []).filter(
-      st => st.value && st.value !== "general"
-    );
+    const realSubTypes = getRealSubTypes(selectedScholarship);
     if (realSubTypes.length !== 1) return;
     const onlyValue = realSubTypes[0].value;
     if (!onlyValue) return;
@@ -890,11 +891,7 @@ export function ScholarshipApplicationStep({
           : [subTypeValue];
         break;
       case "hierarchical":
-        const validSubTypes =
-          selectedScholarship.eligible_sub_types?.filter(
-            st => st.value && st.value !== "general"
-          ) || [];
-        const orderedValues = validSubTypes
+        const orderedValues = getRealSubTypes(selectedScholarship)
           .map(st => st.value!)
           .filter(Boolean);
 
@@ -994,9 +991,7 @@ export function ScholarshipApplicationStep({
     // When the scholarship defines real sub-types, never fall back to the
     // synthetic "general" category (it matches no quota slot at distribution);
     // send [] so the backend guard / draft stays honest.
-    const hasRealEligibleSubTypes = (
-      selectedScholarship.eligible_sub_types ?? []
-    ).some(st => st.value && st.value !== "general");
+    const hasRealEligibleSubTypes = realSubTypes.length > 0;
 
     setSubmitting(true);
     try {
@@ -1072,9 +1067,7 @@ export function ScholarshipApplicationStep({
     // When the scholarship defines real sub-types, never fall back to the
     // synthetic "general" category (it matches no quota slot at distribution);
     // send [] so the backend guard / draft stays honest.
-    const hasRealEligibleSubTypes = (
-      selectedScholarship.eligible_sub_types ?? []
-    ).some(st => st.value && st.value !== "general");
+    const hasRealEligibleSubTypes = realSubTypes.length > 0;
 
     setSubmitting(true);
     try {
@@ -1166,13 +1159,10 @@ export function ScholarshipApplicationStep({
     );
   }
 
-  const eligibleSubTypes = selectedScholarship?.eligible_sub_types ?? [];
+  const eligibleSubTypes = realSubTypes;
   const selectionMode =
     selectedScholarship?.sub_type_selection_mode ?? "multiple";
-  const hasSpecialSubTypes =
-    eligibleSubTypes.length > 0 &&
-    eligibleSubTypes[0]?.value !== "general" &&
-    eligibleSubTypes[0]?.value !== null;
+  const hasSpecialSubTypes = realSubTypes.length > 0;
 
   const applicationDocumentNote =
     locale === "zh"
@@ -1474,9 +1464,6 @@ export function ScholarshipApplicationStep({
                     if (!subTypeValue) return false;
 
                     if (selectionMode === "hierarchical") {
-                      const validSubTypes = eligibleSubTypes.filter(
-                        st => st.value && st.value !== "general"
-                      );
                       const expectedIndex = selectedSubTypes.length;
                       return isSelected || index === expectedIndex;
                     }
