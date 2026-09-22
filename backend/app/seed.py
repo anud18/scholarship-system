@@ -617,6 +617,12 @@ async def seed_development():
 
             await seed_ay115_demo(session)
 
+            # 9. 存摺封面 for the returning student accounts (uploaded to MinIO)
+            print("\n🏦 Initializing 存摺封面 for seeded students...")
+            from app.db.seed_passbooks import seed_passbooks
+
+            print(f"  ✓ 存摺封面 uploaded: +{await seed_passbooks(session)}")
+
             print("\n📋 Test User Accounts:")
             print("- Admin: admin@nycu.edu.tw")
             print("- Super Admin: super_admin@nycu.edu.tw")

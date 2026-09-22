@@ -9,33 +9,6 @@ export interface ApiResult<T> {
   traceId: string | null;
 }
 
-// 1x1 transparent PNG — small enough for the base64 query-string endpoint and
-// a real image, so the backend's PIL/MIME validation accepts it.
-const PASSBOOK_PNG_BASE64 =
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
-
-/**
- * Put a 存摺封面 on the student's profile. `POST /applications/{id}/submit`
- * refuses an application whose profile has none, and the seed never uploads
- * one, so API-driven specs must plant it before submitting — and undo it
- * with `clearBankDocument` (helpers/db.ts) in afterAll.
- */
-export async function ensureBankDocument(token: string): Promise<void> {
-  const query = new URLSearchParams({
-    photo_data: PASSBOOK_PNG_BASE64,
-    filename: "e2e-passbook.png",
-    content_type: "image/png",
-  });
-  const res = await apiAs<{ success?: boolean; detail?: string }>(
-    token,
-    "POST",
-    `/user-profiles/me/bank-document?${query.toString()}`,
-  );
-  if (!res.ok) {
-    throw new Error(`ensureBankDocument failed: HTTP ${res.status} body=${JSON.stringify(res.body)}`);
-  }
-}
-
 export async function apiAs<T = unknown>(
   token: string,
   method: string,

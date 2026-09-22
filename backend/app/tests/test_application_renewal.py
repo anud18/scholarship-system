@@ -12,8 +12,20 @@ from app.models.application import ApplicationStatus
 from app.models.enums import QuotaManagementMode, Semester
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User
+from app.models.user_profile import UserProfile
 from app.schemas.application import ApplicationCreate, ApplicationFormData
 from app.services.application_service import ApplicationService
+
+
+async def _ensure_passbook(db: AsyncSession, user_id: int) -> None:
+    """Direct (non-draft) creation is gated on the profile's 存摺封面."""
+    db.add(
+        UserProfile(
+            user_id=user_id,
+            bank_document_photo_url="/api/v1/user-profiles/files/bank_documents/passbook.jpg",
+        )
+    )
+    await db.commit()
 
 
 def _build_form_data() -> ApplicationFormData:
@@ -96,6 +108,7 @@ class TestApplicationRenewal:
         """
         # Arrange
         config = await _create_active_configuration(db, test_scholarship)
+        await _ensure_passbook(db, test_user.id)
 
         with _mock_student_service() as mock_student:
             mock_instance = AsyncMock()
@@ -130,6 +143,7 @@ class TestApplicationRenewal:
         """Test creating a new (non-renewal) application"""
         # Arrange
         config = await _create_active_configuration(db, test_scholarship)
+        await _ensure_passbook(db, test_user.id)
 
         with _mock_student_service() as mock_student:
             mock_instance = AsyncMock()

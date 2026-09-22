@@ -131,19 +131,6 @@ export async function deleteCollegeRankings(opts: {
   }
 }
 
-/**
- * Undo `ensureBankDocument` for a seeded student so the shared profile is
- * pristine for the next spec. The tiny MinIO object is left orphaned.
- */
-export async function clearBankDocument(studentNycuId: string): Promise<void> {
-  await pool.query(
-    `UPDATE user_profiles
-        SET bank_document_photo_url = NULL, bank_document_object_name = NULL
-      WHERE user_id = (SELECT id FROM users WHERE nycu_id = $1)`,
-    [studentNycuId],
-  );
-}
-
 export async function deleteApplicationCascade(appId: string): Promise<void> {
   // Best-effort idempotent cleanup covering every FK that points at
   // `applications` with ON DELETE NO ACTION (the default for most of the
