@@ -19,6 +19,7 @@ from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import AdminScholarship, User
 from app.models.user_profile import UserProfile
 from app.services.college_ranking_export_service import DynamicFieldSpec
+from app.services.sub_type_labels import load_configuration_for_period, resolve_sub_type_labels, zh_labels
 from app.utils.application_helpers import (
     get_college_code_from_data,
     get_nycu_id_from_data,
@@ -166,6 +167,8 @@ async def load_export_aux_data(
     *,
     scholarship_type,  # ScholarshipType ORM object or None
     applications: Iterable[Any],
+    academic_year: Optional[int] = None,
+    semester: Optional[str] = None,
 ) -> tuple[
     list[DynamicFieldSpec],
     dict[str, str],
@@ -173,6 +176,9 @@ async def load_export_aux_data(
     dict[int, str],
 ]:
     """Bulk-load auxiliary data shared by the 學生資料彙整表 exports.
+
+    ``academic_year`` (with ``semester``) selects the ScholarshipConfiguration
+    whose per-year ``sub_type_labels`` override the base sub-type names.
 
     Returns:
         (dynamic_fields, sub_type_labels, account_number_by_user, advisor_string_by_user)
@@ -203,12 +209,16 @@ async def load_export_aux_data(
             for f in rows
         ]
 
-    # 2. Sub-type Chinese labels
+    # 2. Sub-type Chinese labels (base names + this year's configuration overrides)
     sub_type_labels: dict[str, str] = {}
     if scholarship_type:
-        for cfg in getattr(scholarship_type, "sub_type_configs", []) or []:
-            if cfg.sub_type_code and cfg.name:
-                sub_type_labels[cfg.sub_type_code] = cfg.name
+        configuration = None
+        if academic_year is not None:
+            configuration = await load_configuration_for_period(db, scholarship_type.id, academic_year, semester)
+        sub_type_configs = [
+            cfg for cfg in (getattr(scholarship_type, "sub_type_configs", []) or []) if cfg.sub_type_code and cfg.name
+        ]
+        sub_type_labels = zh_labels(resolve_sub_type_labels(sub_type_configs, configuration, include_inactive=True))
 
     # 3. Profile lookups (account_number, advisor_name fallback)
     user_ids: set[int] = set()

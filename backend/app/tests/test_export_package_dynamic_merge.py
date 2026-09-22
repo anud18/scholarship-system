@@ -82,7 +82,7 @@ def _stype():
 
 
 async def _run_export(monkeypatch, apps, minio, field_labels=None, summary_pdf=None):
-    async def _fake_aux(db, *, scholarship_type, applications):
+    async def _fake_aux(db, *, scholarship_type, applications, academic_year=None, semester=None):
         return ([], {}, {}, {})
 
     monkeypatch.setattr("app.services.export_summary_tables.load_export_aux_data", _fake_aux)
