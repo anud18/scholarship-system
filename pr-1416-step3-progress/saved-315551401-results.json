@@ -1,0 +1,79 @@
+[
+  {
+    "tag": "B1-initial",
+    "expect": {
+      "progress": 25,
+      "hint": false,
+      "genericLine": true,
+      "selector": true,
+      "submitDisabled": true
+    },
+    "obs": {
+      "progress": 25,
+      "hint": false,
+      "genericLine": true,
+      "selector": true,
+      "subTypeCards": 2,
+      "submitDisabled": true
+    },
+    "ok": true,
+    "file": "saved-315551401-B1-initial.png"
+  },
+  {
+    "tag": "B2-subtype-selected",
+    "expect": {
+      "progress": 50,
+      "hint": false,
+      "genericLine": true,
+      "submitDisabled": true
+    },
+    "obs": {
+      "progress": 50,
+      "hint": false,
+      "genericLine": true,
+      "selector": true,
+      "subTypeCards": 2,
+      "submitDisabled": true
+    },
+    "ok": true,
+    "file": "saved-315551401-B2-subtype-selected.png"
+  },
+  {
+    "tag": "B3-all-filled",
+    "expect": {
+      "progress": 100,
+      "hint": false,
+      "genericLine": false,
+      "submitDisabled": false
+    },
+    "obs": {
+      "progress": 100,
+      "hint": false,
+      "genericLine": false,
+      "selector": true,
+      "subTypeCards": 2,
+      "submitDisabled": false
+    },
+    "ok": true,
+    "file": "saved-315551401-B3-all-filled.png"
+  },
+  {
+    "tag": "B4-advisor-edited-unsaved",
+    "expect": {
+      "progress": 75,
+      "hint": true,
+      "genericLine": false,
+      "submitDisabled": true
+    },
+    "obs": {
+      "progress": 75,
+      "hint": true,
+      "genericLine": false,
+      "selector": true,
+      "subTypeCards": 2,
+      "submitDisabled": true
+    },
+    "ok": true,
+    "file": "saved-315551401-B4-advisor-edited-unsaved.png"
+  }
+]

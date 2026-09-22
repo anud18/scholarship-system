@@ -1,0 +1,55 @@
+[
+  {
+    "tag": "A1-initial",
+    "expect": {
+      "progress": 0,
+      "hint": true,
+      "genericLine": false,
+      "selector": true,
+      "submitDisabled": true
+    },
+    "obs": {
+      "progress": 0,
+      "hint": true,
+      "genericLine": false,
+      "selector": true,
+      "subTypeCards": 2,
+      "submitDisabled": true
+    },
+    "ok": true,
+    "file": "unsaved-stuphd001-A1-initial.png"
+  },
+  {
+    "tag": "A2-all-below-filled",
+    "expect": {
+      "progress": 75,
+      "hint": true,
+      "genericLine": false,
+      "selector": true,
+      "submitDisabled": true
+    },
+    "obs": {
+      "progress": 75,
+      "hint": true,
+      "genericLine": false,
+      "selector": true,
+      "subTypeCards": 2,
+      "submitDisabled": true
+    },
+    "ok": true,
+    "file": "unsaved-stuphd001-A2-all-below-filled.png"
+  },
+  {
+    "tag": "A3-go-to-personal-info",
+    "expect": {
+      "headingTopWithinViewport": true
+    },
+    "obs": {
+      "headingTopBefore": -366,
+      "headingTopAfter": 121,
+      "scrollY": 265
+    },
+    "ok": true,
+    "file": "unsaved-stuphd001-A3-go-to-personal-info.png"
+  }
+]
