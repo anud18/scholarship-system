@@ -60,14 +60,17 @@ import {
   type FixedFormText,
 } from "@/lib/utils/fixed-form-text";
 import { logger } from "@/lib/utils/logger";
-import { isApplyableScholarship } from "@/lib/scholarship-eligibility";
+import {
+  getRealSubTypes,
+  isApplyableScholarship,
+} from "@/lib/scholarship-eligibility";
 import { clsx } from "@/lib/utils";
 import {
   buildApplicationFormFields,
   isValidTaiwanMobile,
-  isDocumentUploadRequired,
   TAIWAN_MOBILE_MESSAGE,
 } from "@/lib/utils/application-helpers";
+import { calculateFormProgress } from "@/lib/utils/application-progress";
 import { useApplications } from "@/hooks/use-applications";
 import { useStudentProfile } from "@/hooks/use-student-profile";
 import {
@@ -169,7 +172,6 @@ export function ScholarshipApplicationStep({
   const [dynamicFileData, setDynamicFileData] = useState<
     Record<string, File[]>
   >({});
-  const [formProgress, setFormProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   // Form config of the scholarship whose 固定欄位/固定文件 text the 個人資料
   // section shows — see the loader effect below.
@@ -202,6 +204,7 @@ export function ScholarshipApplicationStep({
     filename: string;
     type: string;
   } | null>(null);
+  const personalInfoSectionRef = useRef<HTMLDivElement>(null);
   const savedApplicationIdRef = useRef<number | null>(null);
   // Restore an editing application into local state only once per id: the
   // uploads inside a save trigger fetchApplications, and a mid-save re-run of
@@ -265,6 +268,9 @@ export function ScholarshipApplicationStep({
       programsRequired: "請至少選擇一個申請項目",
       formProgress: "表單完成度",
       completeAllRequired: "請完成所有必填項目",
+      savePersonalInfoFirst:
+        "請先填寫上方的指導教授資訊與郵局帳號，並按「儲存個人資料」後才能提交申請",
+      goToPersonalInfo: "前往個人資料",
       saveDraft: "暫存草稿（請按「提交申請」才會正式送出）",
       submitApplication: "提交申請",
       backButton: "返回上一步",
@@ -364,6 +370,9 @@ export function ScholarshipApplicationStep({
       programsRequired: "Please select at least one program",
       formProgress: "Form Completion",
       completeAllRequired: "Please complete all required fields",
+      savePersonalInfoFirst:
+        'Fill in the advisor and post office account information above and click "Save Personal Info" before submitting',
+      goToPersonalInfo: "Go to personal info",
       saveDraft: 'Save Draft (Click "Submit Application" to officially submit)',
       submitApplication: "Submit Application",
       backButton: "Back",
@@ -612,10 +621,6 @@ export function ScholarshipApplicationStep({
     loadEligibleScholarships();
   }, []);
 
-  useEffect(() => {
-    calculateProgress();
-  }, [selectedScholarship, selectedSubTypes, dynamicFormData, dynamicFileData]);
-
   // The 個人資料 section sits above the scholarship picker, so before a choice
   // is made it shows the first eligible scholarship's fixed-item text rather
   // than the built-in defaults — the admin's renames are per scholarship type
@@ -795,79 +800,29 @@ export function ScholarshipApplicationStep({
     }
   };
 
-  const calculateProgress = async () => {
-    if (!selectedScholarship) {
-      setFormProgress(0);
-      return;
-    }
+  const realSubTypes = getRealSubTypes(selectedScholarship);
 
-    try {
-      const response = await api.applicationFields.getFormConfig(
-        selectedScholarship.code
-      );
-      if (!response.success || !response.data) {
-        setFormProgress(0);
-        return;
-      }
-
-      const { fields, documents } = response.data;
-      const requiredFields = fields.filter(
-        f => f.is_active && f.is_required && !f.is_fixed
-      );
-      const requiredDocuments = documents.filter(isDocumentUploadRequired);
-
-      let totalRequired = requiredFields.length + requiredDocuments.length;
-
-      // Add sub-type selection as required if applicable
-      const hasSpecialSubTypes =
-        selectedScholarship.eligible_sub_types &&
-        selectedScholarship.eligible_sub_types.length > 0 &&
-        selectedScholarship.eligible_sub_types[0]?.value !== "general" &&
-        selectedScholarship.eligible_sub_types[0]?.value !== null;
-
-      if (hasSpecialSubTypes) {
-        totalRequired += 1;
-      }
-
-      if (totalRequired === 0) {
-        setFormProgress(100);
-        return;
-      }
-
-      let completedItems = 0;
-
-      // Check required fields
-      requiredFields.forEach(field => {
-        const fieldValue = dynamicFormData[field.field_name];
-        if (
-          fieldValue !== undefined &&
-          fieldValue !== null &&
-          fieldValue !== ""
-        ) {
-          completedItems++;
-        }
-      });
-
-      // Check required documents
-      requiredDocuments.forEach(doc => {
-        const docFiles = dynamicFileData[doc.document_name];
-        if (docFiles && docFiles.length > 0) {
-          completedItems++;
-        }
-      });
-
-      // Check sub-type selection
-      if (hasSpecialSubTypes && selectedSubTypes.length > 0) {
-        completedItems++;
-      }
-
-      const progress = Math.round((completedItems / totalRequired) * 100);
-      setFormProgress(progress);
-    } catch (error) {
-      // silently ignore progress calculation errors
-      setFormProgress(0);
-    }
-  };
+  // Derived synchronously from the form config the fixed-text loader already
+  // holds, so a late response can never overwrite a newer result (提交申請 is
+  // gated on this). While that config still belongs to a previously selected
+  // scholarship — or failed to load — progress reads 0.
+  const selectedFormConfig =
+    selectedScholarship &&
+    fixedFormConfig?.scholarship_type === selectedScholarship.code
+      ? fixedFormConfig
+      : null;
+  const formProgress = selectedFormConfig
+    ? calculateFormProgress({
+        fields: selectedFormConfig.fields,
+        documents: selectedFormConfig.documents,
+        formData: dynamicFormData,
+        fileData: dynamicFileData,
+        // Sub-type selection is required only when the scholarship offers one
+        hasSubTypeChoice: realSubTypes.length > 0,
+        selectedSubTypeCount: selectedSubTypes.length,
+        isPersonalInfoSaved: personalInfoSaved,
+      })
+    : 0;
 
   // Auto-select the sole eligible sub-type. With exactly one real choice,
   // leaving it unselected strands the form below 100% (sub-type is a required
@@ -875,9 +830,7 @@ export function ScholarshipApplicationStep({
   // category at submit. Depend on the whole scholarship object so switching to
   // a different single-sub-type scholarship re-selects correctly.
   useEffect(() => {
-    const realSubTypes = (selectedScholarship?.eligible_sub_types ?? []).filter(
-      st => st.value && st.value !== "general"
-    );
+    const realSubTypes = getRealSubTypes(selectedScholarship);
     if (realSubTypes.length !== 1) return;
     const onlyValue = realSubTypes[0].value;
     if (!onlyValue) return;
@@ -938,11 +891,7 @@ export function ScholarshipApplicationStep({
           : [subTypeValue];
         break;
       case "hierarchical":
-        const validSubTypes =
-          selectedScholarship.eligible_sub_types?.filter(
-            st => st.value && st.value !== "general"
-          ) || [];
-        const orderedValues = validSubTypes
+        const orderedValues = getRealSubTypes(selectedScholarship)
           .map(st => st.value!)
           .filter(Boolean);
 
@@ -1042,9 +991,7 @@ export function ScholarshipApplicationStep({
     // When the scholarship defines real sub-types, never fall back to the
     // synthetic "general" category (it matches no quota slot at distribution);
     // send [] so the backend guard / draft stays honest.
-    const hasRealEligibleSubTypes = (
-      selectedScholarship.eligible_sub_types ?? []
-    ).some(st => st.value && st.value !== "general");
+    const hasRealEligibleSubTypes = realSubTypes.length > 0;
 
     setSubmitting(true);
     try {
@@ -1120,9 +1067,7 @@ export function ScholarshipApplicationStep({
     // When the scholarship defines real sub-types, never fall back to the
     // synthetic "general" category (it matches no quota slot at distribution);
     // send [] so the backend guard / draft stays honest.
-    const hasRealEligibleSubTypes = (
-      selectedScholarship.eligible_sub_types ?? []
-    ).some(st => st.value && st.value !== "general");
+    const hasRealEligibleSubTypes = realSubTypes.length > 0;
 
     setSubmitting(true);
     try {
@@ -1214,13 +1159,10 @@ export function ScholarshipApplicationStep({
     );
   }
 
-  const eligibleSubTypes = selectedScholarship?.eligible_sub_types ?? [];
+  const eligibleSubTypes = realSubTypes;
   const selectionMode =
     selectedScholarship?.sub_type_selection_mode ?? "multiple";
-  const hasSpecialSubTypes =
-    eligibleSubTypes.length > 0 &&
-    eligibleSubTypes[0]?.value !== "general" &&
-    eligibleSubTypes[0]?.value !== null;
+  const hasSpecialSubTypes = realSubTypes.length > 0;
 
   const applicationDocumentNote =
     locale === "zh"
@@ -1231,7 +1173,8 @@ export function ScholarshipApplicationStep({
   return (
     <div className="space-y-6">
       {/* Personal Information Section */}
-      <Card>
+      {/* scroll-mt clears the sticky site header when 前往個人資料 scrolls here */}
+      <Card ref={personalInfoSectionRef} className="scroll-mt-24">
         <CardHeader>
           <div className="flex items-center gap-3">
             <div className="p-3 bg-violet-100 rounded-lg">
@@ -1521,9 +1464,6 @@ export function ScholarshipApplicationStep({
                     if (!subTypeValue) return false;
 
                     if (selectionMode === "hierarchical") {
-                      const validSubTypes = eligibleSubTypes.filter(
-                        st => st.value && st.value !== "general"
-                      );
                       const expectedIndex = selectedSubTypes.length;
                       return isSelected || index === expectedIndex;
                     }
@@ -1675,10 +1615,30 @@ export function ScholarshipApplicationStep({
                 </span>
               </div>
               <Progress value={formProgress} className="h-2" />
-              {formProgress < 100 && (
+              {formProgress < 100 && personalInfoSaved && (
                 <p className="text-sm text-amber-600">
                   {text.completeAllRequired} ({formProgress}%)
                 </p>
+              )}
+              {!personalInfoSaved && (
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-amber-600">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{text.savePersonalInfoFirst}</span>
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    className="h-auto p-0 text-nycu-blue-700"
+                    onClick={() =>
+                      personalInfoSectionRef.current?.scrollIntoView({
+                        behavior: "smooth",
+                        block: "start",
+                      })
+                    }
+                  >
+                    {text.goToPersonalInfo}
+                  </Button>
+                </div>
               )}
             </div>
           )}

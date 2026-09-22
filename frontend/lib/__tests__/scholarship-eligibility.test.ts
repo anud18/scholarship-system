@@ -17,6 +17,7 @@
  */
 import type { ScholarshipType } from "@/lib/api/types";
 import {
+  getRealSubTypes,
   isApplyableScholarship,
   isSelectableScholarship,
 } from "../scholarship-eligibility";
@@ -29,22 +30,25 @@ type _Sch = {
   errors?: Array<{ sub_type?: string | null; rule_id?: number }>;
 };
 
-const scholarship = (s: _Sch) => s as unknown as Parameters<typeof isSelectableScholarship>[0];
+const scholarship = (s: _Sch) =>
+  s as unknown as Parameters<typeof isSelectableScholarship>[0];
 
 describe("isSelectableScholarship", () => {
   it("returns true when eligible_sub_types is non-empty and no common errors", () => {
     /** Happy path — at least one sub-type passes all gates. */
     expect(
       isSelectableScholarship(
-        scholarship({ eligible_sub_types: ["nstc", "moe_1w"], errors: [] }),
-      ),
+        scholarship({ eligible_sub_types: ["nstc", "moe_1w"], errors: [] })
+      )
     ).toBe(true);
   });
 
   it("returns false when eligible_sub_types is empty array", () => {
     /** No sub-type passed → no application path → not selectable. */
     expect(
-      isSelectableScholarship(scholarship({ eligible_sub_types: [], errors: [] })),
+      isSelectableScholarship(
+        scholarship({ eligible_sub_types: [], errors: [] })
+      )
     ).toBe(false);
   });
 
@@ -60,8 +64,8 @@ describe("isSelectableScholarship", () => {
      * the Array.isArray guard prevents .length crash. */
     expect(
       isSelectableScholarship(
-        scholarship({ eligible_sub_types: "nstc" as never, errors: [] }),
-      ),
+        scholarship({ eligible_sub_types: "nstc" as never, errors: [] })
+      )
     ).toBe(false);
   });
 
@@ -92,7 +96,7 @@ describe("isSelectableScholarship", () => {
      * `|| false` shortcircuit in `hasCommonErrors` prevents undefined
      * propagating into the final boolean. */
     expect(
-      isSelectableScholarship(scholarship({ eligible_sub_types: [] })),
+      isSelectableScholarship(scholarship({ eligible_sub_types: [] }))
     ).toBe(false);
   });
 });
@@ -155,5 +159,31 @@ describe("isApplyableScholarship", () => {
       is_application_period: true,
     } as ScholarshipType;
     expect(isApplyableScholarship(open)).toBe(true);
+  });
+});
+
+describe("getRealSubTypes", () => {
+  const st = (value: string | null) => ({
+    value,
+    label: value ?? "",
+    label_en: value ?? "",
+    is_default: false,
+  });
+
+  it("drops general and null placeholders regardless of position", () => {
+    expect(
+      getRealSubTypes({
+        eligible_sub_types: [st("general"), st(null), st("nstc"), st("moe_1w")],
+      }).map(s => s.value)
+    ).toEqual(["nstc", "moe_1w"]);
+  });
+
+  it("is empty for a general-only, empty or missing list", () => {
+    expect(getRealSubTypes({ eligible_sub_types: [st("general")] })).toEqual(
+      []
+    );
+    expect(getRealSubTypes({ eligible_sub_types: [] })).toEqual([]);
+    expect(getRealSubTypes({})).toEqual([]);
+    expect(getRealSubTypes(null)).toEqual([]);
   });
 });
