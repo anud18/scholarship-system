@@ -6,6 +6,7 @@ import { useCollegeManagement } from "@/contexts/college-management-context";
 import { useReferenceData } from "@/hooks/use-reference-data";
 import { apiClient } from "@/lib/api";
 import { exportDepartmentSummaryBulk } from "@/lib/api/modules/college";
+import { triggerAttachmentDownload } from "@/lib/utils/download";
 import type {
   DistributionStudent,
   LocalAlloc,
@@ -74,6 +75,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Download,
+  FileArchive,
   Clock,
   Eye,
   Shield,
@@ -300,6 +302,48 @@ export function ManualDistributionPanel({
       URL.revokeObjectURL(url);
     } catch (err) {
       toast.error(`匯出失敗：${(err as Error).message}`);
+    }
+  }, [summaryDept, scholarshipType.id, selectedAcademicYear, selectedSemester]);
+
+  // 匯出申請資料 — the same application-materials ZIP the college review page
+  // offers, scoped by the 學院 dropdown above; 「全部學院」 gives the whole
+  // school with one folder per college.
+  const [isExportingPackage, setIsExportingPackage] = useState(false);
+  const handleExportPackage = useCallback(async () => {
+    if (!summaryDept || !scholarshipType.id || !selectedAcademicYear) {
+      toast.error("缺少必要的篩選條件");
+      return;
+    }
+    const token = localStorage.getItem("auth_token");
+    if (!token) {
+      toast.error("請重新登入");
+      return;
+    }
+    setIsExportingPackage(true);
+    try {
+      const { downloadUrl, filename } = await apiClient.college.exportPackage({
+        scholarship_type_id: scholarshipType.id,
+        academic_year: selectedAcademicYear,
+        semester:
+          selectedSemester &&
+          ["first", "second", "annual"].includes(selectedSemester)
+            ? selectedSemester
+            : undefined,
+        college_code:
+          summaryDept === ALL_ACADEMIES_SYSTEM ? undefined : summaryDept,
+        token,
+      });
+      // Possibly multi-GB (#1376): hand it to the browser's download manager.
+      triggerAttachmentDownload(downloadUrl, filename);
+      toast.info("已交由瀏覽器下載，請於下載列查看進度與結果", {
+        description: filename,
+      });
+    } catch (err) {
+      toast.error("匯出申請資料失敗", {
+        description: err instanceof Error ? err.message : undefined,
+      });
+    } finally {
+      setIsExportingPackage(false);
     }
   }, [summaryDept, scholarshipType.id, selectedAcademicYear, selectedSemester]);
 
@@ -1202,7 +1246,7 @@ export function ManualDistributionPanel({
             <div className="flex gap-2 flex-wrap">
               <Select value={summaryDept} onValueChange={setSummaryDept}>
                 <SelectTrigger className="w-[200px] h-9">
-                  <SelectValue placeholder="選擇學院匯出總表" />
+                  <SelectValue placeholder="選擇學院匯出" />
                 </SelectTrigger>
                 <SelectContent>
                   {visibleAcademies.map((a: { code: string; name: string }) => (
@@ -1212,7 +1256,7 @@ export function ManualDistributionPanel({
                   ))}
                   {(user.role === "admin" || user.role === "super_admin") && (
                     <SelectItem value={ALL_ACADEMIES_SYSTEM}>
-                      全部學院 (ZIP)
+                      全部學院
                     </SelectItem>
                   )}
                 </SelectContent>
@@ -1225,6 +1269,25 @@ export function ManualDistributionPanel({
               >
                 <Download className="h-4 w-4 mr-1" />
                 匯出申請總表
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={
+                  isExportingPackage ||
+                  !summaryDept ||
+                  !scholarshipType.id ||
+                  !selectedAcademicYear
+                }
+                title={
+                  summaryDept === ALL_ACADEMIES_SYSTEM
+                    ? "匯出全校申請資料 ZIP，每個學院一個資料夾"
+                    : "匯出所選學院的申請資料 ZIP（與學院端相同）"
+                }
+                onClick={handleExportPackage}
+              >
+                <FileArchive className="h-4 w-4 mr-1" />
+                {isExportingPackage ? "匯出中..." : "匯出申請資料"}
               </Button>
               {/* 分發名單 (受獎名冊) 的 Excel/PDF 匯出在「查看分發名單」對話框內
                   ——與畫面上的名單同一份資料來源，見 DistributionSummaryDialog。 */}

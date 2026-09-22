@@ -35,6 +35,7 @@ from sqlalchemy.orm import selectinload
 from app.core.config import settings
 from app.models.application import Application
 from app.models.scholarship import ScholarshipType
+from app.models.student import Academy
 from app.services.export_summary_tables import build_embedded_summary_tables
 from app.services.form_field_labels import (
     ACCOUNT_FIELD_SYNONYMS,
@@ -45,6 +46,7 @@ from app.services.minio_service import MinIOService
 from app.services.pdf_fonts import CJK_FONT_NAME, ensure_cjk_font
 from app.services.pdf_merge import MergeItem, build_merged_pdf
 from app.services.zip_stream import COPY_CHUNK_SIZE, ZipStreamSink, write_stream_entry
+from app.utils.application_helpers import get_college_code_from_data
 from app.utils.export_download import sanitise_filename_part
 
 logger = logging.getLogger(__name__)
@@ -238,15 +240,42 @@ def _uploaded_file_name(af, student_prefix: str, label: str, count: int, total: 
     return f"{student_prefix}_{label}{suffix}{ext}"
 
 
-def _group_by_department(applications: List[Application]) -> Dict[str, List[Application]]:
-    """Folder key per application: `{depno}_{depname}` from the SIS term snapshot."""
+def _college_folder(app: Application, academy_names: Dict[str, str]) -> Tuple[str, str]:
+    """`({academyno}_{name}, name)` for the college folder of a whole-school export.
+
+    The code comes from the same snapshot field the college filter uses
+    (std_academyno); the display name is resolved academies-table first and
+    only falls back to the snapshot's trm_academyname.
+    """
+    student = app.student_data or {}
+    code = get_college_code_from_data(student) or "unknown"
+    name = academy_names.get(code) or student.get("trm_academyname") or "未知學院"
+    return f"{_sanitize_filename(code)}_{_sanitize_filename(name)}", name
+
+
+def _group_by_department(
+    applications: List[Application], academy_names: Optional[Dict[str, str]] = None
+) -> Tuple[Dict[str, List[Application]], Dict[str, str]]:
+    """Folder key per application: `{depno}_{depname}` from the SIS term snapshot.
+
+    With ``academy_names`` (whole-school export) every key is nested under a
+    college folder, `{academyno}_{academyname}/{depno}_{depname}`, so each
+    college gets its own directory. The second return value maps each college
+    folder to its display name (empty for a single-college export).
+    """
     dept_groups: Dict[str, List[Application]] = defaultdict(list)
+    college_labels: Dict[str, str] = {}
     for app in applications:
         student = app.student_data or {}
         dep_no = student.get("trm_depno", "unknown")
         dep_name = student.get("trm_depname", "未知系所")
-        dept_groups[f"{_sanitize_filename(dep_no)}_{_sanitize_filename(dep_name)}"].append(app)
-    return dept_groups
+        key = f"{_sanitize_filename(dep_no)}_{_sanitize_filename(dep_name)}"
+        if academy_names is not None:
+            college_folder, college_name = _college_folder(app, academy_names)
+            college_labels[college_folder] = college_name
+            key = f"{college_folder}/{key}"
+        dept_groups[key].append(app)
+    return dept_groups, college_labels
 
 
 def _first_college_name(applications: List[Application]) -> Optional[str]:
@@ -284,6 +313,8 @@ class ExportPlan:
     semester: Optional[str]
     college_name: Optional[str]
     dept_groups: Dict[str, List[Application]]
+    #: college folder → display name; only populated for whole-school exports
+    college_labels: Dict[str, str]
     field_labels: Dict[str, str]
     summary_tables: Dict[str, bytes]
     zip_filename: str
@@ -312,6 +343,10 @@ class ExportPackageService:
         Raises ValueError for the user-facing rejections (mapped to 400 by the
         endpoint). All DB work — scholarship type, applications with their
         files, form-field labels, the embedded 申請總表 workbooks — happens here.
+
+        With ``college_code`` the archive is that college's department folders;
+        without it (whole-school export) every department folder sits inside
+        its college's folder.
         The dry-run precheck passes ``include_summary_tables=False``: it only
         needs the filename and count, and the workbooks are the expensive part.
         """
@@ -332,7 +367,8 @@ class ExportPackageService:
         field_labels = await load_form_field_labels(self.db, scholarship_type.code)
 
         college_name = _first_college_name(applications) if college_code else None
-        dept_groups = _group_by_department(applications)
+        academy_names = None if college_code else await self._load_academy_names()
+        dept_groups, college_labels = _group_by_department(applications, academy_names)
 
         # 3. Embedded 申請總表 workbooks from the SAME dept_groups. Best-effort:
         # a wholesale failure (e.g. an aux-data DB error before the per-table
@@ -342,7 +378,7 @@ class ExportPackageService:
         if include_summary_tables:
             try:
                 summary_tables = await build_embedded_summary_tables(
-                    self.db, scholarship_type, dept_groups, college_name, academic_year
+                    self.db, scholarship_type, dept_groups, college_name, academic_year, college_labels
                 )
             except Exception as e:
                 logger.exception("embedded summary tables generation failed wholesale")
@@ -354,6 +390,7 @@ class ExportPackageService:
             semester=semester,
             college_name=college_name,
             dept_groups=dept_groups,
+            college_labels=college_labels,
             field_labels=field_labels,
             summary_tables=summary_tables,
             zip_filename=_build_zip_filename(scholarship_type.name, academic_year, semester, college_name),
@@ -401,6 +438,11 @@ class ExportPackageService:
             raise ValueError(f"找不到獎學金類型 ID={scholarship_type_id}")
         return scholarship
 
+    async def _load_academy_names(self) -> Dict[str, str]:
+        """academies.code → name, the authoritative source for college folder names."""
+        result = await self.db.execute(select(Academy.code, Academy.name))
+        return {code: name for code, name in result.all() if code}
+
     async def _query_applications(
         self,
         scholarship_type_id: int,
@@ -430,9 +472,7 @@ class ExportPackageService:
         # Filter by college_code using student_data
         if college_code:
             applications = [
-                app
-                for app in applications
-                if app.student_data and app.student_data.get("std_academyno") == college_code
+                app for app in applications if get_college_code_from_data(app.student_data or {}) == college_code
             ]
 
         return applications
