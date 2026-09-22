@@ -30,6 +30,26 @@ export type FixedFieldKey = (typeof FIXED_FIELD_KEYS)[number];
 
 export const FIXED_DOCUMENT_KEY_BANK_STATEMENT = "bank_statement";
 
+/**
+ * Whether the 存摺封面 must be uploaded before 儲存個人資料 / 提交申請.
+ * Mirrors `ApplicationFieldService.is_fixed_bank_document_required`: the
+ * built-in document is required, and only the admin's `bank_statement` row
+ * can relax it. The backend always injects that row into the form config
+ * and drops it again for students when the admin deactivated it, so a
+ * loaded config without the row means "switched off"; a config that has
+ * not loaded (or failed) keeps the built-in default.
+ */
+export const isFixedBankDocumentRequired = (
+  config: Pick<ScholarshipFormConfig, "documents"> | null | undefined
+): boolean => {
+  if (!config) return true;
+  const bankRow = config.documents?.find(
+    doc => doc.fixed_key === FIXED_DOCUMENT_KEY_BANK_STATEMENT
+  );
+  if (!bankRow) return false;
+  return bankRow.is_active && bankRow.is_required;
+};
+
 export interface FixedFieldText {
   label: string;
   placeholder: string;

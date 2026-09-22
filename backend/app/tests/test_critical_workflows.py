@@ -15,6 +15,7 @@ from app.models.application import Application, ApplicationStatus
 from app.models.enums import QuotaManagementMode, Semester
 from app.models.scholarship import ScholarshipConfiguration, SubTypeSelectionMode
 from app.models.user import User, UserRole
+from app.models.user_profile import UserProfile
 from app.schemas.application import ApplicationCreate, ApplicationFormData
 from app.services.application_service import ApplicationService
 from app.services.bulk_approval_service import BulkApprovalService
@@ -84,6 +85,59 @@ class TestCriticalApplicationWorkflow:
             assert result.status == ApplicationStatus.draft.value
             assert result.user_id == test_user.id
 
+    async def test_direct_submit_requires_passbook(self, db, test_user, test_scholarship):
+        """CRITICAL: a non-draft create lands in `submitted` without going
+        through submit_application, so it must apply the same 存摺封面 gate."""
+        config = ScholarshipConfiguration(
+            scholarship_type_id=test_scholarship.id,
+            config_code="TEST_CONFIG_PASSBOOK",
+            config_name="Test Configuration",
+            academic_year=113,
+            semester=Semester.first,
+            amount=50000,
+            is_active=True,
+            effective_start_date=datetime.now(timezone.utc) - timedelta(days=1),
+            effective_end_date=datetime.now(timezone.utc) + timedelta(days=30),
+            application_start_date=datetime.now(timezone.utc) - timedelta(days=1),
+            application_end_date=datetime.now(timezone.utc) + timedelta(days=30),
+            has_quota_limit=True,
+            total_quota=100,
+            quota_management_mode=QuotaManagementMode.simple,
+        )
+        db.add(config)
+        await db.commit()
+        await db.refresh(config)
+
+        with patch("app.services.application_service.StudentService") as mock_student:
+            mock_instance = AsyncMock()
+            mock_student.return_value = mock_instance
+            _student_snapshot = {
+                "std_stdcode": "112550001",
+                "std_cname": "Test Student",
+                "std_academyno": "A",
+                "std_depno": "4460",
+                "_api_fetched_at": "2025-10-22T17:27:08Z",
+                "_term_data_status": "success",
+            }
+            mock_instance.get_student_basic_info.return_value = _student_snapshot
+            mock_instance.get_student_snapshot.return_value = _student_snapshot
+
+            service = ApplicationService(db)
+            app_data = ApplicationCreate(
+                scholarship_type="test_scholarship",
+                configuration_id=config.id,
+                scholarship_subtype_list=[],
+                form_data=ApplicationFormData(configuration_id=config.id, fields={}),
+            )
+
+            with pytest.raises(ValidationError, match="存摺封面"):
+                await service.create_application(
+                    user_id=test_user.id,
+                    student_code="112550001",
+                    application_data=app_data,
+                    is_draft=False,
+                )
+
     async def test_submit_application_state_transition(self, db, test_user):
         """CRITICAL: Test application submission and state validation"""
         # Create draft application
@@ -100,6 +154,13 @@ class TestCriticalApplicationWorkflow:
             agree_terms=True,
         )
         db.add(app)
+        # Submission requires the profile's 存摺封面.
+        db.add(
+            UserProfile(
+                user_id=test_user.id,
+                bank_document_photo_url="/api/v1/user-profiles/files/bank_documents/passbook.jpg",
+            )
+        )
         await db.commit()
         await db.refresh(app)
 

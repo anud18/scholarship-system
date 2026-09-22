@@ -134,6 +134,17 @@ class ApplicationFieldService:
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
+    async def is_fixed_bank_document_required(self, scholarship_type: str) -> bool:
+        """Whether 存摺封面 must be on the profile before an application is submitted.
+
+        The built-in document is required; only the admin's materialised
+        `bank_statement` row (審核管理 → 系統預設) can relax that.
+        """
+        row = await self._get_fixed_row(ApplicationDocument, scholarship_type, FIXED_KEY_BANK_STATEMENT)
+        if row is None:
+            return True
+        return bool(row.is_active and row.is_required)
+
     async def _overwrite_row(self, row, values: Dict[str, Any], updated_by: int):
         """Replace an existing row's configurable columns and commit.
 

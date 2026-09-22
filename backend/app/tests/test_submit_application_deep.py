@@ -23,6 +23,8 @@ Contract pinned:
   value is preserved.
 - Returned-status applications can be re-submitted (the second allowed
   starting state).
+- 存摺封面 gate: a profile without `bank_document_photo_url` cannot submit
+  unless the admin's `bank_statement` row marks the document not required.
 """
 
 from datetime import datetime, timezone
@@ -33,9 +35,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError, ValidationError
 from app.models.application import Application, ApplicationStatus
+from app.models.application_field import ApplicationDocument
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User, UserRole, UserType
 from app.models.user_profile import UserProfile
+from app.services.application_field_service import FIXED_KEY_BANK_STATEMENT
 from app.services.application_service import ApplicationService
 
 
@@ -61,10 +65,20 @@ async def _seed_user(
     return u
 
 
-async def _seed_user_profile(db: AsyncSession, *, user_id: int, advisor_nycu_id: str | None) -> UserProfile:
+PASSBOOK_URL = "/api/v1/user-profiles/files/bank_documents/passbook.jpg"
+
+
+async def _seed_user_profile(
+    db: AsyncSession,
+    *,
+    user_id: int,
+    advisor_nycu_id: str | None = None,
+    bank_document_photo_url: str | None = PASSBOOK_URL,
+) -> UserProfile:
     profile = UserProfile(
         user_id=user_id,
         advisor_nycu_id=advisor_nycu_id,
+        bank_document_photo_url=bank_document_photo_url,
     )
     db.add(profile)
     await db.commit()
@@ -164,6 +178,7 @@ async def test_submit_rejects_when_status_not_draft_or_returned(db: AsyncSession
 @pytest.mark.asyncio
 async def test_submit_happy_path_flips_status_and_sets_submitted_at(db: AsyncSession, silence_collaborators):
     student = await _seed_user(db, role=UserRole.student, name="S", nycu_id="s_sub_happy")
+    await _seed_user_profile(db, user_id=student.id)
     cfg = await _seed_config(db, suffix="happy")
     app = await _seed_app(db, student=student, config=cfg, status=ApplicationStatus.draft.value, suffix="happy")
     service = ApplicationService(db)
@@ -259,6 +274,7 @@ async def test_submit_works_from_returned_status(db: AsyncSession, silence_colla
     """An application returned for revisions can be re-submitted; pin
     the second allowed starting state explicitly."""
     student = await _seed_user(db, role=UserRole.student, name="S", nycu_id="s_sub_ret")
+    await _seed_user_profile(db, user_id=student.id)
     cfg = await _seed_config(db, suffix="ret")
     app = await _seed_app(db, student=student, config=cfg, status=ApplicationStatus.returned.value, suffix="ret")
     service = ApplicationService(db)
@@ -268,3 +284,60 @@ async def test_submit_works_from_returned_status(db: AsyncSession, silence_colla
     await db.refresh(app)
     assert app.status == ApplicationStatus.submitted.value or app.status == ApplicationStatus.submitted
     assert app.submitted_at is not None
+
+
+@pytest.mark.asyncio
+async def test_submit_rejects_when_profile_has_no_passbook(db: AsyncSession, silence_collaborators):
+    """存摺封面 is uploaded on the profile, so a draft whose profile lacks
+    it must not reach 'submitted' — the wizard hides this, the API must not."""
+    student = await _seed_user(db, role=UserRole.student, name="S", nycu_id="s_sub_nopb")
+    await _seed_user_profile(db, user_id=student.id, bank_document_photo_url=None)
+    cfg = await _seed_config(db, suffix="nopb")
+    app = await _seed_app(db, student=student, config=cfg, status=ApplicationStatus.draft.value, suffix="nopb")
+    service = ApplicationService(db)
+
+    with pytest.raises(ValidationError, match="存摺封面"):
+        await service.submit_application(application_id=app.id, user=student)
+
+    await db.refresh(app)
+    assert app.status == ApplicationStatus.draft.value or app.status == ApplicationStatus.draft
+    assert app.submitted_at is None
+
+
+@pytest.mark.asyncio
+async def test_submit_rejects_when_student_has_no_profile_at_all(db: AsyncSession, silence_collaborators):
+    student = await _seed_user(db, role=UserRole.student, name="S", nycu_id="s_sub_noprof")
+    cfg = await _seed_config(db, suffix="noprof")
+    app = await _seed_app(db, student=student, config=cfg, status=ApplicationStatus.draft.value, suffix="noprof")
+    service = ApplicationService(db)
+
+    with pytest.raises(ValidationError, match="存摺封面"):
+        await service.submit_application(application_id=app.id, user=student)
+
+
+@pytest.mark.asyncio
+async def test_submit_allows_missing_passbook_when_admin_relaxed_fixed_document(
+    db: AsyncSession, silence_collaborators
+):
+    """The admin's materialised `bank_statement` row is the only thing that
+    can make the 存摺封面 optional; when it does, the gate steps aside."""
+    student = await _seed_user(db, role=UserRole.student, name="S", nycu_id="s_sub_relax")
+    await _seed_user_profile(db, user_id=student.id, bank_document_photo_url=None)
+    cfg = await _seed_config(db, suffix="relax")
+    db.add(
+        ApplicationDocument(
+            scholarship_type="submit_relax",
+            fixed_key=FIXED_KEY_BANK_STATEMENT,
+            document_name="存摺封面",
+            is_required=False,
+            is_active=True,
+        )
+    )
+    await db.commit()
+    app = await _seed_app(db, student=student, config=cfg, status=ApplicationStatus.draft.value, suffix="relax")
+    service = ApplicationService(db)
+
+    await service.submit_application(application_id=app.id, user=student)
+
+    await db.refresh(app)
+    assert app.status == ApplicationStatus.submitted.value or app.status == ApplicationStatus.submitted

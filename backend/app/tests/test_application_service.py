@@ -274,6 +274,7 @@ class TestApplicationService:
             patch.object(service, "_get_user_and_student_data", new_callable=AsyncMock) as mock_get_user,
             patch("app.services.application_service.EligibilityService") as mock_elig_cls,
             patch.object(service, "_create_application_instance", new_callable=AsyncMock) as mock_create_inst,
+            patch.object(service, "_require_bank_document", new_callable=AsyncMock),
             patch.object(service, "_clone_user_profile_documents", new_callable=AsyncMock),
             patch.object(service, "_build_application_response", new_callable=AsyncMock) as mock_build_resp,
             patch.object(service.db, "add") as mock_add,

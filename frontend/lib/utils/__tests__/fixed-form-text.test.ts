@@ -1,4 +1,5 @@
 import {
+  isFixedBankDocumentRequired,
   resolveFixedFormText,
   FixedFormText,
 } from "../fixed-form-text";
@@ -195,5 +196,43 @@ describe("resolveFixedFormText", () => {
       resolveFixedFormText({ fields: [], documents: [] }, "zh", DEFAULTS)
         .bankDocument
     ).toEqual(DEFAULTS.bankDocument);
+  });
+});
+
+describe("isFixedBankDocumentRequired", () => {
+  it("keeps the built-in default (required) while the config has not loaded", () => {
+    expect(isFixedBankDocumentRequired(null)).toBe(true);
+    expect(isFixedBankDocumentRequired(undefined)).toBe(true);
+  });
+
+  it("treats a loaded config without the row as the admin having deactivated it", () => {
+    // The backend always injects the bank_statement row and only drops it
+    // from the student payload when is_active is false.
+    expect(isFixedBankDocumentRequired({ documents: [] })).toBe(false);
+  });
+
+  it("follows the bank_statement row's is_required / is_active", () => {
+    const withRow = (overrides: Partial<ApplicationDocument>) => ({
+      documents: [document({ fixed_key: "bank_statement", ...overrides })],
+    });
+
+    expect(isFixedBankDocumentRequired(withRow({}))).toBe(true);
+    expect(isFixedBankDocumentRequired(withRow({ is_required: false }))).toBe(
+      false
+    );
+    expect(isFixedBankDocumentRequired(withRow({ is_active: false }))).toBe(
+      false
+    );
+  });
+
+  it("only reads the fixed bank_statement row, not a same-named admin document", () => {
+    expect(
+      isFixedBankDocumentRequired({
+        documents: [
+          document({ document_name: "存摺封面", is_required: true }),
+          document({ fixed_key: "bank_statement", is_required: false }),
+        ],
+      })
+    ).toBe(false);
   });
 });
