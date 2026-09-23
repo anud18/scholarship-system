@@ -5,9 +5,9 @@
 # fills, Prometheus can tear a WAL record, every compaction afterwards fails,
 # and the WAL grows until the disk is full again.
 #
-# WHAT IT DOES
-#   1. reports host state: disk, top directories, docker usage, CPU / memory /
-#      load, top processes, per-container `docker stats`
+# WHAT IT DOES (cleanup first: the first run spent 17 min in `docker stats`
+# and hit the job timeout before reaching it)
+#   1. reports host state: disk, CPU / memory / load, top processes
 #   2. cleans up ONLY when needed (disk >= CLEANUP_THRESHOLD_PCT used, or
 #      Prometheus is logging WAL corruption):
 #        - stops monitoring_prometheus, removes wal/ + chunks_head/ (persisted
@@ -15,6 +15,8 @@
 #        - `docker image prune -f` (DANGLING images only — nothing in use)
 #        - `docker builder prune -af` (build cache)
 #   3. reports disk usage again
+#   4. slow diagnostics last, each time-boxed: per-container `docker stats`,
+#      docker disk usage, top directories
 #
 # It never touches app containers, the database, or any other volume.
 #
@@ -43,7 +45,7 @@ jobs:
   rescue:
     name: Staging disk rescue
     runs-on: [self-hosted, scholarship, test]
-    timeout-minutes: 30
+    timeout-minutes: 90
     steps:
       - name: Host state (before)
         run: |
@@ -55,27 +57,6 @@ jobs:
           echo; echo "== CPU count: $(nproc)"; cat /proc/loadavg
           echo; echo "== top processes by CPU"; ps -eo pid,user,%cpu,%mem,rss,etime,comm --sort=-%cpu | head -15
           echo; echo "== top processes by memory"; ps -eo pid,user,%cpu,%mem,rss,etime,comm --sort=-%mem | head -15
-
-      - name: Container CPU / memory
-        run: |
-          set +e
-          docker stats --no-stream --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.BlockIO}}'
-
-      - name: What is using the disk
-        run: |
-          set +e
-          docker system df
-          echo
-          docker system df -v | sed -n '/Local Volumes space usage/,/Build cache usage/p'
-          echo
-          docker run --rm -v /:/host:ro alpine sh -c '
-            echo "== depth 1";          du -xh -d1 /host 2>/dev/null | sort -rh | head -12
-            echo "== /var/lib/docker";  du -xh -d1 /host/var/lib/docker 2>/dev/null | sort -rh | head -8
-            echo "== docker volumes";   du -xh -d1 /host/var/lib/docker/volumes 2>/dev/null | sort -rh | head -12
-            echo "== /home";            du -xh -d2 /host/home 2>/dev/null | sort -rh | head -12
-            echo "== /opt";             du -xh -d2 /host/opt 2>/dev/null | sort -rh | head -10
-            echo "== /var/log";         du -xh -d1 /host/var/log 2>/dev/null | sort -rh | head -6
-          '
 
       - name: Prometheus state
         id: prom
@@ -141,4 +122,26 @@ jobs:
           set +e
           df -h /
           free -h
-          docker system df
+          timeout 300 docker system df
+
+      - name: Container CPU / memory
+        if: always()
+        run: |
+          set +e
+          timeout 300 docker stats --no-stream --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.BlockIO}}'
+
+      - name: What is using the disk
+        if: always()
+        run: |
+          set +e
+          timeout 300 docker system df -v | sed -n '/Local Volumes space usage/,/Build cache usage/p'
+          echo
+          timeout 900 docker run --rm -v /:/host:ro alpine sh -c '
+            echo "== depth 1";          du -xh -d1 /host 2>/dev/null | sort -rh | head -12
+            echo "== /var/lib/docker";  du -xh -d1 /host/var/lib/docker 2>/dev/null | sort -rh | head -8
+            echo "== docker volumes";   du -xh -d1 /host/var/lib/docker/volumes 2>/dev/null | sort -rh | head -12
+            echo "== /home";            du -xh -d2 /host/home 2>/dev/null | sort -rh | head -12
+            echo "== /opt";             du -xh -d2 /host/opt 2>/dev/null | sort -rh | head -10
+            echo "== /var/log";         du -xh -d1 /host/var/log 2>/dev/null | sort -rh | head -6
+          '
+
