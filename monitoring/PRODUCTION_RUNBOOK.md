@@ -259,15 +259,11 @@ du -sh /var/lib/docker/volumes/monitoring_*
    docker system prune -a --volumes
    ```
 
-2. **Short-term**: Reduce retention periods:
-   ```yaml
-   # In prometheus.yml
-   --storage.tsdb.retention.time=10d  # Reduce from 15d
-
-   # In loki-config.yml (limits.yml)
-   prod:
-     retention_period: 480h  # 20 days instead of 30
-   ```
+2. **Short-term**: Do NOT lower retention — policy requires at least 6 months
+   (`--storage.tsdb.retention.time=180d` in `docker-compose.monitoring.yml`,
+   `retention_period: 4320h` in `limits.yml`). Instead reclaim space by
+   dropping high-cardinality metrics/log streams at the Alloy collectors, or
+   lowering the dev tenant's retention.
 
 3. **Long-term**: Expand disk or move to external storage
 
