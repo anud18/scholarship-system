@@ -5,23 +5,20 @@
 # fills, Prometheus can tear a WAL record, every compaction afterwards fails,
 # and the WAL grows until the disk is full again.
 #
-# WHAT IT DOES (cleanup first: the first run spent 17 min in `docker stats`
-# and hit the job timeout before reaching it)
-#   1. reports host state: disk, CPU / memory / load, top processes
-#   2. cleans up ONLY when needed (disk >= CLEANUP_THRESHOLD_PCT used, or
-#      Prometheus is logging WAL corruption):
-#        - stops monitoring_prometheus, removes wal/ + chunks_head/ (persisted
-#          blocks are kept, so < ~2h of metrics are lost), starts it again
-#        - `docker image prune -f` (DANGLING images only — nothing in use)
-#        - `docker builder prune -af` (build cache)
-#   3. reports disk usage again
-#   4. slow diagnostics last, each time-boxed: per-container `docker stats`,
-#      docker disk usage, top directories
+# EMERGENCY VERSION. The earlier revisions called the docker CLI first and every
+# call hung (one step sat for an hour), so the critical path here does not need
+# dockerd at all:
+#   - every command is wrapped in `timeout`
+#   - sizes are read and the WAL is removed straight from
+#     /var/lib/docker/volumes/*prometheus_data/_data with passwordless sudo
+#     (staging's deploy workflows already rely on it)
+#   - Prometheus is then restarted through docker if dockerd answers, else its
+#     process is sent SIGTERM and the restart policy brings it back
+# Persisted blocks are kept, so < ~2h of metrics are lost. Nothing else is
+# removed except the systemd journal beyond 200 MB and docker build cache /
+# dangling images (only if dockerd answers).
 #
-# It never touches app containers, the database, or any other volume.
-#
-# USAGE: every push to this branch runs it. If the disk is 100% full the runner
-# itself may be unable to start the job — then only a shell on the VM helps.
+# USAGE: every push to this branch runs it.
 
 name: Diagnose / rescue staging disk
 
@@ -32,14 +29,14 @@ on:
 
 concurrency:
   group: diag-staging-disk-rescue
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 env:
-  CONTAINER: monitoring_prometheus
   CLEANUP_THRESHOLD_PCT: 85
+  T: "timeout 120"
 
 jobs:
   rescue:
@@ -50,98 +47,79 @@ jobs:
       - name: Host state (before)
         run: |
           set +e
-          echo "host: $(hostname)  user: $(id -un)  $(date -u)"
-          uptime
-          echo; df -hT -x tmpfs -x overlay -x squashfs
-          echo; free -h
-          echo; echo "== CPU count: $(nproc)"; cat /proc/loadavg
-          echo; echo "== top processes by CPU"; ps -eo pid,user,%cpu,%mem,rss,etime,comm --sort=-%cpu | head -15
-          echo; echo "== top processes by memory"; ps -eo pid,user,%cpu,%mem,rss,etime,comm --sort=-%mem | head -15
+          echo "host: $(hostname)  $(date -u)"; cat /proc/loadavg
+          $T df -hT -x tmpfs -x overlay -x squashfs
+          $T free -h
+          $T sudo -n du -sh /var/lib/docker/volumes/*/_data 2>/dev/null | sort -rh | head -10
 
-      - name: Prometheus state
+      - name: Find Prometheus WAL
         id: prom
         run: |
           set +e
-          VOL=$(docker inspect "${CONTAINER}" \
-            --format '{{range .Mounts}}{{if eq .Destination "/prometheus"}}{{.Name}}{{end}}{{end}}' 2>/dev/null)
-          echo "volume=${VOL}" >> "$GITHUB_OUTPUT"
-          if [ -z "${VOL}" ]; then echo "${CONTAINER} not found / no /prometheus volume"; exit 0; fi
-          echo "prometheus volume: ${VOL}"
-          docker inspect "${CONTAINER}" --format 'status={{.State.Status}} started={{.State.StartedAt}} restarts={{.RestartCount}} oomkilled={{.State.OOMKilled}}'
-          docker run --rm -v "${VOL}:/p:ro" alpine sh -c \
-            'du -sh /p /p/wal /p/chunks_head 2>/dev/null; echo "wal segments: $(ls /p/wal 2>/dev/null | grep -c "^[0-9]")"; ls -d /p/wal/checkpoint.* 2>/dev/null'
-          if docker logs --since 24h "${CONTAINER}" 2>&1 | grep -qE 'corruption in segment|no space left on device'; then
-            echo "corrupt=true" >> "$GITHUB_OUTPUT"
-            echo "::warning::Prometheus is logging WAL corruption / ENOSPC:"
-            docker logs --since 24h "${CONTAINER}" 2>&1 | grep -E 'corruption in segment|no space left' | tail -3
-          else
-            echo "corrupt=false" >> "$GITHUB_OUTPUT"
-          fi
+          DATA=$(sudo -n sh -c 'ls -d /var/lib/docker/volumes/*prometheus_data/_data' 2>/dev/null | head -1)
+          echo "data=${DATA}" >> "$GITHUB_OUTPUT"
+          [ -n "$DATA" ] || { echo "::warning::no *prometheus_data volume found"; exit 0; }
+          echo "prometheus data: ${DATA}"
+          WAL_MB=$($T sudo -n du -sm "${DATA}/wal" 2>/dev/null | cut -f1)
+          echo "wal_mb=${WAL_MB:-0}" >> "$GITHUB_OUTPUT"
+          echo "wal: ${WAL_MB:-?} MB, segments: $(sudo -n ls "${DATA}/wal" 2>/dev/null | grep -c '^[0-9]')"
+          sudo -n sh -c "ls -d ${DATA}/wal/checkpoint.*" 2>/dev/null
 
       - name: Decide
         id: decide
         run: |
           USED=$(df --output=pcent / | tail -1 | tr -dc '0-9')
-          echo "root used: ${USED}%  (threshold ${CLEANUP_THRESHOLD_PCT}%)  prometheus corrupt: ${{ steps.prom.outputs.corrupt }}"
-          if [ "${USED}" -ge "${CLEANUP_THRESHOLD_PCT}" ] || [ "${{ steps.prom.outputs.corrupt }}" = "true" ]; then
+          WAL_MB="${{ steps.prom.outputs.wal_mb }}"
+          echo "root used: ${USED}%  wal: ${WAL_MB:-0} MB"
+          # A healthy WAL is a few hundred MB; > 2 GB means truncation stopped.
+          if [ "${USED}" -ge "${CLEANUP_THRESHOLD_PCT}" ] || [ "${WAL_MB:-0}" -gt 2048 ]; then
             echo "cleanup=true" >> "$GITHUB_OUTPUT"
           else
             echo "cleanup=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Disk below threshold and Prometheus healthy — report only, nothing removed."
+            echo "::notice::Disk below threshold and WAL small — report only."
           fi
 
-      - name: Reset Prometheus WAL
-        if: steps.decide.outputs.cleanup == 'true' && steps.prom.outputs.volume != ''
+      - name: Reset Prometheus WAL (no dockerd needed)
+        if: steps.decide.outputs.cleanup == 'true' && steps.prom.outputs.data != ''
         env:
-          VOL: ${{ steps.prom.outputs.volume }}
+          DATA: ${{ steps.prom.outputs.data }}
         run: |
-          set -euo pipefail
-          # Always bring Prometheus back, even if the removal fails.
-          trap 'docker start "${CONTAINER}" >/dev/null || true' EXIT
-          docker stop -t 60 "${CONTAINER}"
-          docker run --rm -v "${VOL}:/p" alpine rm -rf /p/wal /p/chunks_head
-          docker start "${CONTAINER}"
-          for i in $(seq 1 60); do
-            if docker exec "${CONTAINER}" wget -qO- http://localhost:9090/-/ready >/dev/null 2>&1; then
-              echo "✅ Prometheus ready after ~$((i * 5))s"; exit 0
-            fi
-            sleep 5
-          done
-          echo "::error::Prometheus not ready after 5 minutes"; docker logs --tail 40 "${CONTAINER}"; exit 1
+          set +e
+          # Stop first when dockerd answers, so nothing is writing while we delete.
+          $T docker stop -t 30 monitoring_prometheus && STOPPED=1
+          $T sudo -n rm -rf "${DATA}/wal" "${DATA}/chunks_head"
+          echo "removed wal/ and chunks_head/ (rc=$?)"
+          if [ -n "${STOPPED}" ]; then
+            $T docker start monitoring_prometheus && echo "✅ prometheus started"
+          else
+            # dockerd did not answer: deleted-but-open files only free their
+            # space once closed, so end the process; the restart policy
+            # (unless-stopped) brings it back with a fresh WAL.
+            PID=$(pgrep -f 'prometheus.*--storage.tsdb.path' | head -1)
+            [ -n "$PID" ] && sudo -n kill -TERM "$PID" && echo "sent SIGTERM to prometheus pid $PID"
+          fi
+          $T df -h /
 
-      - name: Prune dangling images and build cache
+      - name: Trim journal, docker cache
         if: always() && steps.decide.outputs.cleanup == 'true'
         run: |
           set +e
-          docker image prune -f
-          docker builder prune -af
+          $T sudo -n journalctl --vacuum-size=200M
+          $T docker image prune -f
+          $T docker builder prune -af
 
       - name: Host state (after)
         if: always()
         run: |
           set +e
-          df -h /
-          free -h
-          timeout 300 docker system df
+          cat /proc/loadavg
+          $T df -h /
+          $T free -h
+          echo "== top processes by CPU"; $T ps -eo pid,user,%cpu,%mem,rss,etime,comm --sort=-%cpu | head -12
+          echo "== top processes by memory"; $T ps -eo pid,user,%cpu,%mem,rss,etime,comm --sort=-%mem | head -12
 
       - name: Container CPU / memory
         if: always()
         run: |
           set +e
-          timeout 300 docker stats --no-stream --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.BlockIO}}'
-
-      - name: What is using the disk
-        if: always()
-        run: |
-          set +e
-          timeout 300 docker system df -v | sed -n '/Local Volumes space usage/,/Build cache usage/p'
-          echo
-          timeout 900 docker run --rm -v /:/host:ro alpine sh -c '
-            echo "== depth 1";          du -xh -d1 /host 2>/dev/null | sort -rh | head -12
-            echo "== /var/lib/docker";  du -xh -d1 /host/var/lib/docker 2>/dev/null | sort -rh | head -8
-            echo "== docker volumes";   du -xh -d1 /host/var/lib/docker/volumes 2>/dev/null | sort -rh | head -12
-            echo "== /home";            du -xh -d2 /host/home 2>/dev/null | sort -rh | head -12
-            echo "== /opt";             du -xh -d2 /host/opt 2>/dev/null | sort -rh | head -10
-            echo "== /var/log";         du -xh -d1 /host/var/log 2>/dev/null | sort -rh | head -6
-          '
-
+          $T docker stats --no-stream --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}'
