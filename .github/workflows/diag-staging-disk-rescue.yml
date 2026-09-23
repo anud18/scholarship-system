@@ -1,0 +1,144 @@
+# TEMPORARY — staging AP VM disk rescue. Delete this file and its branch once
+# staging is healthy again.
+#
+# Staging hit the same failure as production (issue #1423): once the disk
+# fills, Prometheus can tear a WAL record, every compaction afterwards fails,
+# and the WAL grows until the disk is full again.
+#
+# WHAT IT DOES
+#   1. reports host state: disk, top directories, docker usage, CPU / memory /
+#      load, top processes, per-container `docker stats`
+#   2. cleans up ONLY when needed (disk >= CLEANUP_THRESHOLD_PCT used, or
+#      Prometheus is logging WAL corruption):
+#        - stops monitoring_prometheus, removes wal/ + chunks_head/ (persisted
+#          blocks are kept, so < ~2h of metrics are lost), starts it again
+#        - `docker image prune -f` (DANGLING images only — nothing in use)
+#        - `docker builder prune -af` (build cache)
+#   3. reports disk usage again
+#
+# It never touches app containers, the database, or any other volume.
+#
+# USAGE: every push to this branch runs it. If the disk is 100% full the runner
+# itself may be unable to start the job — then only a shell on the VM helps.
+
+name: Diagnose / rescue staging disk
+
+on:
+  push:
+    branches:
+      - 'diag/staging-disk-rescue'
+
+concurrency:
+  group: diag-staging-disk-rescue
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CONTAINER: monitoring_prometheus
+  CLEANUP_THRESHOLD_PCT: 85
+
+jobs:
+  rescue:
+    name: Staging disk rescue
+    runs-on: [self-hosted, scholarship, test]
+    timeout-minutes: 30
+    steps:
+      - name: Host state (before)
+        run: |
+          set +e
+          echo "host: $(hostname)  user: $(id -un)  $(date -u)"
+          uptime
+          echo; df -hT -x tmpfs -x overlay -x squashfs
+          echo; free -h
+          echo; echo "== CPU count: $(nproc)"; cat /proc/loadavg
+          echo; echo "== top processes by CPU"; ps -eo pid,user,%cpu,%mem,rss,etime,comm --sort=-%cpu | head -15
+          echo; echo "== top processes by memory"; ps -eo pid,user,%cpu,%mem,rss,etime,comm --sort=-%mem | head -15
+
+      - name: Container CPU / memory
+        run: |
+          set +e
+          docker stats --no-stream --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.BlockIO}}'
+
+      - name: What is using the disk
+        run: |
+          set +e
+          docker system df
+          echo
+          docker system df -v | sed -n '/Local Volumes space usage/,/Build cache usage/p'
+          echo
+          docker run --rm -v /:/host:ro alpine sh -c '
+            echo "== depth 1";          du -xh -d1 /host 2>/dev/null | sort -rh | head -12
+            echo "== /var/lib/docker";  du -xh -d1 /host/var/lib/docker 2>/dev/null | sort -rh | head -8
+            echo "== docker volumes";   du -xh -d1 /host/var/lib/docker/volumes 2>/dev/null | sort -rh | head -12
+            echo "== /home";            du -xh -d2 /host/home 2>/dev/null | sort -rh | head -12
+            echo "== /opt";             du -xh -d2 /host/opt 2>/dev/null | sort -rh | head -10
+            echo "== /var/log";         du -xh -d1 /host/var/log 2>/dev/null | sort -rh | head -6
+          '
+
+      - name: Prometheus state
+        id: prom
+        run: |
+          set +e
+          VOL=$(docker inspect "${CONTAINER}" \
+            --format '{{range .Mounts}}{{if eq .Destination "/prometheus"}}{{.Name}}{{end}}{{end}}' 2>/dev/null)
+          echo "volume=${VOL}" >> "$GITHUB_OUTPUT"
+          if [ -z "${VOL}" ]; then echo "${CONTAINER} not found / no /prometheus volume"; exit 0; fi
+          echo "prometheus volume: ${VOL}"
+          docker inspect "${CONTAINER}" --format 'status={{.State.Status}} started={{.State.StartedAt}} restarts={{.RestartCount}} oomkilled={{.State.OOMKilled}}'
+          docker run --rm -v "${VOL}:/p:ro" alpine sh -c \
+            'du -sh /p /p/wal /p/chunks_head 2>/dev/null; echo "wal segments: $(ls /p/wal 2>/dev/null | grep -c "^[0-9]")"; ls -d /p/wal/checkpoint.* 2>/dev/null'
+          if docker logs --since 24h "${CONTAINER}" 2>&1 | grep -qE 'corruption in segment|no space left on device'; then
+            echo "corrupt=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::Prometheus is logging WAL corruption / ENOSPC:"
+            docker logs --since 24h "${CONTAINER}" 2>&1 | grep -E 'corruption in segment|no space left' | tail -3
+          else
+            echo "corrupt=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Decide
+        id: decide
+        run: |
+          USED=$(df --output=pcent / | tail -1 | tr -dc '0-9')
+          echo "root used: ${USED}%  (threshold ${CLEANUP_THRESHOLD_PCT}%)  prometheus corrupt: ${{ steps.prom.outputs.corrupt }}"
+          if [ "${USED}" -ge "${CLEANUP_THRESHOLD_PCT}" ] || [ "${{ steps.prom.outputs.corrupt }}" = "true" ]; then
+            echo "cleanup=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "cleanup=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Disk below threshold and Prometheus healthy — report only, nothing removed."
+          fi
+
+      - name: Reset Prometheus WAL
+        if: steps.decide.outputs.cleanup == 'true' && steps.prom.outputs.volume != ''
+        env:
+          VOL: ${{ steps.prom.outputs.volume }}
+        run: |
+          set -euo pipefail
+          # Always bring Prometheus back, even if the removal fails.
+          trap 'docker start "${CONTAINER}" >/dev/null || true' EXIT
+          docker stop -t 60 "${CONTAINER}"
+          docker run --rm -v "${VOL}:/p" alpine rm -rf /p/wal /p/chunks_head
+          docker start "${CONTAINER}"
+          for i in $(seq 1 60); do
+            if docker exec "${CONTAINER}" wget -qO- http://localhost:9090/-/ready >/dev/null 2>&1; then
+              echo "✅ Prometheus ready after ~$((i * 5))s"; exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::Prometheus not ready after 5 minutes"; docker logs --tail 40 "${CONTAINER}"; exit 1
+
+      - name: Prune dangling images and build cache
+        if: always() && steps.decide.outputs.cleanup == 'true'
+        run: |
+          set +e
+          docker image prune -f
+          docker builder prune -af
+
+      - name: Host state (after)
+        if: always()
+        run: |
+          set +e
+          df -h /
+          free -h
+          docker system df
