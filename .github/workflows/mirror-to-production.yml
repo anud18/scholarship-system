@@ -703,7 +703,7 @@ jobs:
           # exempts ./monitoring/), but nothing in the prod repo ever started it,
           # so prod Alloy dropped every batch and nginx's /monitoring proxy had
           # no upstream. These three workflows are what start it.
-          for f in deploy-test.yml deploy-production.yml deploy-stack.yml stop-test.yml stop-production.yml stop-stack.yml deploy-monitoring-test.yml deploy-monitoring-production.yml deploy-monitoring-stack.yml health-check.yml backup.yml auto-tag-on-merge.yml setting-env.yml; do
+          for f in deploy-test.yml deploy-production.yml deploy-stack.yml stop-test.yml stop-production.yml stop-stack.yml deploy-monitoring-test.yml deploy-monitoring-production.yml deploy-monitoring-stack.yml health-check.yml backup.yml auto-tag-on-merge.yml setting-env.yml monitoring-alert-issue.yml; do
             src="/tmp/prod-workflow-templates/$f"
             [ -f "$src" ] || continue
             dest=".github/workflows/$f"
