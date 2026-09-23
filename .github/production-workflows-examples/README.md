@@ -308,7 +308,7 @@ nginx-exporter、redis-exporter）。Alloy 把資料推到
 | `GRAFANA_ADMIN_USER` | ✅ | Grafana 管理者帳號。正式站請勿用 `admin`。 |
 | `GRAFANA_ADMIN_PASSWORD` | ✅ | ≥ 12 字元。這個儀表板是從正式站網域對外開的，沒設好等於公開。 |
 | `GRAFANA_SECRET_KEY` | 建議 | Grafana 用它加密 `secureJsonData`（這裡就是 Loki 的 `X-Scope-OrgID` tenant header）。**要在第一次部署就設好**：對一個「已經存在、且是用別把 key（含 Grafana 內建預設 key，也就是沒設這個 secret 時用的那把）加密過」的 `grafana_data` volume 換 key，所有存起來的 secret 都會解成亂碼——provisioning 不會修好它（datasource 已存在就不會重寫 secure 欄位），畫面上只會看到 `Unable to connect with Loki`。真的撞到只有兩條路：把舊 key 換回來，或用 `reset_grafana_volume=true` 重建。`openssl rand -base64 32`，每個 stage 一把。 |
-| `GH_PAT` | 選用 | 只給「告警 → 開 GitHub issue」用（webhook-bridge）。沒設也能跑，只是告警只留在 Grafana 裡。 |
+| `GH_PAT` | **必填** | 告警唯一的送出管道（webhook-bridge → `repository_dispatch` → `monitoring-alert-issue.yml` 開 issue）。需能對本 repo 發 dispatch（classic `repo` scope，或 fine-grained `Contents: write`）。沒設時 deploy 會直接失敗 — 之前只是 warning，結果正式機所有告警（含 DiskSpaceCritical）都 502 在 bridge，沒有人收到。 |
 
 | Variable | 必填 | 說明 |
 |---|---|---|

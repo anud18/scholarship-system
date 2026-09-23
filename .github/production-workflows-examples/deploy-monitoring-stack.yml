@@ -66,8 +66,8 @@
 #     (this workflow needs scholarship_prod_network and, for the end-to-end
 #     dashboard check, the nginx container).
 #   - Environment secrets on the stage: GRAFANA_ADMIN_USER,
-#     GRAFANA_ADMIN_PASSWORD (both required), GRAFANA_SECRET_KEY (recommended),
-#     GH_PAT (optional — only for alert → GitHub issue delivery).
+#     GRAFANA_ADMIN_PASSWORD, GH_PAT (all required — GH_PAT is the only way an
+#     alert reaches anyone), GRAFANA_SECRET_KEY (recommended).
 #   - Environment variables on the stage: DEPLOY_STAGE (already required by
 #     deploy-stack.yml) and either GRAFANA_ROOT_URL or EXPECT_DOMAIN.
 #   - No root access is required. Preferred layout is
@@ -223,10 +223,12 @@ jobs:
           [ -n "${GRAFANA_SECRET_KEY}" ] || \
             echo "::warning::GRAFANA_SECRET_KEY is not set — Grafana will use its built-in default key. Set a per-stage random value."
 
-          # Optional. The alert → GitHub issue path needs it; everything else
-          # (dashboards, datasources, alert evaluation) works without it.
-          [ -n "${GH_PAT}" ] || \
-            echo "::warning::GH_PAT is not set — alerts will still fire and show in Grafana, but the webhook-bridge cannot open GitHub issues."
+          # Required. It was a warning, and production ran a month without it:
+          # every alert — DiskSpaceCritical included — fired in Grafana and then
+          # died in the webhook-bridge with `Illegal header value b'Bearer '`
+          # (HTTP 502), so nobody was told the AP VM disk was filling. An alert
+          # that reaches no one is not monitoring.
+          [ -n "${GH_PAT}" ] || err "GH_PAT is not set on the '${STAGE}' environment — without it no alert is ever delivered (webhook-bridge → GitHub issue)"
 
           [ "$fail" -eq 0 ] || exit 1
           echo "✅ Monitoring secrets validated"
@@ -433,11 +435,7 @@ jobs:
           # mounts ${MONITORING_SECRETS_DIR:-/opt/scholarship/secrets}/gh_pat.
           PAT_FILE="${MONITORING_SECRETS_DIR}/gh_pat"
 
-          # An empty PAT is written deliberately rather than skipped: the mount
-          # has to resolve to a file either way. The bridge reads it only when
-          # an alert fires, so an empty value costs a failed dispatch at alert
-          # time, not a failed deploy now (warned about in "Validate monitoring
-          # secrets").
+          # "Validate monitoring secrets" already refused an empty GH_PAT.
           if ! printf '%s' "${GH_PAT}" | sudo -n tee "${PAT_FILE}" > /dev/null 2>&1; then
             # A previous run left the file 0444: its owner may delete it, but
             # not open it for writing — recreate instead of overwriting.
@@ -496,6 +494,15 @@ jobs:
           fi
 
           docker compose -f docker-compose.monitoring.yml up -d
+
+          # Without passwordless sudo, "Write the alert-dispatch PAT file"
+          # replaces gh_pat with rm + create — a NEW inode. A single-file bind
+          # mount pins the old inode, and `up -d` leaves an unchanged container
+          # running, so the bridge would keep reading the previous (possibly
+          # empty) token. A restart re-resolves the mount. Grafana gets the same
+          # treatment from "Reload provisioning" below.
+          docker restart monitoring_webhook_bridge >/dev/null
+          echo "✅ webhook-bridge restarted to pick up the current gh_pat"
 
       # Everything below reads Grafana through `docker exec`, not through a
       # published port or a throwaway curl container: it needs no host port, no
