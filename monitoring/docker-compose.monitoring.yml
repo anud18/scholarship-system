@@ -116,7 +116,8 @@ services:
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=15d'
+      # Keep metrics for 6 months (matches Loki log retention in limits.yml).
+      - '--storage.tsdb.retention.time=180d'
       - '--web.enable-lifecycle'
       - '--web.enable-remote-write-receiver'  # Enable remote write
     networks:
