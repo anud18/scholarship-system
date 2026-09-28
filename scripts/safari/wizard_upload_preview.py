@@ -38,7 +38,7 @@ BROWSER = os.environ.get("BROWSER", "safari")
 SCHOLARSHIP_LABEL = os.environ.get("SCHOLARSHIP_LABEL", "博士生獎學金")
 
 DEFAULT_TIMEOUT = 60
-PREVIEW_SETTLE_SECONDS = 6
+PREVIEW_SETTLE_SECONDS = 12
 PDF_NAME = "safari-transcript.pdf"
 PNG_NAME = "safari-passbook.png"
 
@@ -137,18 +137,27 @@ def press_escape(driver) -> None:
 
 
 def close_dialog(driver) -> None:
-    """Click the dialog's own 關閉 button: once a PDF iframe has focus the
-    Escape key goes to the embedded viewer and the dialog stays open."""
-    driver.execute_script("""
-        const dialog = [...document.querySelectorAll('[role=dialog]')].pop();
-        if (!dialog) return;
-        const buttons = [...dialog.querySelectorAll('button')];
-        const close = buttons.find(b => b.textContent.trim() === '關閉')
-          || buttons.find(b => (b.getAttribute('aria-label') || '').match(/close|關閉/i))
-          || buttons.find(b => b.querySelector('svg.lucide-x'));
-        if (close) close.click();
-        """)
-    wait_for(driver, lambda d: not find_xpath(d, "//*[@role='dialog']"), timeout=15, what="dialog to close")
+    """Close the preview dialog. Escape alone fails once a PDF iframe has
+    focus, and on a short viewport (Safari) the footer 關閉 button is clipped
+    by the dialog's overflow-hidden, so try the header ✕ first."""
+    attempts = [
+        ("header-x", "const b = d.querySelector('button svg.lucide-x'); if (b) b.closest('button').click();"),
+        (
+            "footer-close",
+            "const b = [...d.querySelectorAll('button')].find(b => b.textContent.trim() === '關閉'); if (b) b.click();",
+        ),
+    ]
+    for name, js in attempts:
+        driver.execute_script("const d = [...document.querySelectorAll('[role=dialog]')].pop(); if (!d) return;" + js)
+        try:
+            wait_for(driver, lambda d: not find_xpath(d, "//*[@role='dialog']"), timeout=5, what="dialog to close")
+            step("dialog-closed", name)
+            return
+        except TimeoutException:
+            continue
+    press_escape(driver)
+    wait_for(driver, lambda d: not find_xpath(d, "//*[@role='dialog']"), timeout=5, what="dialog to close")
+    step("dialog-closed", "escape")
 
 
 def login(driver) -> None:
@@ -194,15 +203,27 @@ def delete_own_drafts(driver) -> None:
     step("delete-old-drafts", str(outcome))
 
 
+def select_tab(driver, label: str) -> None:
+    """Click a tab until it reports selected: a click that lands before the
+    page has hydrated is silently dropped."""
+    xpath = f"//*[@role='tab' and contains(normalize-space(.), '{label}')]"
+
+    def selected(d) -> bool:
+        tab = find_xpath(d, xpath)
+        if not tab:
+            return False
+        if tab.get_attribute("aria-selected") == "true":
+            return True
+        click(d, tab)
+        time.sleep(1)
+        return tab.get_attribute("aria-selected") == "true"
+
+    wait_for(driver, selected, timeout=120, what=f"{label} tab selected")
+
+
 def reopen_draft(driver) -> None:
     driver.get(f"{BASE_URL}/")
-    tab = wait_for(
-        driver,
-        lambda d: find_xpath(d, "//*[@role='tab' and contains(normalize-space(.), '我的申請紀錄')]"),
-        timeout=120,
-        what="我的申請紀錄 tab",
-    )
-    click(driver, tab)
+    select_tab(driver, "我的申請紀錄")
     click_button_text(driver, "編輯")
     wait_for(
         driver,
@@ -321,9 +342,10 @@ def open_preview(driver, file_name: str, label: str) -> None:
         timeout=30,
         what=f"preview button for {file_name}",
     )
+    install_page_probes(driver)
     click(driver, button)
     wait_for(driver, lambda d: find_xpath(d, "//*[@role='dialog']"), timeout=30, what="preview dialog")
-    time.sleep(PREVIEW_SETTLE_SECONDS)
+    timeline = sample_dialog(driver, PREVIEW_SETTLE_SECONDS)
     info = driver.execute_script("""
         const dialog = [...document.querySelectorAll('[role=dialog]')].pop();
         const frame = dialog.querySelector('iframe, embed, object');
@@ -340,11 +362,59 @@ def open_preview(driver, file_name: str, label: str) -> None:
             .filter(e => e.name.includes('/api/v1/preview?')).length,
         };
         """)
-    info.update({"label": label, "file": file_name})
+    info.update({"label": label, "file": file_name, "timeline": timeline})
+    info["page_errors"] = driver.execute_script("return window.__probeErrors || []")
     results["previews"].append(info)
-    step("preview", json.dumps(info, ensure_ascii=False))
+    step("preview", json.dumps({k: v for k, v in info.items() if k != "timeline"}, ensure_ascii=False))
+    step("preview-timeline", json.dumps(timeline[-1] if timeline else {}, ensure_ascii=False))
     shot(driver, f"preview-{label}")
     close_dialog(driver)
+
+
+def install_page_probes(driver) -> None:
+    """A 250 ms ticker (are page timers running at all?) plus error capture —
+    safaridriver exposes no console log."""
+    driver.execute_script("""
+        if (window.__probeInstalled) return;
+        window.__probeInstalled = true;
+        window.__ticks = 0;
+        setInterval(() => { window.__ticks += 1; }, 250);
+        window.__probeErrors = [];
+        window.addEventListener('error', e => window.__probeErrors.push('error: ' + e.message));
+        window.addEventListener('unhandledrejection', e => window.__probeErrors.push('rejection: ' + e.reason));
+        const original = console.error.bind(console);
+        console.error = (...args) => {
+          window.__probeErrors.push('console: ' + args.map(String).join(' ').slice(0, 300));
+          original(...args);
+        };
+        """)
+
+
+def sample_dialog(driver, seconds: int) -> list:
+    """Once a second: is the skeleton still up, is the viewer still
+    opacity-0, and did the ticker advance (timer throttling)?"""
+    samples = []
+    for second in range(seconds):
+        time.sleep(1)
+        samples.append(
+            driver.execute_script(
+                """
+                const dialog = [...document.querySelectorAll('[role=dialog]')].pop();
+                const viewer = dialog && dialog.querySelector('iframe, img');
+                return {
+                  t: arguments[0],
+                  ticks: window.__ticks,
+                  visibility: document.visibilityState,
+                  focus: document.hasFocus(),
+                  skeleton: !!(dialog && dialog.querySelector('.animate-pulse')),
+                  viewer_hidden: !!(viewer && viewer.className.includes('opacity-0')),
+                  viewer_src: viewer ? String(viewer.src).slice(0, 12) : null,
+                };
+                """,
+                second + 1,
+            )
+        )
+    return samples
 
 
 def save_draft(driver) -> None:
@@ -361,14 +431,14 @@ def main() -> int:
     try:
         results["user_agent"] = driver.execute_script("return navigator.userAgent")
         login(driver)
-        tab = wait_for(
+        wait_for(
             driver,
             lambda d: find_xpath(d, "//*[@role='tab' and contains(normalize-space(.), '獎學金申請')]"),
             timeout=120,
             what="獎學金申請 tab",
         )
         shot(driver, "dashboard")
-        click(driver, tab)
+        select_tab(driver, "獎學金申請")
         read_regulations(driver)
         agree_and_continue(driver)
         select_scholarship(driver)
