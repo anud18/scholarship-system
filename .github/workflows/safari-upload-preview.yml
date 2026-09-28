@@ -50,6 +50,7 @@ jobs:
           fi
 
       - name: Trust the target's self-signed certificate
+        timeout-minutes: 3
         run: |
           hostport="${TARGET_URL#https://}"
           hostport="${hostport%%/*}"
