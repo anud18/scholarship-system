@@ -22,7 +22,14 @@ jobs:
   handle-alert:
     runs-on: ubuntu-latest
     steps:
-      - name: Render issue title and body
+      # Every later step reads the NORMALISED values from this step's outputs,
+      # never the raw payload. Grafana's own alerts (DatasourceError,
+      # DatasourceNoData) carry none of our labels, so `environment` arrives
+      # empty; the label step used to default it to `env:unknown` while the
+      # find/create steps used the raw `env:` — a label that never exists —
+      # so `gh issue create` failed with "could not add label: 'env:' not
+      # found" on every repeat.
+      - name: Normalise payload, render issue title and body
         id: render
         env:
           ALERT: ${{ github.event.client_payload.alertname }}
@@ -36,11 +43,14 @@ jobs:
           FIRED_AT: ${{ github.event.client_payload.fired_at }}
           GRAFANA_URL: ${{ github.event.client_payload.grafana_url }}
         run: |
-          # Defaults for missing fields (Grafana may send partial payloads)
-          ALERT="${ALERT:-(unknown alert)}"
-          ENV="${ENV:-(unknown env)}"
+          # Label-safe: gh splits --label on commas, and GitHub caps a label
+          # at 50 characters.
+          label_part() { printf '%s' "$1" | tr -d ',\n\r' | cut -c1-40; }
+
+          ALERT=$(label_part "${ALERT:-unknown}")
+          ENV=$(label_part "${ENV:-unknown}")
+          SEVERITY=$(label_part "${SEVERITY:-warning}")
           STATUS="${STATUS:-firing}"
-          SEVERITY="${SEVERITY:-warning}"
           SUMMARY="${SUMMARY:-(no summary)}"
           DESCRIPTION="${DESCRIPTION:-(no description)}"
           INSTANCE="${INSTANCE:-(unknown)}"
@@ -48,8 +58,15 @@ jobs:
           FIRED_AT="${FIRED_AT:-$(date -u -Iseconds)}"
           GRAFANA_URL="${GRAFANA_URL:-(unknown)}"
 
-          TITLE=$(printf 'Monitoring Alert: %s (%s/%s)' "$ALERT" "$ENV" "$SEVERITY" | tr -d '\n\r')
-          printf 'title=%s\n' "$TITLE" >> "$GITHUB_OUTPUT"
+          {
+            echo "alert=$ALERT"
+            echo "env=$ENV"
+            echo "severity=$SEVERITY"
+            echo "status=$STATUS"
+            echo "fired_at=$FIRED_AT"
+            printf 'title=%s\n' "$(printf 'Monitoring Alert: %s (%s/%s)' "$ALERT" "$ENV" "$SEVERITY" | tr -d '\n\r')"
+          } >> "$GITHUB_OUTPUT"
+
           cat > /tmp/body.md <<EOF
           ## $STATUS — $ALERT
 
@@ -71,11 +88,12 @@ jobs:
         id: find
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ALERT: ${{ github.event.client_payload.alertname }}
-          ENV: ${{ github.event.client_payload.environment }}
+          REPO: ${{ github.repository }}
+          ALERT: ${{ steps.render.outputs.alert }}
+          ENV: ${{ steps.render.outputs.env }}
         run: |
           ISSUE=$(gh issue list \
-            --repo "${{ github.repository }}" \
+            --repo "$REPO" \
             --label "monitoring-alert" \
             --label "alert:$ALERT" \
             --label "env:$ENV" \
@@ -84,9 +102,11 @@ jobs:
             --json number,state \
             --jq '.[0]')
           if [ -n "$ISSUE" ] && [ "$ISSUE" != "null" ]; then
-            echo "found=true" >> "$GITHUB_OUTPUT"
-            echo "number=$(echo "$ISSUE" | jq -r .number)" >> "$GITHUB_OUTPUT"
-            echo "state=$(echo "$ISSUE" | jq -r .state)" >> "$GITHUB_OUTPUT"
+            {
+              echo "found=true"
+              echo "number=$(echo "$ISSUE" | jq -r .number)"
+              echo "state=$(echo "$ISSUE" | jq -r .state)"
+            } >> "$GITHUB_OUTPUT"
           else
             echo "found=false" >> "$GITHUB_OUTPUT"
           fi
@@ -97,54 +117,67 @@ jobs:
         # arbitrary Grafana payloads, so pre-create them on demand.
         # `gh label create` returns non-zero if the label already exists,
         # hence the `|| true` swallow.
-        if: github.event.client_payload.status == 'firing'
+        if: steps.render.outputs.status == 'firing'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ALERT: ${{ github.event.client_payload.alertname }}
-          ENV: ${{ github.event.client_payload.environment }}
-          SEVERITY: ${{ github.event.client_payload.severity }}
+          REPO: ${{ github.repository }}
+          ALERT: ${{ steps.render.outputs.alert }}
+          ENV: ${{ steps.render.outputs.env }}
+          SEVERITY: ${{ steps.render.outputs.severity }}
         run: |
-          for label in "alert:${ALERT:-unknown}" "env:${ENV:-unknown}" "severity:${SEVERITY:-warning}"; do
+          for label in "monitoring-alert" "alert:$ALERT" "env:$ENV" "severity:$SEVERITY"; do
             gh label create "$label" \
-              --repo "${{ github.repository }}" \
+              --repo "$REPO" \
               --color "ededed" \
               --description "Auto-created by monitoring-alert workflow" \
               2>/dev/null || true
           done
 
       - name: Create new issue (no existing match, status=firing)
-        if: steps.find.outputs.found != 'true' && github.event.client_payload.status == 'firing'
+        if: steps.find.outputs.found != 'true' && steps.render.outputs.status == 'firing'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          TITLE: ${{ steps.render.outputs.title }}
+          ALERT: ${{ steps.render.outputs.alert }}
+          ENV: ${{ steps.render.outputs.env }}
+          SEVERITY: ${{ steps.render.outputs.severity }}
         run: |
           gh issue create \
-            --repo "${{ github.repository }}" \
-            --title "${{ steps.render.outputs.title }}" \
+            --repo "$REPO" \
+            --title "$TITLE" \
             --body-file /tmp/body.md \
             --label "monitoring-alert" \
-            --label "alert:${{ github.event.client_payload.alertname }}" \
-            --label "env:${{ github.event.client_payload.environment }}" \
-            --label "severity:${{ github.event.client_payload.severity }}"
+            --label "alert:$ALERT" \
+            --label "env:$ENV" \
+            --label "severity:$SEVERITY"
 
       - name: Reopen + comment (existing closed, status=firing)
-        if: steps.find.outputs.found == 'true' && steps.find.outputs.state == 'CLOSED' && github.event.client_payload.status == 'firing'
+        if: steps.find.outputs.found == 'true' && steps.find.outputs.state == 'CLOSED' && steps.render.outputs.status == 'firing'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ steps.find.outputs.number }}
         run: |
-          gh issue reopen ${{ steps.find.outputs.number }} --repo "${{ github.repository }}"
-          gh issue comment ${{ steps.find.outputs.number }} --repo "${{ github.repository }}" --body-file /tmp/body.md
+          gh issue reopen "$NUMBER" --repo "$REPO"
+          gh issue comment "$NUMBER" --repo "$REPO" --body-file /tmp/body.md
 
       - name: Append firing comment (existing open, status=firing)
-        if: steps.find.outputs.found == 'true' && steps.find.outputs.state == 'OPEN' && github.event.client_payload.status == 'firing'
+        if: steps.find.outputs.found == 'true' && steps.find.outputs.state == 'OPEN' && steps.render.outputs.status == 'firing'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ steps.find.outputs.number }}
         run: |
-          gh issue comment ${{ steps.find.outputs.number }} --repo "${{ github.repository }}" --body-file /tmp/body.md
+          gh issue comment "$NUMBER" --repo "$REPO" --body-file /tmp/body.md
 
       - name: Append resolved comment (existing issue, status=resolved)
-        if: steps.find.outputs.found == 'true' && github.event.client_payload.status == 'resolved'
+        if: steps.find.outputs.found == 'true' && steps.render.outputs.status == 'resolved'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ steps.find.outputs.number }}
+          FIRED_AT: ${{ steps.render.outputs.fired_at }}
         run: |
-          gh issue comment ${{ steps.find.outputs.number }} --repo "${{ github.repository }}" \
-            --body "✅ Alert resolved at $(date -u -Iseconds). Original fired_at: ${{ github.event.client_payload.fired_at }}. Closing left to operator after verifying root cause."
+          gh issue comment "$NUMBER" --repo "$REPO" \
+            --body "✅ Alert resolved at $(date -u -Iseconds). Original fired_at: ${FIRED_AT}. Closing left to operator after verifying root cause."
