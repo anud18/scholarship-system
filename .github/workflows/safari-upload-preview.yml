@@ -55,8 +55,18 @@ jobs:
           hostport="${TARGET_URL#https://}"
           hostport="${hostport%%/*}"
           host="${hostport%%:*}"
-          echo | openssl s_client -connect "$hostport" -servername "$host" 2>/dev/null \
-            | openssl x509 -outform PEM > target-cert.pem
+          # `openssl s_client` has no timeout of its own and hung for minutes
+          # when the dev host's link stalled; macOS has no `timeout`, so bound
+          # it with perl's alarm and retry.
+          for attempt in 1 2 3 4 5; do
+            if echo | perl -e 'alarm 20; exec @ARGV' \
+                openssl s_client -connect "$hostport" -servername "$host" 2>/dev/null > handshake.txt \
+              && openssl x509 -in handshake.txt -outform PEM -out target-cert.pem 2>/dev/null; then
+              break
+            fi
+            echo "certificate fetch attempt $attempt failed, retrying"
+            sleep 5
+          done
           openssl x509 -in target-cert.pem -noout -ext subjectAltName,extendedKeyUsage
           sudo security add-trusted-cert -d -r trustRoot \
             -k /Library/Keychains/System.keychain target-cert.pem
