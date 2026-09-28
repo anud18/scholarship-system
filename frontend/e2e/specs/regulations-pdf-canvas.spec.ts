@@ -75,7 +75,7 @@ test.describe("同意步驟中獎學金要點 PDF 以 canvas 呈現 | Regulation
     const page = await studentLogin.context.newPage();
 
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    await page.getByRole("tab", { name: "學生申請" }).click();
+    await page.getByRole("tab", { name: "獎學金申請" }).click();
 
     // Step 1 of the wizard = NoticeAgreementStep.
     const openButton = page.getByRole("button", { name: /閱讀獎學金要點/ });

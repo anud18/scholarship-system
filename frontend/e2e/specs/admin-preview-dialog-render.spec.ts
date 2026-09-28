@@ -202,7 +202,16 @@ test.describe("管理員預覽對話框顯示已上傳 PDF | Admin preview dialo
     await dialog.waitFor({ timeout: 10_000 });
     await dialog.getByText(/上傳文件/).first().click();
     await dialog.getByText(PDF_NAME).first().waitFor({ timeout: 10_000 });
-    await dialog.getByRole("button", { name: /預覽/ }).first().click();
+    // Scope 預覽 to OUR PDF's row: the seed also gives stuphd001 a 存摺封面
+    // PNG (#1418) listed ahead of it, so a dialog-wide .first() previews the
+    // PNG. Ancestors match first in document order → .last() = the row itself.
+    await dialog
+      .locator("div")
+      .filter({ hasText: PDF_NAME })
+      .filter({ has: page.getByRole("button", { name: /預覽/ }) })
+      .last()
+      .getByRole("button", { name: /預覽/ })
+      .click();
 
     // (b) the iframe really fetched the PDF through the proxy.
     await expect
