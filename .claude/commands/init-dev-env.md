@@ -56,20 +56,7 @@ docker exec -u root scholarship_backend_dev alembic upgrade head
 docker exec -u root scholarship_backend_dev python -m app.seed
 ```
 
-## Step 5: Assign cs_college to PhD scholarship
-
-```bash
-docker compose -f docker-compose.dev.yml exec -T postgres \
-  psql -U scholarship_user -d scholarship_db -c "
-    INSERT INTO admin_scholarships (admin_id, scholarship_id, assigned_at)
-    SELECT u.id, st.id, NOW()
-      FROM users u, scholarship_types st
-     WHERE u.nycu_id = 'cs_college' AND st.code = 'phd'
-    ON CONFLICT ON CONSTRAINT uq_admin_scholarship DO NOTHING;
-  "
-```
-
-## Step 6: Restart backend
+## Step 5: Restart backend
 
 After migrations and seeding, restart the backend to pick up the initialized database:
 
@@ -77,7 +64,7 @@ After migrations and seeding, restart the backend to pick up the initialized dat
 docker compose -f docker-compose.dev.yml restart backend
 ```
 
-## Step 7: Verify
+## Step 6: Verify
 
 Check that the backend is running without errors:
 
@@ -99,7 +86,7 @@ Check first instead of assuming a fresh init is needed:
 docker ps -a --filter "name=scholarship_" --format '{{.Names}}\t{{.Status}}\t{{.Image}}'
 ```
 
-If containers are already `Up`/`healthy`, skip Steps 1–6 — just verify the mount (Step 0) matches
+If containers are already `Up`/`healthy`, skip Steps 1–5 — just verify the mount (Step 0) matches
 where you want to work. Use the **change-dev-env-worktree** skill to re-point an already-running
 stack's `backend`/`frontend` to a different worktree without touching the data tier.
 

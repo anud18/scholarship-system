@@ -1,6 +1,6 @@
 ---
 name: playwright-test-and-debug
-description: Drive browser-based actions against the scholarship-system localhost dev env (http://localhost:3000), AND when something diverges from the codebase's spec, walk an integrated diagnose-and-fix loop — tail backend logs, query Postgres, classify the gap, and patch the responsible layer. Use this skill whenever the user asks to drive a quick local browser test, screenshot a page, log in as a seeded user (admin / cs_professor / cs_college / stuphd001 / stuunder1 / etc.) and click through a flow, debug why a localhost endpoint is returning 5xx or behaving unexpectedly, dump application/review/whitelist DB state, OR — most importantly — verify a recent code change end-to-end ("I just finished feature X / fixed bug Y, smoke-test that it works"). Treat any post-change verification request, any "make sure my localhost change works" prompt, any "the e2e test in frontend/e2e failed — figure out why" debugging request, and any "log in as <seeded user> and check the dashboard" exploratory request as a trigger. Includes a ready-made multi-college ranking→distribution→roster end-to-end driver (`scripts/verify-multi-college-distribution.js`) for the #1029/#1034 college-pipeline regression. Do NOT use for staging (use `nycu-sso-login` for `ss.test.nycu.edu.tw`), and do NOT use for setting up a new `@playwright/test` runner from scratch (that's a project-config task, not session tooling).
+description: Drive browser-based actions against the scholarship-system localhost dev env (http://localhost:3000), AND when something diverges from the codebase's spec, walk an integrated diagnose-and-fix loop — tail backend logs, query Postgres, classify the gap, and patch the responsible layer. Use this skill whenever the user asks to drive a quick local browser test, screenshot a page, log in as a seeded user (admin / cs_professor / cs_college / stuphd001 / stuunder1 / etc.) and click through a flow, debug why a localhost endpoint is returning 5xx or behaving unexpectedly, dump application/review/whitelist DB state, OR — most importantly — verify a recent code change end-to-end ("I just finished feature X / fixed bug Y, smoke-test that it works"). Treat any post-change verification request, any "make sure my localhost change works" prompt, any "the e2e test in frontend/e2e failed — figure out why" debugging request, and any "log in as <seeded user> and check the dashboard" exploratory request as a trigger. Includes a ready-made multi-college ranking→distribution→roster end-to-end driver (`scripts/verify-multi-college-distribution.js`) for the #1029/#1034 college-pipeline regression. Do NOT use for staging (`ss.test.nycu.edu.tw`, which needs real NYCU Portal SSO), and do NOT use for setting up a new `@playwright/test` runner from scratch (that's a project-config task, not session tooling).
 ---
 
 # Playwright local test & debug (scholarship-system dev env)
@@ -18,7 +18,7 @@ The dev env (`docker compose -f docker-compose.dev.yml`) has full mock-SSO so lo
 | "this localhost endpoint returns 500 — debug it" | Yes | tail-logs + db-query loop |
 | "the e2e test in `frontend/e2e/...` failed — figure out why" | Yes | same diagnose loop applies |
 | **"I just finished feature X / fix Y — verify it works end-to-end"** | **Yes — primary use case** | drives the relevant flow + cross-validates UI/API/DB; runs diagnose loop on divergence |
-| "log in to NYCU staging" | No — use `nycu-sso-login` | different env, different login flow |
+| "log in to NYCU staging" | No | different env, real Portal SSO login |
 | "set up `@playwright/test` in `frontend/`" | No | runner setup is one-time project-config, not per-session |
 
 ## Prerequisites (one command)
@@ -186,7 +186,7 @@ This is the primary use case — when the user says "I just finished X, verify i
    |---|---|
    | `backend/app/services/eligibility_service.py` | Log in as a student; hit `/scholarships/eligible`; verify the rule fires (and ineligible students still see the right rejection) |
    | `backend/app/api/v1/endpoints/applications.py` (submit/withdraw) | Log in as student; submit/withdraw an app; verify status transition in DB |
-   | `frontend/app/admin/whitelist/page.tsx` (or similar admin UI) | Log in as admin; navigate to whitelist UI; add+remove a student; verify DB row mutations |
+   | Admin whitelist UI (an `AdminManagementShell` tab on `/`) | Log in as admin; open the whitelist tab; add+remove a student; verify DB row mutations |
    | `backend/app/services/review_service.py` | Log in as professor; submit recommendation; log in as college; verify the cascade rules fired |
 
 3. **Establish baseline.** Run `scripts/check-stack.sh` and `scripts/dump-app-state.sh <relevant_id>` so the "before" state is on record. If the dev DB is dirty from prior testing, consider `scripts/reset-db.sh` first.
@@ -269,7 +269,7 @@ SELECT created_at, action, status, description, trace_id
 
 Named scenarios to re-run after touching the specified files. Each scenario lists the
 exact curl/DB checks that confirmed the behavior. Run `scripts/reset-db.sh` first for a
-clean slate, then re-seed by restarting the backend container.
+clean slate (it migrates and re-seeds).
 
 ---
 
@@ -422,12 +422,10 @@ scripts/db-query.sh "
   WHERE sc.is_active = true
     AND sc.requires_professor_recommendation = true
   LIMIT 1;"
-# Note config_id from output (typically 5 for PhD 114-first)
+# Note config_id from output and export it: CONFIG_ID=<id>
 
 # 1. Login as doctoral student
-STU_TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/mock-login \
-  -H "Content-Type: application/json" \
-  -d '{"nycu_id":"csphd0001","password":"test123"}' | jq -r '.data.access_token')
+STU_TOKEN=$(scripts/login-mock-sso.sh csphd0001 | jq -r .data.access_token)
 
 # 2. Set advisor info pointing at a registered professor
 curl -s -X PUT http://localhost:8000/api/v1/user-profiles/me/advisor-info \
@@ -435,10 +433,10 @@ curl -s -X PUT http://localhost:8000/api/v1/user-profiles/me/advisor-info \
   -d '{"advisor_name":"李資訊教授","advisor_email":"cs_professor@nycu.edu.tw","advisor_nycu_id":"cs_professor"}'
 # expect: success=true
 
-# 3. Create draft application  (configuration_id=5, adjust if DB query above returns different id)
+# 3. Create draft application
 APP_RESP=$(curl -s -X POST "http://localhost:8000/api/v1/applications?is_draft=true" \
   -H "Authorization: Bearer $STU_TOKEN" -H "Content-Type: application/json" \
-  -d '{"scholarship_type":"doctoral","configuration_id":5,"form_data":{"fields":{},"documents":[]}}')
+  -d '{"scholarship_type":"phd","configuration_id":'"$CONFIG_ID"',"form_data":{"fields":{},"documents":[]}}')
 APP_ID=$(echo "$APP_RESP" | jq -r '.data.id')
 echo "Created draft app id=$APP_ID  ($(echo $APP_RESP | jq -r '.data.app_id'))"
 # expect: success=true, status=draft
@@ -468,13 +466,11 @@ scripts/db-query.sh "
 
 **Edge case — submit with no advisor info (professor_id stays NULL)**:
 ```bash
-STU2_TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/mock-login \
-  -H "Content-Type: application/json" \
-  -d '{"nycu_id":"csphd0002","password":"test123"}' | jq -r '.data.access_token')
+STU2_TOKEN=$(scripts/login-mock-sso.sh csphd0002 | jq -r .data.access_token)
 
 APP2=$(curl -s -X POST "http://localhost:8000/api/v1/applications?is_draft=true" \
   -H "Authorization: Bearer $STU2_TOKEN" -H "Content-Type: application/json" \
-  -d '{"scholarship_type":"doctoral","configuration_id":5,"form_data":{"fields":{},"documents":[]}}')
+  -d '{"scholarship_type":"phd","configuration_id":'"$CONFIG_ID"',"form_data":{"fields":{},"documents":[]}}')
 APP2_ID=$(echo "$APP2" | jq -r '.data.id')
 curl -s -X POST "http://localhost:8000/api/v1/applications/$APP2_ID/submit" \
   -H "Authorization: Bearer $STU2_TOKEN"
@@ -497,7 +493,7 @@ Before starting, ensure VPN is up. If not, ask the user to run:
 ! sudo wg-quick up peer2
 ```
 
-Then obtain a bearer token via the **`nycu-sso-login`** skill (handles Portal OIDC redirect). Once you have `$SS_TOKEN` and `$SS_ADMIN_TOKEN`:
+Then obtain a bearer token through the NYCU Portal SSO login (no skill for it is installed in this project — ask the user how to mint one). Once you have `$SS_TOKEN` and `$SS_ADMIN_TOKEN`:
 
 ```bash
 SS_BASE="https://ss.test.nycu.edu.tw/api/v1"
@@ -516,7 +512,7 @@ curl -s -X PUT "$SS_BASE/user-profiles/me/advisor-info" \
 # 2-4. Create draft → submit
 APP_RESP=$(curl -s -X POST "$SS_BASE/applications?is_draft=true" \
   -H "Authorization: Bearer $SS_TOKEN" -H "Content-Type: application/json" \
-  -d '{"scholarship_type":"doctoral","configuration_id":<id>,"form_data":{"fields":{},"documents":[]}}')
+  -d '{"scholarship_type":"phd","configuration_id":<id>,"form_data":{"fields":{},"documents":[]}}')
 APP_ID=$(echo "$APP_RESP" | jq -r '.data.id')
 curl -s -X POST "$SS_BASE/applications/$APP_ID/submit" \
   -H "Authorization: Bearer $SS_TOKEN"
@@ -551,8 +547,8 @@ and admin distribution must surface **all** colleges — not just the last one f
 **Actors**: one `college` reviewer per target college + `admin`. College reviewers are
 scoped by `users.college_code`; a ranking is auto-populated with that college's apps
 (college = `student_data->>'std_academyno'`). The seed set ships `college`/`cs_college`
-(both code `C`); this session also created `hum_college`(A), `bio_college`(B), `ee_college`(E).
-If your target colleges lack a reviewer, create one per code first.
+(both code `C`) and `ee_college`(E). Other colleges (e.g. `hum_college` for A, `bio_college`
+for B in the example below) are not seeded — create one reviewer per code first.
 
 **Setup — confirm there are submitted apps across ≥2 colleges** (else rankings are empty):
 ```bash
@@ -602,7 +598,6 @@ curl -s "http://localhost:8000/api/v1/manual-distribution/students?scholarship_t
 ## Cross-references
 
 - **`webwright`** (project skill) — the code-as-action browser loop this skill defaults to for multi-step flows (plan → instrument → screenshot → harsh self-verify). Here it runs against `localhost:3000` seeded with a logged-in storage state and cross-validated against logs/DB, using the bundled Node scripts rather than webwright's Python venv.
-- **`nycu-sso-login`** (project skill) — staging-only NYCU SSO; uses real Portal credentials. Ignore when working against `localhost:3000`.
-- **`frontend/e2e/`** (when it lands from the Ultraplan PR) — `@playwright/test` runner with fixtures/reporters. The diagnose-and-fix loop in this skill applies inside that test runner too — call `scripts/tail-logs.sh` / `scripts/db-query.sh` from inside a custom Playwright reporter.
+- **`frontend/e2e/`** — the `@playwright/test` suite (`frontend/playwright.config.ts`) with fixtures/reporters. The diagnose-and-fix loop in this skill applies inside that test runner too — call `scripts/tail-logs.sh` / `scripts/db-query.sh` from inside a custom Playwright reporter.
 - **`backend/app/tests/conftest.py`** — pytest fixtures for similar workflow tests at the API layer; useful for cross-checking when "is this a backend bug?" vs "is the test wrong?"
 - **`CLAUDE.md`** (project root) — the canonical reset script (`./scripts/reset_database.sh`) and dev-env conventions.

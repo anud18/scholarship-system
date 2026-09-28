@@ -4,7 +4,7 @@ Loaded when working under `backend/`. Project-wide rules live in `.claude/CLAUDE
 
 ## API Response Standardization
 
-**CRITICAL**: All API endpoints MUST return a consistent ApiResponse format for frontend compatibility.
+All API endpoints return a consistent ApiResponse format for frontend compatibility.
 
 ### Standard Format
 ```python
@@ -36,7 +36,7 @@ async def get_users():
 
 Convert Pydantic schemas with `.model_dump()` (v2). `PaginatedResponse` is **not** a top-level return — wrap it too: `data=response_data.model_dump()`.
 
-The frontend `api.ts` auto-detects this shape (`"success" in data && "message" in data`), so a non-wrapped endpoint silently falls through to the raw-body path.
+The frontend API client (`frontend/lib/api/client.ts`) auto-detects this shape (`"success" in data && "message" in data`), so a non-wrapped endpoint silently falls through to the raw-body path.
 
 ### Migration Checklist
 When standardizing existing endpoints:
@@ -51,7 +51,7 @@ When standardizing existing endpoints:
 ## Database Initialization & Migration Standards
 
 ### Database Volume Recreation
-**ALWAYS** use the automated script for clean database rebuilds:
+Use the automated script for clean database rebuilds:
 
 ```bash
 ./scripts/reset_database.sh
@@ -59,7 +59,7 @@ When standardizing existing endpoints:
 ```
 
 ### Alembic Migration Development Rules
-**CRITICAL**: Always include existence checks in migrations:
+Include existence checks in migrations:
 
 ```python
 # ✅ CORRECT - Check before creating
@@ -97,12 +97,10 @@ Before creating any migration:
 
 ## Testing, Lint & CI Standards
 
-Hard-won from the 2026-05-30 backend-test-backlog cleanup (cleared ~150 failures). Follow these to avoid re-introducing the same classes of failure.
-
 ### CI suite layout (`.github/workflows/ci.yml`)
 - **unit**: `app/tests/test_*.py -m "not integration and not asyncio"` — sync tests only.
-- **integration**: `app/tests/test_*.py -m "integration or asyncio"` — async tests. `asyncio_mode = auto`, so any `async def test_` is auto-collected here (it is EXCLUDED from unit). The path glob is ALL test files, not `test_*_service*.py` — that narrower glob was the bug that silently dropped ~64 files whose async tests matched no lane (see the comment at `ci.yml:302-317`); `test_no_orphaned_async_tests.py` now guards the invariant.
-- **smoke**: explicit file list (includes `test_critical_workflows.py`). The former dedicated `critical-workflows` lane was removed as redundant — that file already runs in smoke + integration.
+- **integration**: `app/tests/test_*.py -m "integration or asyncio"` — async tests. `asyncio_mode = auto`, so any `async def test_` is auto-collected here (it is EXCLUDED from unit). The path glob is ALL test files so every async test lands in a lane; `test_no_orphaned_async_tests.py` guards that invariant.
+- **smoke**: explicit file list (includes `test_critical_workflows.py`, which also runs in integration).
 - A test that is `@pytest.mark.asyncio` / `async def` runs in **integration**, not unit. Converting a sync test to async moves it between suites.
 
 ### Lint is HARD-gated — black passing is NOT enough
