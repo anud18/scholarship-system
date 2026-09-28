@@ -1,0 +1,40 @@
+# =============================================================================
+# Opt-in overlay: run a RELEASED backend/frontend image on the dev stack
+#
+# Stack it on top of docker-compose.dev-nginx.yml to get the closest local
+# copy of production: release images (no source bind-mount, no hot reload,
+# production Next.js build via `node server.js`) behind nginx.prod.conf,
+# still on the dev DB / RustFS / mock SIS.
+#
+#   RELEASE_TAG=v1.2.0 ./scripts/dev-nginx.sh up
+#
+# Kept deliberately dev-flavoured:
+#   - ENABLE_MOCK_SSO stays on, so the seeded accounts log in via /dev-login
+#     (the production build's `/` renders the Portal SSO page instead).
+#   - The dev DB is at main's alembic head; an older release runs on a schema
+#     that may be ahead of it. Additive changes are harmless, but check the
+#     migrations between the release commit and main before trusting results.
+# =============================================================================
+
+services:
+  backend:
+    image: ghcr.io/anud18/scholarship-system-backend:${RELEASE_TAG:?set RELEASE_TAG, e.g. v1.2.0}
+    # Never build: `up --build` would otherwise overwrite the release tag
+    # locally with a build of the working tree.
+    build: !reset null
+    pull_policy: missing
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    volumes: !reset []
+    environment:
+      DEBUG: "false"
+      # Templates are baked into the image (backend/Dockerfile).
+      REACT_EMAIL_TEMPLATES_DIR: /frontend/emails
+
+  frontend:
+    image: ghcr.io/anud18/scholarship-system-frontend:${RELEASE_TAG:?set RELEASE_TAG, e.g. v1.2.0}
+    build: !reset null
+    pull_policy: missing
+    command: node server.js
+    volumes: !reset []
+    environment:
+      NODE_ENV: production

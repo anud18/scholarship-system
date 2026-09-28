@@ -1,0 +1,85 @@
+# Real-Safari check of the student wizard's upload → preview flow.
+#
+# Drives Safari (safaridriver) on a GitHub macOS runner against a reachable
+# dev stack fronted by the prod nginx (scripts/dev-nginx.sh), and uploads a
+# screenshot of every step. The target URL is a secret, not an input: the
+# dev stack runs mock SSO, so its address must not land in this public repo.
+# The target's self-signed cert (DEV_NGINX_EXTRA_SAN must cover the host) is
+# trusted on first use — this is a throwaway runner hitting our own box.
+#
+# workflow_dispatch only becomes usable once this file is on the default
+# branch; until then, pushing to a branch that changes the files below runs it.
+name: Safari upload preview
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - scripts/safari/**
+      - .github/workflows/safari-upload-preview.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: safari-upload-preview
+  cancel-in-progress: true
+
+jobs:
+  safari:
+    runs-on: macos-15
+    timeout-minutes: 20
+    env:
+      TARGET_URL: ${{ secrets.SAFARI_TARGET_URL }}
+      OUT_DIR: safari-shots
+      BROWSER: safari
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check target is reachable
+        run: |
+          if [ -z "$TARGET_URL" ]; then
+            echo "::error::secret SAFARI_TARGET_URL is not set"
+            exit 1
+          fi
+          code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 20 "$TARGET_URL/health" || true)
+          echo "health: $code"
+          if [ "$code" != "200" ]; then
+            echo "::error::target not reachable from the runner (health=$code)"
+            exit 1
+          fi
+
+      - name: Trust the target's self-signed certificate
+        run: |
+          hostport="${TARGET_URL#https://}"
+          hostport="${hostport%%/*}"
+          host="${hostport%%:*}"
+          echo | openssl s_client -connect "$hostport" -servername "$host" 2>/dev/null \
+            | openssl x509 -outform PEM > target-cert.pem
+          openssl x509 -in target-cert.pem -noout -ext subjectAltName,extendedKeyUsage
+          sudo security add-trusted-cert -d -r trustRoot \
+            -k /Library/Keychains/System.keychain target-cert.pem
+
+      - name: Enable safaridriver
+        run: |
+          sudo safaridriver --enable
+          safaridriver --version
+          defaults read /Applications/Safari.app/Contents/Info CFBundleShortVersionString
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Selenium
+        run: pip install "selenium>=4.20"
+
+      - name: Walk the wizard in Safari
+        run: python scripts/safari/wizard_upload_preview.py
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: safari-upload-preview
+          path: safari-shots/
+          retention-days: 7

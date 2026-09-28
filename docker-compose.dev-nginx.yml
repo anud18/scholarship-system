@@ -1,0 +1,40 @@
+# =============================================================================
+# Opt-in overlay: put the PRODUCTION nginx in front of the dev stack
+#
+# Mounts nginx/nginx.prod.conf UNMODIFIED (no dev copy to drift), so the dev
+# stack exercises the exact prod reverse-proxy layer: TLS, the /api path split
+# between Next.js proxies and FastAPI, security headers (COOP/COEP/CORP/HSTS),
+# rate limits (429), the dotfile / script-extension 404 guards, gzip, and the
+# 50 MB upload cap. Backend/frontend stay on hot reload.
+#
+# Usage (certs are generated on first run):
+#   ./scripts/dev-nginx.sh up      # → https://localhost:8443
+#   ./scripts/dev-nginx.sh down    # remove only the nginx container
+#
+# Only HTTPS is published: host :80/:443 are usually taken, and prod's
+# port-80 block redirects to https://$host (no port), which cannot land on a
+# remapped port anyway. The direct :3000 / :8000 dev ports keep working.
+# =============================================================================
+
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: scholarship_nginx_dev
+    ports:
+      - "${DEV_NGINX_HTTPS_PORT:-8443}:443"
+    volumes:
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl/dev:/etc/nginx/ssl:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - scholarship_dev_network
+    restart: unless-stopped
+
+  backend:
+    environment:
+      # User-facing links (SSO callback redirect, email system_url) must point
+      # at the nginx origin, like prod's FRONTEND_URL=https://${DOMAIN}.
+      FRONTEND_URL: https://localhost:${DEV_NGINX_HTTPS_PORT:-8443}
+      CORS_ORIGINS: "https://localhost:${DEV_NGINX_HTTPS_PORT:-8443},http://localhost:3000,http://localhost:8000"
