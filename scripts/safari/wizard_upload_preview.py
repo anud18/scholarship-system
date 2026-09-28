@@ -260,10 +260,18 @@ def read_regulations(driver) -> None:
 
 
 def agree_and_continue(driver) -> None:
-    agree = wait_for(
-        driver, lambda d: find_xpath(d, "//button[@id='agree-terms' and not(@disabled)]"), what="#agree-terms"
-    )
-    click(driver, agree)
+    def agree_checked(d) -> bool:
+        box = find_xpath(d, "//button[@id='agree-terms' and not(@disabled)]")
+        if not box:
+            return False
+        if box.get_attribute("data-state") != "checked":
+            click(d, box)
+            time.sleep(1)
+        return box.get_attribute("data-state") == "checked"
+
+    # Re-click until it sticks: in Safari a click right after the regulations
+    # dialog closes was dropped, leaving 同意並繼續 disabled.
+    wait_for(driver, agree_checked, what="#agree-terms checked")
     click_button_text(driver, "同意並繼續")
     step("agreed")
     click_button_text(driver, "確認資料無誤", timeout=120)
