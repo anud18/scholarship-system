@@ -1,0 +1,155 @@
+name: "Self-hosted runner — VS Code tunnel"
+
+# Manually-triggered: installs the VS Code CLI on a self-hosted runner and
+# runs `code tunnel` as a persistent user-level service, so the runner host
+# can be reached from vscode.dev / VS Code Desktop ("Remote - Tunnels").
+#
+# Auth: the tunnel is bound to a GitHub account.
+#   - If the `VSCODE_TUNNEL_GITHUB_TOKEN` secret is set, it is used for a
+#     non-interactive login (a GitHub token of the account that should own
+#     the tunnel, `read:user` + `user:email` scope is enough).
+#   - Otherwise the job falls back to GitHub device-code login: the code is
+#     printed to the job log and the job waits up to LOGIN_TIMEOUT_SECONDS for
+#     you to enter it at https://github.com/login/device.
+#   Login state is cached in ~/.vscode/cli on the runner, so subsequent runs
+#   (restart / status) don't need to log in again.
+#
+# Service: `code tunnel service install` registers a systemd *user* unit
+# (no sudo needed). The runner has no sudo, so if the user systemd manager is
+# unreachable the job falls back to a detached `nohup` process that survives
+# the job (RUNNER_TRACKING_ID is cleared so the runner doesn't reap it).
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "What to do"
+        type: choice
+        options: [install, restart, status, uninstall]
+        default: install
+      tunnel_name:
+        description: "Tunnel machine name (max 20 chars, blank = scholarship-test)"
+        type: string
+        default: ""
+
+concurrency:
+  group: vscode-tunnel
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  LOGIN_TIMEOUT_SECONDS: "600"
+
+jobs:
+  tunnel:
+    name: VS Code tunnel (${{ inputs.action }})
+    runs-on: [self-hosted, scholarship, test]
+    timeout-minutes: 20
+    steps:
+      - name: Resolve paths and tunnel name
+        env:
+          INPUT_NAME: ${{ inputs.tunnel_name }}
+        run: |
+          set -euo pipefail
+          name="${INPUT_NAME:-scholarship-test}"
+          if ! [[ "$name" =~ ^[A-Za-z0-9-]{1,20}$ ]]; then
+            echo "::error::tunnel_name must be 1-20 chars of [A-Za-z0-9-], got '$name'"
+            exit 1
+          fi
+          # Keep the CLI outside the job workspace so checkouts never wipe it.
+          cli_dir="$HOME/.local/share/vscode-cli"
+          uid="$(id -u)"
+          {
+            echo "TUNNEL_NAME=$name"
+            echo "CLI_DIR=$cli_dir"
+            echo "CODE_BIN=$cli_dir/code"
+            echo "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/$uid}"
+            echo "DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/$uid/bus}"
+          } >> "$GITHUB_ENV"
+
+      - name: Install / update VS Code CLI
+        if: ${{ inputs.action == 'install' || inputs.action == 'restart' }}
+        run: |
+          set -euo pipefail
+          case "$(uname -m)" in
+            x86_64) os=cli-alpine-x64 ;;
+            aarch64|arm64) os=cli-alpine-arm64 ;;
+            armv7l) os=cli-linux-armhf ;;
+            *) echo "::error::Unsupported arch $(uname -m)"; exit 1 ;;
+          esac
+          mkdir -p "$CLI_DIR"
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          curl -fsSL --retry 3 -o "$tmp/cli.tar.gz" \
+            "https://code.visualstudio.com/sha/download?build=stable&os=${os}"
+          tar -xzf "$tmp/cli.tar.gz" -C "$tmp"
+          install -m 0755 "$tmp/code" "$CODE_BIN"
+          "$CODE_BIN" --version
+
+      - name: Log in to GitHub (tunnel owner)
+        if: ${{ inputs.action == 'install' || inputs.action == 'restart' }}
+        env:
+          GH_TUNNEL_TOKEN: ${{ secrets.VSCODE_TUNNEL_GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if "$CODE_BIN" tunnel user show >/dev/null 2>&1; then
+            echo "Already logged in: $("$CODE_BIN" tunnel user show)"
+            exit 0
+          fi
+          if [ -n "${GH_TUNNEL_TOKEN:-}" ]; then
+            "$CODE_BIN" tunnel user login --provider github --access-token "$GH_TUNNEL_TOKEN"
+          else
+            echo "::notice::No VSCODE_TUNNEL_GITHUB_TOKEN secret — using device-code login. Watch this log for the code."
+            timeout "$LOGIN_TIMEOUT_SECONDS" "$CODE_BIN" tunnel user login --provider github
+          fi
+          "$CODE_BIN" tunnel user show
+
+      - name: Uninstall existing tunnel service
+        if: ${{ inputs.action == 'restart' || inputs.action == 'uninstall' }}
+        env:
+          ACTION: ${{ inputs.action }}
+        run: |
+          set -uo pipefail
+          if [ -x "$CODE_BIN" ]; then
+            "$CODE_BIN" tunnel service uninstall || true
+          fi
+          # Also stop a nohup-fallback tunnel from an earlier run, if any.
+          pkill -u "$(id -u)" -f "$CODE_BIN tunnel" || true
+          if [ "$ACTION" = "uninstall" ]; then
+            "$CODE_BIN" tunnel unregister 2>/dev/null || true
+            echo "Tunnel service removed."
+          fi
+
+      - name: Install tunnel as a service
+        if: ${{ inputs.action == 'install' || inputs.action == 'restart' }}
+        run: |
+          set -euo pipefail
+          if systemctl --user show-environment >/dev/null 2>&1; then
+            # Keep the user manager (and the tunnel) alive without a login session.
+            loginctl enable-linger "$(id -un)" 2>/dev/null \
+              || echo "::warning::Could not enable linger; the tunnel may stop when the runner user has no session. Ask an admin to run: sudo loginctl enable-linger $(id -un)"
+            "$CODE_BIN" tunnel service install \
+              --accept-server-license-terms \
+              --name "$TUNNEL_NAME"
+            systemctl --user --no-pager status code-tunnel.service || true
+          else
+            echo "::warning::systemd user manager unavailable — starting a detached tunnel process instead (won't survive a host reboot)."
+            pkill -u "$(id -u)" -f "$CODE_BIN tunnel" || true
+            log="$CLI_DIR/tunnel.log"
+            RUNNER_TRACKING_ID="" nohup setsid "$CODE_BIN" tunnel \
+              --accept-server-license-terms \
+              --name "$TUNNEL_NAME" > "$log" 2>&1 < /dev/null &
+            sleep 10
+            tail -n 20 "$log"
+          fi
+
+      - name: Tunnel status
+        if: ${{ always() && inputs.action != 'uninstall' }}
+        run: |
+          set -uo pipefail
+          [ -x "$CODE_BIN" ] || { echo "::error::VS Code CLI not installed — run with action=install"; exit 1; }
+          "$CODE_BIN" tunnel status || true
+          echo "Connect: https://vscode.dev/tunnel/${TUNNEL_NAME}" >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice::Connect at https://vscode.dev/tunnel/${TUNNEL_NAME}"
