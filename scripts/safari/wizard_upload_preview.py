@@ -39,6 +39,7 @@ SCHOLARSHIP_LABEL = os.environ.get("SCHOLARSHIP_LABEL", "博士生獎學金")
 
 DEFAULT_TIMEOUT = 60
 PREVIEW_SETTLE_SECONDS = 12
+SAFARI_LAUNCH_ATTEMPTS = 3
 PDF_NAME = "safari-transcript.pdf"
 PNG_NAME = "safari-passbook.png"
 
@@ -64,9 +65,24 @@ results: dict = {"browser": BROWSER, "student": STUDENT_ID, "steps": [], "previe
 _shot_counter = 0
 
 
+def start_safari() -> webdriver.Remote:
+    """safaridriver on hosted macOS runners intermittently times out while
+    launching Safari ("Finding or launching a compatible Safari"); retry."""
+    for attempt in range(1, SAFARI_LAUNCH_ATTEMPTS + 1):
+        try:
+            return webdriver.Safari()
+        except WebDriverException as exc:
+            print(f"[driver] Safari launch attempt {attempt} failed: {exc.msg}", flush=True)
+            if attempt == SAFARI_LAUNCH_ATTEMPTS:
+                raise
+            subprocess.run(["pkill", "-x", "Safari"], check=False)
+            time.sleep(10)
+    raise RuntimeError("unreachable")
+
+
 def make_driver() -> webdriver.Remote:
     if BROWSER == "safari":
-        driver = webdriver.Safari()
+        driver = start_safari()
     else:
         options = webdriver.ChromeOptions()
         options.add_argument("--headless=new")
