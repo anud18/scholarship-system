@@ -44,8 +44,9 @@ CASES = [
     ("local-again", "local", LOCAL_VIEWER, False),
     ("remote-again", "remote", REMOTE_FRAME, False),
 ]
-# The `-again` cases reuse the page, so the dialog before them must be closed.
-CLOSE_AFTER = {"local", "remote"}
+# Cases that leave a dialog open; the `-again` cases reuse the page, so it must
+# be closed before the next case.
+CLOSE_AFTER = {"local", "remote", "local-again", "remote-again"}
 # Cases that must paint (EXPECT_PAINTED=1): both real-dialog paths, first open
 # and re-open.
 MUST_PAINT = {"local", "remote", "local-again", "remote-again"}
