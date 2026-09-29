@@ -9,7 +9,8 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - scripts/safari/pdf_header_matrix.py
+      - scripts/safari/**
+      - frontend/components/file-preview-dialog.tsx
       - .github/workflows/safari-pdf-preview.yml
 
 permissions:
