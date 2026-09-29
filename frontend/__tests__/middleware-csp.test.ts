@@ -1,13 +1,15 @@
 /**
  * Unit tests for the CSP middleware (frontend/middleware.ts).
  *
- * Regression guard for PR #885: document preview iframes (a same-origin
- * /api/v1/preview proxy, and a blob: URL for a just-selected local PDF) are
- * only allowed to render if the CSP carries `frame-src 'self' blob:`. With no
- * frame-src directive the browser falls back to `default-src 'self'`, which
- * blocks blob: frames and silently renders a blank preview. These tests pin
- * the directive in BOTH the dev and prod CSP branches and confirm the
- * clickjacking protections were not loosened in the process.
+ * Regression guard for PR #885 / issue #1434: document preview iframes are a
+ * same-origin /api/v1/preview proxy ONLY, so the CSP carries `frame-src 'self'`
+ * (with no frame-src directive the browser falls back to `default-src 'self'`,
+ * which is the same today but leaves the intent implicit). `blob:` is NOT
+ * allowed: Safari paints a blob: PDF iframe blank under `frame-ancestors
+ * 'none'`, so a just-selected local PDF is drawn by pdf.js instead, and a
+ * blob: frame must fail loudly in every browser rather than only in Safari.
+ * These tests pin the directive in BOTH the dev and prod CSP branches and
+ * confirm the clickjacking protections were not loosened in the process.
  */
 import { middleware } from "@/middleware";
 import { SONNER_EMPTY_STYLE_HASH, SONNER_STYLE_HASH } from "@/lib/security-headers";
@@ -32,25 +34,25 @@ describe("middleware Content-Security-Policy", () => {
     Object.defineProperty(process.env, "NODE_ENV", { value, configurable: true });
   }
 
-  it("dev CSP allows frame-src 'self' blob: for blob/same-origin PDF preview", () => {
+  it("dev CSP frames same-origin only (no blob: — see #1434)", () => {
     setNodeEnv("development");
     const res = middleware(mockRequest("http://localhost:3000/student/apply"));
     const csp = res.headers.get("Content-Security-Policy") ?? "";
-    expect(csp).toContain("frame-src 'self' blob:");
+    expect(csp).toContain("frame-src 'self';");
+    expect(csp).not.toContain("frame-src 'self' blob:");
     // blob: images must still be allowed (the preview dialog renders images via <img>)
     expect(csp).toContain("img-src 'self' data: blob:");
     // ...but NOT via a wildcard scheme (issue #1223 finding B)
     expect(csp).not.toContain("img-src 'self' data: blob: https:");
   });
 
-  it("prod CSP allows frame-src 'self' blob: and keeps clickjacking protections", () => {
+  it("prod CSP frames same-origin only (no blob:) and keeps clickjacking protections", () => {
     setNodeEnv("production");
     const res = middleware(mockRequest("https://ss.test.nycu.edu.tw/student/apply"));
     const csp = res.headers.get("Content-Security-Policy") ?? "";
-    // the #885 fix
-    expect(csp).toContain("frame-src 'self' blob:");
-    // and it must NOT have loosened the directive to anything wider than blob:
-    expect(csp).not.toContain("frame-src 'self' blob: https:");
+    // the #885 fix, narrowed by #1434: same-origin proxy frames only
+    expect(csp).toContain("frame-src 'self';");
+    expect(csp).not.toContain("frame-src 'self' blob:");
     expect(csp).not.toContain("frame-src *");
     // clickjacking / object protections intact
     expect(csp).toContain("frame-ancestors 'none'");

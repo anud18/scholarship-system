@@ -23,9 +23,7 @@ import sys
 import time
 
 from pdf_header_matrix import MIN_DARK_PIXELS, capture_viewer, make_driver
-from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
 
 TARGET_URL = os.environ.get("TARGET_URL", "http://localhost:3000").rstrip("/")
 OUT_DIR = pathlib.Path(os.environ.get("OUT_DIR", "safari-dialog"))

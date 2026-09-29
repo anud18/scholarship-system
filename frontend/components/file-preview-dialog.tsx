@@ -56,7 +56,11 @@ export function FilePreviewDialog({
 
   const isPdf = !!file && file.type.includes("pdf");
   const isRenderable = !!file && (isPdf || file.type.includes("image"));
-  const isLocalPdf = isPdf && !!file && isLocalObjectUrl(file.url);
+  // A local PDF is drawn from its Blob; without one there is nothing safe to
+  // show (the effect below reports it), so never mount the viewer for it —
+  // it would fall back to fetching the blob: URL, which the CSP refuses.
+  const canDrawLocalPdf =
+    isPdf && !!file && isLocalObjectUrl(file.url) && !!file.blob;
 
   // Get the viewer a source it can actually show.
   //
@@ -115,7 +119,9 @@ export function FilePreviewDialog({
           );
         }
         if (isPdf) {
-          // Only the status matters here; don't download the body twice.
+          // Only the status matters here: stop the browser receiving the body
+          // (the proxy still serves it, so the frame's own request below is a
+          // second full round trip — the price of not framing a blob:).
           await response.body?.cancel();
           if (isCancelled) return;
           setFrameUrl(file.url);
@@ -185,7 +191,7 @@ export function FilePreviewDialog({
               <p className="text-lg font-medium mb-2">{file.filename}</p>
               <p className="text-sm text-muted-foreground">{loadError}</p>
             </div>
-          ) : isLocalPdf ? (
+          ) : canDrawLocalPdf ? (
             <InlinePdfViewer
               url={file.url}
               blob={file.blob}

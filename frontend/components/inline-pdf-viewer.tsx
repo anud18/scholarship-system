@@ -336,9 +336,12 @@ export function InlinePdfViewer({
           <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
             <AlertCircle className="h-8 w-8 text-red-500" />
             <p className="text-sm font-medium text-red-700">{labels.error}</p>
-            <p className="text-xs text-muted-foreground">
-              {labels.errorFallback}
-            </p>
+            {/* The hint points at the toolbar buttons, which hideActions removes. */}
+            {!hideActions && (
+              <p className="text-xs text-muted-foreground">
+                {labels.errorFallback}
+              </p>
+            )}
             <Button
               size="sm"
               variant="outline"

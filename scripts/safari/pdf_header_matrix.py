@@ -3,11 +3,14 @@
 Issue #1434: in real Safari the student wizard's PDF preview stays blank while
 the PNG preview works. This harness is self-contained (no dev stack, no
 secrets): it serves a tiny page + a valid one-page PDF under several header
-sets and embed modes, drives real Safari (safaridriver) on a macOS runner, and
-measures the pixels the PDF viewer actually painted with a native screencapture
-(the WebDriver snapshot leaves PDF plugin areas blank).
+sets, frames it once from a blob: URL and once from its own URL, drives real
+Safari (safaridriver) on a macOS runner, and measures the pixels the PDF viewer
+actually painted (WebDriver screenshot crop, cross-checked by a native capture).
 
-Header sets mirror frontend/lib/security-headers.ts + middleware.ts.
+Header sets mirror frontend/lib/security-headers.ts + middleware.ts. The result
+that pinned the bug: a blob: PDF frame is blank exactly when the page carries
+`frame-ancestors 'none'` (the blob document inherits it); the same-origin URL
+frame paints under every set.
 
 Env: OUT_DIR (default safari-matrix), BROWSER=safari|chrome, ONLY (comma list
 of "<headers>/<mode>" to restrict), PORT (default 8765).
@@ -21,7 +24,7 @@ import subprocess
 import sys
 import threading
 import time
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 
 from selenium import webdriver
 from selenium.common.exceptions import WebDriverException
@@ -65,7 +68,6 @@ def build_pdf() -> bytes:
 
 PDF_BYTES = build_pdf()
 
-PERMISSIONS_POLICY = "clipboard-write=(self), fullscreen=(self)"
 PROD_CSP = "; ".join(
     [
         "default-src 'self'",
@@ -79,7 +81,6 @@ PROD_CSP = "; ".join(
         "object-src 'none'",
     ]
 )
-CSP_OBJECT_OK = PROD_CSP.replace("object-src 'none'", "object-src 'self' blob:")
 TRIO = {
     "Cross-Origin-Opener-Policy": "same-origin",
     "Cross-Origin-Resource-Policy": "same-origin",
@@ -160,13 +161,6 @@ def framable(headers: dict) -> dict:
     return relaxed
 
 
-def headers_for(name: str, mode: str) -> dict:
-    headers = dict(HEADER_SETS[name])
-    if mode in ("blob-object", "blob-embed") and "Content-Security-Policy" in headers:
-        headers["Content-Security-Policy"] = CSP_OBJECT_OK
-    return headers
-
-
 PAGE = """<!doctype html>
 <html><head><meta charset="utf-8"><title>matrix</title></head>
 <body style="margin:0;background:#fff">
@@ -180,29 +174,22 @@ HARNESS_JS = """
 const mode = new URLSearchParams(location.search).get("mode");
 const status = document.getElementById("status");
 const host = document.getElementById("host");
-function mount(tag, src) {
-  const el = document.createElement(tag);
+function mountIframe(src) {
+  const el = document.createElement("iframe");
   el.id = "viewer";
-  if (tag === "iframe") el.src = src;
-  else el.setAttribute("data" in el ? "data" : "src", src);
-  if (tag === "embed") el.src = src;
-  if (tag === "object") el.data = src;
-  el.type = "application/pdf";
+  el.src = src;
   el.style.cssText = "width:800px;height:420px;border:0";
   host.appendChild(el);
-  return el;
 }
 async function run() {
   try {
     if (mode === "direct-iframe") {
-      mount("iframe", "file.pdf");
+      mountIframe("file.pdf");
     } else {
       const response = await fetch("file.pdf", { credentials: "same-origin" });
       if (!response.ok) throw new Error("HTTP " + response.status);
       const blob = await response.blob();
-      const url = URL.createObjectURL(new Blob([blob], { type: "application/pdf" }));
-      const tag = mode === "blob-object" ? "object" : mode === "blob-embed" ? "embed" : "iframe";
-      mount(tag, url);
+      mountIframe(URL.createObjectURL(new Blob([blob], { type: "application/pdf" })));
     }
     status.textContent = "mounted " + mode;
   } catch (error) {
@@ -227,7 +214,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_error(404)
             return
         name, resource = parts
-        mode = parse_qs(parsed.query).get("mode", ["blob-iframe"])[0]
         if resource == "index.html":
             body, ctype = (PAGE % NONCE).encode(), "text/html; charset=utf-8"
         elif resource == "harness.js":
@@ -242,7 +228,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Cache-Control", "no-store")
-        headers = headers_for(name, mode)
+        headers = dict(HEADER_SETS[name])
         if resource == "file.pdf":
             headers = framable(headers)
             headers.setdefault("X-Frame-Options", "SAMEORIGIN")
@@ -368,6 +354,13 @@ def main() -> int:
     print("\nheaders          mode            painted  dark_px")
     for case in cases:
         print(f"{case['headers']:<16} {case['mode']:<15} " f"{str(case['painted']):<8} {case.get('dark_pixels')}")
+    # Gate on what the app relies on: a PDF framed by its own same-origin URL
+    # must paint under every header set. (blob-iframe is EXPECTED blank under
+    # `frame-ancestors 'none'` — that is the documented finding, not a failure.)
+    unpainted = [c["headers"] for c in cases if c["mode"] == "direct-iframe" and not c["painted"]]
+    if unpainted:
+        print(f"FAIL: same-origin URL frame did not paint under: {unpainted}")
+        return 1
     return 0
 
 

@@ -482,6 +482,16 @@ describe("InlinePdfViewer", () => {
     expect(screen.getByTestId("pdf-document")).toHaveAttribute("data-file-kind", "blob");
   });
 
+  it("with hideActions the load-error hint no longer points at toolbar buttons that are not there", () => {
+    const { rerender } = render(<InlinePdfViewer url="/broken.pdf" />);
+    act(() => reactPdf.__setError(new Error("boom")));
+    expect(screen.getByText(/上方按鈕/)).toBeInTheDocument();
+
+    rerender(<InlinePdfViewer url="/broken.pdf" hideActions />);
+    expect(screen.getByText(/重新載入|Reload/)).toBeInTheDocument();
+    expect(screen.queryByText(/上方按鈕/)).toBeNull();
+  });
+
   it("hideActions drops download / open-in-new-tab but keeps the zoom controls", () => {
     render(<InlinePdfViewer url="/a.pdf" hideActions />);
 
