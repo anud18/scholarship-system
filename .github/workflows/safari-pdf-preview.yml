@@ -43,7 +43,9 @@ jobs:
         run: pip install "selenium>=4.20" pillow
 
       - name: Run the header / embed matrix in Safari
-        run: python scripts/safari/pdf_header_matrix.py 2>&1 | tee matrix.log
+        run: |
+          set -o pipefail
+          python scripts/safari/pdf_header_matrix.py 2>&1 | tee matrix.log
 
       - name: Summary
         if: always()
@@ -114,7 +116,9 @@ jobs:
         run: sudo safaridriver --enable
 
       - name: Drive the dialog in Safari
-        run: python scripts/safari/dialog_pdf_preview.py 2>&1 | tee dialog.log
+        run: |
+          set -o pipefail
+          python scripts/safari/dialog_pdf_preview.py 2>&1 | tee dialog.log
 
       - name: Summary
         if: always()

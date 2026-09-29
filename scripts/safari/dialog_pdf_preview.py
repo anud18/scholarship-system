@@ -28,6 +28,15 @@ SAMPLE_SECONDS = 8
 IFRAME_SELECTOR = "iframe[data-source-url]"
 DIALOG_CLOSE_LABEL = "關閉"
 
+HYDRATION_SECONDS = 6
+ERROR_HOOK_SCRIPT = """
+window.__errors = [];
+window.addEventListener('error', e => window.__errors.push(String(e.message)));
+window.addEventListener('unhandledrejection', e => window.__errors.push('rejection: ' + e.reason));
+document.addEventListener('securitypolicyviolation', e =>
+  window.__errors.push('csp: ' + e.violatedDirective + ' ' + e.blockedURI));
+"""
+
 STATE_SCRIPT = """
 const frame = document.querySelector(arguments[0]);
 return {
@@ -47,7 +56,18 @@ def open_dialog(driver, button_id: str) -> None:
         if driver.find_elements(By.CSS_SELECTOR, IFRAME_SELECTOR):
             return
         time.sleep(0.25)
+    dump_diagnostics(driver, f"no-dialog-after-{button_id}")
     raise RuntimeError(f"dialog iframe never appeared after #{button_id}")
+
+
+def dump_diagnostics(driver, label: str) -> None:
+    """A screenshot plus what the page saw, for a case that never got going."""
+    driver.save_screenshot(str(OUT_DIR / f"{label}.png"))
+    info = driver.execute_script(
+        "return {errors: window.__errors || [], text: document.body.innerText.slice(0, 500),"
+        " dialogs: document.querySelectorAll('[role=dialog]').length};"
+    )
+    print(f"[diagnostics] {label}: {json.dumps(info, ensure_ascii=False)}", flush=True)
 
 
 def close_dialog(driver) -> None:
@@ -87,7 +107,8 @@ def main() -> int:
             flush=True,
         )
         driver.get(f"{TARGET_URL}/safari-harness")
-        time.sleep(3)
+        driver.execute_script(ERROR_HOOK_SCRIPT)
+        time.sleep(HYDRATION_SECONDS)
         for label, button in [
             ("local-first", "open-local"),
             ("local-second", "open-local"),
