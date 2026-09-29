@@ -1,0 +1,63 @@
+# Real-Safari check for framed-PDF rendering (issue #1434).
+#
+# Self-contained: serves a page + PDF from the runner itself under several
+# header sets / embed modes and measures what real Safari (safaridriver) paints.
+# No dev stack and no secrets, unlike safari-upload-preview.yml.
+name: Safari PDF preview
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - scripts/safari/pdf_header_matrix.py
+      - .github/workflows/safari-pdf-preview.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: safari-pdf-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  matrix:
+    runs-on: macos-15
+    timeout-minutes: 25
+    env:
+      OUT_DIR: safari-matrix
+      BROWSER: safari
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable safaridriver
+        run: |
+          sudo safaridriver --enable
+          safaridriver --version
+          defaults read /Applications/Safari.app/Contents/Info CFBundleShortVersionString
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Selenium
+        run: pip install "selenium>=4.20" pillow
+
+      - name: Run the header / embed matrix in Safari
+        run: python scripts/safari/pdf_header_matrix.py 2>&1 | tee matrix.log
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo '```'
+            sed -n '/^headers /,$p' matrix.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: safari-pdf-matrix
+          path: safari-matrix/
+          retention-days: 7
