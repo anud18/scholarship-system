@@ -6,8 +6,8 @@ workflow with the harness page from scripts/safari/harness/.
 
 Per case (open local blob / open remote proxy URL, first open and re-open) it
 samples the dialog's iframe once a second for SAMPLE_SECONDS: is the skeleton
-still up, the iframe's computed opacity, and the dark-pixel count of a native
-screencapture of the iframe rectangle. The verdict is `painted` at the end.
+still up, the iframe's computed opacity, and the dark-pixel count inside the
+iframe's rectangle on a WebDriver screenshot. The verdict is `painted` at the end.
 
 Env: TARGET_URL (default http://localhost:3000), OUT_DIR, BROWSER=safari|chrome,
      EXPECT_PAINTED=1 to fail the run when any case ends unpainted.
@@ -20,7 +20,9 @@ import sys
 import time
 
 from pdf_header_matrix import MIN_DARK_PIXELS, capture_viewer, make_driver
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 
 TARGET_URL = os.environ.get("TARGET_URL", "http://localhost:3000").rstrip("/")
 OUT_DIR = pathlib.Path(os.environ.get("OUT_DIR", "safari-dialog"))
@@ -76,10 +78,26 @@ def dump_diagnostics(driver, label: str) -> None:
     print(f"[diagnostics] {label}: {json.dumps(info, ensure_ascii=False)}", flush=True)
 
 
+def is_dialog_open(driver) -> bool:
+    return bool(driver.find_elements(By.CSS_SELECTOR, "[role=dialog]"))
+
+
 def close_dialog(driver) -> None:
-    driver.execute_script("document.querySelector('[role=dialog]')" f"?.querySelector('button:last-of-type')?.click();")
-    driver.execute_script("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));")
+    """Close like a user would (Escape, then the 關閉 button) and verify it."""
+    main_handle = driver.window_handles[0]
+    for handle in driver.window_handles[1:]:  # a stray "open in new window"
+        driver.switch_to.window(handle)
+        driver.close()
+    driver.switch_to.window(main_handle)
+
+    ActionChains(driver).send_keys(Keys.ESCAPE).perform()
     time.sleep(1)
+    if is_dialog_open(driver):
+        driver.find_element(By.XPATH, f"//button[normalize-space()='{DIALOG_CLOSE_LABEL}']").click()
+        time.sleep(1)
+    if is_dialog_open(driver):
+        dump_diagnostics(driver, "dialog-would-not-close")
+        raise RuntimeError("dialog did not close")
 
 
 def run_case(driver, label: str, button_id: str) -> dict:

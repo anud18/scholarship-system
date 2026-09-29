@@ -222,37 +222,52 @@ def make_driver() -> webdriver.Remote:
     return driver
 
 
-def count_dark_pixels(png_path: pathlib.Path) -> int:
+def count_dark_pixels(png_path: pathlib.Path, crop_css_rect=None) -> int:
+    """Dark pixels in a screenshot, optionally cropped to a CSS-pixel rect
+    (x, y, w, h) — scaled by the screenshot-to-viewport ratio (retina)."""
     from PIL import Image
 
     with Image.open(png_path) as image:
+        if crop_css_rect:
+            scale = image.width / crop_css_rect[4]
+            x, y, w, h = (v * scale for v in crop_css_rect[:4])
+            image = image.crop((int(x), int(y), int(x + w), int(y + h)))
         gray = image.convert("L")
         return sum(1 for value in gray.getdata() if value < DARK_PIXEL_THRESHOLD)
 
 
 def capture_viewer(driver, base: pathlib.Path, selector: str = "#viewer") -> dict:
-    """Native capture of the viewer rectangle (macOS) + WebDriver snapshot."""
+    """Measure what the viewer painted.
+
+    Primary metric: dark pixels inside the viewer's rect on the WebDriver
+    screenshot (it does include the PDF plugin in Safari 26). A native
+    screencapture of the same rect is kept as a cross-check, but its screen
+    coordinates drift when the window sits low on the runner's display.
+    """
     result: dict = {}
-    try:
-        driver.save_screenshot(f"{base}-webdriver.png")
-    except WebDriverException as exc:
-        result["webdriver_shot_error"] = exc.msg
-    if sys.platform != "darwin":
-        return result
     rect = driver.execute_script(
         "const r = document.querySelector(arguments[0])?.getBoundingClientRect();"
-        "return r ? [screenX + r.left, screenY + outerHeight - innerHeight + r.top,"
-        " r.width, r.height] : null;",
+        "return r ? [Math.max(r.left, 0), Math.max(r.top, 0),"
+        " Math.min(r.width, innerWidth - Math.max(r.left, 0)),"
+        " Math.min(r.height, innerHeight - Math.max(r.top, 0)), innerWidth,"
+        " screenX + r.left, screenY + outerHeight - innerHeight + r.top] : null;",
         selector,
     )
     if not rect:
         result["viewer"] = "missing"
         return result
-    native = pathlib.Path(f"{base}-native.png")
-    region = ",".join(str(int(v)) for v in rect)
-    subprocess.run(["screencapture", "-x", "-R", region, str(native)], check=False)
-    if native.exists():
-        result["dark_pixels"] = count_dark_pixels(native)
+    shot = pathlib.Path(f"{base}-webdriver.png")
+    try:
+        driver.save_screenshot(str(shot))
+        result["dark_pixels"] = count_dark_pixels(shot, rect[:5])
+    except WebDriverException as exc:
+        result["webdriver_shot_error"] = exc.msg
+    if sys.platform == "darwin":
+        native = pathlib.Path(f"{base}-native.png")
+        region = ",".join(str(int(v)) for v in (rect[5], rect[6], rect[2], rect[3]))
+        subprocess.run(["screencapture", "-x", "-R", region, str(native)], check=False)
+        if native.exists():
+            result["native_dark_pixels"] = count_dark_pixels(native)
     return result
 
 
