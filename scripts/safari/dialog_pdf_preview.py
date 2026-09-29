@@ -30,15 +30,15 @@ OUT_DIR = pathlib.Path(os.environ.get("OUT_DIR", "safari-dialog"))
 SAMPLE_SECONDS = 5
 DIALOG_CLOSE_LABEL = "關閉"
 HYDRATION_SECONDS = 6
-# (label, variant button suffix, iframe selector, opens a dialog?, fresh page?)
+# (label, variant button suffix, iframe selector, fresh page?)
 CASES = [
-    ("inline", "inline", 'iframe[data-variant="inline"]', False, True),
-    ("plain", "plain", 'iframe[data-variant="plain"]', True, True),
-    ("no-transform", "no-transform", 'iframe[data-variant="no-transform"]', True, True),
-    ("opacity", "opacity", 'iframe[data-variant="opacity"]', True, True),
-    ("swap", "swap", 'iframe[data-variant="swap"]', True, True),
-    ("real", "real", "iframe[data-source-url]", True, True),
-    ("real-again", "real", "iframe[data-source-url]", True, False),
+    ("inline", "inline", 'iframe[data-variant="inline"]', True),
+    ("plain", "plain", 'iframe[data-variant="plain"]', True),
+    ("no-transform", "no-transform", 'iframe[data-variant="no-transform"]', True),
+    ("opacity", "opacity", 'iframe[data-variant="opacity"]', True),
+    ("swap", "swap", 'iframe[data-variant="swap"]', True),
+    ("real", "real", "iframe[data-source-url]", True),
+    ("real-again", "real", "iframe[data-source-url]", False),
 ]
 # Cases that must paint once the bug is fixed (EXPECT_PAINTED=1).
 MUST_PAINT = {"inline", "real", "real-again"}
@@ -91,18 +91,20 @@ def is_dialog_open(driver) -> bool:
 
 
 def close_dialog(driver) -> None:
-    """Close like a user would (Escape, then the 關閉 button) and verify it."""
+    """Close via the 關閉 button (keyboard focus can be stuck inside the PDF
+    viewer, so Escape is unreliable) and verify it went away."""
     main_handle = driver.window_handles[0]
     for handle in driver.window_handles[1:]:  # a stray "open in new window"
         driver.switch_to.window(handle)
         driver.close()
     driver.switch_to.window(main_handle)
 
-    ActionChains(driver).send_keys(Keys.ESCAPE).perform()
+    driver.execute_script(
+        "[...document.querySelectorAll('[role=dialog] button')]"
+        ".find(b => b.textContent.trim() === arguments[0])?.click();",
+        DIALOG_CLOSE_LABEL,
+    )
     time.sleep(1)
-    if is_dialog_open(driver):
-        driver.find_element(By.XPATH, f"//button[normalize-space()='{DIALOG_CLOSE_LABEL}']").click()
-        time.sleep(1)
     if is_dialog_open(driver):
         dump_diagnostics(driver, "dialog-would-not-close")
         raise RuntimeError("dialog did not close")
@@ -115,7 +117,7 @@ def load_harness(driver) -> None:
 
 
 def run_case(driver, case_def) -> dict:
-    label, button_suffix, selector, opens_dialog, fresh_page = case_def
+    label, button_suffix, selector, fresh_page = case_def
     case: dict = {"case": label, "timeline": []}
     if fresh_page:
         load_harness(driver)
@@ -134,7 +136,7 @@ def run_case(driver, case_def) -> dict:
         f"opacity={last['opacity']} skeleton={last['skeleton']} src={last['src_kind']}",
         flush=True,
     )
-    if opens_dialog:
+    if label == "real":  # `real-again` reuses this page, so it must be closed first
         close_dialog(driver)
     return case
 

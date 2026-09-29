@@ -86,20 +86,78 @@ TRIO = {
     "Cross-Origin-Embedder-Policy": "require-corp",
 }
 
-# name -> headers applied to BOTH the page and the framed PDF response
+NONCE = "matrixnonce123"
+FULL_PERMISSIONS_POLICY = ", ".join(
+    [
+        "accelerometer=()", "autoplay=()", "browsing-topics=()", "camera=()",
+        "clipboard-read=()", "clipboard-write=(self)", "display-capture=()",
+        "encrypted-media=()", "fullscreen=(self)", "geolocation=()", "gyroscope=()",
+        "hid=()", "idle-detection=()", "local-fonts=()", "magnetometer=()",
+        "microphone=()", "midi=()", "payment=()", "picture-in-picture=()",
+        "publickey-credentials-get=()", "screen-wake-lock=()", "serial=()", "usb=()",
+        "xr-spatial-tracking=()",
+    ]
+)  # fmt: skip
+
+
+def real_csp(frame_ancestors: bool = True) -> str:
+    """frontend/middleware.ts production CSP (minus upgrade-insecure-requests,
+    which only matters over https), for a NON-preview page."""
+    directives = [
+        "default-src 'self'",
+        f"script-src 'self' 'nonce-{NONCE}' 'strict-dynamic'",
+        f"style-src 'self' 'nonce-{NONCE}'",
+        "style-src-attr 'unsafe-inline'",
+        "img-src 'self' data: blob:",
+        "frame-src 'self' blob:",
+        "font-src 'self'",
+        "connect-src 'self' https://*.nycu.edu.tw",
+        "base-uri 'self'",
+        "form-action 'self'",
+        "object-src 'none'",
+    ]
+    if frame_ancestors:
+        directives.append("frame-ancestors 'none'")
+    return "; ".join(directives)
+
+
+def real_headers(*, frame_ancestors=True, xfo=True, permissions=True) -> dict:
+    headers = {
+        "Content-Security-Policy": real_csp(frame_ancestors),
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        **TRIO,
+    }
+    if xfo:
+        headers["X-Frame-Options"] = "DENY"
+    if permissions:
+        headers["Permissions-Policy"] = FULL_PERMISSIONS_POLICY
+    return headers
+
+
+# name -> headers applied to BOTH the page and the framed PDF response (the
+# PDF response is relaxed to same-origin framing, like /api/v1/preview).
 HEADER_SETS = {
     "current": {"Content-Security-Policy": PROD_CSP, **TRIO},
-    "no-coep": {
-        "Content-Security-Policy": PROD_CSP,
-        "Cross-Origin-Opener-Policy": "same-origin",
-        "Cross-Origin-Resource-Policy": "same-origin",
-    },
-    "no-trio": {"Content-Security-Policy": PROD_CSP},
-    "trio-only": dict(TRIO),
     "bare": {},
+    "real-all": real_headers(),
+    "real-no-frame-ancestors": real_headers(frame_ancestors=False),
+    "real-no-xfo": real_headers(xfo=False),
+    "real-no-fa-no-xfo": real_headers(frame_ancestors=False, xfo=False),
+    "real-no-permissions": real_headers(permissions=False),
 }
-# Modes that need `object-src` get a CSP that allows it (except in "bare").
-MODES = ["blob-iframe", "direct-iframe", "blob-object", "blob-embed"]
+MODES = ["blob-iframe", "direct-iframe"]
+
+
+def framable(headers: dict) -> dict:
+    """The same headers with framing relaxed to same-origin (preview proxy)."""
+    relaxed = dict(headers)
+    if "Content-Security-Policy" in relaxed:
+        relaxed["Content-Security-Policy"] = relaxed["Content-Security-Policy"].replace(
+            "frame-ancestors 'none'", "frame-ancestors 'self'"
+        )
+    if "X-Frame-Options" in relaxed:
+        relaxed["X-Frame-Options"] = "SAMEORIGIN"
+    return relaxed
 
 
 def headers_for(name: str, mode: str) -> dict:
@@ -114,7 +172,7 @@ PAGE = """<!doctype html>
 <body style="margin:0;background:#fff">
 <div id="status" style="font:14px sans-serif;padding:4px">loading</div>
 <div id="host" style="width:800px;height:420px"></div>
-<script src="harness.js"></script>
+<script nonce="%s" src="harness.js"></script>
 </body></html>
 """
 
@@ -171,7 +229,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         name, resource = parts
         mode = parse_qs(parsed.query).get("mode", ["blob-iframe"])[0]
         if resource == "index.html":
-            body, ctype = PAGE.encode(), "text/html; charset=utf-8"
+            body, ctype = (PAGE % NONCE).encode(), "text/html; charset=utf-8"
         elif resource == "harness.js":
             body, ctype = HARNESS_JS.encode(), "text/javascript"
         elif resource == "file.pdf":
@@ -184,10 +242,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Cache-Control", "no-store")
-        for key, value in headers_for(name, mode).items():
-            self.send_header(key, value)
+        headers = headers_for(name, mode)
         if resource == "file.pdf":
-            self.send_header("X-Frame-Options", "SAMEORIGIN")
+            headers = framable(headers)
+            headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+        for key, value in headers.items():
+            self.send_header(key, value)
         self.end_headers()
         self.wfile.write(body)
 
