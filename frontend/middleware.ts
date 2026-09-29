@@ -65,7 +65,7 @@ export function middleware(request: NextRequest) {
       // production. Turbopack HMR needs no image source — its channel is the
       // ws:/wss: connect-src below, its overlay is inline data:/same-origin.
       "img-src 'self' data: blob:",
-      "frame-src 'self' blob:", // inline file preview: same-origin /api proxy + just-selected blob: PDFs
+      "frame-src 'self' blob:", // inline file preview: same-origin /api proxy. blob: is no longer framed for PDFs (Safari paints it blank under frame-ancestors 'none', #1434)
       "font-src 'self'",
       "connect-src 'self' ws: wss:", // WebSocket for HMR
       frameAncestors,
@@ -110,7 +110,7 @@ export function middleware(request: NextRequest) {
       // future remote image MUST be added here by explicit origin, never as a scheme.
       // data: covers inline SVG; blob: covers just-selected local files.
       "img-src 'self' data: blob:",
-      "frame-src 'self' blob:", // inline file preview: same-origin /api proxy + just-selected blob: PDFs
+      "frame-src 'self' blob:", // inline file preview: same-origin /api proxy. blob: is no longer framed for PDFs (Safari paints it blank under frame-ancestors 'none', #1434)
       "font-src 'self'",
       "connect-src 'self' https://*.nycu.edu.tw",
       "base-uri 'self'",
