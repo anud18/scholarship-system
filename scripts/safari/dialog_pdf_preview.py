@@ -64,8 +64,14 @@ def dump_diagnostics(driver, label: str) -> None:
     """A screenshot plus what the page saw, for a case that never got going."""
     driver.save_screenshot(str(OUT_DIR / f"{label}.png"))
     info = driver.execute_script(
+        "const button = document.querySelector('button');"
         "return {errors: window.__errors || [], text: document.body.innerText.slice(0, 500),"
-        " dialogs: document.querySelectorAll('[role=dialog]').length};"
+        " dialogs: document.querySelectorAll('[role=dialog]').length,"
+        " scripts: document.querySelectorAll('script[src]').length,"
+        " hydrated: !!button && Object.keys(button).some(k => k.startsWith('__reactProps')),"
+        " failed_resources: performance.getEntriesByType('resource')"
+        "   .filter(r => r.responseStatus === 0 || r.transferSize === 0 && r.decodedBodySize === 0)"
+        "   .slice(0, 5).map(r => r.name)};"
     )
     print(f"[diagnostics] {label}: {json.dumps(info, ensure_ascii=False)}", flush=True)
 

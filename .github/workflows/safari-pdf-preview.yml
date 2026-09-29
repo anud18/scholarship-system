@@ -96,6 +96,12 @@ jobs:
           mkdir -p frontend/app/safari-harness
           cp scripts/safari/harness/page.tsx frontend/app/safari-harness/page.tsx
           python scripts/safari/pdf_header_matrix.py --write-pdf frontend/public/sample.pdf
+          # The harness is served over plain http://localhost, where Safari
+          # applies `upgrade-insecure-requests` to same-origin chunks and the
+          # page never hydrates. Real staging/prod are https, so drop ONLY that
+          # directive here; every other header stays the real middleware's.
+          sed -i '' '/"upgrade-insecure-requests",/d' frontend/middleware.ts
+          grep -c upgrade-insecure-requests frontend/middleware.ts || true
 
       - name: Build and start the production frontend
         working-directory: frontend
