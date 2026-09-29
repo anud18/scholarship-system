@@ -61,3 +61,76 @@ jobs:
           name: safari-pdf-matrix
           path: safari-matrix/
           retention-days: 7
+
+  dialog:
+    # The real FilePreviewDialog (Radix Dialog + iframe + skeleton) from the
+    # production Next build, in real Safari — what the header matrix cannot see.
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      OUT_DIR: safari-dialog
+      BROWSER: safari
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.11"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Selenium
+        run: pip install "selenium>=4.20" pillow
+
+      - name: Add the CI-only harness page and sample PDF
+        run: |
+          mkdir -p frontend/app/safari-harness
+          cp scripts/safari/harness/page.tsx frontend/app/safari-harness/page.tsx
+          python scripts/safari/pdf_header_matrix.py --write-pdf frontend/public/sample.pdf
+
+      - name: Build and start the production frontend
+        working-directory: frontend
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+          nohup bun run start > ../next.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/safari-harness || true)
+            echo "harness attempt $attempt: $code"
+            [ "$code" = "200" ] && break
+            sleep 2
+          done
+          [ "$code" = "200" ]
+          curl -sI http://localhost:3000/safari-harness | grep -i -E 'cross-origin|content-security|x-frame'
+
+      - name: Enable safaridriver
+        run: sudo safaridriver --enable
+
+      - name: Drive the dialog in Safari
+        run: python scripts/safari/dialog_pdf_preview.py 2>&1 | tee dialog.log
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo '```'
+            sed -n '/^case /,$p' dialog.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload screenshots and server log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: safari-dialog
+          path: |
+            safari-dialog/
+            next.log
+          retention-days: 7

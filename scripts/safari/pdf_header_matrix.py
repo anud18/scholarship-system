@@ -230,7 +230,7 @@ def count_dark_pixels(png_path: pathlib.Path) -> int:
         return sum(1 for value in gray.getdata() if value < DARK_PIXEL_THRESHOLD)
 
 
-def capture_viewer(driver, base: pathlib.Path) -> dict:
+def capture_viewer(driver, base: pathlib.Path, selector: str = "#viewer") -> dict:
     """Native capture of the viewer rectangle (macOS) + WebDriver snapshot."""
     result: dict = {}
     try:
@@ -240,9 +240,10 @@ def capture_viewer(driver, base: pathlib.Path) -> dict:
     if sys.platform != "darwin":
         return result
     rect = driver.execute_script(
-        "const r = document.getElementById('viewer')?.getBoundingClientRect();"
+        "const r = document.querySelector(arguments[0])?.getBoundingClientRect();"
         "return r ? [screenX + r.left, screenY + outerHeight - innerHeight + r.top,"
-        " r.width, r.height] : null;"
+        " r.width, r.height] : null;",
+        selector,
     )
     if not rect:
         result["viewer"] = "missing"
@@ -296,4 +297,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    if len(sys.argv) == 3 and sys.argv[1] == "--write-pdf":
+        pathlib.Path(sys.argv[2]).write_bytes(PDF_BYTES)
+        sys.exit(0)
     sys.exit(main())
