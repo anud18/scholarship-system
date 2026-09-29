@@ -2,8 +2,6 @@
 name: scholarship-issue-workflow
 description: |
   Full workflow for picking up a GitHub issue in the NYCU scholarship-system, implementing the fix, and validating it end-to-end on both localhost and ss.test.nycu.edu.tw staging. Use this skill whenever the user says "work on issue #N", "pick up an issue", "fix issue", "implement this feature", or otherwise wants to take a GitHub issue from open → fixed → verified. Also invoke it when the user asks to validate a recent fix on staging, or to post a verification screenshot to an issue.
-
-  Key protection: always grep to confirm a file is actually imported before editing it — the most expensive mistake in this codebase is spending time on a dead/unused component while the real rendering path goes elsewhere.
 ---
 
 # Scholarship Issue Workflow
@@ -95,10 +93,7 @@ If unreachable, ask the user to bring the tunnel up — do NOT run sudo yourself
 sudo env "PATH=$PATH" wg-quick up peer2
 ```
 
-**2. Ensure session is valid** (use nycu-sso-login skill if missing/expired):
-```bash
-ls /tmp/pw-test/auth-E00001.json || node scripts/login.js E00001
-```
+**2. Ensure session is valid:** `/tmp/pw-test/auth-E00001.json` must hold a fresh staging storage state. The login helper this step used (`nycu-sso-login` / `scripts/login.js`) is not in this project — if the file is missing or expired, ask the user how to mint one.
 
 **3. Write a quick before-spec** (`e2e/staging/issue<N>-before.spec.ts`, delete after closing):
 ```typescript
@@ -148,24 +143,24 @@ export default defineConfig({
 
 ### Branch
 ```bash
-git checkout -b fix/issue-<N>-short-description
+git fetch origin && git checkout -b fix/issue-<N>-<slug> origin/main
 ```
 
 ### Rules (from CLAUDE.md)
 - Never return fallback/mock data on DB failure — throw directly
 - All API endpoints return `{"success": bool, "message": str, "data": any}`
 - Enums: Python lowercase, TypeScript UPPERCASE names / lowercase values, Postgres lowercase
-- After touching backend schemas: `cd frontend && npm run api:generate`
+- After touching backend schemas: `cd frontend && bun run api:generate`
 
 ### Lint after editing
 ```bash
 # Backend
 docker compose -f docker-compose.dev.yml exec backend python -m black <files>
 # Frontend
-docker compose -f docker-compose.dev.yml exec frontend npm run lint
+docker compose -f docker-compose.dev.yml exec frontend bun run lint
 ```
 
-`flake8` is often not installed in the dev image (`No module named flake8`) — `black` alone is enough; don't block on flake8.
+CI hard-gates `flake8 --select=B904,B014` as well as black (see `backend/CLAUDE.md` → Lint is HARD-gated). If the dev image lacks flake8, run it on the host instead of skipping it.
 
 **`exec` failing with "current working directory is outside of container mount namespace root"?** The backend container drifted unhealthy. Restart it and retry:
 ```bash
@@ -198,8 +193,6 @@ Drive the actual user flow — not just a page screenshot. Check:
 git add <specific files — never -A blindly>
 git commit -m "$(cat <<'EOF'
 fix(#<N>): short description of what changed
-
-Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 EOF
 )"
 git push origin <branch>
@@ -244,10 +237,7 @@ Typical wall-clock: ~9–10 min. The Deployment Pipeline:
 ```bash
 curl -sI --max-time 5 https://ss.test.nycu.edu.tw/ >/dev/null && echo OK || echo UNREACHABLE
 ```
-Session may have expired during the deploy wait — re-login if needed:
-```bash
-node scripts/login.js E00001
-```
+Session may have expired during the deploy wait — refresh the storage state (see Phase 2 step 2) if needed.
 
 ### Pick the right account for the path you're testing
 

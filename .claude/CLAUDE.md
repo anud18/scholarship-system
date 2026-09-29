@@ -11,7 +11,7 @@ This spins up the full stack (backend, frontend, database, RustFS object storage
 ## Core Development Principles
 
 ### 1. Error Handling Standards
-**CRITICAL**: Never return fallback or mock data when database retrieval fails. Always throw errors directly.
+Never return fallback or mock data when database retrieval fails. Always throw errors directly.
 
 ```python
 # ❌ WRONG - Don't return fallback data
@@ -51,7 +51,7 @@ if scholarship.config.requires_interview:
 3. No code changes required - system uses configuration automatically
 
 ### 4. Enum Consistency Guidelines
-**CRITICAL**: Maintain strict consistency between Python enums, PostgreSQL enums, and TypeScript enums.
+Maintain strict consistency between Python enums, PostgreSQL enums, and TypeScript enums.
 
 #### Python Backend
 - Use **lowercase** enum member names matching database values exactly
@@ -77,11 +77,11 @@ semester = Column(
 - Enum values are always **lowercase**
 - Match Python enum values exactly
 
-The authoritative list of current system enums is `backend/app/models/enums.py` (mirrored in `frontend/lib/enums.ts`). Note one non-obvious case: **EmployeeStatus** values are Chinese (`在職`, `退休`, `在學`, `畢業`), not romanized.
+Most system enums live in `backend/app/models/enums.py` (mirrored in `frontend/lib/enums.ts`); some are defined next to their model, e.g. **EmployeeStatus** in `backend/app/models/user.py`, whose values are Chinese (`在職`, `退休`, `在學`, `畢業`), not romanized.
 
 #### Special Case: Scholarship Sub-Types (Configuration-Driven)
 
-**IMPORTANT**: Scholarship sub-types (e.g., `nstc`, `moe_1w`, `moe_2w`) are **NOT enum-constrained**.
+Scholarship sub-types (e.g., `nstc`, `moe_1w`, `moe_2w`) are **NOT enum-constrained**.
 
 **Why?**
 - Sub-types are defined in `scholarship_configurations.quotas` JSON field
@@ -91,7 +91,6 @@ The authoritative list of current system enums is `backend/app/models/enums.py` 
 **Naming Convention**:
 - Use **lowercase** with **underscore** separation (e.g., `nstc`, `moe_1w`, `new_custom_type`)
 - Stored as `String(50)` in database, not Enum
-- `ScholarshipSubType` enum exists for backward compatibility only (deprecated)
 
 **Example Configuration**:
 ```json
@@ -106,7 +105,7 @@ The authoritative list of current system enums is `backend/app/models/enums.py` 
 
 **For Developers**:
 - ✅ Use string values directly: `application.sub_scholarship_type = "nstc"`
-- ❌ Don't add new values to `ScholarshipSubType` enum
+- ❌ Don't introduce an enum for sub-types
 - ✅ Normalize to lowercase in application layer: `sub_type.lower().strip()`
 
 #### Enum Synchronization Checklist
@@ -155,7 +154,7 @@ Implementation: `backend/app/models/application_sequence.py` + `_generate_app_id
 
 ### 7. Application Data Structure Principles
 
-**CRITICAL**: Clear separation between API data snapshot and student-submitted data.
+Keep a clear separation between API data snapshot and student-submitted data.
 
 #### student_data (JSON Field)
 **Purpose**: Pure SIS API data snapshot at time of application submission.
@@ -183,17 +182,9 @@ Implementation: `backend/app/models/application_sequence.py` + `_generate_app_id
 #### Review Data Principles
 **No Scoring System**: Review mechanism simplified to recommendation/ranking mode.
 
-**Application Table**:
-- ❌ Removed: `review_score`, `review_comments`, `rejection_reason`, `priority_score`, `college_ranking_score`
-- ✅ Kept: `final_ranking_position` (position number, not score)
-
-**ApplicationReview Table**:
-- ❌ Removed: `score`, `criteria_scores`
-- ✅ Kept: `comments`, `recommendation`, `decision_reason` (包含拒絕原因)
-
-**CollegeReview Table**:
-- ❌ Removed: `ranking_score`, `academic_score`, `professor_review_score`, etc.
-- ✅ Kept: `preliminary_rank`, `final_rank` (positions, not scores)
+- **Application**: `final_ranking_position` holds the final position (a number, not a score). There are no score columns.
+- **ApplicationReview** (`backend/app/models/review.py`): `recommendation` + `comments`, with one **ApplicationReviewItem** per sub-type (`sub_type_code`, `recommendation`, `comments`).
+- **College ranking**: `CollegeRanking` / `CollegeRankingItem` in `backend/app/models/college_review.py` (there is no CollegeReview table).
 
 **Review Flow**:
 1. Professor Review: Recommend (yes/no) + comments
@@ -225,7 +216,7 @@ When the user asks to change a **seed / dev env setting** (e.g. "申請所需文
 
 ## Path Security & Backslash Handling
 
-**CRITICAL**: Always validate file paths to prevent path traversal attacks.
+Validate every file path to prevent path traversal attacks.
 
 ### Path Traversal Prevention
 ```python
@@ -251,7 +242,7 @@ if not resolved_path.startswith(expected_dir):
 
 ## Regex Injection Prevention
 
-**CRITICAL**: Never use `re.escape()` on admin-provided validation patterns (it breaks them), and never call `re.match()`/`re.search()` on them directly — always use the safe wrappers in `backend/app/core/regex_validator.py` (`validate_regex_pattern()`, `safe_regex_match()`, `safe_regex_search()`). For the full validation architecture, ReDoS rules, CodeQL `filter-sarif` suppression workflow, and integration examples, use the **regex-security** skill.
+Never use `re.escape()` on admin-provided validation patterns (it breaks them), and never call `re.match()`/`re.search()` on them directly — always use the safe wrappers in `backend/app/core/regex_validator.py` (`validate_regex_pattern()`, `safe_regex_match()`, `safe_regex_search()`). For the full validation architecture, ReDoS rules, CodeQL `filter-sarif` suppression workflow, and integration examples, use the **regex-security** skill.
 
 ## File Upload & Preview Architecture
 

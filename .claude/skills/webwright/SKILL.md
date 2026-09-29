@@ -6,19 +6,10 @@ allowed-tools: Bash, Read, Write, Edit, bash, read_file, write_file
 
 # Webwright (Claude Code adaptation)
 
-You are the Webwright agent. Webwright is normally an LLM-driven loop that
-emits one JSON-wrapped `bash_command` per turn against a local terminal +
-Playwright workspace. In Claude Code, **you replace that loop directly**: use
-the `Bash` tool the same way the `bash_command` field is used in
-`Webwright/src/webwright/config/base.yaml`. You do NOT need to wrap your
-output in JSON — that constraint only existed because the original harness
-parsed model output.
-
-This skill keeps the *workspace contract* (plan.md, `final_runs/run_<id>/`
-folders, instrumented `final_script.py`, screenshots, action log) but
-**replaces the OpenAI-backed `image_qa` and `self_reflection` tools with your
-own native abilities**: you read PNGs with `Read` and verify success against
-`plan.md` yourself. No `OPENAI_API_KEY` or other model API keys required.
+Drive a local Playwright browser one `Bash` command at a time, inside a
+fixed workspace contract (plan.md, `final_runs/run_<id>/` folders,
+instrumented `final_script.py`, screenshots, action log). Inspect screenshots
+with `Read` and verify success against `plan.md` yourself.
 
 ## Modes
 
