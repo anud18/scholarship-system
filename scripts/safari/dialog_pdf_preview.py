@@ -1,17 +1,19 @@
 """Drive the REAL FilePreviewDialog in real Safari and measure what paints.
 
-Companion to pdf_header_matrix.py (which showed the response headers are NOT
-the cause of issue #1434). Targets the production Next build served by the
-workflow with the harness page from scripts/safari/harness/.
+Companion to pdf_header_matrix.py, which pinned issue #1434 on the page's
+`frame-ancestors 'none'`: Safari paints a blob: PDF iframe blank because the
+blob document inherits that CSP. Targets the production Next build served by
+the workflow with the harness page from scripts/safari/harness/.
 
-Each case opens a local blob: PDF (the just-picked-file path) in the real
-FilePreviewDialog or in a single-ingredient variant built from the same Radix
-primitives (see harness/page.tsx), samples the iframe once a second, and judges
-`painted` from the dark pixels inside the iframe's rectangle on a WebDriver
-screenshot. `real-again` re-opens the real dialog on the same page.
+Each case opens a PDF the way the app does — a just-picked local file
+(`local`) or a saved file behind the same-origin proxy (`remote`) — in the real
+FilePreviewDialog, samples the viewer once a second, and judges `painted` from
+the dark pixels inside its rectangle on a WebDriver screenshot. The `-again`
+cases re-open the dialog on the same page. `control` is a bare blob: iframe and
+is expected to stay blank in Safari.
 
 Env: TARGET_URL (default http://localhost:3000), OUT_DIR, BROWSER=safari|chrome,
-     EXPECT_PAINTED=1 to fail the run when any case ends unpainted.
+     EXPECT_PAINTED=1 to fail the run when a MUST_PAINT case ends unpainted.
 """
 
 import json
@@ -30,18 +32,23 @@ OUT_DIR = pathlib.Path(os.environ.get("OUT_DIR", "safari-dialog"))
 SAMPLE_SECONDS = 5
 DIALOG_CLOSE_LABEL = "關閉"
 HYDRATION_SECONDS = 6
-# (label, variant button suffix, iframe selector, fresh page?)
+LOCAL_VIEWER = '[data-testid="pdf-scroll-container"]'  # pdf.js viewer (local file)
+REMOTE_FRAME = "iframe[data-source-url]"  # framed same-origin proxy URL
+# (label, harness button suffix, painted-area selector, fresh page?)
 CASES = [
-    ("inline", "inline", 'iframe[data-variant="inline"]', True),
-    ("plain", "plain", 'iframe[data-variant="plain"]', True),
-    ("no-transform", "no-transform", 'iframe[data-variant="no-transform"]', True),
-    ("opacity", "opacity", 'iframe[data-variant="opacity"]', True),
-    ("swap", "swap", 'iframe[data-variant="swap"]', True),
-    ("real", "real", "iframe[data-source-url]", True),
-    ("real-again", "real", "iframe[data-source-url]", False),
+    # Control: a bare blob: PDF iframe. Documents the Safari behaviour behind
+    # #1434 (blank under `frame-ancestors 'none'`); it is expected NOT to paint.
+    ("control", "control", 'iframe[data-variant="control"]', True),
+    ("local", "local", LOCAL_VIEWER, True),
+    ("remote", "remote", REMOTE_FRAME, True),
+    ("local-again", "local", LOCAL_VIEWER, False),
+    ("remote-again", "remote", REMOTE_FRAME, False),
 ]
-# Cases that must paint once the bug is fixed (EXPECT_PAINTED=1).
-MUST_PAINT = {"inline", "real", "real-again"}
+# The `-again` cases reuse the page, so the dialog before them must be closed.
+CLOSE_AFTER = {"local", "remote"}
+# Cases that must paint (EXPECT_PAINTED=1): both real-dialog paths, first open
+# and re-open.
+MUST_PAINT = {"local", "remote", "local-again", "remote-again"}
 
 ERROR_HOOK_SCRIPT = """
 window.__errors = [];
@@ -136,7 +143,7 @@ def run_case(driver, case_def) -> dict:
         f"opacity={last['opacity']} skeleton={last['skeleton']} src={last['src_kind']}",
         flush=True,
     )
-    if label == "real":  # `real-again` reuses this page, so it must be closed first
+    if label in CLOSE_AFTER:
         close_dialog(driver)
     return case
 

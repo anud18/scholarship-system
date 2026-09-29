@@ -78,6 +78,7 @@ export function FileUpload({
     url: string;
     filename: string;
     type: string;
+    blob?: Blob;
   } | null>(null);
   const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false);
 
@@ -306,6 +307,9 @@ export function FileUpload({
       url: previewUrl,
       filename: file.name,
       type: fileType,
+      // A local PDF is drawn from the File itself: its blob: URL can neither
+      // be fetched (CSP) nor framed in Safari (#1434).
+      blob: isLocalObjectUrl(previewUrl) ? file : undefined,
     });
     setIsPreviewDialogOpen(true);
   };

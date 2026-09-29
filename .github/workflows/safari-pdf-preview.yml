@@ -11,6 +11,9 @@ on:
     paths:
       - scripts/safari/**
       - frontend/components/file-preview-dialog.tsx
+      - frontend/components/inline-pdf-viewer.tsx
+      - frontend/components/file-upload.tsx
+      - frontend/middleware.ts
       - .github/workflows/safari-pdf-preview.yml
 
 permissions:
@@ -96,6 +99,8 @@ jobs:
         run: |
           mkdir -p frontend/app/safari-harness
           cp scripts/safari/harness/page.tsx frontend/app/safari-harness/page.tsx
+          mkdir -p frontend/app/api/v1/preview/sample
+          cp scripts/safari/harness/preview-sample-route.ts frontend/app/api/v1/preview/sample/route.ts
           python scripts/safari/pdf_header_matrix.py --write-pdf frontend/public/sample.pdf
           # The harness is served over plain http://localhost, where Safari
           # applies `upgrade-insecure-requests` to same-origin chunks and the
@@ -123,6 +128,8 @@ jobs:
         run: sudo safaridriver --enable
 
       - name: Drive the dialog in Safari
+        env:
+          EXPECT_PAINTED: "1"
         run: |
           set -o pipefail
           python scripts/safari/dialog_pdf_preview.py 2>&1 | tee dialog.log
