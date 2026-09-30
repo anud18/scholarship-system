@@ -50,7 +50,24 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isFramablePreview =
     pathname === "/api/v1/preview" || pathname.startsWith("/api/v1/preview/");
-  const frameAncestors = isFramablePreview ? "frame-ancestors 'self'" : "frame-ancestors 'none'";
+
+  // EVERY page is `frame-ancestors 'self'` (issue #1434), not just the preview
+  // proxies above. A `blob:` document inherits its creator's CSP, and Safari
+  // enforces the inherited `frame-ancestors` against the blob's own parent —
+  // which is the creating page itself. Under `'none'` a just-picked local PDF,
+  // framed from a blob: URL by the preview dialog, paints BLANK in Safari
+  // (Chrome ignores the inherited directive). Proven on a macOS runner with real
+  // Safari: dropping the directive makes it paint. `'self'` still refuses every
+  // cross-origin embedder, so clickjacking from another site is still blocked;
+  // only same-origin framing is newly allowed.
+  //
+  // X-Frame-Options is deliberately left at DENY for non-preview routes: nginx
+  // sends the same DENY, so the pair stays an identical (tolerated) duplicate.
+  // Flipping only the middleware to SAMEORIGIN would make nginx + middleware a
+  // conflicting DENY/SAMEORIGIN pair — invalid, and a ZAP "Multiple
+  // X-Frame-Options Header Entries" finding. Browsers that know CSP
+  // `frame-ancestors` (all current ones) ignore XFO when it is present.
+  const frameAncestors = "frame-ancestors 'self'";
 
   let csp: string;
 
@@ -65,10 +82,7 @@ export function middleware(request: NextRequest) {
       // production. Turbopack HMR needs no image source — its channel is the
       // ws:/wss: connect-src below, its overlay is inline data:/same-origin.
       "img-src 'self' data: blob:",
-      // inline file preview: same-origin /api proxy only. No blob:: Safari paints a
-      // blob: PDF iframe blank under frame-ancestors 'none' (#1434), so a local PDF
-      // is drawn by pdf.js and a blob: frame must fail loudly everywhere.
-      "frame-src 'self'",
+      "frame-src 'self' blob:", // inline file preview: same-origin /api proxy + just-selected blob: PDFs
       "font-src 'self'",
       "connect-src 'self' ws: wss:", // WebSocket for HMR
       frameAncestors,
@@ -113,8 +127,7 @@ export function middleware(request: NextRequest) {
       // future remote image MUST be added here by explicit origin, never as a scheme.
       // data: covers inline SVG; blob: covers just-selected local files.
       "img-src 'self' data: blob:",
-      // Same-origin /api proxy only; no blob: (see the dev branch above, #1434).
-      "frame-src 'self'",
+      "frame-src 'self' blob:", // inline file preview: same-origin /api proxy + just-selected blob: PDFs
       "font-src 'self'",
       "connect-src 'self' https://*.nycu.edu.tw",
       "base-uri 'self'",

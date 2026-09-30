@@ -2,15 +2,16 @@
 
 Companion to pdf_header_matrix.py, which pinned issue #1434 on the page's
 `frame-ancestors 'none'`: Safari paints a blob: PDF iframe blank because the
-blob document inherits that CSP. Targets the production Next build served by
+blob document inherits that CSP. The fix serves every page `frame-ancestors
+'self'`. Targets the production Next build (real middleware headers) served by
 the workflow with the harness page from scripts/safari/harness/.
 
 Each case opens a PDF the way the app does — a just-picked local file
-(`local`) or a saved file behind the same-origin proxy (`remote`) — in the real
-FilePreviewDialog, samples the viewer once a second, and judges `painted` from
+(`local`, a blob: URL) or a saved file behind the same-origin proxy (`remote`,
+fetched and re-wrapped as a blob by the dialog) — in the real
+FilePreviewDialog, samples the iframe once a second, and judges `painted` from
 the dark pixels inside its rectangle on a WebDriver screenshot. The `-again`
-cases re-open the dialog on the same page. `control` is a bare blob: iframe and
-is expected to stay blank in Safari.
+cases re-open the dialog on the same page. `control` is a bare blob: iframe.
 
 Env: TARGET_URL (default http://localhost:3000), OUT_DIR, BROWSER=safari|chrome,
      EXPECT_PAINTED=1 to fail the run when a MUST_PAINT case ends unpainted.
@@ -30,24 +31,23 @@ OUT_DIR = pathlib.Path(os.environ.get("OUT_DIR", "safari-dialog"))
 SAMPLE_SECONDS = 5
 DIALOG_CLOSE_LABEL = "關閉"
 HYDRATION_SECONDS = 6
-LOCAL_VIEWER = '[data-testid="pdf-scroll-container"]'  # pdf.js viewer (local file)
-REMOTE_FRAME = "iframe[data-source-url]"  # framed same-origin proxy URL
+DIALOG_FRAME = "iframe[data-source-url]"  # the dialog's PDF iframe
 # (label, harness button suffix, painted-area selector, fresh page?)
 CASES = [
-    # Control: a bare blob: PDF iframe. Documents the Safari behaviour behind
-    # #1434 (blank under `frame-ancestors 'none'`); it is expected NOT to paint.
+    # A bare blob: PDF iframe on the real page: painted only if the page's
+    # `frame-ancestors` is not `'none'` (#1434).
     ("control", "control", 'iframe[data-variant="control"]', True),
-    ("local", "local", LOCAL_VIEWER, True),
-    ("remote", "remote", REMOTE_FRAME, True),
-    ("local-again", "local", LOCAL_VIEWER, False),
-    ("remote-again", "remote", REMOTE_FRAME, False),
+    ("local", "local", DIALOG_FRAME, True),
+    ("remote", "remote", DIALOG_FRAME, True),
+    ("local-again", "local", DIALOG_FRAME, False),
+    ("remote-again", "remote", DIALOG_FRAME, False),
 ]
 # Cases that leave a dialog open; the `-again` cases reuse the page, so it must
 # be closed before the next case.
 CLOSE_AFTER = {"local", "remote", "local-again", "remote-again"}
-# Cases that must paint (EXPECT_PAINTED=1): both real-dialog paths, first open
-# and re-open.
-MUST_PAINT = {"local", "remote", "local-again", "remote-again"}
+# Cases that must paint (EXPECT_PAINTED=1): the bare blob control plus both
+# real-dialog paths, first open and re-open.
+MUST_PAINT = {"control", "local", "remote", "local-again", "remote-again"}
 
 ERROR_HOOK_SCRIPT = """
 window.__errors = [];

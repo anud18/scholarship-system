@@ -20,10 +20,8 @@ export interface UploadedFileLike {
 
 /**
  * True for a URL minted by URL.createObjectURL below. Such URLs are caller-owned
- * and local: consumers must never fetch() them (the CSP has no blob: in
- * connect-src). An image renders them directly; a PDF must NOT be framed from
- * one — Safari paints a blob: iframe blank under `frame-ancestors 'none'`
- * (#1434) — so a local PDF is drawn from the File itself (FilePreviewDialog).
+ * and local: consumers render them directly (iframe/img) and must never fetch()
+ * them — the CSP allows blob: in frame-src/img-src but not connect-src.
  */
 export function isLocalObjectUrl(url: string): boolean {
   return url.startsWith("blob:");

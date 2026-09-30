@@ -29,15 +29,6 @@ import "react-pdf/dist/Page/TextLayer.css";
 
 interface InlinePdfViewerProps {
   url: string;
-  // In-memory document to render instead of fetching `url`. Needed for a
-  // just-picked local file: its `blob:` URL cannot be fetched (CSP
-  // `connect-src` has no `blob:`), and framing it in an <iframe> renders blank
-  // in Safari under `frame-ancestors 'none'` (#1434). `url` stays the identity
-  // of the document and the target of the toolbar's download / new-tab buttons.
-  blob?: Blob;
-  // Hide the toolbar's download / new-tab buttons when the host already
-  // provides its own.
-  hideActions?: boolean;
   // Tailwind classes sizing the WHOLE viewer (toolbar + scroll area), e.g.
   // `h-[min(745px,calc(90vh-200px))]`. Required in practice — the component
   // has no intrinsic height without one. The toolbar consumes its share from
@@ -120,8 +111,6 @@ function ToolbarIconButton({
 
 export function InlinePdfViewer({
   url,
-  blob,
-  hideActions = false,
   className,
   onReachedBottom,
   onLoadError,
@@ -309,22 +298,20 @@ export function InlinePdfViewer({
             </span>
           )}
         </div>
-        {!hideActions && (
-          <div className="flex items-center gap-1">
-            <ToolbarIconButton
-              icon={ExternalLink}
-              label={labels.openInNewTab}
-              testId="pdf-open-new-tab"
-              onClick={handleOpenInNewTab}
-            />
-            <ToolbarIconButton
-              icon={Download}
-              label={labels.download}
-              testId="pdf-download"
-              onClick={handleDownload}
-            />
-          </div>
-        )}
+        <div className="flex items-center gap-1">
+          <ToolbarIconButton
+            icon={ExternalLink}
+            label={labels.openInNewTab}
+            testId="pdf-open-new-tab"
+            onClick={handleOpenInNewTab}
+          />
+          <ToolbarIconButton
+            icon={Download}
+            label={labels.download}
+            testId="pdf-download"
+            onClick={handleDownload}
+          />
+        </div>
       </div>
       <div
         ref={scrollRef}
@@ -336,12 +323,9 @@ export function InlinePdfViewer({
           <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
             <AlertCircle className="h-8 w-8 text-red-500" />
             <p className="text-sm font-medium text-red-700">{labels.error}</p>
-            {/* The hint points at the toolbar buttons, which hideActions removes. */}
-            {!hideActions && (
-              <p className="text-xs text-muted-foreground">
-                {labels.errorFallback}
-              </p>
-            )}
+            <p className="text-xs text-muted-foreground">
+              {labels.errorFallback}
+            </p>
             <Button
               size="sm"
               variant="outline"
@@ -358,7 +342,7 @@ export function InlinePdfViewer({
         ) : (
           <Document
             key={`${url}#${reloadToken}`}
-            file={blob ?? url}
+            file={url}
             loading={
               <div className="space-y-3 p-6">
                 <Skeleton className="h-6 w-full" />

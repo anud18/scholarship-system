@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import dynamic from "next/dynamic";
 import {
   Dialog,
   DialogContent,
@@ -18,13 +17,6 @@ import { isLocalObjectUrl } from "@/lib/file-preview";
 import { triggerFileDownload } from "@/lib/utils/download";
 import { logger } from "@/lib/utils/logger";
 
-// pdf.js is heavy and only needed for a just-picked local PDF: keep it out of
-// the initial chunk (see frontend/CLAUDE.md, "Lazy-load heavy frontend libs").
-const InlinePdfViewer = dynamic(
-  () => import("@/components/inline-pdf-viewer").then(m => m.InlinePdfViewer),
-  { ssr: false }
-);
-
 interface FilePreviewDialogProps {
   isOpen: boolean;
   onClose: () => void;
@@ -33,9 +25,6 @@ interface FilePreviewDialogProps {
     filename: string;
     type: string;
     downloadUrl?: string; // 添加下載URL
-    // The in-memory file behind a `blob:` `url` (a just-picked local file).
-    // Required to preview a local PDF — see the note on the effect below.
-    blob?: Blob;
   } | null;
   locale: Locale;
 }
@@ -48,63 +37,39 @@ export function FilePreviewDialog({
 }: FilePreviewDialogProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  // Image source: a fetched (or caller-owned local) blob: URL.
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
-  // Remote PDF source: the same-origin proxy URL to frame, once probed OK.
-  const [frameUrl, setFrameUrl] = useState<string | null>(null);
   const t = (k: string) => getTranslation(locale, k);
 
-  const isPdf = !!file && file.type.includes("pdf");
-  const isRenderable = !!file && (isPdf || file.type.includes("image"));
-  // A local PDF is drawn from its Blob; without one there is nothing safe to
-  // show (the effect below reports it), so never mount the viewer for it —
-  // it would fall back to fetching the blob: URL, which the CSP refuses.
-  const canDrawLocalPdf =
-    isPdf && !!file && isLocalObjectUrl(file.url) && !!file.blob;
+  const isRenderable =
+    !!file && (file.type.includes("pdf") || file.type.includes("image"));
 
-  // Get the viewer a source it can actually show.
+  // Fetch the file ourselves and hand the viewer a blob: URL.
   //
-  // A remote file (a same-origin /api/v1/preview proxy URL) is fetched first:
-  // pointing an <iframe>/<img> straight at the proxy cannot surface HTTP
-  // errors — a 401 (expired token) or 404 (example deleted) body does not fire
-  // onError, so the student saw the right caption over a blank pane. An image
-  // then renders from the fetched blob. A PDF must NOT be re-wrapped in a blob
-  // and framed: a `blob:` document inherits the page's CSP, and Safari applies
-  // the inherited `frame-ancestors 'none'` against the blob's own parent, so
-  // the frame stays blank (#1434). The fetch is only a status probe; the frame
-  // then loads the proxy URL itself, which /api/v1/preview allows same-origin.
+  // Pointing an <iframe>/<img> straight at the proxy URL cannot surface HTTP
+  // errors: a 401 (expired token) or 404 (example deleted) body does not fire
+  // onError, so the student saw the right caption over a blank pane. Fetching
+  // first lets us show a real error message; the blob also spares the proxy a
+  // second full round trip when the viewer re-requests the resource.
   //
   // A `blob:` URL is already local: the caller (FileUpload, for a file the
   // student just selected and has not saved yet) created it with
   // URL.createObjectURL and owns its lifetime. It cannot produce an HTTP
   // error, and fetching it is refused by the CSP (`connect-src` deliberately
   // lists no `blob:`; only frame-src/img-src do) — that refusal surfaced as
-  // 「無法載入文件」 for every not-yet-saved upload. An image uses it as-is; a
-  // PDF is drawn by pdf.js from `file.blob`, since the frame is not an option.
-  // Neither path revokes the caller's URL.
+  // 「無法載入文件」 for every not-yet-saved upload. Use it as-is and never
+  // revoke it here.
   useEffect(() => {
     if (!isOpen || !file) return;
 
     setIsLoading(true);
     setLoadError(null);
     setObjectUrl(null);
-    setFrameUrl(null);
     if (!isRenderable) {
       setIsLoading(false);
       return;
     }
     if (isLocalObjectUrl(file.url)) {
-      if (!isPdf) {
-        setObjectUrl(file.url);
-        return;
-      }
-      setIsLoading(false);
-      if (!file.blob) {
-        logger.error("Local PDF preview needs the file's Blob", {
-          url: file.url,
-        });
-        setLoadError(t("dialogs.preview.load_failed"));
-      }
+      setObjectUrl(file.url);
       return;
     }
 
@@ -117,15 +82,6 @@ export function FilePreviewDialog({
           throw new Error(
             `Preview request failed with HTTP ${response.status}`
           );
-        }
-        if (isPdf) {
-          // Only the status matters here: stop the browser receiving the body
-          // (the proxy still serves it, so the frame's own request below is a
-          // second full round trip — the price of not framing a blob:).
-          await response.body?.cancel();
-          if (isCancelled) return;
-          setFrameUrl(file.url);
-          return;
         }
         const blob = await response.blob();
         if (isCancelled) return;
@@ -144,19 +100,18 @@ export function FilePreviewDialog({
       if (createdUrl) URL.revokeObjectURL(createdUrl);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, file?.url, file?.type, file?.blob]);
+  }, [isOpen, file?.url, file?.type]);
 
   // The skeleton overlay is gated on `isLoading`, which is otherwise only
   // cleared by the viewer's onLoad/onError. That is reliable for images, but
   // Chrome's built-in PDF viewer frequently NEVER fires the iframe load event,
   // which left the skeleton covering an opacity-0 iframe forever. Fall back to
-  // clearing the loading state on a short timer once the source is ready.
-  const viewerSource = objectUrl ?? frameUrl;
+  // clearing the loading state on a short timer once the blob is ready.
   useEffect(() => {
-    if (!viewerSource) return;
+    if (!objectUrl) return;
     const fallback = setTimeout(() => setIsLoading(false), 1500);
     return () => clearTimeout(fallback);
-  }, [viewerSource]);
+  }, [objectUrl]);
 
   const handleOpenInNewWindow = () => {
     if (!file) return;
@@ -191,16 +146,7 @@ export function FilePreviewDialog({
               <p className="text-lg font-medium mb-2">{file.filename}</p>
               <p className="text-sm text-muted-foreground">{loadError}</p>
             </div>
-          ) : canDrawLocalPdf ? (
-            <InlinePdfViewer
-              url={file.url}
-              blob={file.blob}
-              downloadFilename={file.filename}
-              locale={locale}
-              hideActions
-              className="h-[70vh]"
-            />
-          ) : isPdf ? (
+          ) : file.type.includes("pdf") ? (
             <>
               {isLoading && (
                 <div className="absolute inset-0 flex items-center justify-center bg-background p-8">
@@ -224,7 +170,7 @@ export function FilePreviewDialog({
                 </div>
               )}
               <iframe
-                src={frameUrl ?? "about:blank"}
+                src={objectUrl ?? "about:blank"}
                 data-source-url={file.url}
                 className={`w-full h-[70vh] border rounded transition-opacity duration-300 ${
                   isLoading ? "opacity-0" : "opacity-100"

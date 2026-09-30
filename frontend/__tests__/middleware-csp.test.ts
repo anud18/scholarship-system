@@ -1,15 +1,13 @@
 /**
  * Unit tests for the CSP middleware (frontend/middleware.ts).
  *
- * Regression guard for PR #885 / issue #1434: document preview iframes are a
- * same-origin /api/v1/preview proxy ONLY, so the CSP carries `frame-src 'self'`
- * (with no frame-src directive the browser falls back to `default-src 'self'`,
- * which is the same today but leaves the intent implicit). `blob:` is NOT
- * allowed: Safari paints a blob: PDF iframe blank under `frame-ancestors
- * 'none'`, so a just-selected local PDF is drawn by pdf.js instead, and a
- * blob: frame must fail loudly in every browser rather than only in Safari.
- * These tests pin the directive in BOTH the dev and prod CSP branches and
- * confirm the clickjacking protections were not loosened in the process.
+ * Regression guard for PR #885: document preview iframes (a same-origin
+ * /api/v1/preview proxy, and a blob: URL for a just-selected local PDF) are
+ * only allowed to render if the CSP carries `frame-src 'self' blob:`. With no
+ * frame-src directive the browser falls back to `default-src 'self'`, which
+ * blocks blob: frames and silently renders a blank preview. These tests pin
+ * the directive in BOTH the dev and prod CSP branches and confirm the
+ * clickjacking protections were not loosened in the process.
  */
 import { middleware } from "@/middleware";
 import { SONNER_EMPTY_STYLE_HASH, SONNER_STYLE_HASH } from "@/lib/security-headers";
@@ -34,28 +32,29 @@ describe("middleware Content-Security-Policy", () => {
     Object.defineProperty(process.env, "NODE_ENV", { value, configurable: true });
   }
 
-  it("dev CSP frames same-origin only (no blob: — see #1434)", () => {
+  it("dev CSP allows frame-src 'self' blob: for blob/same-origin PDF preview", () => {
     setNodeEnv("development");
     const res = middleware(mockRequest("http://localhost:3000/student/apply"));
     const csp = res.headers.get("Content-Security-Policy") ?? "";
-    expect(csp).toContain("frame-src 'self';");
-    expect(csp).not.toContain("frame-src 'self' blob:");
+    expect(csp).toContain("frame-src 'self' blob:");
     // blob: images must still be allowed (the preview dialog renders images via <img>)
     expect(csp).toContain("img-src 'self' data: blob:");
     // ...but NOT via a wildcard scheme (issue #1223 finding B)
     expect(csp).not.toContain("img-src 'self' data: blob: https:");
   });
 
-  it("prod CSP frames same-origin only (no blob:) and keeps clickjacking protections", () => {
+  it("prod CSP allows frame-src 'self' blob: and keeps clickjacking protections", () => {
     setNodeEnv("production");
     const res = middleware(mockRequest("https://ss.test.nycu.edu.tw/student/apply"));
     const csp = res.headers.get("Content-Security-Policy") ?? "";
-    // the #885 fix, narrowed by #1434: same-origin proxy frames only
-    expect(csp).toContain("frame-src 'self';");
-    expect(csp).not.toContain("frame-src 'self' blob:");
+    // the #885 fix
+    expect(csp).toContain("frame-src 'self' blob:");
+    // and it must NOT have loosened the directive to anything wider than blob:
+    expect(csp).not.toContain("frame-src 'self' blob: https:");
     expect(csp).not.toContain("frame-src *");
-    // clickjacking / object protections intact
-    expect(csp).toContain("frame-ancestors 'none'");
+    // clickjacking / object protections intact: only the same origin may embed
+    // (`'self'`, not `'none'` — #1434, see the frame-ancestors test below)
+    expect(csp).toContain("frame-ancestors 'self'");
     expect(csp).toContain("object-src 'none'");
     expect(res.headers.get("X-Frame-Options")).toBe("DENY");
   });
@@ -174,7 +173,27 @@ describe("middleware framing for same-origin preview proxies", () => {
     expect(csp).toContain("frame-ancestors 'self'");
   });
 
-  it("non-preview routes keep the strict DENY / frame-ancestors 'none' posture", () => {
+  // Issue #1434: a blob: document inherits its creator's CSP and Safari applies
+  // the inherited `frame-ancestors` to the blob's own parent, so `'none'` blanks
+  // a framed blob: PDF. Every route is `'self'` — but it must stay EXACTLY
+  // `'self'`: no wildcard, no scheme, no foreign host.
+  it("every route is frame-ancestors 'self' exactly (never 'none', never a wildcard or foreign host)", () => {
+    for (const nodeEnv of ["production", "development"]) {
+      setNodeEnv(nodeEnv);
+      for (const url of [
+        "https://ss.test.nycu.edu.tw/",
+        "https://ss.test.nycu.edu.tw/student/apply",
+        "https://ss.test.nycu.edu.tw/api/v1/applications/87",
+        "https://ss.test.nycu.edu.tw/api/v1/preview?fileId=1&type=pdf",
+      ]) {
+        const csp = middleware(mockRequest(url)).headers.get("Content-Security-Policy") ?? "";
+        const directive = csp.split("; ").find((d) => d.startsWith("frame-ancestors ")) ?? "";
+        expect(directive).toBe("frame-ancestors 'self'");
+      }
+    }
+  });
+
+  it("non-preview routes keep X-Frame-Options DENY (nginx sends the same DENY — a mixed pair would be invalid)", () => {
     setNodeEnv("production");
     for (const url of [
       "https://ss.test.nycu.edu.tw/",
@@ -192,8 +211,7 @@ describe("middleware framing for same-origin preview proxies", () => {
       const res = middleware(mockRequest(url));
       const csp = res.headers.get("Content-Security-Policy") ?? "";
       expect(res.headers.get("X-Frame-Options")).toBe("DENY");
-      expect(csp).toContain("frame-ancestors 'none'");
-      expect(csp).not.toContain("frame-ancestors 'self'");
+      expect(csp).toContain("frame-ancestors 'self'");
     }
   });
 

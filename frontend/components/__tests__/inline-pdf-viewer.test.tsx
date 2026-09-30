@@ -18,7 +18,6 @@ jest.mock("react-pdf", () => {
   const pageRenderCallbacks: Array<() => void> = [];
 
   const Document = (props: {
-    file?: string | Blob;
     onLoadSuccess?: LoadCb;
     onLoadError?: ErrCb;
     children?: React.ReactNode;
@@ -28,14 +27,7 @@ jest.mock("react-pdf", () => {
     // NOTE: don't reset pageRenderCallbacks here — Page's useEffect cleanup
     // manages add/remove. Resetting on every Document render would wipe
     // registrations that survived through re-renders.
-    return (
-      <div
-        data-testid="pdf-document"
-        data-file-kind={typeof props.file === "string" ? "url" : "blob"}
-      >
-        {props.children}
-      </div>
-    );
+    return <div data-testid="pdf-document">{props.children}</div>;
   };
 
   const Page = ({
@@ -467,36 +459,5 @@ describe("InlinePdfViewer", () => {
     expect(screen.getByTestId("pdf-download")).toBeEnabled();
     expect(screen.getByTestId("pdf-open-new-tab")).toBeEnabled();
     expect(screen.getByTestId("pdf-zoom-in")).toBeDisabled();
-  });
-
-  it("hands pdf.js the in-memory Blob when one is given, and the URL otherwise", () => {
-    const { rerender } = render(<InlinePdfViewer url="/a.pdf" />);
-    expect(screen.getByTestId("pdf-document")).toHaveAttribute("data-file-kind", "url");
-
-    rerender(
-      <InlinePdfViewer
-        url="blob:http://localhost:3000/picked"
-        blob={new Blob(["%PDF-1.4"], { type: "application/pdf" })}
-      />,
-    );
-    expect(screen.getByTestId("pdf-document")).toHaveAttribute("data-file-kind", "blob");
-  });
-
-  it("with hideActions the load-error hint no longer points at toolbar buttons that are not there", () => {
-    const { rerender } = render(<InlinePdfViewer url="/broken.pdf" />);
-    act(() => reactPdf.__setError(new Error("boom")));
-    expect(screen.getByText(/上方按鈕/)).toBeInTheDocument();
-
-    rerender(<InlinePdfViewer url="/broken.pdf" hideActions />);
-    expect(screen.getByText(/重新載入|Reload/)).toBeInTheDocument();
-    expect(screen.queryByText(/上方按鈕/)).toBeNull();
-  });
-
-  it("hideActions drops download / open-in-new-tab but keeps the zoom controls", () => {
-    render(<InlinePdfViewer url="/a.pdf" hideActions />);
-
-    expect(screen.queryByTestId("pdf-download")).toBeNull();
-    expect(screen.queryByTestId("pdf-open-new-tab")).toBeNull();
-    expect(screen.getByTestId("pdf-zoom-in")).toBeInTheDocument();
   });
 });

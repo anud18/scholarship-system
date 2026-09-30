@@ -10,7 +10,8 @@ actually painted (WebDriver screenshot crop, cross-checked by a native capture).
 Header sets mirror frontend/lib/security-headers.ts + middleware.ts. The result
 that pinned the bug: a blob: PDF frame is blank exactly when the page carries
 `frame-ancestors 'none'` (the blob document inherits it); the same-origin URL
-frame paints under every set.
+frame paints under every set. `real-self` is today's production set
+(`frame-ancestors 'self'`, X-Frame-Options DENY) and must paint both ways.
 
 Env: OUT_DIR (default safari-matrix), BROWSER=safari|chrome, ONLY (comma list
 of "<headers>/<mode>" to restrict), PORT (default 8765).
@@ -101,9 +102,10 @@ FULL_PERMISSIONS_POLICY = ", ".join(
 )  # fmt: skip
 
 
-def real_csp(frame_ancestors: bool = True) -> str:
+def real_csp(frame_ancestors: str | None = "'self'") -> str:
     """frontend/middleware.ts production CSP (minus upgrade-insecure-requests,
-    which only matters over https), for a NON-preview page."""
+    which only matters over https), for a NON-preview page. `frame_ancestors`
+    is the directive's value; None omits the directive."""
     directives = [
         "default-src 'self'",
         f"script-src 'self' 'nonce-{NONCE}' 'strict-dynamic'",
@@ -118,21 +120,20 @@ def real_csp(frame_ancestors: bool = True) -> str:
         "object-src 'none'",
     ]
     if frame_ancestors:
-        directives.append("frame-ancestors 'none'")
+        directives.append(f"frame-ancestors {frame_ancestors}")
     return "; ".join(directives)
 
 
-def real_headers(*, frame_ancestors=True, xfo=True, permissions=True) -> dict:
-    headers = {
+def real_headers(frame_ancestors: str | None = "'self'") -> dict:
+    """The full production header set of a non-preview page (X-Frame-Options
+    stays DENY, exactly as middleware.ts + nginx send it)."""
+    return {
         "Content-Security-Policy": real_csp(frame_ancestors),
         "Referrer-Policy": "strict-origin-when-cross-origin",
+        "X-Frame-Options": "DENY",
+        "Permissions-Policy": FULL_PERMISSIONS_POLICY,
         **TRIO,
     }
-    if xfo:
-        headers["X-Frame-Options"] = "DENY"
-    if permissions:
-        headers["Permissions-Policy"] = FULL_PERMISSIONS_POLICY
-    return headers
 
 
 # name -> headers applied to BOTH the page and the framed PDF response (the
@@ -140,13 +141,16 @@ def real_headers(*, frame_ancestors=True, xfo=True, permissions=True) -> dict:
 HEADER_SETS = {
     "current": {"Content-Security-Policy": PROD_CSP, **TRIO},
     "bare": {},
-    "real-all": real_headers(),
-    "real-no-frame-ancestors": real_headers(frame_ancestors=False),
-    "real-no-xfo": real_headers(xfo=False),
-    "real-no-fa-no-xfo": real_headers(frame_ancestors=False, xfo=False),
-    "real-no-permissions": real_headers(permissions=False),
+    # Today's production set (#1434): frame-ancestors 'self'.
+    "real-self": real_headers("'self'"),
+    # The pre-#1434 set: 'none' blanks a blob: PDF frame in Safari (documented
+    # finding, EXPECTED blank — not gated).
+    "real-none": real_headers("'none'"),
+    "real-no-frame-ancestors": real_headers(None),
 }
 MODES = ["blob-iframe", "direct-iframe"]
+# Sets whose blob: PDF frame is EXPECTED to stay blank in Safari.
+BLOB_BLANK_EXPECTED = {"real-none"}
 
 
 def framable(headers: dict) -> dict:
@@ -355,11 +359,16 @@ def main() -> int:
     for case in cases:
         print(f"{case['headers']:<16} {case['mode']:<15} " f"{str(case['painted']):<8} {case.get('dark_pixels')}")
     # Gate on what the app relies on: a PDF framed by its own same-origin URL
-    # must paint under every header set. (blob-iframe is EXPECTED blank under
-    # `frame-ancestors 'none'` — that is the documented finding, not a failure.)
-    unpainted = [c["headers"] for c in cases if c["mode"] == "direct-iframe" and not c["painted"]]
+    # (remote previews) AND from a blob: URL (just-picked local file) must both
+    # paint under every header set — except the pre-#1434 `frame-ancestors
+    # 'none'` set, where a blank blob frame is the documented finding.
+    unpainted = [
+        f"{c['headers']}/{c['mode']}"
+        for c in cases
+        if not c["painted"] and not (c["mode"] == "blob-iframe" and c["headers"] in BLOB_BLANK_EXPECTED)
+    ]
     if unpainted:
-        print(f"FAIL: same-origin URL frame did not paint under: {unpainted}")
+        print(f"FAIL: expected a painted PDF frame, got blank: {unpainted}")
         return 1
     return 0
 

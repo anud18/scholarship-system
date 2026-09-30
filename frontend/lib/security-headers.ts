@@ -116,8 +116,7 @@ export const CROSS_ORIGIN_RESOURCE_POLICY = "same-origin";
  * was previously omitted on purpose; see git history of this comment).
  *
  * Safe here because every embed in the app is same-origin, data: or blob:
- * (the CSP already pins img-src/font-src/frame-src to exactly those sources;
- * frame-src is same-origin only)
+ * (the CSP already pins img-src/font-src/frame-src to exactly those sources)
  * — nothing loads a cross-origin subresource that would now be blocked.
  *
  * THE SHARP EDGE IS NESTED DOCUMENTS: a `require-corp` parent refuses any
@@ -125,10 +124,12 @@ export const CROSS_ORIGIN_RESOURCE_POLICY = "same-origin";
  * middleware.ts emits this header on every matched route — pages AND the
  * framed `/api/v1/preview*` / `/api/email/*` responses — and why the nginx
  * preview/email blocks re-declare it. Dropping it from a framed response
- * breaks every file preview with a silent blank iframe. Do NOT frame a blob:
- * document: it inherits the creator's policy container, including
- * `frame-ancestors 'none'`, and Safari then paints it blank (#1434) — draw a
- * local PDF with pdf.js instead (components/file-preview-dialog.tsx).
+ * breaks every file preview with a silent blank iframe. A blob: iframe is a
+ * different case: it inherits the creator document's policy container, COEP
+ * included, so it needs no header of its own — but it inherits
+ * `frame-ancestors` too, and Safari checks that against the creating page. That
+ * is why middleware.ts serves every page `frame-ancestors 'self'`, not 'none'
+ * (#1434): under 'none' a framed blob: PDF paints blank in Safari.
  */
 export const CROSS_ORIGIN_EMBEDDER_POLICY = "require-corp";
 
