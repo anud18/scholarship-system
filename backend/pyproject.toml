@@ -122,7 +122,7 @@ dependencies = [
     "greenlet>=3.0,<4",  # Required by SQLAlchemy sync engine
     
     # Authentication and Security
-    "PyJWT[crypto]==2.13.0",
+    "PyJWT[crypto]==2.14.0",
     "passlib[bcrypt]==1.7.4",
     "bcrypt==4.2.1",
     "cryptography==50.0.0",

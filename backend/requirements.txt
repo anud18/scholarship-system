@@ -12,7 +12,7 @@ psycopg2-binary==2.9.11  # Updated for Python 3.13 compatibility
 greenlet>=3.0,<4  # Required by SQLAlchemy sync engine (used by health check + APScheduler)
 
 # Authentication and Security
-PyJWT[crypto]==2.13.0  # Security update: patched CVEs PYSEC-2026-175/176/177/178/179
+PyJWT[crypto]==2.14.0  # Security update: patched CVEs PYSEC-2026-175/176/177/178/179
 passlib[bcrypt]==1.7.4
 bcrypt==4.2.1  # Updated for Python 3.13 compatibility
 cryptography==50.0.0  # Security: GHSA-g6cj-pr64-35w5 (PKCS#7 EnvelopedData Bleichenbacher oracle, >=44,<50); unblocked by dropping fastapi-mail (capped <50)
