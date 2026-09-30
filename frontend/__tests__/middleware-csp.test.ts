@@ -52,8 +52,9 @@ describe("middleware Content-Security-Policy", () => {
     // and it must NOT have loosened the directive to anything wider than blob:
     expect(csp).not.toContain("frame-src 'self' blob: https:");
     expect(csp).not.toContain("frame-src *");
-    // clickjacking / object protections intact
-    expect(csp).toContain("frame-ancestors 'none'");
+    // clickjacking / object protections intact: only the same origin may embed
+    // (`'self'`, not `'none'` — #1434, see the frame-ancestors test below)
+    expect(csp).toContain("frame-ancestors 'self'");
     expect(csp).toContain("object-src 'none'");
     expect(res.headers.get("X-Frame-Options")).toBe("DENY");
   });
@@ -172,7 +173,27 @@ describe("middleware framing for same-origin preview proxies", () => {
     expect(csp).toContain("frame-ancestors 'self'");
   });
 
-  it("non-preview routes keep the strict DENY / frame-ancestors 'none' posture", () => {
+  // Issue #1434: a blob: document inherits its creator's CSP and Safari applies
+  // the inherited `frame-ancestors` to the blob's own parent, so `'none'` blanks
+  // a framed blob: PDF. Every route is `'self'` — but it must stay EXACTLY
+  // `'self'`: no wildcard, no scheme, no foreign host.
+  it("every route is frame-ancestors 'self' exactly (never 'none', never a wildcard or foreign host)", () => {
+    for (const nodeEnv of ["production", "development"]) {
+      setNodeEnv(nodeEnv);
+      for (const url of [
+        "https://ss.test.nycu.edu.tw/",
+        "https://ss.test.nycu.edu.tw/student/apply",
+        "https://ss.test.nycu.edu.tw/api/v1/applications/87",
+        "https://ss.test.nycu.edu.tw/api/v1/preview?fileId=1&type=pdf",
+      ]) {
+        const csp = middleware(mockRequest(url)).headers.get("Content-Security-Policy") ?? "";
+        const directive = csp.split("; ").find((d) => d.startsWith("frame-ancestors ")) ?? "";
+        expect(directive).toBe("frame-ancestors 'self'");
+      }
+    }
+  });
+
+  it("non-preview routes keep X-Frame-Options DENY (nginx sends the same DENY — a mixed pair would be invalid)", () => {
     setNodeEnv("production");
     for (const url of [
       "https://ss.test.nycu.edu.tw/",
@@ -190,8 +211,7 @@ describe("middleware framing for same-origin preview proxies", () => {
       const res = middleware(mockRequest(url));
       const csp = res.headers.get("Content-Security-Policy") ?? "";
       expect(res.headers.get("X-Frame-Options")).toBe("DENY");
-      expect(csp).toContain("frame-ancestors 'none'");
-      expect(csp).not.toContain("frame-ancestors 'self'");
+      expect(csp).toContain("frame-ancestors 'self'");
     }
   });
 

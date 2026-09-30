@@ -124,8 +124,12 @@ export const CROSS_ORIGIN_RESOURCE_POLICY = "same-origin";
  * middleware.ts emits this header on every matched route — pages AND the
  * framed `/api/v1/preview*` / `/api/email/*` responses — and why the nginx
  * preview/email blocks re-declare it. Dropping it from a framed response
- * breaks every file preview with a silent blank iframe; blob: iframes are
- * fine (they inherit the creator document's policy container).
+ * breaks every file preview with a silent blank iframe. A blob: iframe is a
+ * different case: it inherits the creator document's policy container, COEP
+ * included, so it needs no header of its own — but it inherits
+ * `frame-ancestors` too, and Safari checks that against the creating page. That
+ * is why middleware.ts serves every page `frame-ancestors 'self'`, not 'none'
+ * (#1434): under 'none' a framed blob: PDF paints blank in Safari.
  */
 export const CROSS_ORIGIN_EMBEDDER_POLICY = "require-corp";
 
