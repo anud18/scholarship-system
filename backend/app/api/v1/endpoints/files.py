@@ -76,6 +76,29 @@ def _assert_college_may_access(current_user: User, application: Application, fil
         raise HTTPException(status_code=404, detail="File not found")
 
 
+def _assert_professor_may_access(current_user: User, application: Application, file_id: int) -> None:
+    """Restrict a professor to the applications assigned to them.
+
+    Same scope as ``GET /applications/{id}`` (``Application.professor_id``),
+    so every document the professor's detail dialog lists is also previewable.
+    The former ``can_access_student_data`` check walked the lazy
+    ``professor_relationships`` collection, which raises MissingGreenlet under
+    an AsyncSession (issue #1130) and 500'd every professor preview.
+    """
+    if application.professor_id != current_user.id:
+        logger.warning(
+            "SECURITY: professor attempted to access a file of an unassigned application",
+            extra={
+                "user_id": current_user.id,
+                "file_id": file_id,
+                "assigned_professor_id": application.professor_id,
+                "application_id": application.id,
+            },
+        )
+        # 404 rather than 403 so the response does not confirm the file exists.
+        raise HTTPException(status_code=404, detail="File not found")
+
+
 @router.get("/applications/{application_id}/files/{file_id}")
 async def get_file_proxy(
     application_id: int = Path(..., description="Application ID"),
@@ -139,18 +162,8 @@ async def get_file_proxy(
                 )
                 raise HTTPException(status_code=403, detail="Access denied")
         elif current_user.role == UserRole.professor:
-            # Professors can access files from their students
-            if not current_user.can_access_student_data(application.user_id, "view_applications"):
-                logger.warning(
-                    "SECURITY: professor lacked relationship to access student file",
-                    extra={
-                        "user_id": current_user.id,
-                        "file_id": file_id,
-                        "student_user_id": application.user_id,
-                        "application_id": application.id,
-                    },
-                )
-                raise HTTPException(status_code=403, detail="Access denied - no relationship with student")
+            # Professors are scoped to the applications assigned to them.
+            _assert_professor_may_access(current_user, application, file_id)
         elif current_user.role == UserRole.college:
             # College staff are scoped to their own college's applicants.
             _assert_college_may_access(current_user, application, file_id)
@@ -273,18 +286,8 @@ async def download_file_proxy(
                 )
                 raise HTTPException(status_code=403, detail="Access denied")
         elif current_user.role == UserRole.professor:
-            # Professors can access files from their students
-            if not current_user.can_access_student_data(application.user_id, "view_applications"):
-                logger.warning(
-                    "SECURITY: professor lacked relationship to access student file",
-                    extra={
-                        "user_id": current_user.id,
-                        "file_id": file_id,
-                        "student_user_id": application.user_id,
-                        "application_id": application.id,
-                    },
-                )
-                raise HTTPException(status_code=403, detail="Access denied - no relationship with student")
+            # Professors are scoped to the applications assigned to them.
+            _assert_professor_may_access(current_user, application, file_id)
         elif current_user.role == UserRole.college:
             # College staff are scoped to their own college's applicants.
             _assert_college_may_access(current_user, application, file_id)
