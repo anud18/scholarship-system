@@ -59,11 +59,14 @@ def validate_sub_type_for_submission(scholarship, sub_scholarship_type: Optional
 def order_sub_type_preferences(sub_types: List[str]) -> List[str]:
     """Order a selected sub-type list the way the student wizard does:
     FORCED_FIRST_PREFERENCE (moe_1w) leads when present; the rest keep
-    their given order. Returns a new list.
+    their given order. Matched case/whitespace-insensitively (stored lists are
+    free-form strings) and the original spelling is kept. Returns a new list.
     """
-    if FORCED_FIRST_PREFERENCE in sub_types:
-        return [FORCED_FIRST_PREFERENCE] + [st for st in sub_types if st != FORCED_FIRST_PREFERENCE]
-    return list(sub_types)
+
+    def _is_forced(st: Optional[str]) -> bool:
+        return (st or "").lower().strip() == FORCED_FIRST_PREFERENCE
+
+    return [st for st in sub_types if _is_forced(st)] + [st for st in sub_types if not _is_forced(st)]
 
 
 def build_submitted_application_values(scholarship, config) -> Dict[str, Any]:
