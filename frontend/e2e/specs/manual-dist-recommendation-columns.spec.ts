@@ -432,8 +432,7 @@ test.describe("手動分發表格的教授推薦／學院推薦欄位 | Admin ma
       await expect(collegeCell(row2).locator('[title="已列入學院確認排名"]')).toContainText(
         "排名: 推薦"
       );
-      // 學院推薦 carries no per-sub-type verdict chips. The 未分配 reason chip
-      // shares the cell, so match the "<子類型>: " chip prefix, not bare names.
+      // 學院推薦 carries no per-sub-type verdict chips — only the 排名 chip.
       await expect(collegeCell(row2)).not.toContainText("國科會: ");
       await expect(collegeCell(row2)).not.toContainText("教育部: ");
       // 教授未推薦 → every applied sub-type's 核配 checkbox is greyed out
