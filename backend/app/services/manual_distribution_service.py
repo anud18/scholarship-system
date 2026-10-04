@@ -24,6 +24,7 @@ from app.models.payment_roster import PaymentRoster, PaymentRosterItem, RosterSt
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipSubTypeConfig
 from app.models.student import Academy
 from app.models.user import User, UserRole
+from app.services.application_builder import order_sub_type_preferences
 from app.services.received_months_service import (
     calculate_received_months_bulk_async,
     get_imported_months_bulk_async,
@@ -397,11 +398,16 @@ def _compute_suggestions(
         # Kept separately from `preferences` so an empty preference list can say
         # WHICH filter emptied it: sub-types the student may draw before review
         # is considered, versus what survives review.
-        applicable: list[str] = [
-            canonical
-            for canonical in (_canonical_sub_type(p, allowed_configs_by_sub_type) for p in raw_prefs)
-            if (_norm_sub_type(canonical) in applied_set if applied_set else True)
-        ]
+        # MOE (moe_1w) leads whatever order was stored: the wizard forces it
+        # first, but stored lists written by other paths (API callers, imports,
+        # the display_order fallback) may not, and 預設分發 must still honour it.
+        applicable: list[str] = order_sub_type_preferences(
+            [
+                canonical
+                for canonical in (_canonical_sub_type(p, allowed_configs_by_sub_type) for p in raw_prefs)
+                if (_norm_sub_type(canonical) in applied_set if applied_set else True)
+            ]
+        )
         not_rejected: list[str] = [c for c in applicable if _norm_sub_type(c) not in rejected]
         unreviewed = unreviewed_map.get(app.id, set())
         preferences: list[str] = [c for c in not_rejected if not _is_professor_unreviewed(unreviewed, c)]
@@ -834,7 +840,9 @@ class ManualDistributionService:
                 "ranking_item_id": item.id,
                 "application_id": app.id,
                 "rank_position": item.rank_position,
-                "applied_sub_types": app.scholarship_subtype_list or [],
+                # Numbered 1., 2. in the grid, so list it in the order 預設分發
+                # tries it (MOE first) — see _compute_suggestions.
+                "applied_sub_types": order_sub_type_preferences(app.scholarship_subtype_list or []),
                 "rejected_sub_types": list(rejected_map.get(app.id, set())),
                 # The professor's per-sub-type 推薦/不推薦 verdicts for the
                 # 教授推薦 display column. The college's verdict is the

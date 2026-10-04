@@ -204,10 +204,11 @@ def _build_quota_tracker(entries: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 
-class TestNewApplicantsAllocatedToCurrentYearNstcFirst:
-    """Test 1: 2 new applicants with prefs ["nstc", "moe_1w"], both get nstc at own config."""
+class TestNewApplicantsAllocatedMoeFirst:
+    """Test 1: 2 new applicants with STORED prefs ["nstc", "moe_1w"] still get
+    moe_1w first — MOE leads regardless of the stored order (教育部優先)."""
 
-    def test_new_applicants_allocated_to_current_year_nstc_first(self, _compute_suggestions):
+    def test_new_applicants_allocated_moe_first_despite_stored_order(self, _compute_suggestions):
         own_config_id = 115
         default_prefs = ["nstc", "moe_1w"]
         allowed = {"nstc": [115], "moe_1w": [115]}
@@ -234,8 +235,36 @@ class TestNewApplicantsAllocatedToCurrentYearNstcFirst:
         )
 
         assert len(results) == 2
-        assert _alloc(results[0]) == {"ranking_item_id": 101, "sub_type_code": "nstc", "allocation_config_id": 115}
-        assert _alloc(results[1]) == {"ranking_item_id": 102, "sub_type_code": "nstc", "allocation_config_id": 115}
+        assert _alloc(results[0]) == {"ranking_item_id": 101, "sub_type_code": "moe_1w", "allocation_config_id": 115}
+        assert _alloc(results[1]) == {"ranking_item_id": 102, "sub_type_code": "moe_1w", "allocation_config_id": 115}
+
+    def test_applied_list_fallback_is_moe_first(self, _compute_suggestions):
+        """No stored preferences: the applied list (nstc first) and the
+        display_order default (nstc first) are reordered MOE-first too."""
+        app1 = _make_app(1, college="A", scholarship_subtype_list=["nstc", "moe_1w"])
+        app2 = _make_app(2, college="A")
+        results = _compute_suggestions(
+            unique_items=[_make_item(101, rank_position=1, app=app1), _make_item(102, rank_position=2, app=app2)],
+            default_prefs=["nstc", "moe_1w"],
+            prev_alloc_configs={},
+            allowed_configs_by_sub_type={"nstc": [115], "moe_1w": [115]},
+            quota_tracker=_build_quota_tracker({(115, "nstc", "A"): 5, (115, "moe_1w", "A"): 3}),
+            own_config_id=115,
+        )
+        assert [r["sub_type_code"] for r in results] == ["moe_1w", "moe_1w"]
+
+    def test_moe_exhausted_falls_back_to_nstc(self, _compute_suggestions):
+        app1 = _make_app(1, college="A", sub_type_preferences=["nstc", "moe_1w"])
+        app2 = _make_app(2, college="A", sub_type_preferences=["moe_1w", "nstc"])
+        results = _compute_suggestions(
+            unique_items=[_make_item(101, rank_position=1, app=app1), _make_item(102, rank_position=2, app=app2)],
+            default_prefs=["nstc", "moe_1w"],
+            prev_alloc_configs={},
+            allowed_configs_by_sub_type={"nstc": [115], "moe_1w": [115]},
+            quota_tracker=_build_quota_tracker({(115, "nstc", "A"): 5, (115, "moe_1w", "A"): 1}),
+            own_config_id=115,
+        )
+        assert [r["sub_type_code"] for r in results] == ["moe_1w", "nstc"]
 
 
 class TestRenewalStudentsSortedBeforeNew:
@@ -245,11 +274,11 @@ class TestRenewalStudentsSortedBeforeNew:
         own_config_id = 115
         default_prefs = ["nstc", "moe_1w"]
         allowed = {"nstc": [115], "moe_1w": [115]}
-        # Only 1 slot for nstc in college A
+        # Only 1 slot for moe_1w (the forced first preference) in college A
         quota_tracker = _build_quota_tracker(
             {
-                (115, "nstc", "A"): 1,
-                (115, "moe_1w", "A"): 5,
+                (115, "nstc", "A"): 5,
+                (115, "moe_1w", "A"): 1,
             }
         )
         prev_alloc_configs: dict[int, int] = {}
@@ -270,11 +299,11 @@ class TestRenewalStudentsSortedBeforeNew:
         )
 
         assert len(results) == 2
-        # Renewal gets nstc, new gets moe_1w (nstc exhausted)
+        # Renewal gets moe_1w, new gets nstc (moe_1w exhausted)
         renewal_result = next(r for r in results if r["ranking_item_id"] == 101)
         new_result = next(r for r in results if r["ranking_item_id"] == 102)
-        assert renewal_result["sub_type_code"] == "nstc"
-        assert new_result["sub_type_code"] == "moe_1w"
+        assert renewal_result["sub_type_code"] == "moe_1w"
+        assert new_result["sub_type_code"] == "nstc"
 
 
 class TestRenewalTargetsPreviousAllocationConfig:
@@ -295,7 +324,8 @@ class TestRenewalTargetsPreviousAllocationConfig:
         # Renewal student's previous app (id=99) was allocated to config 114
         prev_alloc_configs = {99: 114}
 
-        renewal_app = _make_app(1, college="A", is_renewal=True, prev_app_id=99)
+        # NSTC-only renewal: prior-config targeting is an NSTC concept (MOE is current-year only).
+        renewal_app = _make_app(1, college="A", is_renewal=True, prev_app_id=99, scholarship_subtype_list=["nstc"])
         item = _make_item(101, rank_position=1, app=renewal_app)
 
         results = _compute_suggestions(
@@ -327,7 +357,8 @@ class TestRenewalFallbackToOwnConfigWhenPriorExhausted:
         )
         prev_alloc_configs = {99: 114}
 
-        renewal_app = _make_app(1, college="A", is_renewal=True, prev_app_id=99)
+        # NSTC-only renewal: prior-config targeting is an NSTC concept (MOE is current-year only).
+        renewal_app = _make_app(1, college="A", is_renewal=True, prev_app_id=99, scholarship_subtype_list=["nstc"])
         item = _make_item(101, rank_position=1, app=renewal_app)
 
         results = _compute_suggestions(
