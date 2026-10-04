@@ -313,7 +313,7 @@ export const UNALLOCATED_REASON_LABEL: Record<UnallocatedReason, string> = {
  * Label for a reason code, surviving one the backend added and this build has
  * not learnt yet. The union is a hand-kept mirror of the UNALLOCATED_*
  * constants and the response is untyped, so an unknown code reaches here with
- * no type error — showing the raw code beats 「未分配: undefined」.
+ * no type error — showing the raw code beats 「3 筆undefined」.
  */
 export function unallocatedReasonLabel(reason: UnallocatedReason): string {
   return UNALLOCATED_REASON_LABEL[reason] ?? reason;
