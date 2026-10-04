@@ -24,6 +24,7 @@ from app.utils.college_scope import (
     get_application_college_code,
     get_user_college_code,
 )
+from app.utils.professor_scope import professor_user_may_access
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -79,13 +80,12 @@ def _assert_college_may_access(current_user: User, application: Application, fil
 def _assert_professor_may_access(current_user: User, application: Application, file_id: int) -> None:
     """Restrict a professor to the applications assigned to them.
 
-    Same scope as ``GET /applications/{id}`` (``Application.professor_id``),
-    so every document the professor's detail dialog lists is also previewable.
-    The former ``can_access_student_data`` check walked the lazy
+    Same rule as ``GET /applications/{id}`` (see ``professor_scope``). The
+    former ``can_access_student_data`` check walked the lazy
     ``professor_relationships`` collection, which raises MissingGreenlet under
     an AsyncSession (issue #1130) and 500'd every professor preview.
     """
-    if application.professor_id != current_user.id:
+    if not professor_user_may_access(current_user, application):
         logger.warning(
             "SECURITY: professor attempted to access a file of an unassigned application",
             extra={
@@ -97,6 +97,43 @@ def _assert_professor_may_access(current_user: User, application: Application, f
         )
         # 404 rather than 403 so the response does not confirm the file exists.
         raise HTTPException(status_code=404, detail="File not found")
+
+
+def _assert_may_access_file(current_user: User, application: Application, file_id: int) -> None:
+    """Role-based access check shared by the preview and download proxies."""
+    if current_user.role == UserRole.student:
+        # Students can only access their own files
+        if application.user_id != current_user.id:
+            logger.warning(
+                "SECURITY: student attempted to access another user's file",
+                extra={
+                    "user_id": current_user.id,
+                    "file_id": file_id,
+                    "owner_user_id": application.user_id,
+                    "application_id": application.id,
+                },
+            )
+            raise HTTPException(status_code=403, detail="Access denied")
+    elif current_user.role == UserRole.professor:
+        # Professors are scoped to the applications assigned to them.
+        _assert_professor_may_access(current_user, application, file_id)
+    elif current_user.role == UserRole.college:
+        # College staff are scoped to their own college's applicants.
+        _assert_college_may_access(current_user, application, file_id)
+    elif current_user.role in (UserRole.admin, UserRole.super_admin):
+        # Admin and Super Admin can access any file
+        pass
+    else:
+        # Other roles are not allowed
+        logger.warning(
+            "SECURITY: unexpected role attempted file access",
+            extra={
+                "user_id": current_user.id,
+                "role": str(current_user.role),
+                "file_id": file_id,
+            },
+        )
+        raise HTTPException(status_code=403, detail="Access denied")
 
 
 @router.get("/applications/{application_id}/files/{file_id}")
@@ -147,40 +184,7 @@ async def get_file_proxy(
         # Check access permissions
         application = file_record.application
 
-        # Check access permissions based on role
-        if current_user.role == UserRole.student:
-            # Students can only access their own files
-            if application.user_id != current_user.id:
-                logger.warning(
-                    "SECURITY: student attempted to access another user's file",
-                    extra={
-                        "user_id": current_user.id,
-                        "file_id": file_id,
-                        "owner_user_id": application.user_id,
-                        "application_id": application.id,
-                    },
-                )
-                raise HTTPException(status_code=403, detail="Access denied")
-        elif current_user.role == UserRole.professor:
-            # Professors are scoped to the applications assigned to them.
-            _assert_professor_may_access(current_user, application, file_id)
-        elif current_user.role == UserRole.college:
-            # College staff are scoped to their own college's applicants.
-            _assert_college_may_access(current_user, application, file_id)
-        elif current_user.role in (UserRole.admin, UserRole.super_admin):
-            # Admin and Super Admin can access any file
-            pass
-        else:
-            # Other roles are not allowed
-            logger.warning(
-                "SECURITY: unexpected role attempted file access",
-                extra={
-                    "user_id": current_user.id,
-                    "role": str(current_user.role),
-                    "file_id": file_id,
-                },
-            )
-            raise HTTPException(status_code=403, detail="Access denied")
+        _assert_may_access_file(current_user, application, file_id)
 
         # Get file stream from MinIO
         if not file_record.object_name:
@@ -271,40 +275,7 @@ async def download_file_proxy(
         # Check access permissions
         application = file_record.application
 
-        # Check access permissions based on role
-        if current_user.role == UserRole.student:
-            # Students can only access their own files
-            if application.user_id != current_user.id:
-                logger.warning(
-                    "SECURITY: student attempted to access another user's file",
-                    extra={
-                        "user_id": current_user.id,
-                        "file_id": file_id,
-                        "owner_user_id": application.user_id,
-                        "application_id": application.id,
-                    },
-                )
-                raise HTTPException(status_code=403, detail="Access denied")
-        elif current_user.role == UserRole.professor:
-            # Professors are scoped to the applications assigned to them.
-            _assert_professor_may_access(current_user, application, file_id)
-        elif current_user.role == UserRole.college:
-            # College staff are scoped to their own college's applicants.
-            _assert_college_may_access(current_user, application, file_id)
-        elif current_user.role in (UserRole.admin, UserRole.super_admin):
-            # Admin and Super Admin can access any file
-            pass
-        else:
-            # Other roles are not allowed
-            logger.warning(
-                "SECURITY: unexpected role attempted file access",
-                extra={
-                    "user_id": current_user.id,
-                    "role": str(current_user.role),
-                    "file_id": file_id,
-                },
-            )
-            raise HTTPException(status_code=403, detail="Access denied")
+        _assert_may_access_file(current_user, application, file_id)
 
         # Get file stream from MinIO
         if not file_record.object_name:

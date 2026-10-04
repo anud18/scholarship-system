@@ -167,9 +167,7 @@ interface EnrichedApplicationExtras {
 // Visible tab count → grid class (Tailwind needs the literal class names).
 const TAB_GRID_COLS: Record<number, string> = {
   3: "grid-cols-3",
-  4: "grid-cols-4",
   5: "grid-cols-5",
-  6: "grid-cols-6",
   7: "grid-cols-7",
 };
 
@@ -716,22 +714,18 @@ export function ApplicationReviewDialog({
 
   // 審核操作 (per-sub-type review) is an admin surface only: the college
   // recommends — or not — through its ranking, never through a review here.
-  const canSubmitReview = role === "admin" || role === "super_admin";
-
-  const canManage = role === "admin" || role === "super_admin";
+  // The same admin gate also controls the 管理 tab.
+  const isAdminRole = role === "admin" || role === "super_admin";
+  const canSubmitReview = isAdminRole;
 
   // The professor sees the application itself, but not the live SIS 學生資訊
   // tab nor the 操作紀錄 audit trail (the basic tab keeps its 學生資訊 card).
-  const canViewStudentTab = role !== "professor";
-  const canViewAuditTrail = role !== "professor";
+  const canViewStudentAndAudit = role !== "professor";
 
-  // Tailwind needs literal class names, so map the visible tab count to one.
+  // 基本資訊 / 表單內容 / 上傳文件 always, then 學生資訊 + 操作紀錄, then
+  // 審核操作 + 管理.
   const visibleTabCount =
-    3 +
-    Number(canViewStudentTab) +
-    Number(canSubmitReview) +
-    Number(canManage) +
-    Number(canViewAuditTrail);
+    3 + (canViewStudentAndAudit ? 2 : 0) + (isAdminRole ? 2 : 0);
   const tabGridClass = TAB_GRID_COLS[visibleTabCount] ?? "grid-cols-7";
 
   // Check if user can assign professors
@@ -1214,10 +1208,12 @@ export function ApplicationReviewDialog({
     );
   };
 
-  // Get sub-type label
+  // Get sub-type label. `subTypes` is only loaded for the admin review tab, so
+  // the professor / college fall back to the detail response's labels.
   const getSubTypeLabel = (subTypeCode: string) => {
     const subType = subTypes.find((st: SubTypeOption) => st.value === subTypeCode);
-    return subType?.label || subTypeCode;
+    const detailLabel = detailedApplication?.sub_type_labels?.[subTypeCode];
+    return subType?.label || detailLabel?.[locale] || detailLabel?.zh || subTypeCode;
   };
 
   // Helper function to safely convert error messages to strings
@@ -1485,7 +1481,7 @@ export function ApplicationReviewDialog({
                   <Upload className="h-4 w-4 mr-1" />
                   {locale === "zh" ? "上傳文件" : "Documents"}
                 </TabsTrigger>
-                {canViewStudentTab && (
+                {canViewStudentAndAudit && (
                   <TabsTrigger value="student">
                     <GraduationCap className="h-4 w-4 mr-1" />
                     {locale === "zh" ? "學生資訊" : "Student"}
@@ -1497,13 +1493,13 @@ export function ApplicationReviewDialog({
                     {locale === "zh" ? "審核操作" : "Review"}
                   </TabsTrigger>
                 )}
-                {canManage && (
+                {isAdminRole && (
                   <TabsTrigger value="management">
                     <Settings className="h-4 w-4 mr-1" />
                     {locale === "zh" ? "管理" : "Management"}
                   </TabsTrigger>
                 )}
-                {canViewAuditTrail && (
+                {canViewStudentAndAudit && (
                   <TabsTrigger value="audit">
                     <History className="h-4 w-4 mr-1" />
                     {locale === "zh" ? "操作紀錄" : "Audit"}
@@ -1890,7 +1886,7 @@ export function ApplicationReviewDialog({
                 </TabsContent>
 
                 {/* Student Information Tab */}
-                {canViewStudentTab && (
+                {canViewStudentAndAudit && (
                   <TabsContent value="student" className="space-y-4 mt-4">
                     <Card>
                       <CardHeader>
@@ -2170,7 +2166,7 @@ export function ApplicationReviewDialog({
                 )}
 
                 {/* Management Tab (Admin and Super Admin) */}
-                {canManage && (
+                {isAdminRole && (
                   <TabsContent value="management" className="space-y-4 mt-4">
                     {/* Post Office Verification Section */}
                     <Card>
@@ -2392,7 +2388,7 @@ export function ApplicationReviewDialog({
                 )}
 
                 {/* Audit Trail Tab */}
-                {canViewAuditTrail && (
+                {canViewStudentAndAudit && (
                   <TabsContent value="audit" className="mt-4">
                     <Card>
                       <CardHeader>

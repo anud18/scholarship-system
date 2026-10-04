@@ -35,6 +35,8 @@ const APPLICATION = {
   student_termcount: 3,
   created_at: "2026-09-01T00:00:00Z",
   submitted_form_data: { fields: {}, documents: [] },
+  sub_type_labels: { nstc: { zh: "國科會博士生獎學金", en: "NSTC" } },
+  professor_review_items: [{ sub_type_code: "nstc", recommendation: "approve" }],
 } as unknown as Application;
 
 const renderDialog = (role: "professor" | "college") =>
@@ -76,6 +78,10 @@ describe("ApplicationReviewDialog tabs by role", () => {
     expect(screen.getByText("學生資訊")).toBeInTheDocument();
     expect(screen.getByText("王小明")).toBeInTheDocument();
     expect(screen.getByText("312551001")).toBeInTheDocument();
+
+    // 教授審查結果 names the sub-type from the detail response, not its raw code.
+    expect(screen.getByText(/國科會博士生獎學金/)).toBeInTheDocument();
+    expect(screen.queryByText(/^nstc/)).not.toBeInTheDocument();
   });
 
   it("keeps the college's 學生資訊 / 操作紀錄 tabs", async () => {

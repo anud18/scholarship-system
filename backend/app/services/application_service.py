@@ -51,6 +51,7 @@ from app.utils.college_scope import (
     get_application_college_code,
     get_user_college_code,
 )
+from app.utils.professor_scope import professor_user_may_access
 from app.utils.phone_validation import (
     TAIWAN_MOBILE_MESSAGE,
     extract_contact_phone,
@@ -916,7 +917,7 @@ class ApplicationService:
             if application.user_id != current_user.id:
                 return None
         elif current_user.role == UserRole.professor:
-            if application.professor_id != current_user.id:
+            if not professor_user_may_access(current_user, application):
                 return None
         elif current_user.role == UserRole.college:
             # SECURITY (#1223 A): 學院 staff are scoped to their own college's

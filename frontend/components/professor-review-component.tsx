@@ -37,8 +37,17 @@ import {
 import { Search, Eye, CheckCircle, AlertCircle, Clock, X, FileText } from "lucide-react";
 import apiClient, { Application, ApiResponse } from "@/lib/api";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
-import { ApplicationReviewDialog } from "@/components/common/ApplicationReviewDialog";
+import dynamic from "next/dynamic";
 import { User } from "@/types/user";
+
+// The shared detail dialog is large; only fetch it once a professor opens one.
+const ApplicationReviewDialog = dynamic(
+  () =>
+    import("@/components/common/ApplicationReviewDialog").then(mod => ({
+      default: mod.ApplicationReviewDialog,
+    })),
+  { ssr: false }
+);
 
 interface ProfessorReviewComponentProps {
   user: User;
@@ -783,15 +792,17 @@ function ProfessorReviewComponentInner({
       </Card>
 
       {/* Application detail (read-only, college-style tabs minus 學生資訊 / 操作紀錄) */}
-      <ApplicationReviewDialog
-        application={detailApplication}
-        role="professor"
-        open={detailApplication !== null}
-        onOpenChange={open => {
-          if (!open) setDetailApplication(null);
-        }}
-        locale="zh"
-      />
+      {detailApplication && (
+        <ApplicationReviewDialog
+          application={detailApplication}
+          role="professor"
+          open
+          onOpenChange={open => {
+            if (!open) setDetailApplication(null);
+          }}
+          locale="zh"
+        />
+      )}
 
       {/* Regulations Preview */}
       <FilePreviewDialog
