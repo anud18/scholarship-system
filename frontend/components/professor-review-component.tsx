@@ -37,7 +37,17 @@ import {
 import { Search, Eye, CheckCircle, AlertCircle, Clock, X, FileText } from "lucide-react";
 import apiClient, { Application, ApiResponse } from "@/lib/api";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
+import dynamic from "next/dynamic";
 import { User } from "@/types/user";
+
+// The shared detail dialog is large; only fetch it once a professor opens one.
+const ApplicationReviewDialog = dynamic(
+  () =>
+    import("@/components/common/ApplicationReviewDialog").then(mod => ({
+      default: mod.ApplicationReviewDialog,
+    })),
+  { ssr: false }
+);
 
 interface ProfessorReviewComponentProps {
   user: User;
@@ -126,6 +136,10 @@ function ProfessorReviewComponentInner({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [selectedApplication, setSelectedApplication] =
+    useState<Application | null>(null);
+  // Read-only 申請資料 dialog (shared with the college view), separate from
+  // the review modal so viewing never touches the review form state.
+  const [detailApplication, setDetailApplication] =
     useState<Application | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("pending");
@@ -668,15 +682,25 @@ function ProfessorReviewComponentInner({
                               </div>
                             </TableCell>
                             <TableCell>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => openReviewModal(app)}
-                                disabled={loading}
-                              >
-                                <Eye className="h-4 w-4 mr-1" />
-                                審查
-                              </Button>
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setDetailApplication(app)}
+                                >
+                                  <FileText className="h-4 w-4 mr-1" />
+                                  查看申請
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => openReviewModal(app)}
+                                  disabled={loading}
+                                >
+                                  <Eye className="h-4 w-4 mr-1" />
+                                  審查
+                                </Button>
+                              </div>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -686,7 +710,7 @@ function ProfessorReviewComponentInner({
 
                   {/* Mobile — card layout (below md breakpoint).
                       Each application becomes a vertically stacked card with
-                      a full-width "審查" button so the action is never clipped
+                      full-width "查看申請" / "審查" buttons so the actions are never clipped
                       offscreen as it was in the table layout (P1 audit). */}
                   <div className="md:hidden divide-y">
                     {filteredApplications.map(app => {
@@ -734,17 +758,28 @@ function ProfessorReviewComponentInner({
                             </div>
                           </dl>
 
-                          {/* Action: full-width so it can never be clipped */}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openReviewModal(app)}
-                            disabled={loading}
-                            className="w-full"
-                          >
-                            <Eye className="h-4 w-4 mr-1" />
-                            審查
-                          </Button>
+                          {/* Actions: full-width so they can never be clipped */}
+                          <div className="grid grid-cols-2 gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setDetailApplication(app)}
+                              className="w-full"
+                            >
+                              <FileText className="h-4 w-4 mr-1" />
+                              查看申請
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openReviewModal(app)}
+                              disabled={loading}
+                              className="w-full"
+                            >
+                              <Eye className="h-4 w-4 mr-1" />
+                              審查
+                            </Button>
+                          </div>
                         </div>
                       );
                     })}
@@ -755,6 +790,19 @@ function ProfessorReviewComponentInner({
           )}
         </CardContent>
       </Card>
+
+      {/* Application detail (read-only, college-style tabs minus 學生資訊 / 操作紀錄) */}
+      {detailApplication && (
+        <ApplicationReviewDialog
+          application={detailApplication}
+          role="professor"
+          open
+          onOpenChange={open => {
+            if (!open) setDetailApplication(null);
+          }}
+          locale="zh"
+        />
+      )}
 
       {/* Regulations Preview */}
       <FilePreviewDialog

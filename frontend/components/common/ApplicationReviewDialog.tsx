@@ -164,9 +164,16 @@ interface EnrichedApplicationExtras {
   professor_review_items?: SubTypeReviewItem[];
 }
 
+// Visible tab count → grid class (Tailwind needs the literal class names).
+const TAB_GRID_COLS: Record<number, string> = {
+  3: "grid-cols-3",
+  5: "grid-cols-5",
+  7: "grid-cols-7",
+};
+
 interface ApplicationReviewDialogProps {
   application: Application | HistoricalApplication | null;
-  role: "college" | "admin" | "super_admin";
+  role: "professor" | "college" | "admin" | "super_admin";
   open: boolean;
   onOpenChange: (open: boolean) => void;
   locale?: "zh" | "en";
@@ -707,7 +714,19 @@ export function ApplicationReviewDialog({
 
   // 審核操作 (per-sub-type review) is an admin surface only: the college
   // recommends — or not — through its ranking, never through a review here.
-  const canSubmitReview = role === "admin" || role === "super_admin";
+  // The same admin gate also controls the 管理 tab.
+  const isAdminRole = role === "admin" || role === "super_admin";
+  const canSubmitReview = isAdminRole;
+
+  // The professor sees the application itself, but not the live SIS 學生資訊
+  // tab nor the 操作紀錄 audit trail (the basic tab keeps its 學生資訊 card).
+  const canViewStudentAndAudit = role !== "professor";
+
+  // 基本資訊 / 表單內容 / 上傳文件 always, then 學生資訊 + 操作紀錄, then
+  // 審核操作 + 管理.
+  const visibleTabCount =
+    3 + (canViewStudentAndAudit ? 2 : 0) + (isAdminRole ? 2 : 0);
+  const tabGridClass = TAB_GRID_COLS[visibleTabCount] ?? "grid-cols-7";
 
   // Check if user can assign professors
   const canAssignProfessor =
@@ -1189,10 +1208,12 @@ export function ApplicationReviewDialog({
     );
   };
 
-  // Get sub-type label
+  // Get sub-type label. `subTypes` is only loaded for the admin review tab, so
+  // the professor / college fall back to the detail response's labels.
   const getSubTypeLabel = (subTypeCode: string) => {
     const subType = subTypes.find((st: SubTypeOption) => st.value === subTypeCode);
-    return subType?.label || subTypeCode;
+    const detailLabel = detailedApplication?.sub_type_labels?.[subTypeCode];
+    return subType?.label || detailLabel?.[locale] || detailLabel?.zh || subTypeCode;
   };
 
   // Helper function to safely convert error messages to strings
@@ -1447,7 +1468,7 @@ export function ApplicationReviewDialog({
             </div>
           ) : detailedApplication ? (
             <Tabs defaultValue="basic" className="flex-1 overflow-hidden flex flex-col">
-              <TabsList className={role === "college" ? "grid w-full grid-cols-5" : "grid w-full grid-cols-7"}>
+              <TabsList className={`grid w-full ${tabGridClass}`}>
                 <TabsTrigger value="basic">
                   <Info className="h-4 w-4 mr-1" />
                   {locale === "zh" ? "基本資訊" : "Basic"}
@@ -1460,26 +1481,30 @@ export function ApplicationReviewDialog({
                   <Upload className="h-4 w-4 mr-1" />
                   {locale === "zh" ? "上傳文件" : "Documents"}
                 </TabsTrigger>
-                <TabsTrigger value="student">
-                  <GraduationCap className="h-4 w-4 mr-1" />
-                  {locale === "zh" ? "學生資訊" : "Student"}
-                </TabsTrigger>
+                {canViewStudentAndAudit && (
+                  <TabsTrigger value="student">
+                    <GraduationCap className="h-4 w-4 mr-1" />
+                    {locale === "zh" ? "學生資訊" : "Student"}
+                  </TabsTrigger>
+                )}
                 {canSubmitReview && (
                   <TabsTrigger value="review">
                     <CheckCircle className="h-4 w-4 mr-1" />
                     {locale === "zh" ? "審核操作" : "Review"}
                   </TabsTrigger>
                 )}
-                {["admin", "super_admin"].includes(role) && (
+                {isAdminRole && (
                   <TabsTrigger value="management">
                     <Settings className="h-4 w-4 mr-1" />
                     {locale === "zh" ? "管理" : "Management"}
                   </TabsTrigger>
                 )}
-                <TabsTrigger value="audit">
-                  <History className="h-4 w-4 mr-1" />
-                  {locale === "zh" ? "操作紀錄" : "Audit"}
-                </TabsTrigger>
+                {canViewStudentAndAudit && (
+                  <TabsTrigger value="audit">
+                    <History className="h-4 w-4 mr-1" />
+                    {locale === "zh" ? "操作紀錄" : "Audit"}
+                  </TabsTrigger>
+                )}
               </TabsList>
 
               <div className="flex-1 overflow-y-auto">
@@ -1661,74 +1686,73 @@ export function ApplicationReviewDialog({
                     </CardContent>
                   </Card>
 
-                  {/* Professor Review Results (college/admin only) */}
-                  {["college", "admin", "super_admin"].includes(role) &&
-                    displayData.professor_review_items?.length > 0 && (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-lg">
-                            {locale === "zh" ? "教授審查結果" : "Professor Review"}
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="space-y-2">
-                            {displayData.professor_review_items.map(
-                              (item: SubTypeReviewItem, idx: number) => (
-                                <div
-                                  key={`${item.sub_type_code}-${idx}`}
-                                  className={`p-3 rounded border ${
-                                    item.recommendation === "approve"
-                                      ? "border-emerald-200 bg-emerald-50"
-                                      : "border-red-200 bg-red-50"
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-2">
-                                    <Badge
-                                      variant={
-                                        item.recommendation === "approve"
-                                          ? "outline"
-                                          : "destructive"
-                                      }
-                                      className={
-                                        item.recommendation === "approve"
-                                          ? "border-emerald-500 text-emerald-700 bg-white"
-                                          : ""
-                                      }
-                                    >
-                                      {getSubTypeLabel(item.sub_type_code)}
-                                      :{" "}
-                                      {item.recommendation === "approve"
-                                        ? locale === "zh"
-                                          ? "推薦"
-                                          : "Approve"
-                                        : locale === "zh"
-                                        ? "不推薦"
-                                        : "Reject"}
-                                    </Badge>
-                                  </div>
-                                  {item.comments && (
-                                    <div className="mt-2">
-                                      <Label className="text-xs font-medium">
-                                        {item.recommendation === "reject"
-                                          ? locale === "zh"
-                                            ? "不同意理由"
-                                            : "Reason for Reject"
-                                          : locale === "zh"
-                                          ? "備註"
-                                          : "Comments"}
-                                      </Label>
-                                      <p className="text-sm mt-1 whitespace-pre-wrap">
-                                        {item.comments}
-                                      </p>
-                                    </div>
-                                  )}
+                  {/* Professor Review Results */}
+                  {displayData.professor_review_items?.length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg">
+                          {locale === "zh" ? "教授審查結果" : "Professor Review"}
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2">
+                          {displayData.professor_review_items.map(
+                            (item: SubTypeReviewItem, idx: number) => (
+                              <div
+                                key={`${item.sub_type_code}-${idx}`}
+                                className={`p-3 rounded border ${
+                                  item.recommendation === "approve"
+                                    ? "border-emerald-200 bg-emerald-50"
+                                    : "border-red-200 bg-red-50"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <Badge
+                                    variant={
+                                      item.recommendation === "approve"
+                                        ? "outline"
+                                        : "destructive"
+                                    }
+                                    className={
+                                      item.recommendation === "approve"
+                                        ? "border-emerald-500 text-emerald-700 bg-white"
+                                        : ""
+                                    }
+                                  >
+                                    {getSubTypeLabel(item.sub_type_code)}
+                                    :{" "}
+                                    {item.recommendation === "approve"
+                                      ? locale === "zh"
+                                        ? "推薦"
+                                        : "Approve"
+                                      : locale === "zh"
+                                      ? "不推薦"
+                                      : "Reject"}
+                                  </Badge>
                                 </div>
-                              )
-                            )}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
+                                {item.comments && (
+                                  <div className="mt-2">
+                                    <Label className="text-xs font-medium">
+                                      {item.recommendation === "reject"
+                                        ? locale === "zh"
+                                          ? "不同意理由"
+                                          : "Reason for Reject"
+                                        : locale === "zh"
+                                        ? "備註"
+                                        : "Comments"}
+                                    </Label>
+                                    <p className="text-sm mt-1 whitespace-pre-wrap">
+                                      {item.comments}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
 
                   {/* Progress Timeline */}
                   <Card>
@@ -1862,30 +1886,32 @@ export function ApplicationReviewDialog({
                 </TabsContent>
 
                 {/* Student Information Tab */}
-                <TabsContent value="student" className="space-y-4 mt-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">
-                        {locale === "zh" ? "學生資訊" : "Student Information"}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <StudentPreviewDisplay
-                        studentId={displayData.student_id}
-                        academicYear={academicYear}
-                        locale={locale}
-                        studyingStatuses={studyingStatuses}
-                        degrees={degrees}
-                        departments={departments}
-                        genders={genders}
-                        academies={academies}
-                        identities={identities}
-                        schoolIdentities={schoolIdentities}
-                        enrollTypes={enrollTypes}
-                      />
-                    </CardContent>
-                  </Card>
-                </TabsContent>
+                {canViewStudentAndAudit && (
+                  <TabsContent value="student" className="space-y-4 mt-4">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg">
+                          {locale === "zh" ? "學生資訊" : "Student Information"}
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <StudentPreviewDisplay
+                          studentId={displayData.student_id}
+                          academicYear={academicYear}
+                          locale={locale}
+                          studyingStatuses={studyingStatuses}
+                          degrees={degrees}
+                          departments={departments}
+                          genders={genders}
+                          academies={academies}
+                          identities={identities}
+                          schoolIdentities={schoolIdentities}
+                          enrollTypes={enrollTypes}
+                        />
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+                )}
 
                 {/* Review Actions Tab (Admin, Super Admin) */}
                 {canSubmitReview && (
@@ -2140,7 +2166,7 @@ export function ApplicationReviewDialog({
                 )}
 
                 {/* Management Tab (Admin and Super Admin) */}
-                {["admin", "super_admin"].includes(role) && (
+                {isAdminRole && (
                   <TabsContent value="management" className="space-y-4 mt-4">
                     {/* Post Office Verification Section */}
                     <Card>
@@ -2362,18 +2388,20 @@ export function ApplicationReviewDialog({
                 )}
 
                 {/* Audit Trail Tab */}
-                <TabsContent value="audit" className="mt-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">
-                        {locale === "zh" ? "操作紀錄" : "Audit Trail"}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <ApplicationAuditTrail applicationId={displayData.id} locale={locale} />
-                    </CardContent>
-                  </Card>
-                </TabsContent>
+                {canViewStudentAndAudit && (
+                  <TabsContent value="audit" className="mt-4">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg">
+                          {locale === "zh" ? "操作紀錄" : "Audit Trail"}
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ApplicationAuditTrail applicationId={displayData.id} locale={locale} />
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+                )}
               </div>
             </Tabs>
           ) : null}
