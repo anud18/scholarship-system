@@ -33,7 +33,6 @@ import {
   summarizeReasons,
   toStagedItems,
   unallocatedReasonLabel,
-  type UnallocatedReason,
 } from "@/lib/api/modules/manual-distribution";
 import { buildCollegeQuotaGrid } from "@/lib/api/modules/college-quota-grid";
 import { User } from "@/types/user";
@@ -360,12 +359,6 @@ export function ManualDistributionPanel({
   useEffect(() => {
     localAllocationsRef.current = localAllocations;
   }, [localAllocations]);
-  // Why the last 預設分發 run left a row 未決, keyed by ranking_item_id. Comes
-  // straight from the backend, which is the only place that can tell a review
-  // reject from an exhausted quota. Cleared whenever the grid is reseeded.
-  const [unallocatedReasons, setUnallocatedReasons] = useState<
-    Map<number, UnallocatedReason>
-  >(new Map());
   const [collegeFilter, setCollegeFilter] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
@@ -534,7 +527,6 @@ export function ManualDistributionPanel({
     setIsLoading(true);
     setSaveMessage(null);
     setPreviewApplied(false);
-    setUnallocatedReasons(new Map());
     try {
       const [studentsResp, quotaResp] = await Promise.all([
         apiClient.manualDistribution.getStudents(
@@ -600,9 +592,6 @@ export function ManualDistributionPanel({
         setStudents(studentsResp.data);
         setPreviewApplied(merged.filled > 0);
         setLocalAllocations(merged.next);
-        setUnallocatedReasons(
-          hasQuota ? reasonsBySuggestion(previewSuggestions) : new Map()
-        );
       }
       if (quotaResp.success && quotaResp.data) {
         setQuotaStatus(quotaResp.data);
@@ -638,10 +627,8 @@ export function ManualDistributionPanel({
       setStudents(studentsResp.data);
       setLocalAllocations(seedAllocations(studentsResp.data));
       // The reseed is server-only, so any auto-preview suggestions are gone
-      // (saved or discarded) — clear the "已自動預設分配" notice, and with it
-      // the reasons, which described a screen that no longer exists.
+      // (saved or discarded) — clear the "已自動預設分配" notice.
       setPreviewApplied(false);
-      setUnallocatedReasons(new Map());
     }
     if (quotaResp.success && quotaResp.data) {
       setQuotaStatus(quotaResp.data);
@@ -802,12 +789,6 @@ export function ManualDistributionPanel({
     // Unticking returns the row to 未決 — nothing else is remembered about it.
     // A 未決 row is open to 預設分發 again and its slot is free for someone
     // else; to keep a student out of the round entirely, use 撤銷/停發.
-    setUnallocatedReasons(prev => {
-      if (!prev.has(rankingItemId)) return prev;
-      const next = new Map(prev);
-      next.delete(rankingItemId);
-      return next;
-    });
     setLocalAllocations(prev => {
       const next = new Map(prev);
       const prevAlloc = next.get(rankingItemId);
@@ -1112,27 +1093,7 @@ export function ManualDistributionPanel({
           setLocalAllocations(next);
           setPreviewApplied(true);
         }
-        // Refresh the explanation for every row this run considered: a row it
-        // actually staged loses its old one, an unplaced row takes the
-        // backend's verdict. Rows out of scope keep whatever an earlier run
-        // said. Keyed on what the merge STAGED, not on what the server
-        // suggested — a suggestion the merge dropped as ineligible leaves the
-        // row 未決, so clearing its reason would strip the only explanation on
-        // screen.
         const runReasons = reasonsBySuggestion(suggestions);
-        setUnallocatedReasons(prev => {
-          const merged = new Map(prev);
-          for (const s of suggestions) {
-            if (s.sub_type_code && next.get(s.ranking_item_id)) {
-              merged.delete(s.ranking_item_id);
-            }
-          }
-          for (const [itemId, reason] of runReasons) {
-            merged.set(itemId, reason);
-          }
-          return merged;
-        });
-
         const breakdown = summarizeReasons(runReasons)
           .map(
             ({ reason, count }) =>
@@ -1345,7 +1306,6 @@ export function ManualDistributionPanel({
                         setLocalAllocations(
                           new Map(students.map(s => [s.ranking_item_id, null]))
                         );
-                        setUnallocatedReasons(new Map());
                       }}
                     >
                       確認清空
@@ -1862,12 +1822,6 @@ export function ManualDistributionPanel({
                             const curAlloc = localAllocations.get(
                               student.ranking_item_id
                             );
-                            // Only meaningful while the row is still 未決: once
-                            // it carries an allocation, whatever stopped an
-                            // earlier run no longer describes it.
-                            const unallocatedReason = curAlloc
-                              ? undefined
-                              : unallocatedReasons.get(student.ranking_item_id);
                             // Phase 8.2: surface challenge metadata from the
                             // /state payload (keyed by application_id).
                             const challengeMeta = challengeAppMap.get(
@@ -1991,21 +1945,6 @@ export function ManualDistributionPanel({
                                         title="已列入學院確認排名"
                                       >
                                         排名: 推薦
-                                      </span>
-                                    )}
-                                    {/* Why the last 預設分發 left this row
-                                        blank, straight from the backend.
-                                        撤銷/停發 is omitted — the row's own
-                                        status control already says so. */}
-                                    {unallocatedReason && (
-                                      <span
-                                        className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200"
-                                        title={`預設分發未分配：${unallocatedReasonLabel(unallocatedReason)}`}
-                                      >
-                                        未分配:{" "}
-                                        {unallocatedReasonLabel(
-                                          unallocatedReason
-                                        )}
                                       </span>
                                     )}
                                   </div>

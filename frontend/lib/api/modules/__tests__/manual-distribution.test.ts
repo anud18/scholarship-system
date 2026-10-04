@@ -596,7 +596,7 @@ describe("reasonsBySuggestion / summarizeReasons", () => {
 
   it("falls back to the raw code for a reason this build has not learnt", () => {
     // The union is hand-kept and the response is untyped, so a backend that
-    // ships a new code first must not render 「未分配: undefined」.
+    // ships a new code first must not render 「3 筆undefined」.
     expect(unallocatedReasonLabel("quota_full")).toBe("名額不足");
     expect(
       unallocatedReasonLabel("brand_new_code" as UnallocatedReason)
