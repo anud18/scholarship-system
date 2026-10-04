@@ -73,6 +73,11 @@ def test_order_single_and_empty():
     assert order_sub_type_preferences([]) == []
 
 
+def test_order_matches_moe_1w_case_and_whitespace_insensitively():
+    # Stored lists are free-form; the original spelling is kept.
+    assert order_sub_type_preferences(["nstc", " MOE_1W"]) == [" MOE_1W", "nstc"]
+
+
 def test_forced_first_preference_constant_matches_frontend():
     # Mirrors FORCED_FIRST_PREFERENCE in
     # frontend/components/student-wizard/steps/ScholarshipApplicationStep.tsx

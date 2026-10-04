@@ -39,7 +39,7 @@ from app.schemas.application import (
     ApplicationUpdate,
     StudentDataSchema,
 )
-from app.services.application_builder import backfill_professor_assignments
+from app.services.application_builder import backfill_professor_assignments, order_sub_type_preferences
 from app.services.eligibility_service import EligibilityService
 from app.services.email_automation_service import email_automation_service
 from app.services.email_service import EmailService
@@ -512,8 +512,13 @@ class ApplicationService:
             scholarship_subtype_list=scholarship_subtype_list,
             # Ordered sub-type preference list (志願序). The distribution service
             # reads this first; without it, allocation falls back to selection
-            # order. The frontend computes the order (MOE/moe_1w forced first).
-            sub_type_preferences=application_data.sub_type_preferences,
+            # order. MOE (moe_1w) is forced first here too — never trust the
+            # client's order alone.
+            sub_type_preferences=(
+                order_sub_type_preferences(application_data.sub_type_preferences)
+                if application_data.sub_type_preferences
+                else None
+            ),
             sub_type_selection_mode=sub_type_selection_mode,
             sub_scholarship_type=sub_scholarship_type,
             is_renewal=False,  # New applications are never renewals
@@ -1139,7 +1144,7 @@ class ApplicationService:
         # 更新志願序（如果提供）— persist the ordered preference list so the
         # distribution service uses it instead of falling back to selection order.
         if update_data.sub_type_preferences is not None:
-            application.sub_type_preferences = update_data.sub_type_preferences
+            application.sub_type_preferences = order_sub_type_preferences(update_data.sub_type_preferences)
 
         await self.db.commit()
         await self.db.refresh(application)
