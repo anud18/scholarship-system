@@ -24,15 +24,12 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { FileUpload } from "@/components/file-upload";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
-import { getAuthToken } from "@/lib/utils/url-validation";
 import { buildExampleDocumentPreview } from "@/lib/utils/example-document-preview";
 import {
   Loader2,
   AlertCircle,
   FileText,
   FormInput,
-  Eye,
-  CheckCircle,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { logger } from "@/lib/utils/logger";
@@ -59,7 +56,6 @@ interface DynamicApplicationFormProps {
   initialFiles?: Record<string, File[]>;
   className?: string;
   selectedSubTypes?: string[];
-  currentUserId?: number; // 當前用戶ID，用於預覽現有文件
 }
 
 interface FormData {
@@ -80,7 +76,6 @@ export function DynamicApplicationForm({
   initialFiles = {},
   className,
   selectedSubTypes,
-  currentUserId,
 }: DynamicApplicationFormProps) {
   const t = (key: string) => getTranslation(locale, key);
   // State
@@ -141,31 +136,6 @@ export function DynamicApplicationForm({
 
       if (response.success && response.data) {
         setFormConfig(response.data);
-
-        // Auto-populate prefilled values for fixed fields
-        const prefillData: Record<string, any> = {};
-        response.data.fields.forEach(field => {
-          if (
-            field.prefill_value !== undefined &&
-            field.prefill_value !== null &&
-            field.prefill_value !== ""
-          ) {
-            prefillData[field.field_name] = field.prefill_value;
-          }
-        });
-
-        // Merge with existing form data (existing data takes priority)
-        if (Object.keys(prefillData).length > 0) {
-          const mergedData = { ...prefillData, ...formData };
-          setFormData(mergedData);
-
-          // Notify parent component of prefilled values
-          Object.entries(prefillData).forEach(([fieldName, value]) => {
-            if (!(fieldName in formData)) {
-              onFieldChange?.(fieldName, value);
-            }
-          });
-        }
       } else {
         setError(t("form_upload.load_form_config_failed"));
       }
@@ -236,69 +206,6 @@ export function DynamicApplicationForm({
     onFileChange?.(documentType, files);
   };
 
-  const handlePreviewExistingFile = (document: ApplicationDocument) => {
-    if (!document.existing_file_url) return;
-
-    // 從文件 URL 提取檔名
-    const documentUrl = document.existing_file_url;
-    const filename =
-      documentUrl.split("/").pop()?.split("?")[0] || "bank_document";
-
-    // 從 URL 中提取 token（如果有的話）
-    let token = "";
-    const urlParts = documentUrl.split("?");
-    if (urlParts.length > 1) {
-      const urlParams = new URLSearchParams(urlParts[1]);
-      token = urlParams.get("token") || "";
-    }
-
-    // 如果 URL 中沒有 token，嘗試從存儲中獲取
-    if (!token) {
-      token = getAuthToken();
-
-      if (!token) {
-        logger.error("No authentication token available");
-        return null;
-      }
-    }
-
-    // 對於個人資料的文件，使用檔名作為 fileId
-    const fileId = filename;
-    const fileType = encodeURIComponent("存摺封面");
-
-    // 使用傳遞的用戶ID或預設值
-    const userId = currentUserId || 1;
-
-    // 建立預覽 URL - encode all parameters for XSS protection
-    const encodedFileId = encodeURIComponent(fileId);
-    const encodedFilename = encodeURIComponent(filename);
-    const encodedUserId = encodeURIComponent(String(userId));
-    const encodedToken = encodeURIComponent(token);
-    const previewUrl = `/api/v1/preview?fileId=${encodedFileId}&filename=${encodedFilename}&type=${fileType}&userId=${encodedUserId}&token=${encodedToken}`;
-
-    // 判斷文件類型
-    let fileTypeDisplay = "other";
-    if (filename.toLowerCase().endsWith(".pdf")) {
-      fileTypeDisplay = "application/pdf";
-    } else if (
-      [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"].some(ext =>
-        filename.toLowerCase().endsWith(ext)
-      )
-    ) {
-      fileTypeDisplay = "image";
-    }
-
-    // 設定預覽文件資訊並打開modal
-    setPreviewFile({
-      url: previewUrl,
-      filename: filename,
-      type: fileTypeDisplay,
-      downloadUrl: documentUrl, // 使用原始URL作為下載連結
-    });
-
-    setShowPreview(true);
-  };
-
   /**
    * Open an admin-uploaded example document in the shared preview dialog, so it
    * behaves like every other document preview (inline viewer + 在新視窗開啟 +
@@ -360,8 +267,7 @@ export function DynamicApplicationForm({
   const renderField = (field: ApplicationField) => {
     if (!field.is_active) return null;
 
-    // Use prefill value for fixed fields if no current value exists
-    const fieldValue = formData[field.field_name] || field.prefill_value || "";
+    const fieldValue = formData[field.field_name] || "";
     const label = getFieldLabel(field);
     const placeholder = getFieldPlaceholder(field);
     const helpText = getFieldHelpText(field);
@@ -642,48 +548,6 @@ export function DynamicApplicationForm({
             </Badge>
           )}
         </div>
-
-        {isFixedDocument && document.existing_file_url && (
-          <div className="space-y-2">
-            <h4 className="text-sm font-medium">
-              {t("form_upload.uploaded_files")} (1/1) - {documentName}
-            </h4>
-            <Card>
-              <CardContent className="flex items-center justify-between p-3">
-                <div className="flex items-center space-x-3">
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">
-                      {t("form_upload.bankbook_cover")}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      <span className="ml-1 text-blue-600">
-                        {t("form_upload.uploaded")}
-                      </span>
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  {/* 預覽按鈕 */}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handlePreviewExistingFile(document)}
-                  >
-                    <Eye className="h-4 w-4" />
-                  </Button>
-                  <Badge variant="outline" className="text-xs">
-                    <CheckCircle className="h-3 w-3 mr-1" />
-                    {t("form_upload.exists")}
-                  </Badge>
-                </div>
-              </CardContent>
-            </Card>
-            <p className="text-xs text-blue-600">
-              {t("form_upload.replace_existing_notice")}
-            </p>
-          </div>
-        )}
 
         {description && (
           <p className="text-sm text-muted-foreground">{description}</p>

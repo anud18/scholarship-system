@@ -72,6 +72,7 @@ import {
   TAIWAN_MOBILE_MESSAGE,
 } from "@/lib/utils/application-helpers";
 import { calculateFormProgress } from "@/lib/utils/application-progress";
+import { PROFILE_OWNED_FIELD_SOURCES } from "@/lib/utils/profile-owned-fields";
 import { useApplications } from "@/hooks/use-applications";
 import { useStudentProfile } from "@/hooks/use-student-profile";
 import {
@@ -724,6 +725,10 @@ export function ScholarshipApplicationStep({
             // `accountNumber` state (hydrated from the profile); skip the
             // folded-in copy so it can't drift into dynamicFormData.
             if (fieldId === "account_number") return;
+            // 郵局帳號/指導教授 live on the profile. Older drafts may hold a
+            // copy leaked from another student's prefill (#1443); dropping
+            // it here means the next save writes a clean form.
+            if (fieldId in PROFILE_OWNED_FIELD_SOURCES) return;
             if (
               fieldData &&
               typeof fieldData === "object" &&
@@ -1623,7 +1628,6 @@ export function ScholarshipApplicationStep({
               initialValues={dynamicFormData}
               initialFiles={dynamicFileData}
               selectedSubTypes={selectedSubTypes}
-              currentUserId={userId}
             />
           )}
 

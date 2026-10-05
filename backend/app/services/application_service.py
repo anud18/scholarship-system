@@ -40,6 +40,7 @@ from app.schemas.application import (
     StudentDataSchema,
 )
 from app.services.application_builder import backfill_professor_assignments, order_sub_type_preferences
+from app.services.application_field_service import FIXED_ADVISOR_KEYS, FIXED_KEY_POSTAL_ACCOUNT
 from app.services.eligibility_service import EligibilityService
 from app.services.email_automation_service import email_automation_service
 from app.services.email_service import EmailService
@@ -61,6 +62,20 @@ from app.utils.phone_validation import (
 func: Any = sa_func
 
 logger = logging.getLogger(__name__)
+
+# 郵局帳號與指導教授資訊屬於 UserProfile（由精靈的個人資料區塊寫入）。學生自己的
+# 建立/更新路徑若把它們存進 submitted_form_data，審核頁、造冊與帳號驗證就會讀到
+# 錯的值（#1443）。批次/續領匯入不走這兩個路徑，它們合法寫入的 postal_account 不受影響。
+PROFILE_OWNED_FORM_FIELDS = frozenset({FIXED_KEY_POSTAL_ACCOUNT, *FIXED_ADVISOR_KEYS})
+
+
+def strip_profile_owned_fields(form_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Return a copy of `form_data` without the UserProfile-owned fixed fields."""
+    fields = form_data.get("fields")
+    if not isinstance(fields, dict):
+        return form_data
+    kept = {field_id: value for field_id, value in fields.items() if field_id not in PROFILE_OWNED_FORM_FIELDS}
+    return {**form_data, "fields": kept}
 
 
 async def get_student_data_from_user(user: User) -> Optional[Dict[str, Any]]:
@@ -526,7 +541,9 @@ class ApplicationService:
             academic_year=academic_year,
             semester=semester,
             student_data=student_snapshot,
-            submitted_form_data=application_data.form_data.dict() if application_data.form_data else {},
+            submitted_form_data=(
+                strip_profile_owned_fields(application_data.form_data.dict()) if application_data.form_data else {}
+            ),
             agree_terms=application_data.agree_terms or False,
             status=status,
             status_name=status_name,
@@ -1125,7 +1142,9 @@ class ApplicationService:
         # 更新表單資料
         if update_data.form_data:
             # Serialize form data to handle datetime objects properly
-            application.submitted_form_data = self._serialize_for_json(update_data.form_data.dict())
+            application.submitted_form_data = self._serialize_for_json(
+                strip_profile_owned_fields(update_data.form_data.dict())
+            )
 
         # NOTE: status is intentionally not updatable here — see ApplicationUpdate.
 
