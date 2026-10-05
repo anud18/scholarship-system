@@ -7,7 +7,7 @@ appear regardless of scholarship type. Bugs here either:
 - Lock students out (wrong field_name breaks form-data lookup), or
 - Display the wrong label / help_text — surface-level but visible noise.
 
-3 builders covered (10 cases):
+3 builders covered (8 cases):
 - `_create_fixed_bank_account_field`         : postal_account text input
 - `_create_fixed_bank_statement_document`    : 存摺封面 file upload
 - `_create_fixed_advisor_fields`             : 3-field group (name/email/id)
@@ -53,16 +53,6 @@ def test_bank_account_field_canonical_field_name(service):
     assert field["is_fixed"] is True
 
 
-def test_bank_account_field_prefill_from_user_profile(service):
-    """prefill_data['account_number'] flows into prefill_value; missing
-    prefill (None) ⇒ empty string (don't propagate None into the JSX)."""
-    field = service._create_fixed_bank_account_field(prefill_data={"account_number": "0001234567"})
-    assert field["prefill_value"] == "0001234567"
-
-    field_no_prefill = service._create_fixed_bank_account_field(prefill_data=None)
-    assert field_no_prefill["prefill_value"] == ""
-
-
 # ─── _create_fixed_bank_statement_document ───────────────────────────
 
 
@@ -80,14 +70,6 @@ def test_bank_statement_doc_is_fixed_and_required(service):
     doc = service._create_fixed_bank_statement_document()
     assert doc["is_fixed"] is True
     assert doc["is_required"] is True
-
-
-def test_bank_statement_doc_existing_file_url_from_prefill(service):
-    """If the user has a previously-uploaded photo, surface it via
-    existing_file_url — frontend uses this to render a preview thumbnail
-    so the student knows what they're replacing."""
-    doc = service._create_fixed_bank_statement_document(prefill_data={"bank_document_photo_url": "https://x/photo.jpg"})
-    assert doc["existing_file_url"] == "https://x/photo.jpg"
 
 
 # ─── _create_fixed_advisor_fields ────────────────────────────────────
@@ -118,16 +100,18 @@ def test_advisor_fields_email_field_uses_email_type(service):
     assert email_field["field_type"] == "email"
 
 
-def test_advisor_fields_prefill_each_field_separately(service):
-    """Each field reads its own key from prefill_data — name, email,
-    nycu_id are independent."""
-    prefill = {"advisor_name": "Prof Wang", "advisor_email": "wang@nycu.edu.tw", "advisor_nycu_id": "EE0001"}
-    fields = service._create_fixed_advisor_fields(prefill_data=prefill)
+# ─── no per-user data ────────────────────────────────────────────────
 
-    expected = {
-        "advisor_name": "Prof Wang",
-        "advisor_email": "wang@nycu.edu.tw",
-        "advisor_nycu_id": "EE0001",
-    }
-    for f in fields:
-        assert f["prefill_value"] == expected[f["field_name"]]
+
+def test_builders_carry_no_per_user_values(service):
+    """The built items end up in the shared form-config cache, so they must
+    never carry a profile value — that is how one student's 郵局帳號 and
+    指導教授 reached every other student (#1443)."""
+    items = [
+        service._create_fixed_bank_account_field(),
+        service._create_fixed_bank_statement_document(),
+        *service._create_fixed_advisor_fields(),
+    ]
+    for item in items:
+        assert "prefill_value" not in item
+        assert "existing_file_url" not in item

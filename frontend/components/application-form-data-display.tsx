@@ -10,6 +10,7 @@ import {
   formatFieldValue,
 } from "@/lib/utils/application-helpers";
 import {
+  CANONICAL_ACCOUNT_FIELD_ID,
   canonicalizeFieldId,
   collectProfileOwnedFieldValues,
 } from "@/lib/utils/profile-owned-fields";
@@ -30,31 +31,54 @@ interface ApplicationFormDataDisplayProps {
 // has its own consent row in the dialog.
 const EXCLUDED_FIELD_IDS = new Set(["files", "agree_terms"]);
 
+// The wizard folds the account the student typed into the submitted fields
+// under this id. A `postal_account` copy may instead be another student's
+// account leaked through the shared form-config prefill (#1443).
+const OWN_ACCOUNT_FIELD_ID = "account_number";
+
+const getSubmittedFields = (
+  formData: ApplicationFormDataDisplayProps["formData"]
+): Record<string, unknown> =>
+  (formData as { submitted_form_data?: { fields?: Record<string, unknown> } })
+    ?.submitted_form_data?.fields || {};
+
+const hasValue = (value: unknown): boolean =>
+  value !== null && value !== undefined && value !== "";
+
 /** What the student actually submitted, with the 郵局帳號 synonyms collapsed. */
 const collectSubmittedValues = (
   formData: ApplicationFormDataDisplayProps["formData"]
 ): Record<string, unknown> => {
   const values: Record<string, unknown> = {};
-  const fields =
-    (formData as { submitted_form_data?: { fields?: Record<string, unknown> } })
-      ?.submitted_form_data?.fields || {};
 
-  Object.entries(fields).forEach(([fieldId, fieldData]) => {
+  Object.entries(getSubmittedFields(formData)).forEach(([fieldId, fieldData]) => {
     if (!fieldData || typeof fieldData !== "object" || !("value" in fieldData)) {
       return;
     }
     const value = (fieldData as { value: unknown }).value;
-    if (value === null || value === undefined || value === "") return;
+    if (!hasValue(value)) return;
     if (EXCLUDED_FIELD_IDS.has(fieldId)) return;
 
-    // Older submissions store the account under both synonyms; keep the first
-    // one so the rendered value doesn't depend on JSON key order.
+    // Submissions may store the account under both synonyms. The student's own
+    // `account_number` wins, whatever the JSON key order.
     const canonicalId = canonicalizeFieldId(fieldId);
-    if (canonicalId in values) return;
+    if (canonicalId in values && fieldId !== OWN_ACCOUNT_FIELD_ID) return;
     values[canonicalId] = value;
   });
 
   return values;
+};
+
+const hasSubmittedOwnAccount = (
+  formData: ApplicationFormDataDisplayProps["formData"]
+): boolean => {
+  const field = getSubmittedFields(formData)[OWN_ACCOUNT_FIELD_ID];
+  return (
+    !!field &&
+    typeof field === "object" &&
+    "value" in field &&
+    hasValue((field as { value: unknown }).value)
+  );
 };
 
 /**
@@ -76,13 +100,18 @@ const withProfileOwnedFields = (
   const values = { ...submittedValues };
   if (!fieldLabels) return values;
 
+  const keepSubmittedAccount = hasSubmittedOwnAccount(formData);
   Object.entries(
     collectProfileOwnedFieldValues(formData as Record<string, unknown>)
   ).forEach(([fieldId, value]) => {
     if (!(fieldId in fieldLabels)) return;
-    // A submitted snapshot wins over the current profile: it is what the
-    // student sent with this application.
-    if (fieldId in values) return;
+    // The account the student submitted with this application stays.
+    if (fieldId === CANONICAL_ACCOUNT_FIELD_ID && keepSubmittedAccount) return;
+    // Otherwise the profile wins over a submitted copy: these fields belong on
+    // the profile, and a copy in submitted_form_data may be another student's
+    // values leaked through the shared form-config prefill (#1443). An empty
+    // profile value was dropped above, so an imported application whose
+    // profile lacks it keeps its own copy.
     values[fieldId] = value;
   });
 
