@@ -233,6 +233,11 @@ jobs:
         # bun audit is HARD-gated at high severity: a high/critical advisory in
         # the dependency tree fails this job. (It used to end in `|| true`,
         # which made the whole check structurally incapable of failing.)
+        # The one --ignore is GHSA-vfj7-8cjw-p6xm (braces <=3.0.3, stack-
+        # exhaustion DoS): upstream has published NO patched release (3.0.3 is
+        # latest) and braces is reached only through dev tooling (micromatch
+        # via jest/tailwind/eslint/react-email), never the runtime bundle.
+        # Drop the flag once braces ships a fix.
         # safety stays warn-only: it needs network/API access that is flaky on
         # runners, and its findings overlap Dependabot alerts we already gate.
         run: |
@@ -244,7 +249,7 @@ jobs:
                 || echo "::warning title=safety::safety check reported issues (warn-only)"
             fi
             if [[ -f "frontend/package.json" ]]; then
-              cd frontend && bun install --frozen-lockfile && bun audit --audit-level=high
+              cd frontend && bun install --frozen-lockfile && bun audit --audit-level=high --ignore=GHSA-vfj7-8cjw-p6xm
             fi
           fi
 
