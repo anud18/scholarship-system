@@ -122,11 +122,28 @@ class TestAccountNumberAliasing:
         result = service.extract_bank_fields_from_application(app)
         assert result["account_number"] == "11223344556677"
 
+    def test_own_account_number_beats_postal_account(self, service: BankVerificationService) -> None:
+        """account_number is what the wizard folds the student's own typed
+        account into; a postal_account copy in a wizard application may be
+        another student's account leaked through the form-config prefill
+        (#1443)."""
+        app = _app(
+            form_data={
+                "fields": {
+                    "postal_account": {"value": "22222222222222"},
+                    "account_number": {"value": "12341234123412"},
+                }
+            },
+            student_data={"std_cname": "王小明"},
+        )
+        result = service.extract_bank_fields_from_application(app)
+        assert result["account_number"] == "12341234123412"
+
     def test_first_alias_wins(self, service: BankVerificationService) -> None:
-        """When multiple aliases are present, the first one in the mapping
-        (postal_account) wins. This is load-bearing — re-ordering the
-        possible_keys list would change which value is treated as
-        authoritative."""
+        """When multiple aliases are present, the first one in
+        BANK_ACCOUNT_FIELD_LOOKUP wins (here postal_account, as no
+        account_number is present). This is load-bearing — re-ordering the
+        list would change which value is treated as authoritative."""
         app = _app(
             form_data={
                 "fields": {

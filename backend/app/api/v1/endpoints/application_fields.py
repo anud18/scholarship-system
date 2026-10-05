@@ -244,9 +244,12 @@ async def get_scholarship_form_config(
         ) from e
 
 
+# `:v2`: entries cached before #1443 carry one student's profile prefill. A new
+# key makes a deploy stop serving them immediately instead of after the TTL.
+# The suffix keeps the `formconfig:{type}` invalidation prefixes matching.
 @cached(
     key_fn=lambda scholarship_type, should_include_inactive, *_, **__: (
-        f"formconfig:{scholarship_type}:{'all' if should_include_inactive else 'active'}"
+        f"formconfig:{scholarship_type}:{'all' if should_include_inactive else 'active'}:v2"
     ),
     ttl=21600,  # 6 h
 )

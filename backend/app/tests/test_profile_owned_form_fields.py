@@ -12,7 +12,8 @@ Covered here:
 - `strip_profile_owned_fields` drops exactly the profile-owned ids, keeps
   everything else (including the wizard's own `account_number`), and does not
   mutate its input
-- `update_application` persists the stripped form
+- `create_application` (via `_create_application_instance`) and
+  `update_application` persist the stripped form
 """
 
 from datetime import datetime, timezone
@@ -25,12 +26,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.application import Application, ApplicationStatus
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User, UserRole, UserType
-from app.schemas.application import ApplicationFormData, ApplicationUpdate
+from app.schemas.application import ApplicationCreate, ApplicationFormData, ApplicationUpdate
 from app.services.application_service import (
     PROFILE_OWNED_FORM_FIELDS,
     ApplicationService,
     strip_profile_owned_fields,
 )
+from app.utils.bank_account_fields import BANK_ACCOUNT_FIELD_KEYS, BANK_ACCOUNT_FIELD_LOOKUP
 
 
 def _field(field_id: str, value: str) -> dict:
@@ -75,6 +77,13 @@ def test_strip_does_not_mutate_its_input():
 
 def test_strip_leaves_a_form_without_fields_untouched():
     assert strip_profile_owned_fields({"documents": []}) == {"documents": []}
+
+
+def test_account_readers_prefer_the_students_own_account_number():
+    """Roster generation and bank verification read the account through this
+    order; a leaked postal_account must never beat the wizard's account_number."""
+    assert BANK_ACCOUNT_FIELD_KEYS[0] == "account_number"
+    assert BANK_ACCOUNT_FIELD_LOOKUP[: len(BANK_ACCOUNT_FIELD_KEYS)] == BANK_ACCOUNT_FIELD_KEYS
 
 
 # ─── update_application ──────────────────────────────────────────────
@@ -138,6 +147,30 @@ async def _seed_draft(db: AsyncSession) -> tuple[User, Application]:
     await db.commit()
     await db.refresh(application)
     return student, application
+
+
+@pytest.mark.asyncio
+async def test_create_application_does_not_persist_profile_owned_fields(db: AsyncSession):
+    """Drafts and first submissions are written here, before any update."""
+    student, existing = await _seed_draft(db)
+    scholarship_type = await db.get(ScholarshipType, existing.scholarship_type_id)
+    config = await db.get(ScholarshipConfiguration, existing.scholarship_configuration_id)
+    service = ApplicationService(db)
+
+    application = await service._create_application_instance(
+        user=student,
+        student_snapshot={},
+        scholarship=scholarship_type,
+        config=config,
+        application_data=ApplicationCreate(
+            scholarship_type=scholarship_type.code,
+            configuration_id=config.id,
+            form_data=ApplicationFormData(fields={**LEAKED, **OWN}, documents=[]),
+        ),
+        is_draft=True,
+    )
+
+    assert set(application.submitted_form_data["fields"]) == set(OWN)
 
 
 @pytest.mark.asyncio

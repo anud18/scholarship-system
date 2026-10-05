@@ -728,7 +728,7 @@ export function ScholarshipApplicationStep({
             // 郵局帳號/指導教授 live on the profile. Older drafts may hold a
             // copy leaked from another student's prefill (#1443); dropping
             // it here means the next save writes a clean form.
-            if (fieldId in PROFILE_OWNED_FIELD_SOURCES) return;
+            if (Object.hasOwn(PROFILE_OWNED_FIELD_SOURCES, fieldId)) return;
             if (
               fieldData &&
               typeof fieldData === "object" &&
