@@ -1,0 +1,61 @@
+# Report-only check: does a blob: PDF iframe paint in real Microsoft Edge under
+# the production header sets? Reuses the Safari harness (scripts/safari/) with
+# BROWSER=edge. Runs by hand or on pushes that touch this file.
+name: Edge PDF preview
+
+on:
+  workflow_dispatch:
+  push:
+    branches-ignore:
+      - main
+    paths:
+      - .github/workflows/edge-pdf-preview.yml
+
+permissions:
+  contents: read
+
+jobs:
+  matrix:
+    runs-on: macos-15
+    timeout-minutes: 25
+    env:
+      OUT_DIR: edge-matrix
+      BROWSER: edge
+      GATE: "0"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Microsoft Edge
+        run: |
+          brew install --cask microsoft-edge
+          "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge" --version
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Selenium
+        run: pip install "selenium>=4.20" pillow
+
+      - name: Run the header / embed matrix in Edge
+        run: |
+          set -o pipefail
+          python scripts/safari/pdf_header_matrix.py 2>&1 | tee matrix.log
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo '```'
+            grep -E '^\[env\]' matrix.log || true
+            sed -n '/^headers /,$p' matrix.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: edge-pdf-matrix
+          path: edge-matrix/
+          retention-days: 7

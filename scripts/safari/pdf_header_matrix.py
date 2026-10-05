@@ -13,7 +13,8 @@ that pinned the bug: a blob: PDF frame is blank exactly when the page carries
 frame paints under every set. `real-self` is today's production set
 (`frame-ancestors 'self'`, X-Frame-Options DENY) and must paint both ways.
 
-Env: OUT_DIR (default safari-matrix), BROWSER=safari|chrome, ONLY (comma list
+Env: OUT_DIR (default safari-matrix), BROWSER=safari|chrome|edge, GATE=0 to
+report only (never fail), ONLY (comma list
 of "<headers>/<mode>" to restrict), PORT (default 8765).
 """
 
@@ -264,6 +265,10 @@ def start_safari() -> webdriver.Remote:
 def make_driver() -> webdriver.Remote:
     if BROWSER == "safari":
         driver = start_safari()
+    elif BROWSER == "edge":
+        options = webdriver.EdgeOptions()
+        options.add_argument("--headless=new")
+        driver = webdriver.Edge(options=options)
     else:
         options = webdriver.ChromeOptions()
         options.add_argument("--headless=new")
@@ -367,7 +372,7 @@ def main() -> int:
         for c in cases
         if not c["painted"] and not (c["mode"] == "blob-iframe" and c["headers"] in BLOB_BLANK_EXPECTED)
     ]
-    if unpainted:
+    if unpainted and os.environ.get("GATE", "1") != "0":
         print(f"FAIL: expected a painted PDF frame, got blank: {unpainted}")
         return 1
     return 0
