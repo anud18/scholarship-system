@@ -1,0 +1,165 @@
+name: Build Release Images
+
+# Build production images from any ref (e.g. a hotfix on release/v1.2.0) and
+# publish them under an explicit version, so NYCUITSC/naass deploy-production
+# can deploy that tag. deploy-pipeline.yml only builds `main`, and the
+# production repository builds no image.
+#
+# Dispatch from `main` (a workflow_dispatch file must live on the default
+# branch); `source_ref` chooses what is built. Never touches `latest` and never
+# deploys anything.
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: 'Branch, tag or commit SHA to build (e.g. release/v1.2.0)'
+        required: true
+        type: string
+      version:
+        description: 'Image tag to publish, vMAJOR.MINOR.PATCH (e.g. v1.2.1)'
+        required: true
+        type: string
+      overwrite:
+        description: 'Re-point the version tag if it already exists'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-release-images-${{ inputs.version }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  prepare:
+    name: Validate inputs
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+      short_sha: ${{ steps.resolve.outputs.short_sha }}
+    steps:
+      - name: Validate version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::version must look like v1.2.3, got '$VERSION'"
+            exit 1
+          fi
+
+      - name: Checkout source ref
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.source_ref }}
+
+      - name: Resolve commit
+        id: resolve
+        run: |
+          sha="$(git rev-parse HEAD)"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${sha:0:8}" >> "$GITHUB_OUTPUT"
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GH_PAT }}
+
+      - name: Refuse to overwrite an existing version
+        env:
+          VERSION: ${{ inputs.version }}
+          OVERWRITE: ${{ inputs.overwrite }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          existing=""
+          for component in backend frontend; do
+            image="${REGISTRY}/${OWNER}/scholarship-system-${component}:${VERSION}"
+            if docker buildx imagetools inspect "$image" >/dev/null 2>&1; then
+              existing="$existing $image"
+            fi
+          done
+          if [ -n "$existing" ] && [ "$OVERWRITE" != "true" ]; then
+            echo "::error::Already published:$existing. Pick a new version or set overwrite=true."
+            exit 1
+          fi
+
+      - name: Summary
+        env:
+          SOURCE_REF: ${{ inputs.source_ref }}
+          VERSION: ${{ inputs.version }}
+          SHA: ${{ steps.resolve.outputs.sha }}
+        run: |
+          {
+            echo "## Build Release Images"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Source ref | \`$SOURCE_REF\` |"
+            echo "| Commit | \`$SHA\` |"
+            echo "| Version tag | \`$VERSION\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    name: Build & Push ${{ matrix.component }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        component: [backend, frontend]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          # The resolved SHA, so both components build the exact same commit
+          # even if the branch moves during the run.
+          ref: ${{ needs.prepare.outputs.sha }}
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GH_PAT }}
+
+      - name: Build and push ${{ matrix.component }} image
+        id: docker_build
+        uses: docker/build-push-action@v5
+        with:
+          context: ./${{ matrix.component }}
+          # Same named context as deploy-pipeline.yml: the backend Dockerfile
+          # copies the email templates from frontend/emails.
+          build-contexts: |
+            ${{ matrix.component == 'backend' && 'frontend_emails=./frontend/emails' || '' }}
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/scholarship-system-${{ matrix.component }}:${{ inputs.version }}
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/scholarship-system-${{ matrix.component }}:release-${{ needs.prepare.outputs.short_sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ needs.prepare.outputs.sha }}
+            org.opencontainers.image.version=${{ inputs.version }}
+          cache-from: type=gha,scope=${{ matrix.component }}
+          build-args: |
+            VCS_REF=${{ needs.prepare.outputs.sha }}
+
+      - name: Image digest
+        env:
+          COMPONENT: ${{ matrix.component }}
+          DIGEST: ${{ steps.docker_build.outputs.digest }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          echo "$COMPONENT $VERSION digest: $DIGEST"
+          echo "- \`$COMPONENT:$VERSION\` → \`$DIGEST\`" >> "$GITHUB_STEP_SUMMARY"
