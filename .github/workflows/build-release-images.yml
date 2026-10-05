@@ -17,7 +17,7 @@ on:
         required: true
         type: string
       version:
-        description: 'Image tag to publish, vMAJOR.MINOR.PATCH (e.g. v1.2.1)'
+        description: 'Image tag to publish, vMAJOR.MINOR.PATCH with an optional -suffix (e.g. v1.2.0-hotfix)'
         required: true
         type: string
       overwrite:
@@ -49,8 +49,10 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
         run: |
-          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::version must look like v1.2.3, got '$VERSION'"
+          # A suffix keeps a hotfix (v1.2.0-hotfix) from claiming the next
+          # release number, which mirror-to-production retags onto main images.
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]] || [ "${#VERSION}" -gt 128 ]; then
+            echo "::error::version must look like v1.2.3 or v1.2.3-hotfix, got '$VERSION'"
             exit 1
           fi
 
