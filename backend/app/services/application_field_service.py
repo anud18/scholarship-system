@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.application_field import ApplicationDocument, ApplicationField
 from app.models.scholarship import ScholarshipConfiguration
-from app.models.user_profile import UserProfile
 from app.schemas.application_field import (
     ApplicationDocumentCreate,
     ApplicationDocumentResponse,
@@ -339,30 +338,9 @@ class ApplicationFieldService:
         return [ApplicationDocumentResponse.model_validate(doc) for doc in created_documents]
 
     # Fixed fields methods
-    async def get_user_profile_data(self, user_id: int) -> Optional[Dict[str, Any]]:
-        """Get user profile data for auto-filling fixed fields"""
-        try:
-            query = select(UserProfile).where(UserProfile.user_id == user_id)
-            result = await self.db.execute(query)
-            profile = result.scalar_one_or_none()
-
-            if profile:
-                return {
-                    "account_number": profile.account_number,
-                    "bank_document_photo_url": profile.bank_document_photo_url,
-                    "advisor_name": profile.advisor_name,
-                    "advisor_email": profile.advisor_email,
-                    "advisor_nycu_id": profile.advisor_nycu_id,
-                }
-            return None
-        except Exception:
-            self.logger.exception("Error fetching user profile data")
-            return None
-
     def _create_fixed_bank_account_field(
         self,
         display_order: int = 1,
-        prefill_data: Dict[str, Any] = None,
         scholarship_type: str = "fixed",
     ) -> Dict[str, Any]:
         """Create fixed bank account field definition"""
@@ -385,7 +363,6 @@ class ApplicationFieldService:
             "is_active": True,
             "help_text": "",
             "help_text_en": "",
-            "prefill_value": prefill_data.get("account_number", "") if prefill_data else "",
             "created_at": datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
             "created_by": 0,
@@ -395,7 +372,6 @@ class ApplicationFieldService:
     def _create_fixed_bank_statement_document(
         self,
         display_order: int = 1,
-        prefill_data: Dict[str, Any] = None,
         scholarship_type: str = "fixed",
     ) -> Dict[str, Any]:
         """Create fixed bank statement cover document definition"""
@@ -418,7 +394,6 @@ class ApplicationFieldService:
             "is_active": True,
             "upload_instructions": "",
             "upload_instructions_en": "",
-            "existing_file_url": prefill_data.get("bank_document_photo_url", "") if prefill_data else "",
             "created_at": datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
             "created_by": 0,
@@ -428,7 +403,6 @@ class ApplicationFieldService:
     def _create_fixed_advisor_fields(
         self,
         display_order_start: int = 1,
-        prefill_data: Dict[str, Any] = None,
         scholarship_type: str = "fixed",
     ) -> List[Dict[str, Any]]:
         """Create fixed advisor information fields"""
@@ -455,7 +429,6 @@ class ApplicationFieldService:
                 "is_active": True,
                 "help_text": ADVISOR_HELP_TEXT_ZH,
                 "help_text_en": ADVISOR_HELP_TEXT_EN,
-                "prefill_value": prefill_data.get("advisor_name", "") if prefill_data else "",
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
                 "created_by": 0,
@@ -482,7 +455,6 @@ class ApplicationFieldService:
                 "is_active": True,
                 "help_text": "",
                 "help_text_en": "",
-                "prefill_value": prefill_data.get("advisor_email", "") if prefill_data else "",
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
                 "created_by": 0,
@@ -509,7 +481,6 @@ class ApplicationFieldService:
                 "is_active": True,
                 "help_text": "",
                 "help_text_en": "",
-                "prefill_value": prefill_data.get("advisor_nycu_id", "") if prefill_data else "",
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
                 "created_by": 0,
@@ -549,15 +520,13 @@ class ApplicationFieldService:
         items: List[Dict[str, Any]],
         fixed_key: str,
         build_default,
-        prefill: Dict[str, Any],
     ) -> None:
         """Put one built-in item into `items`, admin-edited copy first.
 
         A row carrying `fixed_key` is the admin's edited copy of the built-in
         definition, so it wins over the code default. It still has to be
         flagged `is_fixed` (審核管理 renders it in the 系統預設 card, and the
-        student form treats it as a built-in) and to carry the per-user
-        prefill, which lives on the profile rather than on the row.
+        student form treats it as a built-in).
         """
         existing = next((item for item in items if item.get("fixed_key") == fixed_key), None)
 
@@ -566,25 +535,21 @@ class ApplicationFieldService:
             return
 
         existing["is_fixed"] = True
-        existing.update(prefill)
 
     async def inject_fixed_fields(
         self,
         scholarship_type: str,
         fields: List[Dict[str, Any]],
         documents: List[Dict[str, Any]],
-        user_id: Optional[int] = None,
     ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-        """Inject fixed fields and documents into the form configuration"""
+        """Inject fixed fields and documents into the form configuration.
+
+        The result is cached and shared by every user (see the form-config
+        endpoint), so it must stay user-agnostic: never put profile values
+        (郵局帳號, 指導教授, 存摺封面) in here. The wizard reads those from
+        `/user-profiles/me`.
+        """
         try:
-            # Get user profile data if user_id is provided
-            profile_data = None
-            if user_id:
-                profile_data = await self.get_user_profile_data(user_id)
-
-            def prefill(key: str) -> str:
-                return profile_data.get(key, "") if profile_data else ""
-
             # Calculate display orders
             max_field_order = max([f.get("display_order", 0) for f in fields], default=0)
             max_doc_order = max([d.get("display_order", 0) for d in documents], default=0)
@@ -595,10 +560,8 @@ class ApplicationFieldService:
                 FIXED_KEY_POSTAL_ACCOUNT,
                 lambda: self._create_fixed_bank_account_field(
                     display_order=max_field_order + 1,
-                    prefill_data=profile_data,
                     scholarship_type=scholarship_type,
                 ),
-                {"prefill_value": prefill("account_number")},
             )
 
             self._merge_fixed_item(
@@ -606,10 +569,8 @@ class ApplicationFieldService:
                 FIXED_KEY_BANK_STATEMENT,
                 lambda: self._create_fixed_bank_statement_document(
                     display_order=max_doc_order + 1,
-                    prefill_data=profile_data,
                     scholarship_type=scholarship_type,
                 ),
-                {"existing_file_url": prefill("bank_document_photo_url")},
             )
 
             # Inject advisor fields if required
@@ -619,7 +580,6 @@ class ApplicationFieldService:
                     field["fixed_key"]: field
                     for field in self._create_fixed_advisor_fields(
                         display_order_start=max_field_order + 2,
-                        prefill_data=profile_data,
                         scholarship_type=scholarship_type,
                     )
                 }
@@ -628,7 +588,6 @@ class ApplicationFieldService:
                         fields,
                         advisor_key,
                         lambda key=advisor_key: defaults[key],
-                        {"prefill_value": prefill(advisor_key)},
                     )
             else:
                 # A materialised advisor row outlives the setting that created
@@ -651,7 +610,6 @@ class ApplicationFieldService:
         self,
         scholarship_type: str,
         include_inactive: bool = False,
-        user_id: Optional[int] = None,
     ) -> ScholarshipFormConfigResponse:
         """Get complete form configuration for a scholarship type with fixed fields injection"""
         try:
@@ -677,7 +635,6 @@ class ApplicationFieldService:
                 scholarship_type=scholarship_type,
                 fields=fields_dict,
                 documents=documents_dict,
-                user_id=user_id,
             )
 
             if not include_inactive:

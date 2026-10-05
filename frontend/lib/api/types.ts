@@ -897,8 +897,6 @@ export interface ApplicationField {
   fixed_key?: string | null;
   // Fixed field properties
   is_fixed?: boolean;
-  prefill_value?: string;
-  existing_file_url?: string;
 }
 
 export interface ApplicationFieldCreate {
@@ -978,7 +976,6 @@ export interface ApplicationDocument {
   fixed_key?: string | null;
   // Fixed document properties
   is_fixed?: boolean;
-  existing_file_url?: string;
 }
 
 /**

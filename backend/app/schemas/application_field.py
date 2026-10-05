@@ -108,7 +108,6 @@ class ApplicationFieldResponse(ApplicationFieldBase):
     updated_by: Optional[int] = None
     # Fixed field properties
     is_fixed: Optional[bool] = Field(None, description="Is this a fixed field")
-    prefill_value: Optional[str] = Field(None, description="Prefilled value from user profile")
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -186,7 +185,6 @@ class ApplicationDocumentResponse(ApplicationDocumentBase):
     updated_by: Optional[int] = None
     # Fixed document properties
     is_fixed: Optional[bool] = Field(None, description="Is this a fixed document")
-    existing_file_url: Optional[str] = Field(None, description="URL of existing file from user profile")
 
     model_config = ConfigDict(from_attributes=True)
 
