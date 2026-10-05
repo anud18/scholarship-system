@@ -57,7 +57,6 @@ def _build_field(**overrides):
         created_by=10,
         updated_by=10,
         is_fixed=False,
-        prefill_value=None,
         bank_code=None,
     )
     defaults.update(overrides)
@@ -87,7 +86,6 @@ def _build_document(**overrides):
         created_by=21,
         updated_by=21,
         is_fixed=False,
-        existing_file_url=None,
     )
     defaults.update(overrides)
     return SimpleNamespace(**defaults)

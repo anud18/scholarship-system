@@ -56,6 +56,7 @@ from app.services.roster_regeneration_service import RosterRegenerationService
 from app.services.roster_service import RosterService
 from app.services.student_verification_service import StudentVerificationService
 from app.utils.academic_period import get_roster_period_dates
+from app.utils.bank_account_fields import BANK_ACCOUNT_FIELD_LOOKUP
 from app.utils.pii_masking import mask_id_number
 
 logger = logging.getLogger(__name__)
@@ -606,10 +607,7 @@ async def preview_roster_students(
             form_data = application.submitted_form_data or {}
             form_fields = form_data.get("fields", {})
 
-            # List of possible field names for bank account
-            field_names = ["postal_account", "bank_account", "account_number", "帳戶號碼", "帳號", "郵局帳號"]
-
-            for field_name in field_names:
+            for field_name in BANK_ACCOUNT_FIELD_LOOKUP:
                 # Check nested structure (schema-compliant)
                 if field_name in form_fields and form_fields[field_name].get("value"):
                     return str(form_fields[field_name]["value"]), field_name
