@@ -122,7 +122,7 @@ dependencies = [
     "greenlet>=3.0,<4",  # Required by SQLAlchemy sync engine
     
     # Authentication and Security
-    "PyJWT[crypto]==2.13.0",
+    "PyJWT[crypto]==2.15.1",
     "passlib[bcrypt]==1.7.4",
     "bcrypt==4.2.1",
     "cryptography==50.0.0",
@@ -166,7 +166,7 @@ dependencies = [
 
     # PDF generation
     "reportlab==4.4.10",
-    "pypdf==6.16.2",  # Security: CVE-2026-84309/84310/84311 (TreeObject.insert_child infinite loop, outline + XForm DoS, <6.16.1); merged 申請資料合併檔 PDF in the export package (pdf_merge.py)
+    "pypdf==6.19.0",  # Security: Dependabot #222-#251 (<6.19.0); merged 申請資料合併檔 PDF in the export package (pdf_merge.py)
 
     # Logging and monitoring
     "structlog==24.4.0",
