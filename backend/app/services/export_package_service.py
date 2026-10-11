@@ -45,6 +45,9 @@ from app.services.form_field_labels import (
 from app.services.minio_service import MinIOService
 from app.services.pdf_fonts import CJK_FONT_NAME, ensure_cjk_font
 from app.services.pdf_merge import MergeItem, build_merged_pdf
+from app.services.professor_review_export import ProfessorReviewData, load_professor_review_data
+from app.services.professor_review_pdf import PROFESSOR_REVIEW_PDF_LABEL, build_professor_review_pdf
+from app.services.sub_type_label_map import sub_type_labels_of
 from app.services.zip_stream import COPY_CHUNK_SIZE, ZipStreamSink, write_stream_entry
 from app.utils.application_helpers import get_college_code_from_data
 from app.utils.export_download import sanitise_filename_part
@@ -318,10 +321,26 @@ class ExportPlan:
     field_labels: Dict[str, str]
     summary_tables: Dict[str, bytes]
     zip_filename: str
+    #: professor verdicts for the 合併檔's 指導教授評語 page (empty for a precheck)
+    professor_review: ProfessorReviewData
+    sub_type_labels: Dict[str, str]
 
     @property
     def application_count(self) -> int:
         return sum(len(apps) for apps in self.dept_groups.values())
+
+
+def _merged_subtitle_lines(app: Application, plan: ExportPlan) -> List[str]:
+    """Scholarship/term line + student line heading the 合併檔 and its pages."""
+    student = app.student_data or {}
+    semester_map = {"first": "第一學期", "second": "第二學期"}
+    semester_label = semester_map.get(plan.semester, "全學年") if plan.semester else "全學年"
+    return [
+        f"{plan.scholarship_name} {plan.academic_year}學年度 {semester_label}",
+        # Display surface: raw SIS values (sanitization is for ZIP paths),
+        # with the same fallbacks as folder naming.
+        f"{student.get('std_stdcode', 'unknown')} {student.get('std_cname', '未知')}",
+    ]
 
 
 class ExportPackageService:
@@ -375,14 +394,36 @@ class ExportPackageService:
         # try/except) must not lose the primary materials ZIP — degrade to an
         # error placeholder.
         summary_tables: Dict[str, bytes] = {}
+        professor_review = ProfessorReviewData()
         if include_summary_tables:
+            # Same applications as the ZIP; shared by the summary tables and the
+            # merged PDFs' 指導教授評語 pages. A precheck needs neither.
+            # Best-effort like the tables: a load failure must not lose the
+            # materials ZIP — it degrades to no review columns/pages plus a
+            # root error placeholder saying why.
+            review_error: Optional[str] = None
+            try:
+                professor_review = await load_professor_review_data(
+                    self.db, scholarship_type=scholarship_type, applications=applications
+                )
+            except Exception as e:
+                logger.exception("professor review data load failed")
+                review_error = f"指導教授審核資料載入失敗：{e}"
             try:
                 summary_tables = await build_embedded_summary_tables(
-                    self.db, scholarship_type, dept_groups, college_name, academic_year, college_labels
+                    self.db,
+                    scholarship_type,
+                    dept_groups,
+                    college_name,
+                    academic_year,
+                    college_labels,
+                    professor_review=professor_review,
                 )
             except Exception as e:
                 logger.exception("embedded summary tables generation failed wholesale")
                 summary_tables = {"_錯誤_申請總表生成失敗.txt": f"申請總表生成失敗：{e}".encode("utf-8")}
+            if review_error:
+                summary_tables = {**summary_tables, "_錯誤_指導教授審核資料載入失敗.txt": review_error.encode("utf-8")}
 
         return ExportPlan(
             scholarship_name=scholarship_type.name,
@@ -394,6 +435,8 @@ class ExportPackageService:
             field_labels=field_labels,
             summary_tables=summary_tables,
             zip_filename=_build_zip_filename(scholarship_type.name, academic_year, semester, college_name),
+            professor_review=professor_review,
+            sub_type_labels=sub_type_labels_of(scholarship_type),
         )
 
     async def iter_export_zip(self, plan: ExportPlan) -> AsyncIterator[bytes]:
@@ -496,12 +539,14 @@ class ExportPackageService:
         base_path = f"{dept_folder}/{student_prefix}"
 
         summary_item = self._add_summary_pdf(zf, base_path, student_prefix, app, plan)
+        review_items = self._professor_review_items(app, plan)
         dynamic_items = self._add_uploaded_files(zf, base_path, student_prefix, app)
-        # Extra per-student PDF stitching the summary and all dynamic documents
-        # together. Built for every student — summary_item is always present, so
-        # a student who uploaded no dynamic documents still gets one holding
-        # just their summary and reviewers work from the same file throughout.
-        self._add_merged_pdf(zf, base_path, student_prefix, app, plan, [summary_item] + dynamic_items)
+        # Extra per-student PDF stitching the summary, the professor's comments
+        # and all dynamic documents together. Built for every student —
+        # summary_item is always present, so a student who uploaded no dynamic
+        # documents still gets one holding just their summary and reviewers
+        # work from the same file throughout.
+        self._add_merged_pdf(zf, base_path, student_prefix, app, plan, [summary_item] + review_items + dynamic_items)
 
     def _add_summary_pdf(
         self, zf: zipfile.ZipFile, base_path: str, student_prefix: str, app: Application, plan: ExportPlan
@@ -537,6 +582,36 @@ class ExportPackageService:
                 content=None,
                 error=f"{SUMMARY_PDF_LABEL} PDF 生成失敗：{str(e)}",
             )
+
+    def _professor_review_items(self, app: Application, plan: ExportPlan) -> List[MergeItem]:
+        """The 合併檔-only 指導教授評語 page, as a merge item.
+
+        Present when the professor reviewed the application or its flow
+        requires a professor review (then it shows 未審核); omitted for flows
+        without a professor step. A render failure becomes a placeholder page.
+        """
+        review = plan.professor_review
+        if not review.entries(app) and not review.is_review_required(app):
+            return []
+        filename = f"{PROFESSOR_REVIEW_PDF_LABEL}.pdf"
+        try:
+            content = build_professor_review_pdf(
+                subtitle_lines=_merged_subtitle_lines(app, plan),
+                application=app,
+                review=review,
+                sub_type_labels=plan.sub_type_labels,
+            )
+            return [MergeItem(label=PROFESSOR_REVIEW_PDF_LABEL, filename=filename, content=content)]
+        except Exception as e:
+            logger.exception("Failed to generate professor review PDF for app %s", app.id)
+            return [
+                MergeItem(
+                    label=PROFESSOR_REVIEW_PDF_LABEL,
+                    filename=filename,
+                    content=None,
+                    error=f"{PROFESSOR_REVIEW_PDF_LABEL} PDF 生成失敗：{str(e)}",
+                )
+            ]
 
     def _add_uploaded_files(
         self, zf: zipfile.ZipFile, base_path: str, student_prefix: str, app: Application
@@ -590,20 +665,12 @@ class ExportPackageService:
         items: List[MergeItem],
     ) -> None:
         """Write the per-student 申請資料合併檔, or an error placeholder."""
-        student = app.student_data or {}
-        semester_map = {"first": "第一學期", "second": "第二學期"}
-        semester_label = semester_map.get(plan.semester, "全學年") if plan.semester else "全學年"
         try:
             # pypdf/Pillow/reportlab do seconds of pure CPU per student; this
             # already runs off the event loop (see iter_export_zip).
             merged_bytes = build_merged_pdf(
                 title=MERGED_PDF_LABEL,
-                subtitle_lines=[
-                    f"{plan.scholarship_name} {plan.academic_year}學年度 {semester_label}",
-                    # Display surface: raw SIS values (sanitization is for
-                    # ZIP paths), with the same fallbacks as folder naming.
-                    f"{student.get('std_stdcode', 'unknown')} {student.get('std_cname', '未知')}",
-                ],
+                subtitle_lines=_merged_subtitle_lines(app, plan),
                 items=items,
             )
             zf.writestr(_unique_zip_path(zf, f"{base_path}/{student_prefix}_{MERGED_PDF_LABEL}.pdf"), merged_bytes)

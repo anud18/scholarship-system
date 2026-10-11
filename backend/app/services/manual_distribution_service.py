@@ -23,8 +23,8 @@ from app.models.review import ApplicationReview, ApplicationReviewItem
 from app.models.payment_roster import PaymentRoster, PaymentRosterItem, RosterStatus
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipSubTypeConfig
 from app.models.student import Academy
-from app.models.user import User, UserRole
 from app.services.application_builder import order_sub_type_preferences
+from app.services.professor_review_export import load_professor_reviews, normalize_sub_type
 from app.services.received_months_service import (
     calculate_received_months_bulk_async,
     get_imported_months_bulk_async,
@@ -108,14 +108,11 @@ def _holds_award(app: Application) -> bool:
     return app.quota_allocation_status == "allocated"
 
 
-def _norm_sub_type(code: Optional[str]) -> str:
-    """Normalize a sub-type code for comparison.
-
-    Sub-types are free-form admin-defined strings (config quotas keys, review
-    item codes, stored allocations), so every membership test against
-    load_rejected_subtype_map must normalize BOTH sides with this helper.
-    """
-    return (code or "").lower().strip()
+# Normalize a sub-type code for comparison. Sub-types are free-form
+# admin-defined strings (config quotas keys, review item codes, stored
+# allocations), so every membership test against load_rejected_subtype_map must
+# normalize BOTH sides with this helper. One rule shared with the review loaders.
+_norm_sub_type = normalize_sub_type
 
 
 async def load_rejected_subtype_map(db: AsyncSession, app_ids: list[int]) -> dict[int, set[str]]:
@@ -155,34 +152,14 @@ async def load_professor_review_items(db: AsyncSession, app_ids: list[int]) -> d
     decision surface, so neither has review items to display here.
     Sub-type codes are normalized with _norm_sub_type (matches rejected_sub_types).
     """
-    review_map: dict[int, list[dict[str, Any]]] = {}
-    if not app_ids:
-        return review_map
-    query = (
-        select(
-            ApplicationReview.application_id,
-            ApplicationReviewItem.sub_type_code,
-            ApplicationReviewItem.recommendation,
-            ApplicationReviewItem.comments,
-        )
-        .join(ApplicationReviewItem, ApplicationReviewItem.review_id == ApplicationReview.id)
-        .join(User, User.id == ApplicationReview.reviewer_id)
-        .where(
-            ApplicationReview.application_id.in_(app_ids),
-            User.role == UserRole.professor,
-        )
-        .order_by(ApplicationReview.reviewed_at, ApplicationReviewItem.id)
-    )
-    result = await db.execute(query)
-    for app_id, sub_type_code, recommendation, comments in result:
-        review_map.setdefault(app_id, []).append(
-            {
-                "sub_type_code": _norm_sub_type(sub_type_code),
-                "recommendation": recommendation,
-                "comments": comments,
-            }
-        )
-    return review_map
+    entries_by_app = await load_professor_reviews(db, app_ids)
+    return {
+        app_id: [
+            {"sub_type_code": e.sub_type_code, "recommendation": e.recommendation, "comments": e.comments}
+            for e in entries
+        ]
+        for app_id, entries in entries_by_app.items()
+    }
 
 
 # Marks EVERY sub-type as 教授未推薦: an application without sub-types stores the

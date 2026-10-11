@@ -31,6 +31,7 @@ from app.services.college_ranking_export_service import (
     CollegeRankingExportService,
     ExportRow,
 )
+from app.services.professor_review_export import ProfessorReviewData
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,8 @@ async def build_embedded_summary_tables(
     college_name: Optional[str],
     academic_year: int,
     college_labels: Optional[Dict[str, str]] = None,
+    *,
+    professor_review: ProfessorReviewData,
 ) -> Dict[str, bytes]:
     """Return { zip_inner_path : xlsx_bytes } for the college-level table
     (ZIP root) plus one table per department folder — and, when
@@ -66,6 +69,8 @@ async def build_embedded_summary_tables(
 
     The same dept_groups assembled by ExportPackageService is used directly,
     guaranteeing each table's rows match the student folders next to it.
+    ``professor_review`` (load_professor_review_data over the same
+    applications) fills the 指導教授審核結果/評語 columns.
     """
     # Lazy import: keep this module's top level free of export_package_service
     # (which pulls in reportlab) so callers that only need _sort_key — e.g. the
@@ -111,6 +116,7 @@ async def build_embedded_summary_tables(
                 sub_type_labels=sub_type_labels,
                 title=f"{base_name} - {scope}",
                 sheet_name=sheet_name,
+                professor_review=professor_review,
             )
         except Exception as e:
             logger.exception("summary table build failed: %s", ok_key)

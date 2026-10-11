@@ -17,6 +17,7 @@ import pytest
 from pypdf import PdfReader, PdfWriter
 
 from app.services.export_package_service import MAX_EXPORT_APPLICATIONS, ExportPackageService
+from app.services.professor_review_export import ProfessorReviewData
 from app.services.zip_stream import STREAM_BLOCK_SIZE
 from app.tests.export_package_fakes import FakeMinio, collect_zip, make_application, make_file
 
@@ -45,6 +46,9 @@ async def _prepare(monkeypatch, apps, minio, summary_pdf=None):
 
     monkeypatch.setattr("app.services.export_summary_tables.load_export_aux_data", _fake_aux)
     monkeypatch.setattr("app.services.export_package_service.load_form_field_labels", _coro_returning({}))
+    monkeypatch.setattr(
+        "app.services.export_package_service.load_professor_review_data", _coro_returning(ProfessorReviewData())
+    )
 
     svc = ExportPackageService(db=None, minio_service=minio)
     stype = SimpleNamespace(name="某獎學金", code="phd", sub_type_configs=[])
@@ -156,6 +160,8 @@ async def test_precheck_plan_skips_the_summary_workbooks(monkeypatch):
         raise AssertionError("summary tables built for a precheck")
 
     monkeypatch.setattr("app.services.export_package_service.build_embedded_summary_tables", _must_not_run)
+    # The professor verdicts only feed the workbooks and merged PDFs either.
+    monkeypatch.setattr("app.services.export_package_service.load_professor_review_data", _must_not_run)
     monkeypatch.setattr("app.services.export_package_service.load_form_field_labels", _coro_returning({}))
     svc = ExportPackageService(db=None, minio_service=FakeMinio({}))
     stype = SimpleNamespace(name="某獎學金", code="phd", sub_type_configs=[])

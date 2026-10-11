@@ -127,7 +127,7 @@ def test_build_pdf_none_student_data(service, dynamic_fields):
 
 
 def test_headers_static_plus_dynamic(service, dynamic_fields):
-    headers = service._headers(service._sort_dynamic(dynamic_fields))
+    headers = service._headers(service._sort_dynamic(dynamic_fields), {})
     assert headers[: len(STATIC_HEADERS)] == STATIC_HEADERS
     assert headers[-1] == "得獎理由"  # dynamic label appended
 
@@ -151,9 +151,9 @@ def test_row_cells_blank_rank_when_none(service, sample_row):
 
 
 def test_pdf_col_widths_sum_to_usable_width(service, dynamic_fields):
-    headers = service._headers(service._sort_dynamic(dynamic_fields))
+    headers = service._headers(service._sort_dynamic(dynamic_fields), {})
     usable = 785.0
-    widths = service._pdf_col_widths(headers, usable)
+    widths = service._pdf_col_widths(service._columns(service._sort_dynamic(dynamic_fields), {}), usable)
     assert len(widths) == len(headers)
     assert sum(widths) == pytest.approx(usable)
     assert all(w > 0 for w in widths)
@@ -164,13 +164,13 @@ def test_pdf_col_widths_sum_to_usable_width(service, dynamic_fields):
 
 def test_seal_column_omitted_by_default(service, sample_row, dynamic_fields):
     sorted_dynamic = service._sort_dynamic(dynamic_fields)
-    assert COLLEGE_SEAL_HEADER not in service._headers(sorted_dynamic)
+    assert COLLEGE_SEAL_HEADER not in service._headers(sorted_dynamic, {})
     assert len(service._row_cells(sample_row, 1, {}, sorted_dynamic)) == len(STATIC_HEADERS) + len(dynamic_fields)
 
 
 def test_seal_column_appended_last_and_blank(service, sample_row, dynamic_fields):
     sorted_dynamic = service._sort_dynamic(dynamic_fields)
-    headers = service._headers(sorted_dynamic, include_college_seal=True)
+    headers = service._headers(sorted_dynamic, {}, include_college_seal=True)
     cells = service._row_cells(sample_row, 1, {"nstc": "國科會"}, sorted_dynamic, include_college_seal=True)
     assert headers[-1] == COLLEGE_SEAL_HEADER
     assert headers[-2] == "得獎理由"  # dynamic columns stay before the seal
@@ -179,9 +179,10 @@ def test_seal_column_appended_last_and_blank(service, sample_row, dynamic_fields
 
 
 def test_seal_column_pdf_widths_sum_to_usable_width(service, dynamic_fields):
-    headers = service._headers(service._sort_dynamic(dynamic_fields), include_college_seal=True)
+    headers = service._headers(service._sort_dynamic(dynamic_fields), {}, include_college_seal=True)
     usable = 785.0
-    widths = service._pdf_col_widths(headers, usable, include_college_seal=True)
+    columns = service._columns(service._sort_dynamic(dynamic_fields), {}, include_college_seal=True)
+    widths = service._pdf_col_widths(columns, usable)
     assert len(widths) == len(headers)
     assert sum(widths) == pytest.approx(usable)
     assert widths[-1] > widths[0]  # seal column wider than NO. so a stamp fits
