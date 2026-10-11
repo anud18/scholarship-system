@@ -424,6 +424,89 @@ class TestApplicationFieldsEndpoints:
         assert body["success"] is True
         assert body["data"]["scholarship_type"] == "undergrad_savecfg"
 
+    @pytest.mark.asyncio
+    async def test_save_form_config_keeps_document_example_and_id(self, login, admin):
+        """儲存設定 posts no example_file_url (the admin UI never sends it); the
+        save must update the row in place, not recreate it without its example."""
+        doc = await self._make_document(
+            scholarship_type="undergrad_keepex",
+            document_name="推薦信",
+            example_file_url="examples/document_1.pdf",
+            display_order=0,
+        )
+        c = login(admin)
+        resp = await c.post(
+            "/api/v1/application-fields/form-config/undergrad_keepex",
+            json={
+                "fields": [],
+                "documents": [
+                    {
+                        "document_name": "推薦信",
+                        "description": "新說明",
+                        "accepted_file_types": ["PDF"],
+                        "display_order": 3,
+                        "is_active": False,
+                    }
+                ],
+            },
+        )
+        assert resp.status_code == 200
+
+        [saved] = resp.json()["data"]["documents"]
+        assert saved["id"] == doc.id
+        assert saved["example_file_url"] == "examples/document_1.pdf"
+        assert saved["description"] == "新說明"
+        assert saved["display_order"] == 3
+        assert saved["is_active"] is False
+
+    @pytest.mark.asyncio
+    async def test_save_form_config_keeps_field_export_settings(self, login, admin):
+        """The admin UI's save payload omits the 學院匯出 settings; they survive."""
+        field = await self._make_field(
+            scholarship_type="undergrad_keepexport",
+            include_in_college_export=True,
+            export_column_label="聯絡電話（匯出）",
+        )
+        c = login(admin)
+        resp = await c.post(
+            "/api/v1/application-fields/form-config/undergrad_keepexport",
+            json={
+                "fields": [
+                    {"field_name": "contact_phone", "field_label": "手機", "field_type": "text"},
+                ],
+                "documents": [],
+            },
+        )
+        assert resp.status_code == 200
+
+        [saved] = resp.json()["data"]["fields"]
+        assert saved["id"] == field.id
+        assert saved["field_label"] == "手機"
+        assert saved["include_in_college_export"] is True
+        assert saved["export_column_label"] == "聯絡電話（匯出）"
+
+    @pytest.mark.asyncio
+    async def test_save_form_config_adds_new_and_drops_missing_documents(self, login, admin):
+        await self._make_document(scholarship_type="undergrad_syncdocs", document_name="舊文件")
+        kept = await self._make_document(scholarship_type="undergrad_syncdocs", document_name="保留文件")
+        c = login(admin)
+        resp = await c.post(
+            "/api/v1/application-fields/form-config/undergrad_syncdocs",
+            json={
+                "fields": [],
+                "documents": [
+                    {"document_name": "保留文件", "accepted_file_types": ["PDF"], "display_order": 0},
+                    {"document_name": "新文件", "accepted_file_types": ["PDF"], "display_order": 1},
+                ],
+            },
+        )
+        assert resp.status_code == 200
+
+        listed = await c.get("/api/v1/application-fields/documents/undergrad_syncdocs")
+        docs = listed.json()["data"]
+        assert [d["document_name"] for d in docs] == ["保留文件", "新文件"]
+        assert docs[0]["id"] == kept.id
+
     # ------------------------------------------------------------------
     # POST /documents/{document_id}/upload-example  (require_admin)
     # ------------------------------------------------------------------

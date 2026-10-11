@@ -20,6 +20,11 @@ from app.schemas.application_field import (
     ScholarshipFormConfigResponse,
 )
 
+# Columns a 儲存設定 (bulk save) entry may write. A document's example file is
+# managed only by the upload/delete-example endpoints, never by the bulk save.
+BULK_FIELD_COLUMNS = frozenset(ApplicationFieldCreate.model_fields) - {"scholarship_type"}
+BULK_DOCUMENT_COLUMNS = frozenset(ApplicationDocumentCreate.model_fields) - {"scholarship_type", "example_file_url"}
+
 # Default text of the built-in items, i.e. what the student sees in the
 # application wizard's 個人資料 section until an admin edits the item in
 # 審核管理. The wizard keeps the same strings as its offline fallback
@@ -203,28 +208,61 @@ class ApplicationFieldService:
         self, scholarship_type: str, fields_data: List[Dict[str, Any]], updated_by: int
     ) -> List[ApplicationFieldResponse]:
         """Bulk update fields for a scholarship type"""
-        # First, delete existing fields for this scholarship type
-        await self.db.execute(delete(ApplicationField).where(ApplicationField.scholarship_type == scholarship_type))
+        fields = await self._sync_form_rows(
+            ApplicationField, "field_name", BULK_FIELD_COLUMNS, scholarship_type, fields_data, updated_by
+        )
+        return [ApplicationFieldResponse.model_validate(field) for field in fields]
 
-        # Create new fields
-        created_fields = []
-        for field_data in fields_data:
-            field = ApplicationField(
-                scholarship_type=scholarship_type,
-                **field_data,
-                created_by=updated_by,
-                updated_by=updated_by,
-            )
-            self.db.add(field)
-            created_fields.append(field)
+    @staticmethod
+    def _form_row_key(fixed_key: Optional[str], name: Optional[str]) -> tuple:
+        return ("fixed", fixed_key) if fixed_key else ("name", name)
+
+    async def _sync_form_rows(
+        self,
+        model,
+        name_column: str,
+        settable: frozenset,
+        scholarship_type: str,
+        rows_data: List[Dict[str, Any]],
+        updated_by: int,
+    ) -> list:
+        """Make one scholarship type's rows match `rows_data` (儲存設定), in place.
+
+        A payload entry updates the existing row with the same `fixed_key` or,
+        for admin-created items, the same name; only the keys it carries are
+        written. Columns the payload doesn't carry (a document's example file,
+        a field's 學院匯出 settings) and the row ids therefore survive the
+        save. Rows absent from the payload are deleted; new entries are added.
+        """
+        result = await self.db.execute(select(model).where(model.scholarship_type == scholarship_type))
+        existing = {self._form_row_key(row.fixed_key, getattr(row, name_column)): row for row in result.scalars()}
+
+        matched = []
+        for data in rows_data:
+            values = {key: value for key, value in data.items() if key in settable}
+            row = existing.pop(self._form_row_key(values.get("fixed_key"), values.get(name_column)), None)
+            matched.append((row, values))
+
+        # Delete before inserting so a re-added name can't hit the unique index.
+        for row in existing.values():
+            await self.db.delete(row)
+        await self.db.flush()
+
+        saved = []
+        for row, values in matched:
+            if row is None:
+                row = model(scholarship_type=scholarship_type, **values, created_by=updated_by)
+                self.db.add(row)
+            else:
+                for key, value in values.items():
+                    setattr(row, key, value)
+            row.updated_by = updated_by
+            saved.append(row)
 
         await self.db.commit()
-
-        # Refresh all fields
-        for field in created_fields:
-            await self.db.refresh(field)
-
-        return [ApplicationFieldResponse.model_validate(field) for field in created_fields]
+        for row in saved:
+            await self.db.refresh(row)
+        return saved
 
     # Application Document methods
     async def get_documents_by_scholarship_type(
@@ -323,30 +361,10 @@ class ApplicationFieldService:
         updated_by: int,
     ) -> List[ApplicationDocumentResponse]:
         """Bulk update documents for a scholarship type"""
-        # First, delete existing documents for this scholarship type
-        await self.db.execute(
-            delete(ApplicationDocument).where(ApplicationDocument.scholarship_type == scholarship_type)
+        documents = await self._sync_form_rows(
+            ApplicationDocument, "document_name", BULK_DOCUMENT_COLUMNS, scholarship_type, documents_data, updated_by
         )
-
-        # Create new documents
-        created_documents = []
-        for doc_data in documents_data:
-            document = ApplicationDocument(
-                scholarship_type=scholarship_type,
-                **doc_data,
-                created_by=updated_by,
-                updated_by=updated_by,
-            )
-            self.db.add(document)
-            created_documents.append(document)
-
-        await self.db.commit()
-
-        # Refresh all documents
-        for document in created_documents:
-            await self.db.refresh(document)
-
-        return [ApplicationDocumentResponse.model_validate(doc) for doc in created_documents]
+        return [ApplicationDocumentResponse.model_validate(doc) for doc in documents]
 
     # Fixed fields methods
     def _create_fixed_bank_account_field(
