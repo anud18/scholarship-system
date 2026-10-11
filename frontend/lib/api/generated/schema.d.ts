@@ -3192,6 +3192,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/application-fields/documents/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Reorder Documents
+         * @description Persist a new display order for a scholarship type's documents. Admin only.
+         */
+        patch: operations["reorder_documents_api_v1_application_fields_documents_reorder_patch"];
+        trace?: never;
+    };
     "/api/v1/application-fields/documents/{document_id}": {
         parameters: {
             query?: never;
@@ -8370,6 +8390,23 @@ export interface components {
              * @description Built-in document this row overrides
              */
             fixed_key?: string | null;
+        };
+        /** ApplicationDocumentReorderItem */
+        ApplicationDocumentReorderItem: {
+            /** Id */
+            id: number;
+            /** Display Order */
+            display_order: number;
+        };
+        /**
+         * ApplicationDocumentReorderRequest
+         * @description New display order for one scholarship type's documents (審核管理 drag-sort).
+         */
+        ApplicationDocumentReorderRequest: {
+            /** Scholarship Type */
+            scholarship_type: string;
+            /** Items */
+            items: components["schemas"]["ApplicationDocumentReorderItem"][];
         };
         /**
          * ApplicationDocumentUpdate
@@ -16853,6 +16890,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ApplicationDocumentCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reorder_documents_api_v1_application_fields_documents_reorder_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplicationDocumentReorderRequest"];
             };
         };
         responses: {

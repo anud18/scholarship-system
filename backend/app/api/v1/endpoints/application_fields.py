@@ -22,6 +22,7 @@ from app.models.application_field import ApplicationDocument, ApplicationField, 
 from app.models.user import User
 from app.schemas.application_field import (
     ApplicationDocumentCreate,
+    ApplicationDocumentReorderRequest,
     ApplicationDocumentUpdate,
     ApplicationFieldCreate,
     ApplicationFieldUpdate,
@@ -164,6 +165,25 @@ async def create_document(
     await invalidate(f"documents:{document_data.scholarship_type}")
     await invalidate(f"formconfig:{document_data.scholarship_type}")
     return ApiResponse(success=True, message="Application document created successfully", data=document)
+
+
+@router.patch("/documents/reorder")
+async def reorder_documents(
+    payload: ApplicationDocumentReorderRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Persist a new display order for a scholarship type's documents. Admin only."""
+    service = ApplicationFieldService(db)
+    try:
+        updated = await service.reorder_documents(payload.scholarship_type, payload.items, current_user.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    await invalidate(f"documents:{payload.scholarship_type}")
+    await invalidate(f"formconfig:{payload.scholarship_type}")
+
+    return ApiResponse(success=True, message="已重新排序", data={"updated": updated})
 
 
 @router.put("/documents/{document_id}")
