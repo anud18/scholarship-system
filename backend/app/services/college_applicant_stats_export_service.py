@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import io
 from dataclasses import dataclass
-from typing import Dict, FrozenSet, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Dict, FrozenSet, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
@@ -107,16 +107,19 @@ def _real_sub_types(codes: Iterable[str]) -> List[str]:
 def build_stats_columns(
     sub_type_configs: Sequence[Tuple[str, str]],
     records: Sequence[ApplicantRecord],
+    known_names: Optional[Mapping[str, str]] = None,
 ) -> List[StatsColumn]:
     """Columns for the count matrix.
 
-    ``sub_type_configs`` is the scholarship's ``(sub_type_code, name)`` list in
-    display order. Codes that appear on applications but are no longer
-    configured (e.g. a deactivated sub-type) are appended so no applicant is
-    silently dropped. A scholarship with no real sub-types gets a single
-    申請人數 column.
+    ``sub_type_configs`` is the scholarship's active ``(sub_type_code, name)``
+    list in display order. Codes that appear on applications but are not
+    active (e.g. a deactivated sub-type) are appended so no applicant is
+    silently dropped, labelled from ``known_names`` (every configured
+    sub-type, active or not). A scholarship with no real sub-types gets a
+    single 申請人數 column.
     """
-    names = {_normalize_code(code): name for code, name in sub_type_configs}
+    names = {_normalize_code(code): name for code, name in (known_names or {}).items()}
+    names.update({_normalize_code(code): name for code, name in sub_type_configs})
     ordered_codes = _real_sub_types(code for code, _ in sub_type_configs)
     observed = sorted({c for r in records for c in _real_sub_types(r.sub_type_codes)} - set(ordered_codes))
 
@@ -152,9 +155,9 @@ def _row_label_for_extra_code(code: str) -> str:
 def tally_college_counts(records: Sequence[ApplicantRecord], columns: Sequence[StatsColumn]) -> List[StatsRow]:
     """One row per layout college, then any colleges outside the layout, then 合計.
 
-    Every layout row is emitted even at zero (the sheet is a fixed form). Counts
-    are distinct students, so a student with two applications in one cell is
-    counted once.
+    Every layout row is emitted even at zero (the sheet is a fixed form). Cell
+    counts are distinct students, so a student with two applications in one
+    cell is counted once; 合計 is the column sum.
     """
     column_keys = [c.key for c in columns]
     key_set = set(column_keys)
@@ -175,7 +178,9 @@ def tally_college_counts(records: Sequence[ApplicantRecord], columns: Sequence[S
     row_labels += [extra_labels[code] for code in sorted(extra_labels, key=lambda c: (not c, c))]
 
     rows = [StatsRow(label, tuple(len(users.get((label, key), ())) for key in column_keys)) for label in row_labels]
-    totals = tuple(len(set().union(*(users.get((label, key), set()) for label in row_labels))) for key in column_keys)
+    # Column sums, so the printed form always adds up (a student whose two
+    # applications carry different colleges appears in both rows).
+    totals = tuple(sum(row.counts[i] for row in rows) for i in range(len(column_keys)))
     return rows + [StatsRow(TOTAL_ROW_LABEL, totals)]
 
 

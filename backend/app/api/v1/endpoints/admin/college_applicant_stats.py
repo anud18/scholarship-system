@@ -17,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.v1.endpoints.college_review._helpers import _check_scholarship_permission, normalize_semester_value
+from app.api.v1.endpoints.college_review._helpers import normalize_semester_value
 from app.core.security import require_admin
 from app.db.deps import get_db
 from app.models.application import Application, ApplicationStatus
@@ -74,10 +74,9 @@ async def export_college_applicant_stats(
 ):
     """Download 統計各學院學生申請人數 (.xlsx) for one scholarship and academic year."""
     scholarship = await _load_scholarship(db, scholarship_identifier)
-    if not await _check_scholarship_permission(current_user, scholarship.id, db):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權限存取此獎學金類型")
 
-    stmt = select(Application).where(
+    # Only the three fields the tally reads — skip submitted_form_data & co.
+    stmt = select(Application.user_id, Application.student_data, Application.scholarship_subtype_list).where(
         Application.scholarship_type_id == scholarship.id,
         Application.academic_year == academic_year,
         Application.deleted_at.is_(None),
@@ -91,21 +90,19 @@ async def export_college_applicant_stats(
             if normalised_semester is None
             else Application.semester == normalised_semester
         )
-    applications = (await db.execute(stmt)).scalars().all()
-
     records = [
         ApplicantRecord(
-            user_id=app.user_id,
-            academy_code=get_academy_code_from_data(app.student_data or {}),
-            sub_type_codes=tuple(app.scholarship_subtype_list or ()),
+            user_id=user_id,
+            academy_code=get_academy_code_from_data(student_data or {}),
+            sub_type_codes=tuple(sub_types or ()),
         )
-        for app in applications
+        for user_id, student_data, sub_types in (await db.execute(stmt)).all()
     ]
-    configs = sorted(
-        (c for c in scholarship.sub_type_configs or [] if c.is_active),
-        key=lambda c: (c.display_order is None, c.display_order or 0, c.id),
+    columns = build_stats_columns(
+        [(c.sub_type_code, c.name) for c in scholarship.get_active_sub_type_configs()],
+        records,
+        known_names={c.sub_type_code: c.name for c in scholarship.sub_type_configs},
     )
-    columns = build_stats_columns([(c.sub_type_code, c.name) for c in configs], records)
     rows = tally_college_counts(records, columns)
 
     period = _period_label(academic_year, normalised_semester)

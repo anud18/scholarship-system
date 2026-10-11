@@ -115,3 +115,19 @@ def test_workbook_neutralises_formula_like_sub_type_names():
     payload = build_workbook(title="t", columns=columns, rows=tally_college_counts([], columns))
     ws = load_workbook(io.BytesIO(payload)).active
     assert not str(ws["C2"].value).startswith("=")
+
+
+def test_total_row_is_the_column_sum_even_when_a_student_spans_two_colleges():
+    records = [_rec(1, "C", "nstc"), _rec(1, "E", "nstc")]  # college changed between applications
+    counts = _counts(tally_college_counts(records, build_stats_columns(PHD_CONFIGS, records)))
+    assert counts["資訊學院"] == (1, 0) and counts["電機學院"] == (1, 0)
+    assert counts[TOTAL_ROW_LABEL] == (2, 0)
+
+
+def test_deactivated_sub_type_column_keeps_its_configured_name():
+    columns = build_stats_columns(
+        [("nstc", "x")],
+        [_rec(1, "C", "custom_grant")],
+        known_names={"nstc": "x", "custom_grant": "自訂獎助"},
+    )
+    assert [c.label for c in columns] == ["國科會", "自訂獎助"]
