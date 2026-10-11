@@ -88,7 +88,10 @@ export function ProfessorRecommendation({
   locale,
   getSubTypeName,
 }: {
-  app: Application;
+  app: Pick<
+    Application,
+    "professor_review_items" | "requires_professor_recommendation"
+  >;
   locale: Locale;
   getSubTypeName: (subTypeCode: string | undefined, locale: Locale) => string;
 }) {

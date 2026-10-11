@@ -647,6 +647,8 @@ class ApplicationListResponse(BaseModel):
 
     # Professor information
     professor: Optional[Dict[str, Any]] = None
+    # Per sub-type professor verdicts (sub_type_code / recommendation / comments)
+    professor_review_items: List[Dict[str, Any]] = []
 
     # Scholarship configuration for professor review requirements
     scholarship_configuration: Optional[Dict[str, Any]] = None

@@ -26,6 +26,7 @@ from app.models.scholarship import ScholarshipStatus, ScholarshipSubTypeConfig, 
 from app.models.user import AdminScholarship, User
 from app.schemas.application import ApplicationListResponse
 from app.services.application_deletion_policy import find_distributed_application_ids, has_entered_distribution
+from app.services.manual_distribution_service import load_professor_review_items
 from app.schemas.scholarship import (
     ScholarshipSubTypeConfigCreate,
     ScholarshipSubTypeConfigResponse,
@@ -96,6 +97,8 @@ async def get_applications_by_scholarship(
     # Batch-resolve which rows already hold a saved/finalized allocation or a
     # roster entry, so each row can carry an `is_deletable` flag for the admin UI.
     distributed_ids = await find_distributed_application_ids(db, [app.id for app, _ in application_tuples])
+
+    professor_items = await load_professor_review_items(db, [app.id for app, _ in application_tuples])
 
     response_list = []
     for app_tuple in application_tuples:
@@ -192,7 +195,8 @@ async def get_applications_by_scholarship(
             or getattr(user, "nycu_id", None),
             "student_email": (app.student_data.get("com_email") if app.student_data else None)
             or (user.email if user else None),
-            "days_waiting": None,
+            # Professor's per-sub-type verdicts (same loader as the manual-distribution grid)
+            "professor_review_items": professor_items.get(app.id, []),
             # Include scholarship configuration for professor review settings
             "scholarship_configuration": (
                 {
@@ -212,17 +216,6 @@ async def get_applications_by_scholarship(
                 else None
             ),
         }
-
-        # Calculate days waiting
-        if app.submitted_at:
-            now = datetime.now(timezone.utc)
-            submitted_time = app.submitted_at
-
-            if submitted_time.tzinfo is None:
-                submitted_time = submitted_time.replace(tzinfo=timezone.utc)
-
-            days_diff = (now - submitted_time).days
-            app_data["days_waiting"] = max(0, days_diff)
 
         response_list.append(ApplicationListResponse.model_validate(app_data))
 
