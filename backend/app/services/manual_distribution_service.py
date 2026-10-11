@@ -30,6 +30,7 @@ from app.services.received_months_service import (
     get_imported_months_bulk_async,
 )
 from app.utils.student_snapshot_fields import format_enrollment_date_roc
+from app.utils.sub_type_agency import sub_type_agency_label
 
 logger = logging.getLogger(__name__)
 
@@ -1771,12 +1772,7 @@ class ManualDistributionService:
     @staticmethod
     def _sub_type_to_chinese(sub_type: str) -> str:
         """Map sub-type code to Chinese display name."""
-        mapping = {
-            "nstc": "國科會",
-            "moe_1w": "教育部",
-            "moe_2w": "教育部",
-        }
-        return mapping.get(sub_type, sub_type)
+        return sub_type_agency_label(sub_type) or sub_type
 
     def _format_enrollment_date(self, student_data: dict) -> str:
         """Format enrollment date as ROC calendar (民國年.月.日).
