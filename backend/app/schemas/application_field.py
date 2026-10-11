@@ -176,16 +176,21 @@ class ApplicationDocumentUpdate(BaseModel):
     validation_rules: Optional[Dict[str, Any]] = None
 
 
+PG_INT_MAX = 2**31 - 1
+MAX_REORDER_ITEMS = 500
+
+
 class ApplicationDocumentReorderItem(BaseModel):
-    id: int
-    display_order: int
+    # Bounded to the Integer columns so an out-of-range value is a 422, not a DB error.
+    id: int = Field(..., ge=1, le=PG_INT_MAX)
+    display_order: int = Field(..., ge=0, le=PG_INT_MAX)
 
 
 class ApplicationDocumentReorderRequest(BaseModel):
     """New display order for one scholarship type's documents (審核管理 drag-sort)."""
 
     scholarship_type: str = Field(..., max_length=50)
-    items: List[ApplicationDocumentReorderItem] = Field(..., min_length=1)
+    items: List[ApplicationDocumentReorderItem] = Field(..., min_length=1, max_length=MAX_REORDER_ITEMS)
 
     @field_validator("items")
     @classmethod

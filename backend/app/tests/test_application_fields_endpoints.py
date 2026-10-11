@@ -389,6 +389,16 @@ class TestApplicationFieldsEndpoints:
         assert resp.status_code == 422
 
     @pytest.mark.asyncio
+    async def test_reorder_documents_out_of_range_422(self, login, admin):
+        """Values past the int4 columns are refused at the boundary, not by Postgres."""
+        c = login(admin)
+        resp = await c.patch(
+            "/api/v1/application-fields/documents/reorder",
+            json={"scholarship_type": "undergraduate", "items": [{"id": 1, "display_order": 2**31}]},
+        )
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
     async def test_reorder_documents_other_scholarship_type_400(self, login, admin):
         """An id from another scholarship type is refused and nothing is written."""
         own = await self._make_document(scholarship_type="undergrad_reorder_a", display_order=0)

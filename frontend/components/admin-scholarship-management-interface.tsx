@@ -563,28 +563,46 @@ export function AdminScholarshipManagementInterface({
     }
   };
 
+  type DocumentOrder = Array<{ id: number; display_order: number }>;
+
+  // Puts the dynamic documents in `ranked`'s order with its display_order
+  // values, keeping every other change to the current state — e.g. an
+  // 啟用/停用 toggle made while a reorder was in flight.
+  const applyDocumentOrder = (ranked: DocumentOrder) =>
+    setDocumentRequirements(prev => {
+      const rank = new Map(ranked.map((item, idx) => [item.id, idx]));
+      const orderOf = new Map(ranked.map(item => [item.id, item.display_order]));
+      const dynamic = prev
+        .filter(d => !d.is_fixed)
+        .map(d => ({ ...d, display_order: orderOf.get(d.id) ?? d.display_order }))
+        .sort(
+          (a, b) =>
+            (rank.get(a.id) ?? ranked.length) - (rank.get(b.id) ?? ranked.length)
+        );
+      return [...prev.filter(d => d.is_fixed), ...dynamic];
+    });
+
   // Persists immediately (like 相關連結), independent of 儲存設定.
   const handleReorderDocuments = async (next: ApplicationDocument[]) => {
-    const previous = documentRequirements;
-    const renumbered = next.map((doc, idx) => ({ ...doc, display_order: idx }));
-    setDocumentRequirements([
-      ...previous.filter(d => d.is_fixed),
-      ...renumbered,
-    ]);
+    const previousOrder: DocumentOrder = documentRequirements
+      .filter(d => !d.is_fixed)
+      .map(d => ({ id: d.id, display_order: d.display_order }));
+    const items: DocumentOrder = next.map((doc, idx) => ({
+      id: doc.id,
+      display_order: idx,
+    }));
+    applyDocumentOrder(items);
     setIsReorderingDocuments(true);
 
     try {
-      const response = await api.applicationFields.reorderDocuments(
-        type,
-        renumbered.map(doc => ({ id: doc.id, display_order: doc.display_order }))
-      );
+      const response = await api.applicationFields.reorderDocuments(type, items);
       if (!response.success) {
-        setDocumentRequirements(previous);
+        applyDocumentOrder(previousOrder);
         toast.error(response.message || "排序失敗");
       }
     } catch (err) {
       logger.error("Failed to reorder documents", { err: err });
-      setDocumentRequirements(previous);
+      applyDocumentOrder(previousOrder);
       toast.error("排序失敗，請稍後再試");
     } finally {
       setIsReorderingDocuments(false);
@@ -985,7 +1003,7 @@ export function AdminScholarshipManagementInterface({
           )}
           <Button
             onClick={handleSaveSettings}
-            disabled={isSaving}
+            disabled={isSaving || isReorderingDocuments}
             className="nycu-gradient text-white px-6"
           >
             {isSaving ? (

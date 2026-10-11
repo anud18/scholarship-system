@@ -170,8 +170,11 @@ export function ApplicationDocumentForm({
         throw new Error("至少需要選擇一種支援的檔案格式");
       }
 
+      // Without the input, display_order is whatever it was when the dialog
+      // opened; sending it back would undo a drag made since.
+      const { display_order, ...rest } = formData;
       const documentData = {
-        ...formData,
+        ...(showDisplayOrder ? { ...rest, display_order } : rest),
         scholarship_type: scholarshipType,
       };
 

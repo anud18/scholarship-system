@@ -2,6 +2,7 @@
 
 import {
   DndContext,
+  KeyboardSensor,
   PointerSensor,
   closestCenter,
   useSensor,
@@ -11,6 +12,7 @@ import {
 import {
   SortableContext,
   arrayMove,
+  sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
@@ -86,7 +88,7 @@ function SortableDocumentRow({
         <button
           type="button"
           aria-label="拖曳排序"
-          className="cursor-grab text-gray-400 hover:text-gray-600 disabled:cursor-not-allowed"
+          className="cursor-grab touch-none text-gray-400 hover:text-gray-600 disabled:cursor-not-allowed"
           disabled={disabled}
           {...attributes}
           {...listeners}
@@ -236,7 +238,9 @@ export function DynamicDocumentsTable({
   ...rowActions
 }: DynamicDocumentsTableProps) {
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    // Space/Enter on the handle lifts a row, arrows move it.
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
   const handleDragEnd = (event: DragEndEvent) => {

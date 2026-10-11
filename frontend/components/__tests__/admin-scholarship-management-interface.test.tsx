@@ -21,7 +21,7 @@
  * API surface that warrants its own dedicated test.
  */
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AdminScholarshipManagementInterface } from "../admin-scholarship-management-interface";
 
@@ -30,6 +30,27 @@ const mockGetAll = jest.fn();
 const mockGetConfigurationWhitelist = jest.fn();
 const mockCreateDocument = jest.fn();
 const mockUpdateDocument = jest.fn();
+const mockReorderDocuments = jest.fn();
+
+// jsdom can't run pointer drags; capture the 動態文件 table's onDragEnd (the
+// only DndContext on the page) and fire drops through it directly.
+let capturedDragEnd: ((event: unknown) => void) | undefined;
+jest.mock("@dnd-kit/core", () => {
+  const actual = jest.requireActual("@dnd-kit/core");
+  return {
+    ...actual,
+    DndContext: ({
+      children,
+      onDragEnd,
+    }: {
+      children: React.ReactNode;
+      onDragEnd: (event: unknown) => void;
+    }) => {
+      capturedDragEnd = onDragEnd;
+      return <>{children}</>;
+    },
+  };
+});
 
 jest.mock("../../lib/api", () => ({
   __esModule: true,
@@ -43,6 +64,7 @@ jest.mock("../../lib/api", () => ({
       createDocument: (...args: unknown[]) => mockCreateDocument(...args),
       updateDocument: (...args: unknown[]) => mockUpdateDocument(...args),
       deleteDocument: jest.fn(),
+      reorderDocuments: (...args: unknown[]) => mockReorderDocuments(...args),
       uploadDocumentExample: jest.fn(),
       deleteDocumentExample: jest.fn(),
     },
@@ -88,6 +110,8 @@ beforeEach(() => {
   });
   mockCreateDocument.mockReset();
   mockUpdateDocument.mockReset();
+  mockReorderDocuments.mockReset();
+  capturedDragEnd = undefined;
 });
 
 const FIXED_DOCUMENT = {
@@ -174,5 +198,97 @@ describe("AdminScholarshipManagementInterface", () => {
     expect(payload.fixed_key).toBe("bank_statement");
     expect(payload.document_name).toBe("存摺封面（含戶名）");
     expect(payload.scholarship_type).toBe("phd");
+  });
+
+  describe("動態文件 drag-sort", () => {
+    const dynamicDoc = (id: number, name: string, order: number) => ({
+      ...FIXED_DOCUMENT,
+      id,
+      document_name: name,
+      display_order: order,
+      is_fixed: false,
+      fixed_key: null,
+    });
+
+    const renderWithDynamicDocs = async () => {
+      mockGetFormConfig.mockResolvedValue({
+        success: true,
+        data: {
+          scholarship_type: "phd",
+          fields: [],
+          documents: [
+            FIXED_DOCUMENT,
+            dynamicDoc(21, "推薦信", 0),
+            dynamicDoc(22, "研究計畫", 1),
+          ],
+        },
+      });
+      const user = userEvent.setup();
+      render(<AdminScholarshipManagementInterface type="phd" />);
+      await user.click(await screen.findByRole("tab", { name: /文件要求/ }));
+      await screen.findByTestId("dynamic-document-row-21");
+      return user;
+    };
+
+    const rowOrder = () =>
+      screen
+        .getAllByTestId(/^dynamic-document-row-/)
+        .map(row => row.getAttribute("data-testid"));
+
+    it("saves the dropped order right away", async () => {
+      mockReorderDocuments.mockResolvedValue({ success: true, data: { updated: 2 } });
+      await renderWithDynamicDocs();
+
+      await act(async () => {
+        capturedDragEnd?.({ active: { id: 22 }, over: { id: 21 } });
+      });
+
+      expect(mockReorderDocuments).toHaveBeenCalledWith("phd", [
+        { id: 22, display_order: 0 },
+        { id: 21, display_order: 1 },
+      ]);
+      expect(rowOrder()).toEqual([
+        "dynamic-document-row-22",
+        "dynamic-document-row-21",
+      ]);
+    });
+
+    it("puts the rows back when the save fails", async () => {
+      mockReorderDocuments.mockResolvedValue({ success: false, message: "排序失敗" });
+      await renderWithDynamicDocs();
+
+      await act(async () => {
+        capturedDragEnd?.({ active: { id: 22 }, over: { id: 21 } });
+      });
+
+      await waitFor(() => {
+        expect(rowOrder()).toEqual([
+          "dynamic-document-row-21",
+          "dynamic-document-row-22",
+        ]);
+      });
+      const { toast } = jest.requireMock("sonner");
+      expect(toast.error).toHaveBeenCalledWith("排序失敗");
+    });
+
+    it("leaves display_order out of a dynamic document's edit", async () => {
+      mockUpdateDocument.mockResolvedValue({
+        success: true,
+        data: dynamicDoc(21, "推薦信", 0),
+      });
+      const user = await renderWithDynamicDocs();
+
+      const row = screen.getByTestId("dynamic-document-row-21");
+      await user.click(within(row).getByTitle("編輯文件"));
+      expect(screen.queryByLabelText("顯示順序")).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: /更新文件/ }));
+
+      await waitFor(() => {
+        expect(mockUpdateDocument).toHaveBeenCalled();
+      });
+      expect(mockUpdateDocument.mock.calls[0][1]).not.toHaveProperty(
+        "display_order"
+      );
+    });
   });
 });
