@@ -1577,6 +1577,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/scholarships/{scholarship_identifier}/college-applicant-stats/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export College Applicant Stats
+         * @description Download 統計各學院學生申請人數 (.xlsx) for one scholarship and academic year.
+         */
+        get: operations["export_college_applicant_stats_api_v1_admin_scholarships__scholarship_identifier__college_applicant_stats_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/scholarship-permissions": {
         parameters: {
             query?: never;
@@ -14218,6 +14238,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    export_college_applicant_stats_api_v1_admin_scholarships__scholarship_identifier__college_applicant_stats_export_get: {
+        parameters: {
+            query: {
+                /** @description ROC academic year */
+                academic_year: number;
+                /** @description first / second / yearly; omit to include every semester of the year */
+                semester?: string | null;
+            };
+            header?: never;
+            path: {
+                scholarship_identifier: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

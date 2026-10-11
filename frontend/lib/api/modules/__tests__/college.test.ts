@@ -529,6 +529,16 @@ describe("module-level export helpers", () => {
     await expect(exportRankingExcel(42)).rejects.toThrow("無法匯出排名資料");
   });
 
+  it("fetchBinaryExport never surfaces a FastAPI 422 detail array as the message", async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: false,
+      json: jest.fn().mockResolvedValue({ detail: [{ loc: ["query"], msg: "bad" }] }),
+    });
+    global.fetch = fetchMock as any;
+
+    await expect(exportRankingExcel(42)).rejects.toThrow("無法匯出排名資料");
+  });
+
   it("downloadRankingTemplate hits export-excel with template=true + 範本 fallback filename", async () => {
     const fetchMock = jest.fn().mockResolvedValue({
       ok: true,

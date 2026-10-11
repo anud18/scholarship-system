@@ -16,6 +16,7 @@
  */
 
 import { typedClient } from '../typed-client';
+import { fetchBinaryExport } from './binary-export';
 import { toApiResponse } from '../compat';
 import type { ApiResponse, DashboardStats, HistoricalApplicationFilters } from '../types';
 import type { components } from '../generated/schema';
@@ -145,6 +146,26 @@ export function createAdminApi() {
         throw new Error("匯出歷史申請失敗");
       }
       return response.blob();
+    },
+
+    /**
+     * Download 統計各學院學生申請人數 (.xlsx) for one scholarship + academic year.
+     * `semester` omitted ⇒ every semester of that year (yearly scholarships).
+     */
+    exportCollegeApplicantStats: async (params: {
+      scholarshipCode: string;
+      academicYear: number;
+      semester?: string;
+    }): Promise<{ blob: Blob; filename: string }> => {
+      const search = new URLSearchParams();
+      search.set("academic_year", String(params.academicYear));
+      if (params.semester) search.set("semester", params.semester);
+      return fetchBinaryExport(
+        `/api/v1/admin/scholarships/${encodeURIComponent(params.scholarshipCode)}/college-applicant-stats/export`,
+        search,
+        `${params.academicYear}學年度_統計各學院學生申請人數.xlsx`,
+        "無法匯出統計各學院學生申請人數"
+      );
     },
 
     /**

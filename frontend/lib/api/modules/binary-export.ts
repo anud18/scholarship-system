@@ -40,7 +40,9 @@ export async function fetchBinaryExport(
     let message = errorFallback;
     try {
       const errorData = await response.json();
-      message = errorData?.detail || errorData?.message || errorData?.error || message;
+      const candidate = errorData?.detail || errorData?.message || errorData?.error;
+      // FastAPI 422s carry `detail` as an array of objects — never toast that raw.
+      if (typeof candidate === "string" && candidate) message = candidate;
     } catch {
       // Non-JSON error body — keep default.
     }

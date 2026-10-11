@@ -3,6 +3,7 @@
 import { AdminScholarshipManagementInterface } from "@/components/admin-scholarship-management-interface";
 import { ApplicationReviewDialog } from "@/components/common/ApplicationReviewDialog";
 import { ApplicationAuditTrail } from "@/components/application-audit-trail";
+import { CollegeApplicantStatsExportButton } from "@/components/admin/dashboard/CollegeApplicantStatsExportButton";
 import {
   BankVerificationReviewDialog,
   type BankVerificationData,
@@ -1542,6 +1543,11 @@ export function AdminScholarshipDashboard({
           </p>
         </div>
         <div className="flex gap-2">
+          <CollegeApplicantStatsExportButton
+            scholarshipCode={activeTab}
+            academicYear={selectedAcademicYear}
+            semester={selectedSemester}
+          />
           <Button
             onClick={fetchAuditLogsForCurrentType}
             variant="outline"

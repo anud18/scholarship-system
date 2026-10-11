@@ -238,7 +238,7 @@ class ScholarshipType(Base):
         """Get all active sub-type configurations ordered by display_order"""
         return sorted(
             [config for config in self.sub_type_configs if config.is_active],
-            key=lambda x: x.display_order,
+            key=lambda x: x.display_order or 0,
         )
 
     def get_sub_type_translations(self) -> Dict[str, Dict[str, str]]:
