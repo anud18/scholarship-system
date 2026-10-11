@@ -15,6 +15,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { Application } from "@/lib/api/types";
+import { splitSubTypeLabel } from "@/lib/utils/sub-type-label";
 
 type Locale = "zh" | "en";
 
@@ -115,26 +116,43 @@ export function ProfessorRecommendation({
     <div className="flex flex-col gap-0.5">
       {items.map((item, idx) => {
         const isApprove = item.recommendation === "approve";
+        const verdict = isApprove
+          ? locale === "zh"
+            ? "推薦"
+            : "Approve"
+          : locale === "zh"
+            ? "不推薦"
+            : "Reject";
+        // 括號內的說明換到第二行，避免長名稱撐出欄位（僅顯示用）
+        const [mainLabel, note] = splitSubTypeLabel(
+          getSubTypeName(item.sub_type_code, locale)
+        );
         return (
           <TooltipProvider key={`${item.sub_type_code}-${idx}`}>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Badge
                   variant={isApprove ? "outline" : "destructive"}
-                  className={`text-xs cursor-default ${
+                  className={`text-xs cursor-default flex-col items-start w-fit ${
+                    note ? "rounded-md" : ""
+                  } ${
                     isApprove
                       ? "border-emerald-500 text-emerald-700 bg-emerald-50"
                       : ""
                   }`}
                 >
-                  {getSubTypeName(item.sub_type_code, locale)}:{" "}
-                  {isApprove
-                    ? locale === "zh"
-                      ? "推薦"
-                      : "Approve"
-                    : locale === "zh"
-                      ? "不推薦"
-                      : "Reject"}
+                  {note ? (
+                    <>
+                      <span>{mainLabel}</span>
+                      <span>
+                        {note}: {verdict}
+                      </span>
+                    </>
+                  ) : (
+                    <span>
+                      {mainLabel}: {verdict}
+                    </span>
+                  )}
                 </Badge>
               </TooltipTrigger>
               {item.comments && (
