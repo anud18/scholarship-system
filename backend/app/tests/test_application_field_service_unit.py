@@ -16,6 +16,9 @@ class _FakeScalarResult:
     def scalar_one_or_none(self):
         return self._items[0] if self._items else None
 
+    def scalars(self):
+        return iter(self._items)
+
 
 @pytest.fixture
 def dummy_session():
@@ -25,6 +28,8 @@ def dummy_session():
             self.commit = AsyncMock()
             self.refresh = AsyncMock()
             self.add = MagicMock()
+            self.delete = AsyncMock()
+            self.flush = AsyncMock()
 
     return DummySession()
 
@@ -116,8 +121,9 @@ async def test_update_field_updates_attributes_and_sets_updated_by(dummy_session
 
 
 @pytest.mark.asyncio
-async def test_bulk_update_fields_replaces_existing_entries(dummy_session):
+async def test_bulk_update_fields_adds_new_entries(dummy_session):
     id_counter = count(start=100)
+    dummy_session.execute.return_value = _FakeScalarResult([])  # no rows yet
 
     async def fake_refresh(obj):
         if getattr(obj, "id", None) is None:
@@ -155,8 +161,9 @@ async def test_bulk_update_fields_replaces_existing_entries(dummy_session):
 
     result = await service.bulk_update_fields("NSTC", field_payloads, updated_by=7)
 
-    # Delete issued once, commit performed, refresh called for each field
-    dummy_session.execute.assert_awaited()
+    # One lookup, nothing to delete, commit performed, refresh called for each field
+    dummy_session.execute.assert_awaited_once()
+    dummy_session.delete.assert_not_awaited()
     dummy_session.commit.assert_awaited_once()
     assert dummy_session.refresh.await_count == len(field_payloads)
     assert dummy_session.add.call_count == len(field_payloads)
