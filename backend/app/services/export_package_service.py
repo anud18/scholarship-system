@@ -398,9 +398,17 @@ class ExportPackageService:
         if include_summary_tables:
             # Same applications as the ZIP; shared by the summary tables and the
             # merged PDFs' 指導教授評語 pages. A precheck needs neither.
-            professor_review = await load_professor_review_data(
-                self.db, scholarship_type=scholarship_type, applications=applications
-            )
+            # Best-effort like the tables: a load failure must not lose the
+            # materials ZIP — it degrades to no review columns/pages plus a
+            # root error placeholder saying why.
+            review_error: Optional[str] = None
+            try:
+                professor_review = await load_professor_review_data(
+                    self.db, scholarship_type=scholarship_type, applications=applications
+                )
+            except Exception as e:
+                logger.exception("professor review data load failed")
+                review_error = f"指導教授審核資料載入失敗：{e}"
             try:
                 summary_tables = await build_embedded_summary_tables(
                     self.db,
@@ -414,6 +422,8 @@ class ExportPackageService:
             except Exception as e:
                 logger.exception("embedded summary tables generation failed wholesale")
                 summary_tables = {"_錯誤_申請總表生成失敗.txt": f"申請總表生成失敗：{e}".encode("utf-8")}
+            if review_error:
+                summary_tables = {**summary_tables, "_錯誤_指導教授審核資料載入失敗.txt": review_error.encode("utf-8")}
 
         return ExportPlan(
             scholarship_name=scholarship_type.name,

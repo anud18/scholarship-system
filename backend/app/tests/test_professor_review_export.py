@@ -25,7 +25,7 @@ from app.models.user import User, UserRole, UserType
 from app.services.college_ranking_export_service import STATIC_HEADERS, CollegeRankingExportService, ExportRow
 from app.services.professor_review_export import (
     DEFAULT_SUB_TYPE,
-    NO_REVIEW_LABEL,
+    NOT_APPLIED_LABEL,
     NOT_REVIEWED_LABEL,
     ProfessorReviewData,
     ProfessorReviewEntry,
@@ -81,6 +81,11 @@ def test_scholarship_without_sub_types_gets_one_default_pair(sub_type_list):
     assert ProfessorReviewData(sub_types=columns).headers(LABELS) == ["指導教授審核結果", "指導教授評語"]
 
 
+def test_general_mixed_with_real_sub_types_keeps_its_default_column():
+    stype = SimpleNamespace(sub_type_list=["general", "nstc"])
+    assert review_sub_type_columns(stype) == (DEFAULT_SUB_TYPE, "nstc")
+
+
 def test_verdict_under_an_unlisted_code_gets_its_own_column():
     # e.g. the professor UI's 'default' fallback on a scholarship with real sub-types
     stype = SimpleNamespace(sub_type_list=["nstc", "moe_1w"])
@@ -110,15 +115,15 @@ def test_cells_render_verdict_comment_and_missing_states():
     app = _app(("nstc",))
     review = _review([_entry("nstc", "reject", "已獲其他補助")])
     assert review.cell_pair(app, "nstc") == ("不推薦", "已獲其他補助")
-    # Did not apply for moe_1w → nothing for the professor to review.
-    assert review.cell_pair(app, "moe_1w") == (NO_REVIEW_LABEL, "")
-    # Applied, review required, no verdict yet
-    assert _review().cell_pair(app, "nstc") == (NOT_REVIEWED_LABEL, "")
+    # Did not apply for moe_1w
+    assert review.cell_pair(app, "moe_1w") == ("未申請", "")
+    # Applied, no verdict yet
+    assert _review().cell_pair(app, "nstc") == ("未審核", "")
 
 
-def test_flow_without_professor_step_is_not_reported_as_pending():
+def test_applied_without_verdict_reads_not_reviewed_even_without_professor_step():
     # e.g. a renewal whose config has renewal_requires_professor_review=False
-    assert _review(required=False).cell_pair(_app(("nstc",)), "nstc") == (NO_REVIEW_LABEL, "")
+    assert _review(required=False).cell_pair(_app(("nstc",)), "nstc") == (NOT_REVIEWED_LABEL, "")
 
 
 def test_general_placeholder_application_shows_pending_not_unapplied():
@@ -188,6 +193,20 @@ def test_workbook_survives_control_characters_in_a_comment():
     assert "第一行第二行" in [c.value for c in ws[3]]
 
 
+def test_workbook_neutralizes_formula_like_sub_type_names_in_headers():
+    payload = CollegeRankingExportService().build_workbook(
+        rows=[_row()],
+        dynamic_fields=[],
+        sub_type_labels={"nstc": "=HYPERLINK(1)", "moe_1w": "教育部"},
+        title="t",
+        sheet_name="s",
+        professor_review=_review(),
+    )
+    headers = [c.value for c in load_workbook(io.BytesIO(payload)).active[2]]
+    assert "'=HYPERLINK(1)-指導教授審核結果" in headers
+    assert not any(isinstance(h, str) and h.startswith("=") for h in headers)
+
+
 def test_workbook_without_professor_review_has_no_review_columns():
     headers = [c.value for c in _workbook(None)[2]]
     assert headers == STATIC_HEADERS
@@ -226,7 +245,7 @@ def test_pdf_page_rows_cover_every_column():
     )
     assert _rows(_app(("nstc",)), review, LABELS) == [
         ["國科會", "推薦", "很好", "王教授", "2026-10-05 14:30"],
-        ["教育部(一萬)", NO_REVIEW_LABEL, "", "", ""],
+        ["教育部(一萬)", NOT_APPLIED_LABEL, "", "", ""],
         ["整體推薦", "不推薦", "舊資料", "王教授", "2026-10-05 14:30"],
     ]
 
@@ -337,4 +356,4 @@ async def test_loaders_return_professor_verdicts_and_review_requirement(db: Asyn
     assert data.cells(new_app) == ["推薦", "很好"]  # 'general' verdict lands in the default column
     assert data.is_review_required(new_app)
     assert not data.is_review_required(renewal)
-    assert data.cells(renewal) == [NO_REVIEW_LABEL, ""]
+    assert data.cells(renewal) == [NOT_REVIEWED_LABEL, ""]

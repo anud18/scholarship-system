@@ -417,3 +417,28 @@ async def test_professor_review_page_failure_becomes_a_placeholder(monkeypatch):
     text = "".join(p.extract_text() for p in reader.pages)
     assert "指導教授評語" in reader.pages[0].extract_text()
     assert "review page exploded" in text
+
+
+@pytest.mark.asyncio
+async def test_professor_review_load_failure_keeps_the_materials_zip(monkeypatch):
+    async def _boom(*_args, **_kwargs):
+        raise RuntimeError("review DB down")
+
+    async def _fake_aux(db, *, scholarship_type, applications):
+        return ([], {}, {}, {})
+
+    monkeypatch.setattr("app.services.export_summary_tables.load_export_aux_data", _fake_aux)
+    monkeypatch.setattr("app.services.export_package_service.load_form_field_labels", _coro_returning({}))
+    monkeypatch.setattr("app.services.export_package_service.load_professor_review_data", _boom)
+
+    app = _mk_app(1, 11, "001", "甲", [])
+    svc = ExportPackageService(db=None, minio_service=_FakeMinio({}))
+    monkeypatch.setattr(svc, "_get_scholarship_type", _coro_returning(_stype()))
+    monkeypatch.setattr(svc, "_query_applications", _coro_returning([app]))
+
+    plan = await svc.prepare_export(scholarship_type_id=1, academic_year=114, semester="first", college_code="A")
+    zf = zipfile.ZipFile(await collect_zip(svc, plan))
+    names = zf.namelist()
+
+    assert "1000_A系/001_甲/001_甲_申請資料合併檔.pdf" in names
+    assert "review DB down" in zf.read("_錯誤_指導教授審核資料載入失敗.txt").decode("utf-8")

@@ -24,11 +24,10 @@ from app.models.scholarship import ScholarshipConfiguration
 from app.models.user import User, UserRole
 
 PROFESSOR_RESULT_LABELS: Dict[str, str] = {"approve": "推薦", "reject": "不推薦"}
-# Applied for the sub-type and the flow requires a professor verdict, none yet.
+# Applied for the sub-type, but no professor verdict on it.
 NOT_REVIEWED_LABEL = "未審核"
-# Nothing for the professor to review: the sub-type was not applied for, or the
-# application's flow has no professor step (e.g. most renewals).
-NO_REVIEW_LABEL = "—"
+# The student did not apply for the sub-type — nothing for the professor to review.
+NOT_APPLIED_LABEL = "未申請"
 # The verdict of an application without real sub-types is stored under this
 # code (ReviewService / the professor UI's fallback); a scholarship without
 # real sub-types gets one unprefixed column pair for it.
@@ -123,9 +122,9 @@ class ProfessorReviewData:
 
     def missing_label(self, application: Any, sub_type_code: str) -> str:
         """Status text for a sub-type without any professor verdict."""
-        if self.is_review_required(application) and sub_type_code in applied_sub_types(application):
+        if sub_type_code in applied_sub_types(application):
             return NOT_REVIEWED_LABEL
-        return NO_REVIEW_LABEL
+        return NOT_APPLIED_LABEL
 
     def cell_pair(self, application: Any, sub_type_code: str) -> Tuple[str, str]:
         """(審核結果, 評語) cell text for one sub-type.
@@ -156,12 +155,14 @@ class ProfessorReviewData:
 def review_sub_type_columns(
     scholarship_type: Any, entries_by_app: Optional[Dict[int, List[ProfessorReviewEntry]]] = None
 ) -> Tuple[str, ...]:
-    """Column set: the scholarship's sub-types in its own order (DEFAULT_SUB_TYPE
-    when it has none), then any other code a loaded verdict carries."""
+    """Column set: the scholarship's sub-types in its own order — a listed
+    'general' (alone or mixed with real sub-types) becomes DEFAULT_SUB_TYPE, which
+    is also the column when the list is empty — then any other code a loaded
+    verdict carries."""
     codes: List[str] = []
     for raw in getattr(scholarship_type, "sub_type_list", None) or []:
-        code = review_code(raw) if isinstance(raw, str) else ""
-        if code and code != DEFAULT_SUB_TYPE and code not in codes:
+        code = review_code(raw) if isinstance(raw, str) and raw.strip() else ""
+        if code and code not in codes:
             codes.append(code)
     if not codes:
         codes.append(DEFAULT_SUB_TYPE)

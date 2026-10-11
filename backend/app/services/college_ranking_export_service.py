@@ -145,9 +145,10 @@ class CollegeRankingExportService:
         title_cell.font = Font(bold=True, size=14)
         title_cell.alignment = Alignment(horizontal="center", vertical="center")
 
-        # Row 2: header
+        # Row 2: header. Headers carry admin-entered text (sub-type names in the
+        # review columns, dynamic field labels), so they are neutralized too.
         for col_idx, header in enumerate(headers, start=1):
-            cell = ws.cell(row=2, column=col_idx, value=header)
+            cell = ws.cell(row=2, column=col_idx, value=sanitize_excel_cell(header))
             cell.font = Font(bold=True)
             cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
             cell.fill = PatternFill("solid", fgColor="DDDDDD")
