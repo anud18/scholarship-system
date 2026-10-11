@@ -133,7 +133,7 @@ export function ProfessorRecommendation({
               <TooltipTrigger asChild>
                 <Badge
                   variant={isApprove ? "outline" : "destructive"}
-                  className={`text-xs cursor-default flex-col items-start w-fit ${
+                  className={`text-xs cursor-default flex-col items-start w-fit whitespace-nowrap ${
                     note ? "rounded-md" : ""
                   } ${
                     isApprove
