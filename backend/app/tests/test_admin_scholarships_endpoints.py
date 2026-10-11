@@ -217,6 +217,48 @@ class TestAdminScholarshipsEndpoints:
         assert by_app_id["LIST-DEL-OK"]["review_stage"] == ReviewStage.professor_reviewed.value
         assert by_app_id["LIST-DEL-NO"]["is_deletable"] is False
 
+    @pytest.mark.asyncio
+    async def test_applications_carry_professor_review_items(self, login, admin, student, professor, scholarship):
+        """Rows expose only the professor's per-sub-type verdicts (not other reviewers')."""
+        from datetime import datetime, timezone
+
+        from app.models.application import Application, ApplicationStatus
+        from app.models.enums import Semester
+        from app.models.review import ApplicationReview, ApplicationReviewItem
+
+        db = await _shared_db()
+        application = Application(
+            app_id="LIST-PROF-REV",
+            user_id=student.id,
+            scholarship_type_id=scholarship.id,
+            status=ApplicationStatus.under_review.value,
+            academic_year=113,
+            semester=Semester.first,
+            sub_type_selection_mode="single",
+            student_data={"std_cname": "測試", "std_stdcode": "310460098"},
+            created_at=datetime.now(timezone.utc),
+        )
+        db.add(application)
+        await db.flush()
+        for reviewer, recommendation in ((professor, "approve"), (admin, "reject")):
+            review = ApplicationReview(
+                application_id=application.id,
+                reviewer_id=reviewer.id,
+                recommendation=recommendation,
+                reviewed_at=datetime.now(timezone.utc),
+            )
+            review.items = [ApplicationReviewItem(sub_type_code="nstc", recommendation=recommendation, comments="ok")]
+            db.add(review)
+        await db.commit()
+
+        c = login(admin)
+        resp = await c.get(f"/api/v1/admin/scholarships/{scholarship.id}/applications")
+        assert resp.status_code == 200
+        by_app_id = {row["app_id"]: row for row in resp.json()["data"]}
+        assert by_app_id["LIST-PROF-REV"]["professor_review_items"] == [
+            {"sub_type_code": "nstc", "recommendation": "approve", "comments": "ok"}
+        ]
+
     # ------------------------------------------------------------------
     # GET /scholarships/{scholarship_identifier}/audit-trail
     # ------------------------------------------------------------------

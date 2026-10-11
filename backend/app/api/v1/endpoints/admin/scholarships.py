@@ -22,6 +22,7 @@ from sqlalchemy.sql.selectable import Select
 from app.core.security import require_admin, require_scholarship_manager
 from app.db.deps import get_db
 from app.models.application import Application, ApplicationStatus
+from app.models.review import ApplicationReview
 from app.models.scholarship import ScholarshipStatus, ScholarshipSubTypeConfig, ScholarshipType
 from app.models.user import AdminScholarship, User
 from app.schemas.application import ApplicationListResponse
@@ -35,6 +36,11 @@ from app.schemas.scholarship import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _role_value(role) -> str:
+    """Role may be an enum member or its raw string value."""
+    return role.value if hasattr(role, "value") else role
 
 
 @router.get("/scholarships/{scholarship_identifier}/applications")
@@ -73,6 +79,8 @@ async def get_applications_by_scholarship(
             selectinload(Application.files),
             selectinload(Application.scholarship_configuration),
             selectinload(Application.professor),
+            selectinload(Application.reviews).selectinload(ApplicationReview.reviewer),
+            selectinload(Application.reviews).selectinload(ApplicationReview.items),
         )
         .join(User, Application.user_id == User.id)
         .where(Application.scholarship_type_id == scholarship.id)
@@ -192,7 +200,17 @@ async def get_applications_by_scholarship(
             or getattr(user, "nycu_id", None),
             "student_email": (app.student_data.get("com_email") if app.student_data else None)
             or (user.email if user else None),
-            "days_waiting": None,
+            # Professor's per-sub-type verdicts (same shape as the college listing)
+            "professor_review_items": [
+                {
+                    "sub_type_code": item.sub_type_code,
+                    "recommendation": item.recommendation,
+                    "comments": item.comments,
+                }
+                for review in app.reviews
+                if review.reviewer and _role_value(review.reviewer.role) == "professor"
+                for item in review.items
+            ],
             # Include scholarship configuration for professor review settings
             "scholarship_configuration": (
                 {
@@ -212,17 +230,6 @@ async def get_applications_by_scholarship(
                 else None
             ),
         }
-
-        # Calculate days waiting
-        if app.submitted_at:
-            now = datetime.now(timezone.utc)
-            submitted_time = app.submitted_at
-
-            if submitted_time.tzinfo is None:
-                submitted_time = submitted_time.replace(tzinfo=timezone.utc)
-
-            days_diff = (now - submitted_time).days
-            app_data["days_waiting"] = max(0, days_diff)
 
         response_list.append(ApplicationListResponse.model_validate(app_data))
 
