@@ -21,6 +21,7 @@ import { typedClient } from "../../typed-client";
 
 jest.mock("../../typed-client", () => ({
   typedClient: {
+    getToken: jest.fn(() => "tok"),
     raw: {
       GET: jest.fn(),
       POST: jest.fn(),
@@ -487,13 +488,35 @@ describe("createAdminApi", () => {
     expect("change_reason" in body).toBe(false);
   });
 
+  it("exportCollegeApplicantStats hits the admin stats export with year + optional semester", async () => {
+    // Pin: binary export via fetchBinaryExport (not typedClient.raw), bearer
+    // token attached, semester omitted entirely when not selected.
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      headers: { get: jest.fn().mockReturnValue("") },
+      blob: jest.fn().mockResolvedValue(new Blob()),
+    });
+    global.fetch = fetchMock as any;
+    const api = createAdminApi();
+
+    const result = await api.exportCollegeApplicantStats({ scholarshipCode: "phd", academicYear: 115 });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/v1/admin/scholarships/phd/college-applicant-stats/export?academic_year=115");
+    expect(init.headers.Authorization).toBe("Bearer tok");
+    expect(result.filename).toBe("115學年度_統計各學院學生申請人數.xlsx");
+
+    await api.exportCollegeApplicantStats({ scholarshipCode: "phd", academicYear: 115, semester: "first" });
+    expect(fetchMock.mock.calls[1][0]).toContain("academic_year=115&semester=first");
+  });
+
   // ─── Method count invariant ───────────────────────────────────────
 
-  it("module exposes exactly 79 methods", async () => {
-    // Pin: 79 methods is the current admin surface. Pin so
+  it("module exposes exactly 80 methods", async () => {
+    // Pin: 80 methods is the current admin surface. Pin so
     // refactor adding/removing methods requires explicit review.
     // SECURITY-critical surface — every change should be deliberate.
     const api = createAdminApi();
-    expect(Object.keys(api).length).toBe(79);
+    expect(Object.keys(api).length).toBe(80);
   });
 });
