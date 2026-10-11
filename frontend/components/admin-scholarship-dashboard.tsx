@@ -905,7 +905,7 @@ export function AdminScholarshipDashboard({
                     />
                   </TableHead>
                   <TableHead>申請人</TableHead>
-                  {showSubTypes && <TableHead>子項目</TableHead>}
+                  {showSubTypes && <TableHead>學生申請獎學金類別</TableHead>}
                   <TableHead>指派教授</TableHead>
                   <TableHead>教授審核結果</TableHead>
                   <TableHead>狀態</TableHead>
