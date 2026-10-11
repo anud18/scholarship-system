@@ -145,3 +145,39 @@ async def test_second_correction_does_not_clobber_original(db, app_with_bank_fie
     # original = the STUDENT's value, not the first correction.
     assert app_with_bank_fields.meta_data["original_bank_fields"]["fields"]["postal_account"] == "0001234567890123"
     assert app_with_bank_fields.submitted_form_data["fields"]["postal_account"]["value"] == "22222222222222"
+
+
+async def test_correction_lands_in_the_field_readers_pick(db, app_with_bank_fields):
+    """A wizard application can carry both a leaked postal_account and the
+    student's own account_number (#1443). Readers prefer account_number, so a
+    correction must land there too — otherwise it is silently ignored."""
+    fields = app_with_bank_fields.submitted_form_data["fields"]
+    app_with_bank_fields.submitted_form_data = {
+        **app_with_bank_fields.submitted_form_data,
+        "fields": {
+            **fields,
+            "account_number": {
+                "field_id": "account_number",
+                "field_type": "text",
+                "value": "0009999999999999",
+                "required": True,
+            },
+        },
+    }
+    await db.commit()
+
+    svc = BankVerificationService(db)
+    await svc.manual_review_bank_info(
+        application_id=app_with_bank_fields.id,
+        account_number_approved=None,
+        account_number_corrected="70009999888877",
+        account_holder_approved=None,
+        account_holder_corrected=None,
+        review_notes="correct the read field",
+        reviewer_username="g19admin",
+    )
+    await db.commit()
+    await db.refresh(app_with_bank_fields)
+
+    assert app_with_bank_fields.submitted_form_data["fields"]["account_number"]["value"] == "70009999888877"
+    assert svc.extract_bank_fields_from_application(app_with_bank_fields)["account_number"] == "70009999888877"

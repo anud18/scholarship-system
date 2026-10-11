@@ -468,6 +468,73 @@ describe("ApplicationFormDataDisplay", () => {
         expect(screen.queryByText("99999999999999")).not.toBeInTheDocument();
       });
     });
+
+    // #1443: a shared form-config cache prefilled every student's hidden
+    // postal_account / advisor_* fields with one student's profile, and those
+    // copies were saved into submitted_form_data.
+    it("shows the profile, not a leaked submitted copy, for 指導教授 and 郵局帳號", async () => {
+      const application = {
+        postal_account: "11111111111111",
+        advisor_name: "本人教授",
+        advisor_email: "own@nycu.edu.tw",
+        advisor_nycu_id: "OWN001",
+        submitted_form_data: {
+          fields: {
+            postal_account: { value: "22222222222222" },
+            advisor_name: { value: "別人教授" },
+            advisor_email: { value: "other@nycu.edu.tw" },
+            advisor_nycu_id: { value: "OTHER01" },
+            contact_phone: { value: "0987878978" },
+          },
+        },
+      };
+
+      render(
+        <ApplicationFormDataDisplay
+          formData={application}
+          locale="zh"
+          fieldLabels={fixedFieldLabels}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("11111111111111")).toBeInTheDocument();
+        expect(screen.getByText("本人教授")).toBeInTheDocument();
+        expect(screen.getByText("OWN001")).toBeInTheDocument();
+      });
+      for (const leaked of [
+        "22222222222222",
+        "別人教授",
+        "other@nycu.edu.tw",
+        "OTHER01",
+      ]) {
+        expect(screen.queryByText(leaked)).not.toBeInTheDocument();
+      }
+    });
+
+    it("keeps the submitted account_number over a leaked postal_account, whatever the key order", async () => {
+      const application = {
+        submitted_form_data: {
+          fields: {
+            postal_account: { value: "22222222222222" },
+            account_number: { value: "12341234123412" },
+          },
+        },
+      };
+
+      render(
+        <ApplicationFormDataDisplay
+          formData={application}
+          locale="zh"
+          fieldLabels={fixedFieldLabels}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("12341234123412")).toBeInTheDocument();
+      });
+      expect(screen.queryByText("22222222222222")).not.toBeInTheDocument();
+    });
   });
 
   it("should handle malformed form data gracefully", async () => {

@@ -9,8 +9,7 @@ otherwise the edit is silently discarded on the next page load.
 
 Covered here:
 - the materialised row replaces the built-in and is still flagged is_fixed
-- per-user prefill still reaches the materialised row (it lives on the
-  profile, not on the row)
+- the injected config carries no per-user value (it is cached and shared)
 - a materialised advisor row disappears again when the scholarship stops
   requiring a professor recommendation, exactly as the injected copy would
 - a DEACTIVATED materialised row is not treated as "never edited", which would
@@ -30,14 +29,8 @@ from app.services.application_field_service import (
 
 
 @pytest.fixture
-def service(monkeypatch):
-    svc = ApplicationFieldService(db=None)  # type: ignore[arg-type]
-
-    async def no_profile(_user_id):
-        return None
-
-    monkeypatch.setattr(svc, "get_user_profile_data", no_profile)
-    return svc
+def service():
+    return ApplicationFieldService(db=None)  # type: ignore[arg-type]
 
 
 def _requires_advisor(service, monkeypatch, required: bool):
@@ -97,24 +90,21 @@ async def test_materialised_document_replaces_the_builtin(service, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_materialised_field_still_gets_profile_prefill(service, monkeypatch):
-    """prefill lives on the user profile, so it has to be re-applied to the
-    admin's row — a materialised 郵局帳號 field that stopped prefilling would
-    make every student retype an account number the system already holds."""
-    _requires_advisor(service, monkeypatch, False)
-
-    async def profile(_user_id):
-        return {"account_number": "0001234567"}
-
-    monkeypatch.setattr(service, "get_user_profile_data", profile)
+async def test_injected_config_carries_no_per_user_values(service, monkeypatch):
+    """The config is cached and shared by every student, so neither the
+    built-ins nor the admin's materialised rows may carry a profile value.
+    A per-user prefill here once served one student's 郵局帳號 and 指導教授
+    to everyone else (#1443)."""
+    _requires_advisor(service, monkeypatch, True)
 
     edited = {"id": 7, "fixed_key": FIXED_KEY_POSTAL_ACCOUNT, "field_label": "郵局／玉山帳號"}
 
-    fields, _documents = await service.inject_fixed_fields("phd", [edited], [], user_id=1)
+    fields, documents = await service.inject_fixed_fields("phd", [edited], [])
 
-    assert len(fields) == 1
     assert fields[0]["field_label"] == "郵局／玉山帳號"
-    assert fields[0]["prefill_value"] == "0001234567"
+    for item in [*fields, *documents]:
+        assert "prefill_value" not in item
+        assert "existing_file_url" not in item
 
 
 @pytest.mark.asyncio

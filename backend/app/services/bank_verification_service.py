@@ -16,6 +16,7 @@ from app.models.application import Application, ApplicationFile
 from app.models.payment_roster import PaymentRosterItem
 from app.models.student_bank_account import StudentBankAccount
 from app.services.ocr_service import get_ocr_service
+from app.utils.bank_account_fields import BANK_ACCOUNT_FIELD_KEYS, BANK_ACCOUNT_FIELD_LOOKUP
 
 # Verification thresholds and constants
 ACCOUNT_NUMBER_EXACT_MATCH_REQUIRED = True  # Account number must match 100%
@@ -126,7 +127,7 @@ class BankVerificationService:
 
         # Common field mappings (adjust based on your form structure)
         field_mappings = {
-            "account_number": ["postal_account", "bank_account", "account_number", "帳戶號碼", "帳號", "郵局帳號"],
+            "account_number": BANK_ACCOUNT_FIELD_LOOKUP,
             "account_holder": ["account_holder", "account_name", "戶名", "帳戶名稱"],
         }
 
@@ -598,8 +599,8 @@ class BankVerificationService:
 
             # Update account number if corrected
             if account_number_corrected:
-                # Try to find existing field
-                for key in ["postal_account", "bank_account", "account_number"]:
+                # Correct the field the readers pick, in their priority order
+                for key in BANK_ACCOUNT_FIELD_KEYS:
                     if key in updated_form_data["fields"]:
                         updated_form_data["fields"][key]["value"] = account_number_corrected
                         account_number_updated = True

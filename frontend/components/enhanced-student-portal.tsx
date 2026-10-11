@@ -504,7 +504,10 @@ export function EnhancedStudentPortal({
         const { fields, documents } = response.data;
 
         // Calculate total required items
-        const requiredFields = fields.filter(f => f.is_active && f.is_required);
+        // Fixed fields (郵局帳號/指導教授) live on the profile, not in the form.
+        const requiredFields = fields.filter(
+          f => f.is_active && f.is_required && !f.is_fixed
+        );
         const requiredDocuments = documents.filter(isDocumentUploadRequired);
         let totalRequired = requiredFields.length + requiredDocuments.length;
 
@@ -532,16 +535,7 @@ export function EnhancedStudentPortal({
         // Check required fields completion
         requiredFields.forEach(field => {
           const fieldValue = dynamicFormData[field.field_name];
-          const isFixed = field.is_fixed === true;
-          const hasPrefillValue =
-            field.prefill_value !== undefined &&
-            field.prefill_value !== null &&
-            field.prefill_value !== "";
-
-          // Fixed fields with prefill values are auto-completed
-          if (isFixed && hasPrefillValue) {
-            completedItems++;
-          } else if (
+          if (
             fieldValue !== undefined &&
             fieldValue !== null &&
             fieldValue !== ""
@@ -553,14 +547,7 @@ export function EnhancedStudentPortal({
         // Check required documents completion
         requiredDocuments.forEach(doc => {
           const docFiles = dynamicFileData[doc.document_name];
-          // For fixed documents, check if they have existing_file_url or files
-          const isFixedDocument = doc.is_fixed === true;
-
-          if (isFixedDocument && doc.existing_file_url) {
-            // Fixed document with existing file URL is considered complete
-            completedItems++;
-          } else if (docFiles && docFiles.length > 0) {
-            // Regular document with uploaded files is complete
+          if (docFiles && docFiles.length > 0) {
             completedItems++;
           }
         });
