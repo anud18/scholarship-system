@@ -22,11 +22,11 @@ from sqlalchemy.sql.selectable import Select
 from app.core.security import require_admin, require_scholarship_manager
 from app.db.deps import get_db
 from app.models.application import Application, ApplicationStatus
-from app.models.review import ApplicationReview
 from app.models.scholarship import ScholarshipStatus, ScholarshipSubTypeConfig, ScholarshipType
 from app.models.user import AdminScholarship, User
 from app.schemas.application import ApplicationListResponse
 from app.services.application_deletion_policy import find_distributed_application_ids, has_entered_distribution
+from app.services.manual_distribution_service import load_professor_review_items
 from app.schemas.scholarship import (
     ScholarshipSubTypeConfigCreate,
     ScholarshipSubTypeConfigResponse,
@@ -36,11 +36,6 @@ from app.schemas.scholarship import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-def _role_value(role) -> str:
-    """Role may be an enum member or its raw string value."""
-    return role.value if hasattr(role, "value") else role
 
 
 @router.get("/scholarships/{scholarship_identifier}/applications")
@@ -79,8 +74,6 @@ async def get_applications_by_scholarship(
             selectinload(Application.files),
             selectinload(Application.scholarship_configuration),
             selectinload(Application.professor),
-            selectinload(Application.reviews).selectinload(ApplicationReview.reviewer),
-            selectinload(Application.reviews).selectinload(ApplicationReview.items),
         )
         .join(User, Application.user_id == User.id)
         .where(Application.scholarship_type_id == scholarship.id)
@@ -104,6 +97,8 @@ async def get_applications_by_scholarship(
     # Batch-resolve which rows already hold a saved/finalized allocation or a
     # roster entry, so each row can carry an `is_deletable` flag for the admin UI.
     distributed_ids = await find_distributed_application_ids(db, [app.id for app, _ in application_tuples])
+
+    professor_items = await load_professor_review_items(db, [app.id for app, _ in application_tuples])
 
     response_list = []
     for app_tuple in application_tuples:
@@ -200,17 +195,8 @@ async def get_applications_by_scholarship(
             or getattr(user, "nycu_id", None),
             "student_email": (app.student_data.get("com_email") if app.student_data else None)
             or (user.email if user else None),
-            # Professor's per-sub-type verdicts (same shape as the college listing)
-            "professor_review_items": [
-                {
-                    "sub_type_code": item.sub_type_code,
-                    "recommendation": item.recommendation,
-                    "comments": item.comments,
-                }
-                for review in app.reviews
-                if review.reviewer and _role_value(review.reviewer.role) == "professor"
-                for item in review.items
-            ],
+            # Professor's per-sub-type verdicts (same loader as the manual-distribution grid)
+            "professor_review_items": professor_items.get(app.id, []),
             # Include scholarship configuration for professor review settings
             "scholarship_configuration": (
                 {

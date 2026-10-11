@@ -117,6 +117,9 @@ interface AdminScholarshipDashboardProps {
   user: UserType;
 }
 
+// 仍可能在等待教授審核的申請狀態
+const PROFESSOR_PENDING_STATUSES = ["submitted", "under_review"];
+
 // Dashboard-specific Application interface for the data we actually receive
 interface DashboardApplication {
   id: number;
@@ -1109,13 +1112,16 @@ export function AdminScholarshipDashboard({
                       <ProfessorRecommendation
                         app={{
                           professor_review_items: app.professor_review_items,
+                          // 「教授審核中」只在申請仍停留於審核流程時顯示，
+                          // 已核准/已拒絕等狀態不應顯示為等待教授
                           requires_professor_recommendation:
+                            PROFESSOR_PENDING_STATUSES.includes(app.status) &&
                             app.scholarship_configuration
                               ?.requires_professor_recommendation,
                         }}
                         locale={locale}
                         getSubTypeName={(code, lang) =>
-                          code ? getSubTypeDisplayName(code, lang) : ""
+                          code ? getSubTypeDisplayName(code, lang) : "-"
                         }
                       />
                     </TableCell>
