@@ -102,6 +102,10 @@ export function ApplicationDocumentForm({
     validation_rules: {},
   });
 
+  // 動態文件 are ordered by dragging in the 審核管理 table; only the built-in
+  // (系統預設) documents, which aren't in that table, keep the number input.
+  const showDisplayOrder = document?.is_fixed === true;
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newFileType, setNewFileType] = useState("");
@@ -331,7 +335,9 @@ export function ApplicationDocumentForm({
                 <Label htmlFor="requires_upload">需要學生上傳</Label>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div
+                className={`grid gap-4 ${showDisplayOrder ? "grid-cols-3" : "grid-cols-2"}`}
+              >
                 <div className="space-y-2">
                   <Label htmlFor="max_file_size">檔案大小限制</Label>
                   <Select
@@ -368,21 +374,23 @@ export function ApplicationDocumentForm({
                     max={10}
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="display_order">顯示順序</Label>
-                  <Input
-                    id="display_order"
-                    type="number"
-                    value={formData.display_order || 0}
-                    onChange={e =>
-                      setFormData(prev => ({
-                        ...prev,
-                        display_order: parseInt(e.target.value) || 0,
-                      }))
-                    }
-                    placeholder="例如: 1"
-                  />
-                </div>
+                {showDisplayOrder && (
+                  <div className="space-y-2">
+                    <Label htmlFor="display_order">顯示順序</Label>
+                    <Input
+                      id="display_order"
+                      type="number"
+                      value={formData.display_order || 0}
+                      onChange={e =>
+                        setFormData(prev => ({
+                          ...prev,
+                          display_order: parseInt(e.target.value) || 0,
+                        }))
+                      }
+                      placeholder="例如: 1"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Accepted File Types */}

@@ -13,6 +13,7 @@ from app.models.scholarship import ScholarshipConfiguration
 from app.models.user_profile import UserProfile
 from app.schemas.application_field import (
     ApplicationDocumentCreate,
+    ApplicationDocumentReorderItem,
     ApplicationDocumentResponse,
     ApplicationDocumentUpdate,
     ApplicationFieldCreate,
@@ -316,6 +317,37 @@ class ApplicationFieldService:
         await self.db.commit()
 
         return result.rowcount > 0
+
+    async def reorder_documents(
+        self,
+        scholarship_type: str,
+        items: List[ApplicationDocumentReorderItem],
+        updated_by: int,
+    ) -> int:
+        """Persist a new display order for one scholarship type's documents.
+
+        Every id must belong to `scholarship_type`; otherwise nothing is
+        written and ValueError lists the offending ids.
+        """
+        requested_ids = [item.id for item in items]
+        result = await self.db.execute(
+            select(ApplicationDocument).where(
+                ApplicationDocument.id.in_(requested_ids),
+                ApplicationDocument.scholarship_type == scholarship_type,
+            )
+        )
+        documents = {doc.id: doc for doc in result.scalars().all()}
+
+        missing = [doc_id for doc_id in requested_ids if doc_id not in documents]
+        if missing:
+            raise ValueError(f"ids not found for {scholarship_type}: {missing}")
+
+        for item in items:
+            documents[item.id].display_order = item.display_order
+            documents[item.id].updated_by = updated_by
+
+        await self.db.commit()
+        return len(items)
 
     async def bulk_update_documents(
         self,

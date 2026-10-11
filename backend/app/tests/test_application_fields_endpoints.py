@@ -364,6 +364,74 @@ class TestApplicationFieldsEndpoints:
         assert body["data"] is True
 
     # ------------------------------------------------------------------
+    # PATCH /documents/reorder  (require_admin)
+    # ------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_reorder_documents_non_admin_403(self, login, student):
+        c = login(student)
+        resp = await c.patch(
+            "/api/v1/application-fields/documents/reorder",
+            json={"scholarship_type": "undergraduate", "items": [{"id": 1, "display_order": 0}]},
+        )
+        assert resp.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_reorder_documents_duplicate_order_422(self, login, admin):
+        c = login(admin)
+        resp = await c.patch(
+            "/api/v1/application-fields/documents/reorder",
+            json={
+                "scholarship_type": "undergraduate",
+                "items": [{"id": 1, "display_order": 0}, {"id": 2, "display_order": 0}],
+            },
+        )
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_reorder_documents_other_scholarship_type_400(self, login, admin):
+        """An id from another scholarship type is refused and nothing is written."""
+        own = await self._make_document(scholarship_type="undergrad_reorder_a", display_order=0)
+        foreign = await self._make_document(scholarship_type="undergrad_reorder_b", display_order=0)
+        c = login(admin)
+        resp = await c.patch(
+            "/api/v1/application-fields/documents/reorder",
+            json={
+                "scholarship_type": "undergrad_reorder_a",
+                "items": [{"id": own.id, "display_order": 5}, {"id": foreign.id, "display_order": 6}],
+            },
+        )
+        assert resp.status_code == 400
+
+        listed = await c.get("/api/v1/application-fields/documents/undergrad_reorder_a")
+        assert listed.json()["data"][0]["display_order"] == 0
+
+    @pytest.mark.asyncio
+    async def test_reorder_documents_happy(self, login, admin):
+        first = await self._make_document(scholarship_type="undergrad_reorder", document_name="甲", display_order=0)
+        second = await self._make_document(scholarship_type="undergrad_reorder", document_name="乙", display_order=1)
+        c = login(admin)
+
+        # Prime the cache so the test proves the reorder invalidates it.
+        before = await c.get("/api/v1/application-fields/documents/undergrad_reorder")
+        assert [d["document_name"] for d in before.json()["data"]] == ["甲", "乙"]
+
+        resp = await c.patch(
+            "/api/v1/application-fields/documents/reorder",
+            json={
+                "scholarship_type": "undergrad_reorder",
+                "items": [{"id": second.id, "display_order": 0}, {"id": first.id, "display_order": 1}],
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["success"] is True
+        assert body["data"] == {"updated": 2}
+
+        after = await c.get("/api/v1/application-fields/documents/undergrad_reorder")
+        assert [d["document_name"] for d in after.json()["data"]] == ["乙", "甲"]
+
+    # ------------------------------------------------------------------
     # GET /form-config/{scholarship_type}  (get_current_user, path pattern)
     # ------------------------------------------------------------------
 

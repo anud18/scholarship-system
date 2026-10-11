@@ -5,7 +5,7 @@ Application field configuration schemas
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.application_field import FieldType
 
@@ -174,6 +174,29 @@ class ApplicationDocumentUpdate(BaseModel):
     upload_instructions_en: Optional[str] = None
     example_file_url: Optional[str] = Field(None, max_length=500)
     validation_rules: Optional[Dict[str, Any]] = None
+
+
+class ApplicationDocumentReorderItem(BaseModel):
+    id: int
+    display_order: int
+
+
+class ApplicationDocumentReorderRequest(BaseModel):
+    """New display order for one scholarship type's documents (審核管理 drag-sort)."""
+
+    scholarship_type: str = Field(..., max_length=50)
+    items: List[ApplicationDocumentReorderItem] = Field(..., min_length=1)
+
+    @field_validator("items")
+    @classmethod
+    def _unique(cls, v: List[ApplicationDocumentReorderItem]) -> List[ApplicationDocumentReorderItem]:
+        orders = [i.display_order for i in v]
+        if len(orders) != len(set(orders)):
+            raise ValueError("display_order values must be unique within payload")
+        ids = [i.id for i in v]
+        if len(ids) != len(set(ids)):
+            raise ValueError("id values must be unique within payload")
+        return v
 
 
 class ApplicationDocumentResponse(ApplicationDocumentBase):

@@ -47,6 +47,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ApplicationFieldForm } from "@/components/application-field-form";
 import { ApplicationDocumentForm } from "@/components/application-document-form";
+import { DynamicDocumentsTable } from "@/components/admin/dynamic-documents/DynamicDocumentsTable";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { buildExampleDocumentPreview } from "@/lib/utils/example-document-preview";
 import { api } from "@/lib/api";
@@ -132,6 +133,7 @@ export function AdminScholarshipManagementInterface({
   );
   const [editingDocument, setEditingDocument] =
     useState<ApplicationDocument | null>(null);
+  const [isReorderingDocuments, setIsReorderingDocuments] = useState(false);
 
   // Scholarship type data for whitelist
   const [scholarshipTypeData, setScholarshipTypeData] =
@@ -548,7 +550,44 @@ export function AdminScholarshipManagementInterface({
     if (editingDocument) {
       await handleUpdateDocument(documentData as ApplicationDocumentUpdate);
     } else {
-      await handleCreateDocument(documentData as ApplicationDocumentCreate);
+      // Order is set by dragging in the 動態文件 table, so a new document
+      // simply goes last.
+      const lastOrder = Math.max(
+        -1,
+        ...documentRequirements.filter(d => !d.is_fixed).map(d => d.display_order)
+      );
+      await handleCreateDocument({
+        ...(documentData as ApplicationDocumentCreate),
+        display_order: lastOrder + 1,
+      });
+    }
+  };
+
+  // Persists immediately (like 相關連結), independent of 儲存設定.
+  const handleReorderDocuments = async (next: ApplicationDocument[]) => {
+    const previous = documentRequirements;
+    const renumbered = next.map((doc, idx) => ({ ...doc, display_order: idx }));
+    setDocumentRequirements([
+      ...previous.filter(d => d.is_fixed),
+      ...renumbered,
+    ]);
+    setIsReorderingDocuments(true);
+
+    try {
+      const response = await api.applicationFields.reorderDocuments(
+        type,
+        renumbered.map(doc => ({ id: doc.id, display_order: doc.display_order }))
+      );
+      if (!response.success) {
+        setDocumentRequirements(previous);
+        toast.error(response.message || "排序失敗");
+      }
+    } catch (err) {
+      logger.error("Failed to reorder documents", { err: err });
+      setDocumentRequirements(previous);
+      toast.error("排序失敗，請稍後再試");
+    } finally {
+      setIsReorderingDocuments(false);
     }
   };
 
@@ -1370,7 +1409,7 @@ export function AdminScholarshipManagementInterface({
                     動態文件（可自訂）
                   </CardTitle>
                   <CardDescription className="text-gray-600">
-                    自訂{formConfig?.title}申請時需要上傳的文件類型、格式和大小限制
+                    自訂{formConfig?.title}申請時需要上傳的文件類型、格式和大小限制，拖曳左側把手可調整順序
                   </CardDescription>
                 </div>
                 <Button
@@ -1386,177 +1425,29 @@ export function AdminScholarshipManagementInterface({
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Dynamic Documents Table */}
-              <div className="border rounded-lg overflow-hidden">
-                <Table>
-                  <TableHeader className="bg-gray-50">
-                    <TableRow>
-                      <TableHead className="font-semibold">文件資訊</TableHead>
-                      <TableHead className="font-semibold">必要性</TableHead>
-                      <TableHead className="font-semibold">支援格式</TableHead>
-                      <TableHead className="font-semibold">大小限制</TableHead>
-                      <TableHead className="font-semibold">狀態</TableHead>
-                      <TableHead className="font-semibold">操作</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {documentRequirements.filter(d => !d.is_fixed).map(doc => (
-                      <TableRow
-                        key={doc.id || doc.document_name}
-                        className="hover:bg-gray-50"
-                      >
-                        <TableCell>
-                          <div>
-                            <div className="font-medium text-gray-900">
-                              {doc.document_name}
-                            </div>
-                            <div className="text-sm text-gray-500">
-                              {doc.description}
-                            </div>
-                            {doc.upload_instructions && (
-                              <div className="text-xs text-gray-400 mt-1">
-                                {doc.upload_instructions}
-                              </div>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={
-                              doc.is_required ? "destructive" : "secondary"
-                            }
-                          >
-                            {doc.is_required ? "必要" : "選填"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1 flex-wrap">
-                            {doc.accepted_file_types.map(type => (
-                              <Badge
-                                key={type}
-                                variant="outline"
-                                className="text-xs"
-                              >
-                                {type}
-                              </Badge>
-                            ))}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-sm font-medium text-gray-700">
-                            {doc.max_file_size}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Switch
-                              checked={doc.is_active}
-                              onCheckedChange={checked => {
-                                setDocumentRequirements(prev =>
-                                  prev.map(d =>
-                                    d.document_name === doc.document_name
-                                      ? { ...d, is_active: checked }
-                                      : d
-                                  )
-                                );
-                              }}
-                            />
-                            <span className="text-sm text-gray-500">
-                              {doc.is_active ? "啟用" : "停用"}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            {/* Upload Example Button */}
-                            <div className="relative">
-                              <input
-                                type="file"
-                                id={`upload-example-${doc.id}`}
-                                className="hidden"
-                                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                                onChange={(e) => handleUploadExample(doc.id, e)}
-                                disabled={uploadingExampleDocId === doc.id}
-                              />
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() =>
-                                  document
-                                    .getElementById(`upload-example-${doc.id}`)
-                                    ?.click()
-                                }
-                                disabled={uploadingExampleDocId === doc.id}
-                                className="text-green-600 hover:text-green-700"
-                                title="上傳範例"
-                              >
-                                {uploadingExampleDocId === doc.id ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <Upload className="h-4 w-4" />
-                                )}
-                              </Button>
-                            </div>
-
-                            {/* Preview Example Button */}
-                            {doc.example_file_url && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handlePreviewExample(doc)}
-                                className="text-purple-600 hover:text-purple-700"
-                                title="預覽範例"
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                            )}
-
-                            {/* Delete Example Button */}
-                            {doc.example_file_url && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleDeleteExample(doc.id)}
-                                className="text-orange-600 hover:text-orange-700"
-                                title="刪除範例"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            )}
-
-                            {/* Edit Document Button */}
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setEditingDocument(doc);
-                                setDocumentFormOpen(true);
-                              }}
-                              className="text-blue-600 hover:text-blue-700"
-                              title="編輯文件"
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-
-                            {/* Delete Document Button */}
-                            {doc.id > 0 && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleDeleteDocument(doc.id)}
-                                className="text-red-600 hover:text-red-700"
-                                title="刪除文件"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+              <DynamicDocumentsTable
+                documents={documentRequirements.filter(d => !d.is_fixed)}
+                isReordering={isReorderingDocuments}
+                onReorder={handleReorderDocuments}
+                uploadingExampleDocId={uploadingExampleDocId}
+                onToggleActive={(doc, checked) => {
+                  setDocumentRequirements(prev =>
+                    prev.map(d =>
+                      d.document_name === doc.document_name
+                        ? { ...d, is_active: checked }
+                        : d
+                    )
+                  );
+                }}
+                onUploadExample={handleUploadExample}
+                onPreviewExample={handlePreviewExample}
+                onDeleteExample={handleDeleteExample}
+                onEdit={doc => {
+                  setEditingDocument(doc);
+                  setDocumentFormOpen(true);
+                }}
+                onDelete={handleDeleteDocument}
+              />
             </CardContent>
           </Card>
 
