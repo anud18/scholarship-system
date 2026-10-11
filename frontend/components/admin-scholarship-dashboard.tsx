@@ -50,7 +50,15 @@ import {
   getStudentName,
   getStudentId,
   getStudentEmail,
+  getAcademyCode,
+  getDepartmentCode,
 } from "@/lib/utils/student-data-helpers";
+import {
+  useReferenceData,
+  getAcademyName,
+  getDepartmentName,
+} from "@/hooks/use-reference-data";
+import { splitSubTypeLabel } from "@/lib/utils/sub-type-label";
 import {
   AlertCircle,
   Calendar,
@@ -302,6 +310,8 @@ export function AdminScholarshipDashboard({
     refetch,
     updateApplicationStatus,
   } = useScholarshipSpecificApplications();
+  // 學院/系所名稱以 academies/departments 參考表為準（不用快照中的名稱）
+  const { academies, departments } = useReferenceData();
 
   // Get user's scholarship permissions for debugging
   const {
@@ -895,7 +905,7 @@ export function AdminScholarshipDashboard({
                     />
                   </TableHead>
                   <TableHead>申請人</TableHead>
-                  {showSubTypes && <TableHead>子項目</TableHead>}
+                  {showSubTypes && <TableHead>學生申請獎學金類別</TableHead>}
                   <TableHead>指派教授</TableHead>
                   <TableHead>教授審核結果</TableHead>
                   <TableHead>狀態</TableHead>
@@ -927,6 +937,18 @@ export function AdminScholarshipDashboard({
                       <div className="text-sm text-gray-500 whitespace-nowrap">
                         {app.student_email || app.user?.email || "N/A"}
                       </div>
+                      <div className="text-sm text-gray-500 whitespace-nowrap">
+                        {getAcademyName(
+                          getAcademyCode(app.student_data),
+                          academies
+                        )}
+                      </div>
+                      <div className="text-sm text-gray-500 whitespace-nowrap">
+                        {getDepartmentName(
+                          getDepartmentCode(app.student_data),
+                          departments
+                        )}
+                      </div>
                     </TableCell>
                     {showSubTypes && (
                       <TableCell>
@@ -934,15 +956,24 @@ export function AdminScholarshipDashboard({
                         app.scholarship_subtype_list.length > 0 ? (
                           <div className="flex flex-wrap gap-1 whitespace-nowrap">
                             {app.scholarship_subtype_list.map(
-                              (subType: string) => (
-                                <Badge
-                                  key={subType}
-                                  variant="outline"
-                                  className="text-xs"
-                                >
-                                  {getSubTypeDisplayName(subType)}
-                                </Badge>
-                              )
+                              (subType: string) => {
+                                // 括號內的說明換到第二行（僅顯示用）
+                                const [mainLabel, note] = splitSubTypeLabel(
+                                  getSubTypeDisplayName(subType)
+                                );
+                                return (
+                                  <Badge
+                                    key={subType}
+                                    variant="outline"
+                                    className={`text-xs flex-col items-start${
+                                      note ? " rounded-md" : ""
+                                    }`}
+                                  >
+                                    <span>{mainLabel}</span>
+                                    {note && <span>{note}</span>}
+                                  </Badge>
+                                );
+                              }
                             )}
                           </div>
                         ) : (
