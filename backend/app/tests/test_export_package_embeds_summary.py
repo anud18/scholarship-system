@@ -58,6 +58,7 @@ async def test_export_zip_contains_summary_tables_matching_folders(monkeypatch):
 
     monkeypatch.setattr("app.services.export_summary_tables.load_export_aux_data", _fake_aux)
     monkeypatch.setattr("app.services.export_package_service.load_form_field_labels", _coro_returning({}))
+    monkeypatch.setattr("app.services.export_package_service.load_professor_reviews", _coro_returning({}))
 
     apps = [
         _mk_app(1, 11, "1000", "A系", "001", "甲"),
@@ -112,6 +113,7 @@ async def test_export_zip_degrades_when_summary_build_fails_wholesale(monkeypatc
     # before the per-table try/except) must not lose the materials ZIP.
     monkeypatch.setattr("app.services.export_package_service.build_embedded_summary_tables", _boom)
     monkeypatch.setattr("app.services.export_package_service.load_form_field_labels", _coro_returning({}))
+    monkeypatch.setattr("app.services.export_package_service.load_professor_reviews", _coro_returning({}))
 
     apps = [_mk_app(1, 11, "1000", "A系", "001", "甲")]
     stype = SimpleNamespace(name="某獎學金", code="phd", sub_type_configs=[])
@@ -151,6 +153,7 @@ async def test_whole_school_export_nests_department_folders_under_each_college(m
 
     monkeypatch.setattr("app.services.export_summary_tables.load_export_aux_data", _fake_aux)
     monkeypatch.setattr("app.services.export_package_service.load_form_field_labels", _coro_returning({}))
+    monkeypatch.setattr("app.services.export_package_service.load_professor_reviews", _coro_returning({}))
 
     apps = [
         _mk_app(1, 11, "1000", "A系", "001", "甲", academy="舊名資訊學院", academy_no="E"),

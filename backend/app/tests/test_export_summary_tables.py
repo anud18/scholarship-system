@@ -92,6 +92,7 @@ async def test_builds_college_and_per_dept_tables(_patch_aux):
         dept_groups=dept_groups,
         college_name="某學院",
         academic_year=114,
+        professor_reviews={},
     )
 
     college_key = "114學年度某獎學金學生資料彙整表_某學院.xlsx"
@@ -121,13 +122,14 @@ async def test_college_name_falls_back_to_全校(_patch_aux):
         dept_groups=dept_groups,
         college_name=None,
         academic_year=114,
+        professor_reviews={},
     )
     assert "114學年度某獎學金學生資料彙整表_全校.xlsx" in tables
 
 
 @pytest.mark.asyncio
 async def test_table_build_failure_writes_error_txt(_patch_aux, monkeypatch):
-    def _boom(self, *, rows, dynamic_fields, sub_type_labels, title, sheet_name):
+    def _boom(self, *, rows, dynamic_fields, sub_type_labels, title, sheet_name, review_sub_types):
         raise RuntimeError("render exploded")
 
     monkeypatch.setattr(
@@ -143,6 +145,7 @@ async def test_table_build_failure_writes_error_txt(_patch_aux, monkeypatch):
         dept_groups=dept_groups,
         college_name="某學院",
         academic_year=114,
+        professor_reviews={},
     )
 
     # Each failed table becomes an error .txt instead of aborting the whole build

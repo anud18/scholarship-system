@@ -19,6 +19,7 @@ from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import AdminScholarship, User
 from app.models.user_profile import UserProfile
 from app.services.college_ranking_export_service import DynamicFieldSpec
+from app.services.professor_review_export import sub_type_labels_of
 from app.utils.application_helpers import (
     get_college_code_from_data,
     get_nycu_id_from_data,
@@ -204,11 +205,7 @@ async def load_export_aux_data(
         ]
 
     # 2. Sub-type Chinese labels
-    sub_type_labels: dict[str, str] = {}
-    if scholarship_type:
-        for cfg in getattr(scholarship_type, "sub_type_configs", []) or []:
-            if cfg.sub_type_code and cfg.name:
-                sub_type_labels[cfg.sub_type_code] = cfg.name
+    sub_type_labels = sub_type_labels_of(scholarship_type)
 
     # 3. Profile lookups (account_number, advisor_name fallback)
     user_ids: set[int] = set()

@@ -35,6 +35,13 @@ def now_taipei_str(format_string: str = "%Y-%m-%d %H:%M %z") -> str:
     return datetime.now(timezone.utc).astimezone(_taipei_tz()).strftime(format_string)
 
 
+def to_taipei_str(value: datetime, format_string: str = "%Y-%m-%d %H:%M") -> str:
+    """Render a stored timestamp in Asia/Taipei. A naive value is taken as UTC
+    (the DB stores UTC; SQLite drops the offset)."""
+    aware = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return aware.astimezone(_taipei_tz()).strftime(format_string)
+
+
 def parse_date_field(date_input: Optional[Union[str, datetime]]) -> Optional[datetime]:
     """
     Parse a date string into a datetime object with multiple format support.

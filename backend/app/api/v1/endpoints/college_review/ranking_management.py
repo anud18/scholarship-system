@@ -44,6 +44,7 @@ from app.services.college_review_service import (
 )
 from app.services.email_automation_service import email_automation_service
 from app.services.review_service import ReviewService
+from app.services.professor_review_export import load_professor_reviews, review_sub_type_columns
 
 from app.utils.export_download import XLSX_MEDIA_TYPE
 from ._helpers import (
@@ -1348,6 +1349,8 @@ async def export_ranking_excel(
         scholarship_type=ranking.scholarship_type,
         applications=apps_in_ranking,
     )
+    professor_reviews = await load_professor_reviews(db, [a.id for a in apps_in_ranking])
+    review_sub_types = review_sub_type_columns(ranking.scholarship_type)
 
     export_rows = [
         ExportRow(
@@ -1355,6 +1358,7 @@ async def export_ranking_excel(
             application=item.application,
             bank_account=account_number_by_user.get(item.application.user_id),
             advisor_names=advisor_string_by_user.get(item.application.user_id),
+            professor_reviews=professor_reviews.get(item.application.id, []),
         )
         for item in items_sorted
         if item.application is not None
@@ -1394,6 +1398,7 @@ async def export_ranking_excel(
             sub_type_labels=sub_type_labels,
             title=title,
             include_college_seal=include_college_seal,
+            review_sub_types=review_sub_types,
         )
         media_type = "application/pdf"
     else:
@@ -1404,6 +1409,7 @@ async def export_ranking_excel(
             title=title,
             sheet_name=sheet_name,
             include_college_seal=include_college_seal,
+            review_sub_types=review_sub_types,
         )
         media_type = XLSX_MEDIA_TYPE
 

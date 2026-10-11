@@ -25,6 +25,7 @@ from app.models.scholarship import ScholarshipConfiguration, ScholarshipSubTypeC
 from app.models.student import Academy
 from app.models.user import User, UserRole
 from app.services.application_builder import order_sub_type_preferences
+from app.services.professor_review_export import load_professor_reviews
 from app.services.received_months_service import (
     calculate_received_months_bulk_async,
     get_imported_months_bulk_async,
@@ -153,36 +154,17 @@ async def load_professor_review_items(db: AsyncSession, app_ids: list[int]) -> d
     loaded: the college recommends through its ranking alone (college_rejected
     on the ranking item), and the manual-distribution grid IS the admin
     decision surface, so neither has review items to display here.
-    Sub-type codes are normalized with _norm_sub_type (matches rejected_sub_types).
+    Sub-type codes are normalized (same rule as _norm_sub_type, so they match
+    rejected_sub_types).
     """
-    review_map: dict[int, list[dict[str, Any]]] = {}
-    if not app_ids:
-        return review_map
-    query = (
-        select(
-            ApplicationReview.application_id,
-            ApplicationReviewItem.sub_type_code,
-            ApplicationReviewItem.recommendation,
-            ApplicationReviewItem.comments,
-        )
-        .join(ApplicationReviewItem, ApplicationReviewItem.review_id == ApplicationReview.id)
-        .join(User, User.id == ApplicationReview.reviewer_id)
-        .where(
-            ApplicationReview.application_id.in_(app_ids),
-            User.role == UserRole.professor,
-        )
-        .order_by(ApplicationReview.reviewed_at, ApplicationReviewItem.id)
-    )
-    result = await db.execute(query)
-    for app_id, sub_type_code, recommendation, comments in result:
-        review_map.setdefault(app_id, []).append(
-            {
-                "sub_type_code": _norm_sub_type(sub_type_code),
-                "recommendation": recommendation,
-                "comments": comments,
-            }
-        )
-    return review_map
+    entries_by_app = await load_professor_reviews(db, app_ids)
+    return {
+        app_id: [
+            {"sub_type_code": e.sub_type_code, "recommendation": e.recommendation, "comments": e.comments}
+            for e in entries
+        ]
+        for app_id, entries in entries_by_app.items()
+    }
 
 
 # Marks EVERY sub-type as 教授未推薦: an application without sub-types stores the

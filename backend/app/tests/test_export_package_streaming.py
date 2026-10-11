@@ -45,6 +45,7 @@ async def _prepare(monkeypatch, apps, minio, summary_pdf=None):
 
     monkeypatch.setattr("app.services.export_summary_tables.load_export_aux_data", _fake_aux)
     monkeypatch.setattr("app.services.export_package_service.load_form_field_labels", _coro_returning({}))
+    monkeypatch.setattr("app.services.export_package_service.load_professor_reviews", _coro_returning({}))
 
     svc = ExportPackageService(db=None, minio_service=minio)
     stype = SimpleNamespace(name="某獎學金", code="phd", sub_type_configs=[])
@@ -157,6 +158,7 @@ async def test_precheck_plan_skips_the_summary_workbooks(monkeypatch):
 
     monkeypatch.setattr("app.services.export_package_service.build_embedded_summary_tables", _must_not_run)
     monkeypatch.setattr("app.services.export_package_service.load_form_field_labels", _coro_returning({}))
+    monkeypatch.setattr("app.services.export_package_service.load_professor_reviews", _coro_returning({}))
     svc = ExportPackageService(db=None, minio_service=FakeMinio({}))
     stype = SimpleNamespace(name="某獎學金", code="phd", sub_type_configs=[])
     monkeypatch.setattr(svc, "_get_scholarship_type", _coro_returning(stype))

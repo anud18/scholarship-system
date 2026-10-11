@@ -34,6 +34,9 @@ def _plan(count_per_dept=(2, 1)):
         field_labels={},
         summary_tables={},
         zip_filename=_FILENAME,
+        professor_reviews={},
+        review_sub_types=[],
+        sub_type_labels={},
     )
 
 

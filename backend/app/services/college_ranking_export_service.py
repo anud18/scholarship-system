@@ -13,8 +13,8 @@ from __future__ import annotations
 
 import io
 import math
-from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 # `escape` is a pure string-escaping helper (`<` → `&lt;` …) used to sanitise
 # cell values before they go into reportlab Paragraph markup. It does not parse
@@ -31,6 +31,7 @@ from reportlab.lib.units import mm
 from reportlab.platypus import KeepInFrame, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from app.services.pdf_fonts import CJK_FONT_NAME, ensure_cjk_font
+from app.services.professor_review_export import ProfessorReviewEntry, review_cells, review_headers
 from app.utils.excel_safety import sanitize_excel_cell
 
 # Static columns shared by the xlsx and PDF exports: (header label, PDF column
@@ -63,6 +64,11 @@ _STATIC_COLUMNS: List[Tuple[str, float]] = [
 STATIC_HEADERS: List[str] = [label for label, _ in _STATIC_COLUMNS]
 _STATIC_COL_WEIGHTS: List[float] = [weight for _, weight in _STATIC_COLUMNS]
 
+# 指導教授審核結果 / 評語 columns (a pair per sub-type) sit right after
+# 指導教授姓名: short verdicts narrow, free-text comments wide.
+_REVIEW_RESULT_COL_WEIGHT = 0.7
+_REVIEW_COMMENT_COL_WEIGHT = 1.6
+
 # Trailing blank column the college stamps on the printed ranking. Only the
 # ranking export opts in (include_college_seal=True); 申請總表 exports omit it.
 COLLEGE_SEAL_HEADER = "學院用印"
@@ -89,6 +95,8 @@ class ExportRow:
     application: Any  # Duck-typed: needs sub_type_preferences, sub_scholarship_type, student_data, submitted_form_data
     bank_account: Optional[str] = None  # 郵局帳號 (from user_profiles.account_number)
     advisor_names: Optional[str] = None  # 指導教授姓名 (comma-joined if multiple advisors)
+    # Professor verdicts (load_professor_reviews) behind the 指導教授審核結果/評語 columns
+    professor_reviews: List[ProfessorReviewEntry] = field(default_factory=list)
 
 
 class CollegeRankingExportService:
@@ -103,13 +111,19 @@ class CollegeRankingExportService:
         title: str,
         sheet_name: str,
         include_college_seal: bool = False,
+        review_sub_types: Sequence[str] = (),
     ) -> bytes:
+        """Render the 學生資料彙整表 workbook.
+
+        ``review_sub_types`` (review_sub_type_columns) adds the 指導教授審核結果
+        and 評語 columns per sub-type; empty omits them.
+        """
         wb = Workbook()
         ws = wb.active
         ws.title = sheet_name
 
         sorted_dynamic = self._sort_dynamic(dynamic_fields)
-        headers = self._headers(sorted_dynamic, include_college_seal)
+        headers = self._headers(sorted_dynamic, sub_type_labels, review_sub_types, include_college_seal)
         total_cols = len(headers)
 
         # Row 1: title (merged across all columns)
@@ -130,7 +144,7 @@ class CollegeRankingExportService:
         # Data rows — written from the same _row_cells used by the PDF export
         for idx, row in enumerate(rows, start=1):
             excel_row = idx + 2  # +2 because rows 1-2 are title/header
-            cells = self._row_cells(row, idx, sub_type_labels, sorted_dynamic, include_college_seal)
+            cells = self._row_cells(row, idx, sub_type_labels, sorted_dynamic, review_sub_types, include_college_seal)
             for col_idx, value in enumerate(cells, start=1):
                 # SECURITY (#1081 G): neutralize spreadsheet formula injection from
                 # student-supplied free-text values before writing the cell.
@@ -153,6 +167,7 @@ class CollegeRankingExportService:
         sub_type_labels: Dict[str, str],
         title: str,
         include_college_seal: bool = False,
+        review_sub_types: Sequence[str] = (),
     ) -> bytes:
         """Render the same 學生資料彙整表 as an A4-landscape PDF.
 
@@ -164,11 +179,13 @@ class CollegeRankingExportService:
         ensure_cjk_font()
 
         sorted_dynamic = self._sort_dynamic(dynamic_fields)
-        headers = self._headers(sorted_dynamic, include_college_seal)
+        headers = self._headers(sorted_dynamic, sub_type_labels, review_sub_types, include_college_seal)
 
         page_width, page_height = landscape(A4)
         usable_width = page_width - (self._PDF_MARGIN_PT * 2)
-        col_widths = self._pdf_col_widths(headers, usable_width, include_college_seal)
+        col_widths = self._pdf_col_widths(
+            usable_width, len(sorted_dynamic), len(review_sub_types), include_college_seal
+        )
         # A reportlab Table cannot split ONE row across pages, so a single very
         # long free-text cell (e.g. a verbose dynamic field) would raise
         # LayoutError and fail the whole export. Cap each cell to the usable
@@ -200,7 +217,7 @@ class CollegeRankingExportService:
 
         data: List[list] = [[Paragraph(xml_escape(h), header_style) for h in headers]]
         for idx, row in enumerate(rows, start=1):
-            values = self._row_cells(row, idx, sub_type_labels, sorted_dynamic, include_college_seal)
+            values = self._row_cells(row, idx, sub_type_labels, sorted_dynamic, review_sub_types, include_college_seal)
             data.append(
                 [
                     KeepInFrame(
@@ -252,14 +269,16 @@ class CollegeRankingExportService:
     _PDF_COL_WEIGHT_DEFAULT = 1.2
 
     def _pdf_col_widths(
-        self, headers: List[str], usable_width: float, include_college_seal: bool = False
+        self, usable_width: float, n_dynamic: int, n_review_sub_types: int, include_college_seal: bool = False
     ) -> List[float]:
-        # headers is always STATIC_HEADERS + dynamic (+ the seal column last when
-        # included), so the first N columns map index-for-index onto
-        # _STATIC_COL_WEIGHTS; the rest are dynamic.
-        n_static = len(_STATIC_COL_WEIGHTS)
-        n_dynamic = len(headers) - n_static - (1 if include_college_seal else 0)
-        weights = _STATIC_COL_WEIGHTS[: len(headers)] + [self._PDF_COL_WEIGHT_DEFAULT] * max(n_dynamic, 0)
+        # Same column order as _headers: static, review results, review
+        # comments, dynamic, then the seal column last when included.
+        weights = (
+            list(_STATIC_COL_WEIGHTS)
+            + [_REVIEW_RESULT_COL_WEIGHT] * n_review_sub_types
+            + [_REVIEW_COMMENT_COL_WEIGHT] * n_review_sub_types
+            + [self._PDF_COL_WEIGHT_DEFAULT] * n_dynamic
+        )
         if include_college_seal:
             weights.append(_COLLEGE_SEAL_COL_WEIGHT)
         total = sum(weights) or 1.0
@@ -271,9 +290,16 @@ class CollegeRankingExportService:
     def _sort_dynamic(dynamic_fields: List[DynamicFieldSpec]) -> List[DynamicFieldSpec]:
         return sorted(dynamic_fields, key=lambda f: (f.display_order, f.field_name))
 
-    def _headers(self, sorted_dynamic: List[DynamicFieldSpec], include_college_seal: bool = False) -> List[str]:
+    def _headers(
+        self,
+        sorted_dynamic: List[DynamicFieldSpec],
+        sub_type_labels: Dict[str, str],
+        review_sub_types: Sequence[str] = (),
+        include_college_seal: bool = False,
+    ) -> List[str]:
         seal = [COLLEGE_SEAL_HEADER] if include_college_seal else []
-        return STATIC_HEADERS + [(f.export_column_label or f.field_label) for f in sorted_dynamic] + seal
+        dynamic = [(f.export_column_label or f.field_label) for f in sorted_dynamic]
+        return STATIC_HEADERS + review_headers(review_sub_types, sub_type_labels) + dynamic + seal
 
     def _row_cells(
         self,
@@ -281,16 +307,24 @@ class CollegeRankingExportService:
         row_index: int,
         sub_type_labels: Dict[str, str],
         sorted_dynamic: List[DynamicFieldSpec],
+        review_sub_types: Sequence[str] = (),
         include_college_seal: bool = False,
     ) -> List[Any]:
-        """Ordered cell values for one row: static, dynamic, then the blank seal column.
+        """Ordered cell values for one row: static, professor review, dynamic,
+        then the blank seal column.
 
         The xlsx writer keeps the native int values (NO., rank, grade) for proper
         Excel typing; the PDF renderer stringifies them. Both share this list so
         the two formats render identical content.
         """
         seal = [""] if include_college_seal else []
-        return self._static_values(row, row_index, sub_type_labels) + self._dynamic_values(row, sorted_dynamic) + seal
+        review = review_cells(row.application, row.professor_reviews, review_sub_types)
+        return (
+            self._static_values(row, row_index, sub_type_labels)
+            + review
+            + self._dynamic_values(row, sorted_dynamic)
+            + seal
+        )
 
     def _static_values(
         self,

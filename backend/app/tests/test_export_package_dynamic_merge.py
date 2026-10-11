@@ -21,6 +21,7 @@ from pypdf import PdfReader, PdfWriter
 
 from app.models.application import Application
 from app.services.export_package_service import ExportPackageService
+from app.services.professor_review_export import ProfessorReviewEntry
 from app.tests.export_package_fakes import FakeMinio as _FakeMinio
 from app.tests.export_package_fakes import collect_zip
 
@@ -81,7 +82,7 @@ def _stype():
     return SimpleNamespace(name="某獎學金", code="phd", sub_type_configs=[])
 
 
-async def _run_export(monkeypatch, apps, minio, field_labels=None, summary_pdf=None):
+async def _run_export(monkeypatch, apps, minio, field_labels=None, summary_pdf=None, professor_reviews=None):
     async def _fake_aux(db, *, scholarship_type, applications):
         return ([], {}, {}, {})
 
@@ -89,6 +90,10 @@ async def _run_export(monkeypatch, apps, minio, field_labels=None, summary_pdf=N
     monkeypatch.setattr(
         "app.services.export_package_service.load_form_field_labels",
         _coro_returning(field_labels if field_labels is not None else {}),
+    )
+    monkeypatch.setattr(
+        "app.services.export_package_service.load_professor_reviews",
+        _coro_returning(professor_reviews or {}),
     )
 
     svc = ExportPackageService(db=None, minio_service=minio)
@@ -335,3 +340,76 @@ async def test_merge_failure_degrades_to_error_placeholder(monkeypatch):
     error_path = "1000_A系/001_甲/_錯誤_申請資料合併檔PDF生成失敗.txt"
     assert error_path in names
     assert "merge exploded" in zf.read(error_path).decode("utf-8")
+
+
+def _requires_professor_review(app, required=True):
+    # Duck-typed config: only requires_professor_review_for is consulted.
+    app.__dict__["scholarship_configuration"] = SimpleNamespace(requires_professor_review_for=lambda _r: required)
+    return app
+
+
+@pytest.mark.asyncio
+async def test_professor_review_page_follows_the_summary_in_the_merge(monkeypatch):
+    minio = _FakeMinio({"obj/toefl.pdf": _blank_pdf(1)})
+    app = _mk_app(1, 11, "001", "甲", [_mk_file("語言檢定證明", "toefl.pdf", "obj/toefl.pdf")])
+    reviews = {
+        1: [
+            ProfessorReviewEntry(
+                sub_type_code="default",
+                recommendation="approve",
+                comments="研究表現優異",
+                reviewer_name="王教授",
+                reviewed_at=None,
+            )
+        ]
+    }
+
+    zf = await _run_export(monkeypatch, [app], minio, professor_reviews=reviews)
+    names = zf.namelist()
+
+    # 合併檔 only: no standalone 指導教授評語 file in the student folder
+    assert not any(n.endswith("指導教授評語.pdf") for n in names)
+    reader = PdfReader(io.BytesIO(zf.read("1000_A系/001_甲/001_甲_申請資料合併檔.pdf")))
+    cover = reader.pages[0].extract_text()
+    assert cover.index("學生資料彙整") < cover.index("指導教授評語") < cover.index("語言檢定證明")
+    page_text = "".join(p.extract_text() for p in reader.pages)
+    assert "研究表現優異" in page_text
+    assert "王教授" in page_text
+
+
+@pytest.mark.asyncio
+async def test_required_but_missing_review_shows_not_reviewed(monkeypatch):
+    app = _requires_professor_review(_mk_app(1, 11, "001", "甲", []))
+
+    zf = await _run_export(monkeypatch, [app], _FakeMinio({}))
+
+    reader = PdfReader(io.BytesIO(zf.read("1000_A系/001_甲/001_甲_申請資料合併檔.pdf")))
+    assert "指導教授評語" in reader.pages[0].extract_text()
+    assert "未審核" in "".join(p.extract_text() for p in reader.pages)
+
+
+@pytest.mark.asyncio
+async def test_no_professor_step_and_no_review_means_no_page(monkeypatch):
+    app = _requires_professor_review(_mk_app(1, 11, "001", "甲", []), required=False)
+
+    zf = await _run_export(monkeypatch, [app], _FakeMinio({}))
+
+    reader = PdfReader(io.BytesIO(zf.read("1000_A系/001_甲/001_甲_申請資料合併檔.pdf")))
+    assert "指導教授評語" not in reader.pages[0].extract_text()
+    assert len(reader.pages) == 3  # cover + summary separator + summary
+
+
+@pytest.mark.asyncio
+async def test_professor_review_page_failure_becomes_a_placeholder(monkeypatch):
+    def _boom(**_kwargs):
+        raise RuntimeError("review page exploded")
+
+    monkeypatch.setattr("app.services.export_package_service.build_professor_review_pdf", _boom)
+    app = _requires_professor_review(_mk_app(1, 11, "001", "甲", []))
+
+    zf = await _run_export(monkeypatch, [app], _FakeMinio({}))
+
+    reader = PdfReader(io.BytesIO(zf.read("1000_A系/001_甲/001_甲_申請資料合併檔.pdf")))
+    text = "".join(p.extract_text() for p in reader.pages)
+    assert "指導教授評語" in reader.pages[0].extract_text()
+    assert "review page exploded" in text
