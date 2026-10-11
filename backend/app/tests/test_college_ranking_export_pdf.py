@@ -153,7 +153,7 @@ def test_row_cells_blank_rank_when_none(service, sample_row):
 def test_pdf_col_widths_sum_to_usable_width(service, dynamic_fields):
     headers = service._headers(service._sort_dynamic(dynamic_fields), {})
     usable = 785.0
-    widths = service._pdf_col_widths(usable, len(dynamic_fields), 0)
+    widths = service._pdf_col_widths(service._columns(service._sort_dynamic(dynamic_fields), {}), usable)
     assert len(widths) == len(headers)
     assert sum(widths) == pytest.approx(usable)
     assert all(w > 0 for w in widths)
@@ -181,7 +181,8 @@ def test_seal_column_appended_last_and_blank(service, sample_row, dynamic_fields
 def test_seal_column_pdf_widths_sum_to_usable_width(service, dynamic_fields):
     headers = service._headers(service._sort_dynamic(dynamic_fields), {}, include_college_seal=True)
     usable = 785.0
-    widths = service._pdf_col_widths(usable, len(dynamic_fields), 0, include_college_seal=True)
+    columns = service._columns(service._sort_dynamic(dynamic_fields), {}, include_college_seal=True)
+    widths = service._pdf_col_widths(columns, usable)
     assert len(widths) == len(headers)
     assert sum(widths) == pytest.approx(usable)
     assert widths[-1] > widths[0]  # seal column wider than NO. so a stamp fits

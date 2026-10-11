@@ -37,7 +37,7 @@ from app.services.college_ranking_export_service import (
 # Re-exported so existing callers/tests can keep importing _sort_key from this
 # module; the single definition now lives in the service layer.
 from app.services.export_summary_tables import _sort_key
-from app.services.professor_review_export import load_professor_reviews, review_sub_type_columns
+from app.services.professor_review_export import load_professor_review_data
 
 # Re-exported for the sibling college_review export endpoints that import these
 # from here; the single definition lives in the shared util.
@@ -161,7 +161,7 @@ async def export_department_summary_single(
         scholarship_type=stype,
         applications=apps,
     )
-    professor_reviews = await load_professor_reviews(db, [a.id for a in apps])
+    professor_review = await load_professor_review_data(db, scholarship_type=stype, applications=apps)
 
     # Build rows with rank_position=None — empty cell in column 2
     export_rows = [
@@ -170,7 +170,6 @@ async def export_department_summary_single(
             application=app,
             bank_account=account_by_user.get(app.user_id),
             advisor_names=advisor_by_user.get(app.user_id),
-            professor_reviews=professor_reviews.get(app.id, []),
         )
         for app in apps
     ]
@@ -192,7 +191,7 @@ async def export_department_summary_single(
         sub_type_labels=sub_type_labels,
         title=title,
         sheet_name=sheet_name,
-        review_sub_types=review_sub_type_columns(stype),
+        professor_review=professor_review,
     )
 
     logger.info(
@@ -361,8 +360,7 @@ async def export_department_summary_bulk(
         scholarship_type=stype,
         applications=apps,
     )
-    professor_reviews = await load_professor_reviews(db, [a.id for a in apps])
-    review_sub_types = review_sub_type_columns(stype)
+    professor_review = await load_professor_review_data(db, scholarship_type=stype, applications=apps)
 
     scholarship_name = stype.name or "獎學金"
     service = CollegeRankingExportService()
@@ -377,7 +375,6 @@ async def export_department_summary_bulk(
                     application=app,
                     bank_account=account_by_user.get(app.user_id),
                     advisor_names=advisor_by_user.get(app.user_id),
-                    professor_reviews=professor_reviews.get(app.id, []),
                 )
                 for app in dept_apps
             ]
@@ -389,7 +386,7 @@ async def export_department_summary_bulk(
                 sub_type_labels=sub_type_labels,
                 title=title,
                 sheet_name=sheet_name,
-                review_sub_types=review_sub_types,
+                professor_review=professor_review,
             )
             inner_name = (
                 f"{academic_year}學年度{scholarship_name}學生資料彙整表"

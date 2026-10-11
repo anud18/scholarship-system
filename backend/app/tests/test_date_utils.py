@@ -19,11 +19,13 @@ DB / network — `pytest.mark.smoke`.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 
+from app.utils import date_utils
 from app.utils.date_utils import (
+    to_taipei_str,
     format_date_for_display,
     is_within_date_range,
     parse_date_field,
@@ -166,3 +168,13 @@ class TestIsWithinDateRange:
     def test_both_none_always_true(self) -> None:
         """Range with both ends open accepts everything."""
         assert is_within_date_range(self._d(15), None, None) is True
+
+
+def test_to_taipei_str_converts_aware_and_naive_utc():
+    assert to_taipei_str(datetime(2026, 10, 5, 6, 30, tzinfo=timezone.utc)) == "2026-10-05 14:30"
+    assert to_taipei_str(datetime(2026, 10, 5, 6, 30)) == "2026-10-05 14:30"
+
+
+def test_to_taipei_str_labels_the_utc_fallback(monkeypatch):
+    monkeypatch.setattr(date_utils, "_taipei_tz", lambda: timezone.utc)
+    assert date_utils.to_taipei_str(datetime(2026, 10, 5, 6, 30, tzinfo=timezone.utc)) == "2026-10-05 06:30 UTC"

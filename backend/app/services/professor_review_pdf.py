@@ -2,7 +2,7 @@
 
 One A4 page (more if comments run long) listing the professor's verdict and
 comment per sub-type, with the same 推薦 / 不推薦 / 未審核 / — wording as the
-學生資料彙整表 columns (both come from professor_review_export).
+學生資料彙整表 columns (both read one professor_review_export.ProfessorReviewData).
 """
 
 from __future__ import annotations
@@ -21,10 +21,9 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 
 from app.services.pdf_fonts import CJK_FONT_NAME, ensure_cjk_font
 from app.services.professor_review_export import (
-    NOT_APPLIED_LABEL,
-    NOT_REVIEWED_LABEL,
+    DEFAULT_SUB_TYPE_LABEL,
+    ProfessorReviewData,
     ProfessorReviewEntry,
-    applied_sub_types,
     recommendation_label,
     sub_type_display_name,
 )
@@ -36,22 +35,14 @@ _TABLE_HEADERS = ["申請類別", "審核結果", "評語", "審核教授", "審
 # A4 portrait minus 15 mm margins = 180 mm; the comment column takes the slack.
 _COL_WIDTHS = [30 * mm, 20 * mm, 75 * mm, 25 * mm, 30 * mm]
 _MARGIN = 15 * mm
-_NO_SUB_TYPE_LABEL = "—"
 
 
-def _rows(
-    application: Any,
-    entries: Sequence[ProfessorReviewEntry],
-    review_sub_types: Sequence[str],
-    sub_type_labels: Dict[str, str],
-) -> List[List[str]]:
-    """One row per professor verdict, plus a 未審核/— row per sub-type column
-    nobody reviewed. Verdicts on codes outside the columns are still listed so
-    the page never hides one."""
-    applied = applied_sub_types(application)
+def _rows(application: Any, review: ProfessorReviewData, sub_type_labels: Dict[str, str]) -> List[List[str]]:
+    """One row per professor verdict, plus a 未審核/— row per sub-type nobody
+    reviewed. review.sub_types already covers every code a verdict carries."""
 
     def _label(code: str) -> str:
-        return sub_type_display_name(code, sub_type_labels) or _NO_SUB_TYPE_LABEL
+        return sub_type_display_name(code, sub_type_labels) or DEFAULT_SUB_TYPE_LABEL
 
     def _entry_row(e: ProfessorReviewEntry) -> List[str]:
         reviewed_at = to_taipei_str(e.reviewed_at) if e.reviewed_at else ""
@@ -63,15 +54,14 @@ def _rows(
             reviewed_at,
         ]
 
+    entries = review.entries(application)
     rows: List[List[str]] = []
-    for code in review_sub_types:
+    for code in review.sub_types:
         matching = [e for e in entries if e.sub_type_code == code]
         if matching:
             rows.extend(_entry_row(e) for e in matching)
         else:
-            status = NOT_REVIEWED_LABEL if code in applied else NOT_APPLIED_LABEL
-            rows.append([_label(code), status, "", "", ""])
-    rows.extend(_entry_row(e) for e in entries if e.sub_type_code not in review_sub_types)
+            rows.append([_label(code), review.missing_label(application, code), "", "", ""])
     return rows
 
 
@@ -79,8 +69,7 @@ def build_professor_review_pdf(
     *,
     subtitle_lines: Sequence[str],
     application: Any,
-    entries: Sequence[ProfessorReviewEntry],
-    review_sub_types: Sequence[str],
+    review: ProfessorReviewData,
     sub_type_labels: Dict[str, str],
 ) -> bytes:
     """Render the 指導教授評語 PDF for one application."""
@@ -98,7 +87,7 @@ def build_professor_review_pdf(
     s_head = ParagraphStyle("ProfReviewHead", parent=s_cell, alignment=1)
 
     data = [[Paragraph(xml_escape(h), s_head) for h in _TABLE_HEADERS]]
-    for row in _rows(application, entries, review_sub_types, sub_type_labels):
+    for row in _rows(application, review, sub_type_labels):
         data.append([Paragraph(xml_escape(v).replace("\n", "<br/>"), s_cell) for v in row])
 
     # splitInRow lets a very long comment continue on the next page instead of

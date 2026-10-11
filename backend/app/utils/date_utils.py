@@ -37,9 +37,12 @@ def now_taipei_str(format_string: str = "%Y-%m-%d %H:%M %z") -> str:
 
 def to_taipei_str(value: datetime, format_string: str = "%Y-%m-%d %H:%M") -> str:
     """Render a stored timestamp in Asia/Taipei. A naive value is taken as UTC
-    (the DB stores UTC; SQLite drops the offset)."""
+    (the DB stores UTC; SQLite drops the offset). If tzdata is unavailable the
+    UTC fallback is labelled " UTC" so it can't pass for Taipei wall-clock time."""
     aware = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-    return aware.astimezone(_taipei_tz()).strftime(format_string)
+    tz = _taipei_tz()
+    rendered = aware.astimezone(tz).strftime(format_string)
+    return rendered if tz is not timezone.utc else f"{rendered} UTC"
 
 
 def parse_date_field(date_input: Optional[Union[str, datetime]]) -> Optional[datetime]:

@@ -23,9 +23,8 @@ from app.models.review import ApplicationReview, ApplicationReviewItem
 from app.models.payment_roster import PaymentRoster, PaymentRosterItem, RosterStatus
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipSubTypeConfig
 from app.models.student import Academy
-from app.models.user import User, UserRole
 from app.services.application_builder import order_sub_type_preferences
-from app.services.professor_review_export import load_professor_reviews
+from app.services.professor_review_export import load_professor_reviews, normalize_sub_type
 from app.services.received_months_service import (
     calculate_received_months_bulk_async,
     get_imported_months_bulk_async,
@@ -109,14 +108,11 @@ def _holds_award(app: Application) -> bool:
     return app.quota_allocation_status == "allocated"
 
 
-def _norm_sub_type(code: Optional[str]) -> str:
-    """Normalize a sub-type code for comparison.
-
-    Sub-types are free-form admin-defined strings (config quotas keys, review
-    item codes, stored allocations), so every membership test against
-    load_rejected_subtype_map must normalize BOTH sides with this helper.
-    """
-    return (code or "").lower().strip()
+# Normalize a sub-type code for comparison. Sub-types are free-form
+# admin-defined strings (config quotas keys, review item codes, stored
+# allocations), so every membership test against load_rejected_subtype_map must
+# normalize BOTH sides with this helper. One rule shared with the review loaders.
+_norm_sub_type = normalize_sub_type
 
 
 async def load_rejected_subtype_map(db: AsyncSession, app_ids: list[int]) -> dict[int, set[str]]:
@@ -154,8 +150,7 @@ async def load_professor_review_items(db: AsyncSession, app_ids: list[int]) -> d
     loaded: the college recommends through its ranking alone (college_rejected
     on the ranking item), and the manual-distribution grid IS the admin
     decision surface, so neither has review items to display here.
-    Sub-type codes are normalized (same rule as _norm_sub_type, so they match
-    rejected_sub_types).
+    Sub-type codes are normalized with _norm_sub_type (matches rejected_sub_types).
     """
     entries_by_app = await load_professor_reviews(db, app_ids)
     return {

@@ -19,6 +19,7 @@ from fastapi.responses import StreamingResponse
 import app.api.v1.endpoints.college_review.export_package as ep
 from app.models.user import UserRole
 from app.services.export_package_service import ExportPlan
+from app.services.professor_review_export import ProfessorReviewData
 
 _FILENAME = "博士生獎學金_申請資料_114_0_資訊學院.zip"
 
@@ -34,8 +35,7 @@ def _plan(count_per_dept=(2, 1)):
         field_labels={},
         summary_tables={},
         zip_filename=_FILENAME,
-        professor_reviews={},
-        review_sub_types=[],
+        professor_review=ProfessorReviewData(),
         sub_type_labels={},
     )
 

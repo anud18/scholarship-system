@@ -7,6 +7,7 @@ import pytest
 from openpyxl import Workbook
 
 from app.utils.excel_safety import (
+    EXCEL_CELL_MAX_CHARS,
     is_formula_injection_risk,
     neutralise_worksheet,
     sanitize_csv_row,
@@ -147,3 +148,20 @@ def test_is_formula_injection_risk_false_for_safe_and_non_string():
     assert is_formula_injection_risk("") is False
     assert is_formula_injection_risk(None) is False
     assert is_formula_injection_risk(114) is False
+
+
+def test_illegal_control_characters_are_dropped():
+    # Word's manual line break (\x0b) makes openpyxl raise IllegalCharacterError
+    out = sanitize_excel_cell("第一行\x0b第二行\x00")
+    assert out == "第一行第二行"
+    Workbook().active.cell(row=1, column=1, value=out)  # writes without raising
+
+
+def test_formula_trigger_hidden_behind_a_control_character_is_still_neutralized():
+    assert sanitize_excel_cell("\x0b=cmd()") == "'=cmd()"
+
+
+def test_text_over_the_excel_cell_limit_is_truncated():
+    out = sanitize_excel_cell("長" * (EXCEL_CELL_MAX_CHARS + 10))
+    assert len(out) == EXCEL_CELL_MAX_CHARS
+    assert out.endswith("（已截斷）")

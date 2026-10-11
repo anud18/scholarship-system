@@ -31,7 +31,7 @@ from app.services.college_ranking_export_service import (
     CollegeRankingExportService,
     ExportRow,
 )
-from app.services.professor_review_export import ProfessorReviewEntry, review_sub_type_columns
+from app.services.professor_review_export import ProfessorReviewData
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ async def build_embedded_summary_tables(
     academic_year: int,
     college_labels: Optional[Dict[str, str]] = None,
     *,
-    professor_reviews: Dict[int, List[ProfessorReviewEntry]],
+    professor_review: ProfessorReviewData,
 ) -> Dict[str, bytes]:
     """Return { zip_inner_path : xlsx_bytes } for the college-level table
     (ZIP root) plus one table per department folder — and, when
@@ -69,8 +69,8 @@ async def build_embedded_summary_tables(
 
     The same dept_groups assembled by ExportPackageService is used directly,
     guaranteeing each table's rows match the student folders next to it.
-    ``professor_reviews`` (load_professor_reviews over the same applications)
-    fills the 指導教授審核結果/評語 columns.
+    ``professor_review`` (load_professor_review_data over the same
+    applications) fills the 指導教授審核結果/評語 columns.
     """
     # Lazy import: keep this module's top level free of export_package_service
     # (which pulls in reportlab) so callers that only need _sort_key — e.g. the
@@ -84,7 +84,6 @@ async def build_embedded_summary_tables(
         scholarship_type=scholarship_type,
         applications=all_apps,
     )
-    review_sub_types = review_sub_type_columns(scholarship_type)
 
     scholarship_name = scholarship_type.name or "獎學金"
     service = CollegeRankingExportService()
@@ -100,7 +99,6 @@ async def build_embedded_summary_tables(
                 application=app,
                 bank_account=account_by_user.get(app.user_id),
                 advisor_names=advisor_by_user.get(app.user_id),
-                professor_reviews=professor_reviews.get(app.id, []),
             )
             for app in ordered
         ]
@@ -118,7 +116,7 @@ async def build_embedded_summary_tables(
                 sub_type_labels=sub_type_labels,
                 title=f"{base_name} - {scope}",
                 sheet_name=sheet_name,
-                review_sub_types=review_sub_types,
+                professor_review=professor_review,
             )
         except Exception as e:
             logger.exception("summary table build failed: %s", ok_key)

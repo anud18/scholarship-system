@@ -45,13 +45,9 @@ from app.services.form_field_labels import (
 from app.services.minio_service import MinIOService
 from app.services.pdf_fonts import CJK_FONT_NAME, ensure_cjk_font
 from app.services.pdf_merge import MergeItem, build_merged_pdf
-from app.services.professor_review_export import (
-    ProfessorReviewEntry,
-    load_professor_reviews,
-    review_sub_type_columns,
-    sub_type_labels_of,
-)
+from app.services.professor_review_export import ProfessorReviewData, load_professor_review_data
 from app.services.professor_review_pdf import PROFESSOR_REVIEW_PDF_LABEL, build_professor_review_pdf
+from app.services.sub_type_labels import sub_type_labels_of
 from app.services.zip_stream import COPY_CHUNK_SIZE, ZipStreamSink, write_stream_entry
 from app.utils.application_helpers import get_college_code_from_data
 from app.utils.export_download import sanitise_filename_part
@@ -325,9 +321,8 @@ class ExportPlan:
     field_labels: Dict[str, str]
     summary_tables: Dict[str, bytes]
     zip_filename: str
-    #: application id → professor verdicts, for the 合併檔's 指導教授評語 page
-    professor_reviews: Dict[int, List[ProfessorReviewEntry]]
-    review_sub_types: List[str]
+    #: professor verdicts for the 合併檔's 指導教授評語 page (empty for a precheck)
+    professor_review: ProfessorReviewData
     sub_type_labels: Dict[str, str]
 
     @property
@@ -389,7 +384,6 @@ class ExportPackageService:
         # 2.5 zh-TW labels for the submitted form fields, loaded once for the
         # per-student summary PDFs (built later, off the event loop).
         field_labels = await load_form_field_labels(self.db, scholarship_type.code)
-        professor_reviews = await load_professor_reviews(self.db, [a.id for a in applications])
 
         college_name = _first_college_name(applications) if college_code else None
         academy_names = None if college_code else await self._load_academy_names()
@@ -400,7 +394,13 @@ class ExportPackageService:
         # try/except) must not lose the primary materials ZIP — degrade to an
         # error placeholder.
         summary_tables: Dict[str, bytes] = {}
+        professor_review = ProfessorReviewData()
         if include_summary_tables:
+            # Same applications as the ZIP; shared by the summary tables and the
+            # merged PDFs' 指導教授評語 pages. A precheck needs neither.
+            professor_review = await load_professor_review_data(
+                self.db, scholarship_type=scholarship_type, applications=applications
+            )
             try:
                 summary_tables = await build_embedded_summary_tables(
                     self.db,
@@ -409,7 +409,7 @@ class ExportPackageService:
                     college_name,
                     academic_year,
                     college_labels,
-                    professor_reviews=professor_reviews,
+                    professor_review=professor_review,
                 )
             except Exception as e:
                 logger.exception("embedded summary tables generation failed wholesale")
@@ -425,8 +425,7 @@ class ExportPackageService:
             field_labels=field_labels,
             summary_tables=summary_tables,
             zip_filename=_build_zip_filename(scholarship_type.name, academic_year, semester, college_name),
-            professor_reviews=professor_reviews,
-            review_sub_types=review_sub_type_columns(scholarship_type),
+            professor_review=professor_review,
             sub_type_labels=sub_type_labels_of(scholarship_type),
         )
 
@@ -489,8 +488,8 @@ class ExportPackageService:
         valid_statuses = ("submitted", "under_review", "approved", "partial_approved", "rejected")
         stmt = (
             select(Application)
-            # scholarship_configuration: whether the 合併檔 needs a 指導教授評語 page
-            .options(selectinload(Application.files), selectinload(Application.scholarship_configuration)).where(
+            .options(selectinload(Application.files))
+            .where(
                 Application.scholarship_type_id == scholarship_type_id,
                 Application.academic_year == academic_year,
                 Application.status.in_(valid_statuses),
@@ -581,18 +580,15 @@ class ExportPackageService:
         requires a professor review (then it shows 未審核); omitted for flows
         without a professor step. A render failure becomes a placeholder page.
         """
-        entries = plan.professor_reviews.get(app.id, [])
-        cfg = app.scholarship_configuration
-        requires_review = bool(cfg and cfg.requires_professor_review_for(bool(app.is_renewal)))
-        if not entries and not requires_review:
+        review = plan.professor_review
+        if not review.entries(app) and not review.is_review_required(app):
             return []
         filename = f"{PROFESSOR_REVIEW_PDF_LABEL}.pdf"
         try:
             content = build_professor_review_pdf(
                 subtitle_lines=_merged_subtitle_lines(app, plan),
                 application=app,
-                entries=entries,
-                review_sub_types=plan.review_sub_types,
+                review=review,
                 sub_type_labels=plan.sub_type_labels,
             )
             return [MergeItem(label=PROFESSOR_REVIEW_PDF_LABEL, filename=filename, content=content)]
