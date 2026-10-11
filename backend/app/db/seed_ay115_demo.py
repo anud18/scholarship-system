@@ -24,7 +24,7 @@ the Development Login picker); the import creates their applications.
 Every student here is mirrored in `mock-student-api/main.py` (`_AY115_DEMO`)
 with term rows through 115-2, so SIS lookups and the eligibility rules resolve.
 
-Idempotent: users/profiles are created only when missing; applications,
+Idempotent: users are created only when missing; applications,
 rankings, rosters and schedules are skipped when they already exist.
 """
 
@@ -51,7 +51,6 @@ from app.models.review import ApplicationReview, ApplicationReviewItem
 from app.models.roster_schedule import RosterSchedule, RosterScheduleStatus
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule, ScholarshipType, SubTypeSelectionMode
 from app.models.user import EmployeeStatus, User, UserRole, UserType
-from app.models.user_profile import UserProfile
 
 logger = logging.getLogger(__name__)
 
@@ -221,28 +220,14 @@ async def _get_or_create_student_user(session: AsyncSession, entry: StudentEntry
     return user
 
 
-async def _ensure_profile(session: AsyncSession, user: User, stdcode: str, advisor: Dict[str, str]) -> None:
-    """Profile carries the advisor trio so professor auto-assignment and
-    notifications work the same way they do for wizard-submitted students."""
-    existing = (await session.execute(select(UserProfile).where(UserProfile.user_id == user.id))).scalar_one_or_none()
-    if existing:
-        return
-    session.add(
-        UserProfile(
-            user_id=user.id,
-            account_number=_postal_account(stdcode),
-            advisor_name=advisor["name"],
-            advisor_email=advisor["email"],
-            advisor_nycu_id=advisor["nycu_id"],
-        )
-    )
-
-
 async def _ensure_account(session: AsyncSession, entry: StudentEntry) -> bool:
-    """User + profile for `entry`; True when the user was newly created."""
+    """User for `entry`; True when the user was newly created.
+
+    No UserProfile is seeded: the wizard prefills 郵局帳號 and 指導教授 from the
+    student's profile, and dev students should start with those blank like a real
+    first-time applicant. (Seeded applications still carry both in submitted_form_data.)"""
     before = await _find_user(session, entry[0])
-    user = await _get_or_create_student_user(session, entry)
-    await _ensure_profile(session, user, entry[0], ADVISOR_BY_COLLEGE[entry[4]])
+    await _get_or_create_student_user(session, entry)
     return before is None
 
 
