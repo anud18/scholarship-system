@@ -47,7 +47,7 @@ from app.services.pdf_fonts import CJK_FONT_NAME, ensure_cjk_font
 from app.services.pdf_merge import MergeItem, build_merged_pdf
 from app.services.professor_review_export import ProfessorReviewData, load_professor_review_data
 from app.services.professor_review_pdf import PROFESSOR_REVIEW_PDF_LABEL, build_professor_review_pdf
-from app.services.sub_type_labels import sub_type_labels_of
+from app.services.sub_type_label_map import sub_type_labels_of
 from app.services.zip_stream import COPY_CHUNK_SIZE, ZipStreamSink, write_stream_entry
 from app.utils.application_helpers import get_college_code_from_data
 from app.utils.export_download import sanitise_filename_part

@@ -19,7 +19,7 @@ from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import AdminScholarship, User
 from app.models.user_profile import UserProfile
 from app.services.college_ranking_export_service import DynamicFieldSpec
-from app.services.sub_type_labels import sub_type_labels_of
+from app.services.sub_type_label_map import sub_type_labels_of
 from app.utils.application_helpers import (
     get_college_code_from_data,
     get_nycu_id_from_data,
