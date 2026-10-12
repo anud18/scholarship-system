@@ -241,6 +241,27 @@ async def test_submit_auto_assign_matches_advisor_nycu_id_case_insensitively(db:
 
 
 @pytest.mark.asyncio
+async def test_submit_auto_assign_prefers_exact_case_among_case_variant_professors(
+    db: AsyncSession, silence_collaborators
+):
+    """users.nycu_id is unique only case-sensitively; two professor accounts
+    differing in case must not raise MultipleResultsFound — the exact match wins."""
+    student = await _seed_user(db, role=UserRole.student, name="S", nycu_id="s_sub_dup")
+    await _seed_user(db, role=UserRole.professor, name="Lower", nycu_id="prof_dup")
+    exact = await _seed_user(db, role=UserRole.professor, name="Upper", nycu_id="PROF_DUP")
+    await _seed_user_profile(db, user_id=student.id, advisor_nycu_id="PROF_DUP")
+
+    cfg = await _seed_config(db, suffix="dup")
+    app = await _seed_app(db, student=student, config=cfg, status=ApplicationStatus.draft.value, suffix="dup")
+    service = ApplicationService(db)
+
+    await service.submit_application(application_id=app.id, user=student)
+
+    await db.refresh(app)
+    assert app.professor_id == exact.id
+
+
+@pytest.mark.asyncio
 async def test_submit_does_not_overwrite_existing_professor_id(db: AsyncSession, silence_collaborators):
     """When professor_id is already set (e.g. admin pre-assigned), the
     auto-assign step is skipped."""

@@ -73,6 +73,7 @@ import {
 } from "@/lib/utils/application-helpers";
 import { calculateFormProgress } from "@/lib/utils/application-progress";
 import { PROFILE_OWNED_FIELD_SOURCES } from "@/lib/utils/profile-owned-fields";
+import { uppercaseInputValue } from "@/lib/utils/uppercase-input";
 import { useApplications } from "@/hooks/use-applications";
 import { useStudentProfile } from "@/hooks/use-student-profile";
 import {
@@ -1294,7 +1295,7 @@ export function ScholarshipApplicationStep({
                   placeholder={fixedText.fields.advisor_nycu_id.placeholder}
                   value={advisorNycuId}
                   onChange={e => {
-                    setAdvisorNycuId(e.target.value.toUpperCase());
+                    setAdvisorNycuId(uppercaseInputValue(e.target));
                     setIsPersonalInfoDirty(true);
                     if (advisorErrors.length > 0) setAdvisorErrors([]);
                   }}

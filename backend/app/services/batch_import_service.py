@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 import pandas as pd
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -285,13 +285,16 @@ class BatchImportService:
 
         eligibility_service = EligibilityService(self.db)
 
-        # Professor-account existence: one query for all advisor ids
-        advisor_ids = {row.get("advisor_nycu_id") for row in parsed_data if row.get("advisor_nycu_id")}
+        # Professor-account existence: one query for all advisor ids. Case-insensitive,
+        # matching assign_professor_from_profile, so the warning agrees with assignment.
+        advisor_ids = {row["advisor_nycu_id"].upper() for row in parsed_data if row.get("advisor_nycu_id")}
         professor_map: Dict[str, User] = {}
         if advisor_ids:
-            prof_stmt = select(User).where(User.nycu_id.in_(list(advisor_ids)), User.role == UserRole.professor)
+            prof_stmt = select(User).where(
+                func.upper(User.nycu_id).in_(list(advisor_ids)), User.role == UserRole.professor
+            )
             prof_result = await self.db.execute(prof_stmt)
-            professor_map = {p.nycu_id: p for p in prof_result.scalars().all()}
+            professor_map = {p.nycu_id.upper(): p for p in prof_result.scalars().all()}
 
         # Concurrent snapshot prefetch — the sequential per-row SIS fetch was
         # the preview-request bottleneck (issue #1172).
@@ -307,7 +310,7 @@ class BatchImportService:
             row_number = row.get("row_number")
 
             advisor_id = row.get("advisor_nycu_id")
-            if advisor_id and advisor_id not in professor_map:
+            if advisor_id and advisor_id.upper() not in professor_map:
                 warnings.append(
                     _make_warning(
                         f"查無人事編號 {advisor_id} 的教授帳號，該申請將無法進入教授待審清單。",

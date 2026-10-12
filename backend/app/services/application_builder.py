@@ -154,13 +154,20 @@ async def assign_professor_from_profile(
     if not profile or not profile.advisor_nycu_id:
         return None
 
-    professor_stmt = select(User).where(
-        # 人事代號 is entered uppercased, but account nycu_ids may not be.
-        func.upper(User.nycu_id) == profile.advisor_nycu_id.upper(),
-        User.role == UserRole.professor,
+    # 人事代號 is entered uppercased, but account nycu_ids may not be. users.nycu_id
+    # is unique only case-sensitively, so prefer an exact match and never let two
+    # case-variant accounts raise MultipleResultsFound mid-submit.
+    professor_stmt = (
+        select(User)
+        .where(
+            func.upper(User.nycu_id) == profile.advisor_nycu_id.upper(),
+            User.role == UserRole.professor,
+        )
+        .order_by((User.nycu_id == profile.advisor_nycu_id).desc(), User.id)
+        .limit(1)
     )
     professor_result = await db.execute(professor_stmt)
-    professor = professor_result.scalar_one_or_none()
+    professor = professor_result.scalars().first()
 
     if professor:
         application.professor_id = professor.id
