@@ -32,6 +32,7 @@ from reportlab.platypus import KeepInFrame, Paragraph, SimpleDocTemplate, Spacer
 
 from app.services.pdf_fonts import CJK_FONT_NAME, ensure_cjk_font
 from app.services.professor_review_export import ProfessorReviewData
+from app.utils.college_display_number import format_student_college
 from app.utils.excel_safety import sanitize_excel_cell
 
 # Static columns shared by the xlsx and PDF exports: (header label, PDF column
@@ -45,7 +46,7 @@ _STATIC_COLUMNS: List[Tuple[str, float]] = [
     ("NO.", 0.5),
     ("學院初審會議之學院排序", 0.8),
     ("申請獎學金類別", 1.4),
-    ("學院", 1.0),
+    ("學院", 1.2),
     ("系所", 1.2),
     ("年級", 0.5),
     ("是否為逕博學生", 0.7),
@@ -365,7 +366,7 @@ class CollegeRankingExportService:
             row_index,
             row.rank_position if row.rank_position is not None else "",
             self._render_scholarship_type(row.application, sub_type_labels),
-            self._safe_str(sd.get("trm_academyname")),
+            format_student_college(sd),
             self._safe_str(sd.get("trm_depname")),
             self._compute_grade(sd.get("trm_termcount")),
             self._render_direct_phd(sd.get("std_enrolltype")),
