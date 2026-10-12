@@ -96,10 +96,12 @@ export async function dumpRelated(opts: {
 
 /**
  * Remove every ranking a college owns for one scholarship period so a spec can
- * create a fresh one. A college owns ONE ranking per (type, sub-type, year,
- * semester) — finalized or not — so a leftover from a previous run would be
- * handed back by POST /college-review/rankings (with a stale item set that
- * predates the spec's application) instead of a new ranking being created.
+ * create a fresh one. A college may keep several draft rankings per (type,
+ * sub-type, year, semester), but while one of them is locked (finalized) — or
+ * has had its distribution executed — POST /college-review/rankings answers
+ * 409, so a locked leftover from a previous run would block the spec's create.
+ * Dropping the drafts too keeps a spec's later finalize from collapsing (and
+ * auditing the deletion of) rankings it never created.
  */
 export async function deleteCollegeRankings(opts: {
   scholarshipTypeId: number;
@@ -119,8 +121,8 @@ export async function deleteCollegeRankings(opts: {
   );
   for (const { id } of rows) {
     // Child clean-up is best-effort (tolerates schema drift); the parent DELETE
-    // must surface its error, otherwise a leftover ranking would be silently
-    // handed back to the spec and the failure would show up far downstream.
+    // must surface its error, otherwise a leftover locked ranking would
+    // silently survive and the spec's create would fail far downstream (409).
     for (const sql of [
       "UPDATE payment_rosters SET ranking_id = NULL WHERE ranking_id = $1",
       "DELETE FROM college_ranking_items WHERE ranking_id = $1",

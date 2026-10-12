@@ -126,7 +126,8 @@ async def main():
                 CollegeRanking.sub_type_code == "nstc",
             )
         )
-        ranking = cr_result.scalar_one_or_none()
+        # Several draft rankings may share the period; reuse the first.
+        ranking = cr_result.scalars().first()
         if not ranking:
             ranking = CollegeRanking(
                 scholarship_type_id=phd.id,

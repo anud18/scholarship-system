@@ -157,9 +157,9 @@ test.describe("撤銷對話框：未填原因前不可確認 | admin revoke dial
       throw new Error(`revoke fixture: professor review failed HTTP ${reviewRes.status}`);
     }
 
-    // 4. College creates ranking. A college owns ONE ranking per period, so
-    //    drop any leftover first — otherwise the stale one (created before this
-    //    application existed) would be handed back.
+    // 4. College creates ranking. Drop any leftover first: creating answers 409
+    //    while a locked (finalized) or distributed ranking exists in the period,
+    //    and a previous run's fixture ranking may have survived its afterAll.
     await deleteCollegeRankings({
       scholarshipTypeId: config.scholarship_type_id,
       subType: SETUP_SUB_TYPE,
@@ -571,7 +571,9 @@ test.describe("已鎖定造冊：撤銷／停發名單與項目移除 | locked r
     }
 
     // 3. College creates ranking — both students are now eligible and auto-included.
-    //    Drop the college's existing ranking first (one ranking per period).
+    //    Drop the college's existing rankings first: describe #1's finalized ranking
+    //    can outlive its best-effort afterAll, and a locked ranking in the period
+    //    makes the create 409.
     await deleteCollegeRankings({
       scholarshipTypeId: config.scholarship_type_id,
       subType: SETUP_SUB_TYPE,

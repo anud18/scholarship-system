@@ -13,7 +13,8 @@
  * Flow:
  *   beforeAll:
  *     1. csphd0001 submits phd/nstc application
- *     2. cs_college creates ranking (after dropping C's leftover) — auto-includes the app
+ *     2. cs_college creates a draft ranking (after dropping C's leftovers — a locked
+ *        one would 409 the create) — auto-includes the app
  *   Test 1: GET ranking → items array has csphd0001, college_rejected=false
  *   Test 2: POST import-excel [rank=1, full roster] → all rows updated, rejected_count=0
  *   Test 3: POST import-excel [rank="N", full roster] → all rows updated, rejected_count=1
@@ -135,9 +136,9 @@ test.describe("學院排名 Excel 匯入 | College ranking import-excel @nightly
       await deleteApplicationCascade(app_id).catch(() => undefined);
     }
 
-    // Pre-clean college C's nstc ranking for this period. A college owns ONE
-    // ranking per period, so a leftover from a prior run would be returned
-    // (without csphd0001's new application) instead of a fresh row.
+    // Pre-clean college C's nstc rankings for this period. Every POST creates a
+    // new draft, but a locked (finalized) leftover from a prior run would make
+    // the create answer 409.
     await deleteCollegeRankings({
       scholarshipTypeId: config.scholarship_type_id,
       subType: SUB_TYPE,

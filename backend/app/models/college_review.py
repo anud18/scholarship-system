@@ -68,10 +68,11 @@ class CollegeRanking(Base):
     academic_year = Column(Integer, nullable=False)
     semester = Column(String(20))  # Can be null for yearly scholarships
     # College that owns this ranking. A ranking is scoped per (type, sub_type, year,
-    # semester, college): each college's reviewers share ONE ranking of their own
-    # college's applications — a college can never hold several rankings for the
-    # same period (enforced by uq_college_rankings_single_per_college below).
-    # NULL only for admin/super_admin global rankings.
+    # semester, college) and every reviewer of the college shares the college's
+    # rankings. Several DRAFT rankings may exist per scope, but at most ONE finalized
+    # (enforced by uq_college_rankings_finalized_per_college below); finalizing one
+    # deletes the scope's drafts, and no new ranking can be created while it stays
+    # locked. NULL only for admin/super_admin global rankings.
     college_code = Column(String(10), nullable=True, index=True)
 
     # Ranking metadata
@@ -306,18 +307,23 @@ Index(
     CollegeRanking.ranking_status,
     CollegeRanking.is_finalized,
 )
-# One ranking per college per (scholarship type, sub-type, year, semester).
-# Yearly rankings store semester as NULL (legacy rows may hold "yearly") and
-# admin global rankings store college_code as NULL, so both are coalesced to a
-# sentinel — plain NULLs would be distinct and defeat the uniqueness.
+# At most ONE finalized ranking per college per (scholarship type, sub-type, year,
+# semester); drafts are unconstrained, so the index is partial. Yearly rankings
+# store semester as NULL (legacy rows may hold "yearly") and admin global rankings
+# store college_code as NULL, so both are coalesced to a sentinel — plain NULLs
+# would be distinct and defeat the uniqueness. BOTH where-clauses are needed:
+# with postgresql_where alone SQLite (the test DB) would build a FULL unique index
+# and reject a second draft.
 Index(
-    "uq_college_rankings_single_per_college",
+    "uq_college_rankings_finalized_per_college",
     CollegeRanking.scholarship_type_id,
     CollegeRanking.sub_type_code,
     CollegeRanking.academic_year,
     func.coalesce(CollegeRanking.semester, "yearly"),
     func.coalesce(CollegeRanking.college_code, ""),
     unique=True,
+    postgresql_where=CollegeRanking.is_finalized.is_(True),
+    sqlite_where=CollegeRanking.is_finalized.is_(True),
 )
 
 # Index for ranking items

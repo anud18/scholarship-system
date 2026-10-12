@@ -11,12 +11,15 @@
  *   <test setup>                     UPDATE applications.professor_id = <professor user id>
  *                                    Same workaround as multi-role-phd.spec.ts (see header there).
  *   professor                       → POST /professor/applications/{id}/review (approve)
- *   cs_college (college C)          → POST /college-review/rankings (after dropping C's leftover ranking)
+ *   cs_college (college C)          → POST /college-review/rankings (after dropping C's leftover rankings;
+ *                                      a leftover LOCKED one would make the create 409)
  *                                    → auto-includes csphd0001's application:
  *                                      create_ranking filters by creator college_code ('C');
  *                                      csphd0001 has std_academyno='C' in the mock SIS API.
  *                                      stuphd001 has 'EE' and would be excluded.
+ *   cs_college                      → POST /college-review/rankings (a 2nd draft — drafts may coexist)
  *   cs_college                      → POST /college-review/rankings/{id}/finalize
+ *                                    → deletes the 2nd draft: locking keeps ONE ranking per period.
  *                                    ManualDistributionService.finalize() requires
  *                                    CollegeRanking.is_finalized=True (line 701). Allocate does
  *                                    NOT require finalized rankings — finalize does.
@@ -173,9 +176,9 @@ test.describe("管理員手動分發後申請轉為核准 | Admin manual distrib
     ).toBe(true);
     expect(reviewRes.body.success).toBe(true);
 
-    // 4. College creates a ranking. A college owns ONE ranking per period, so
-    //    drop any leftover from a previous run first — it would otherwise be
-    //    handed back without our application (created after that ranking).
+    // 4. College creates a ranking. Every POST creates a NEW draft, but it
+    //    answers 409 while a locked (finalized) ranking exists in the period,
+    //    so drop any leftover from a previous run first.
     const collegeLogin = await loginAs(browser, "cs_college");
     pushTrace(runState, collegeLogin.traceId);
 
@@ -217,11 +220,31 @@ test.describe("管理員手動分發後申請轉為核准 | Admin manual distrib
     ).toBeDefined();
     const rankingItemId = itemRows[0].id;
 
+    // A second draft for the same period is allowed (several drafts may
+    // coexist) — finalizing the first one below must delete it.
+    const siblingRes = await apiAs<{
+      success: boolean;
+      data: { id: number };
+    }>(collegeLogin.token, "POST", "/college-review/rankings", {
+      scholarship_type_id: config.scholarship_type_id,
+      sub_type_code: SUB_TYPE,
+      academic_year: config.academic_year,
+      semester: config.semester,
+    });
+    pushTrace(runState, siblingRes.traceId);
+    expect(
+      siblingRes.ok,
+      `create sibling draft failed: HTTP ${siblingRes.status} body=${JSON.stringify(siblingRes.body)}`,
+    ).toBe(true);
+    const siblingRankingId = siblingRes.body.data.id;
+    expect(siblingRankingId).not.toBe(rankingId);
+
     // 5. College finalizes the ranking — required before distribution finalize
     //    (ManualDistributionService.finalize queries is_finalized=True at line 701).
+    //    Locking collapses the period to this one ranking: the sibling draft is deleted.
     const finalizeRankingRes = await apiAs<{
       success: boolean;
-      data: { id: number; is_finalized: boolean };
+      data: { id: number; is_finalized: boolean; deleted_ranking_ids: number[] };
     }>(
       collegeLogin.token,
       "POST",
@@ -233,6 +256,21 @@ test.describe("管理員手動分發後申請轉為核准 | Admin manual distrib
       `finalize ranking failed: HTTP ${finalizeRankingRes.status} body=${JSON.stringify(finalizeRankingRes.body)}`,
     ).toBe(true);
     expect(finalizeRankingRes.body.data.is_finalized).toBe(true);
+    expect(finalizeRankingRes.body.data.deleted_ranking_ids).toEqual([siblingRankingId]);
+
+    const { rows: scopeRankings } = await pool.query<{ id: number }>(
+      `SELECT id FROM college_rankings
+        WHERE scholarship_type_id = $1
+          AND sub_type_code = $2
+          AND academic_year = $3
+          AND COALESCE(semester, 'yearly') = COALESCE($4::text, 'yearly')
+          AND college_code = $5`,
+      [config.scholarship_type_id, SUB_TYPE, config.academic_year, config.semester, COLLEGE_CODE],
+    );
+    expect(
+      scopeRankings.map((r) => r.id),
+      "finalize must leave exactly the confirmed ranking in the period",
+    ).toEqual([rankingId]);
 
     // 6. Admin allocates the ranking item.
     const adminLogin = await loginAs(browser, "admin");

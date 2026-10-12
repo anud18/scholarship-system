@@ -323,14 +323,18 @@ async def _get_or_create_finalized_ranking(
     college's 新申請 as allocated items — exactly what the matrix 造冊/preview
     path joins on. Returns None when the ranking already existed."""
     year = config.academic_year
+    # A college may hold several draft rankings for the period, so any row means
+    # "already seeded" (scalar_one_or_none would raise on two drafts).
     existing = (
         await session.execute(
-            select(CollegeRanking).where(
+            select(CollegeRanking.id)
+            .where(
                 CollegeRanking.scholarship_type_id == phd.id,
                 CollegeRanking.academic_year == year,
                 CollegeRanking.college_code == college_code,
                 CollegeRanking.sub_type_code == RANKING_SUB_TYPE_CODE,
             )
+            .limit(1)
         )
     ).scalar_one_or_none()
     if existing:

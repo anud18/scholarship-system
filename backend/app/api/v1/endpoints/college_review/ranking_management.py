@@ -41,6 +41,7 @@ from app.services.college_review_service import (
     InvalidRankingDataError,
     RankingModificationError,
     RankingNotFoundError,
+    RankingScopeConflictError,
 )
 from app.services.email_automation_service import email_automation_service
 from app.services.review_service import ReviewService
@@ -79,10 +80,10 @@ async def get_rankings(
 
         # Apply filters
         if current_user.role not in [UserRole.admin, UserRole.super_admin]:
-            # College reviewers see their college's ranking. Scope by college_code (not
-            # created_by) so every reviewer of the same college shares one ranking and
-            # different colleges stay isolated — matches create_ranking's reuse scoping
-            # (issue #1034).
+            # College reviewers see their college's rankings. Scope by college_code (not
+            # created_by) so every reviewer of the same college shares the college's
+            # rankings (drafts and the finalized one) and different colleges stay
+            # isolated — matches create_ranking's scoping (issue #1034).
             stmt = stmt.where(CollegeRanking.college_code == current_user.college_code)
 
         if academic_year:
@@ -98,8 +99,8 @@ async def get_rankings(
             else:
                 stmt = stmt.where(CollegeRanking.semester == semester_lower)
 
-        # Execute query
-        result = await db.execute(stmt)
+        # Execute query (stable order: several drafts may share a period)
+        result = await db.execute(stmt.order_by(CollegeRanking.id))
         rankings = result.scalars().all()
 
         # Preload scholarship configurations per (type, year, semester) to avoid N+1 queries
@@ -179,6 +180,7 @@ async def get_rankings(
                     "ranking_name": ranking.ranking_name,
                     "scholarship_type_id": ranking.scholarship_type_id,
                     "sub_type_code": ranking.sub_type_code,
+                    "college_code": ranking.college_code,
                     "academic_year": ranking.academic_year,
                     "semester": normalized_ranking_semester,
                     "total_applications": ranking.total_applications,
@@ -224,13 +226,12 @@ async def create_ranking(
     current_user: User = Depends(require_college),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create the caller's college ranking for a scholarship sub-type and period.
+    """Create a NEW draft ranking of the caller's college for a scholarship sub-type and period.
 
-    A college owns at most ONE ranking per (scholarship type, sub-type, academic
-    year, semester). If that ranking already exists — finalized or not — it is
-    returned with ``data.reused = true`` instead of creating a second one; while
-    it is still a draft, applications that became eligible since it was created
-    are appended to it (``data.added_application_count``).
+    A college may keep several draft rankings per (scholarship type, sub-type,
+    academic year, semester) and compare them; 確認排名 (finalize) keeps one and
+    deletes the others. Returns HTTP 409 while the caller's scope holds a finalized
+    ranking (unlock it first) or a distributed one (sync it instead).
     """
 
     try:
@@ -239,7 +240,7 @@ async def create_ranking(
         # (admins / super_admins bypass).
         await service.assert_ranking_within_deadline(scholarship_type_id, academic_year, semester, current_user)
 
-        upsert_kwargs = dict(
+        ranking = await service.create_ranking(
             scholarship_type_id=scholarship_type_id,
             sub_type_code=sub_type_code,
             academic_year=academic_year,
@@ -247,36 +248,16 @@ async def create_ranking(
             creator_id=current_user.id,
             ranking_name=ranking_name,
         )
-        try:
-            result = await service.get_or_create_ranking(**upsert_kwargs)
-            # Commit before building the response so the row is visible to any
-            # read-after-write query the caller makes immediately after receiving
-            # the HTTP 200 (e.g. direct pool.query in the E2E test suite — see
-            # issue #199). get_db will commit again on context exit but that is a
-            # no-op on an already-clean session. Mirrors the fix in PR #200.
-            await db.commit()
-        except IntegrityError:
-            # Two reviewers of the same college raced past find_ranking and both
-            # inserted; the unique index rejected the loser. The idempotent answer
-            # is the winner's row, so retry once on a clean transaction.
-            await db.rollback()
-            logger.info("Ranking create lost a unique-index race; returning the existing ranking")
-            result = await service.get_or_create_ranking(**upsert_kwargs)
-            await db.commit()
-
-        ranking = result.ranking
-        reused = not result.created
-        added_count = len(result.added_application_ids)
-        if not reused:
-            message = "Ranking created successfully"
-        elif added_count:
-            message = f"本學院此期間已有排名，已將 {added_count} 位新申請者加入既有排名"
-        else:
-            message = "本學院此期間已有排名，已回傳既有排名"
+        # Commit before building the response so the row is visible to any
+        # read-after-write query the caller makes immediately after receiving
+        # the HTTP 200 (e.g. direct pool.query in the E2E test suite — see
+        # issue #199). get_db will commit again on context exit but that is a
+        # no-op on an already-clean session. Mirrors the fix in PR #200.
+        await db.commit()
 
         return ApiResponse(
             success=True,
-            message=message,
+            message="Ranking created successfully",
             data={
                 "id": ranking.id,
                 "ranking_name": ranking.ranking_name,
@@ -287,8 +268,6 @@ async def create_ranking(
                 "academic_year": ranking.academic_year,
                 "semester": normalize_semester_value(ranking.semester),
                 "is_finalized": bool(ranking.is_finalized),
-                "reused": reused,
-                "added_application_count": added_count,
                 "created_at": ranking.created_at.isoformat(),
             },
         )
@@ -297,6 +276,9 @@ async def create_ranking(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except NotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except RankingScopeConflictError as e:
+        logger.info("Ranking creation refused by its scope: %s", e)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except ValueError as e:
         logger.warning("Invalid ranking creation data", exc_info=True)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid ranking data") from e
@@ -586,6 +568,9 @@ async def get_ranking(
                 }
             )
 
+        # Pending + stale come from ONE eligibility query (see compute_ranking_diff).
+        diff = await service.compute_ranking_diff(ranking)
+
         return ApiResponse(
             success=True,
             message="Ranking retrieved successfully",
@@ -607,9 +592,12 @@ async def get_ranking(
                 "distribution_executed": ranking.distribution_executed,
                 "sub_type_metadata": list(sub_type_metadata_map.values()),
                 "items": items,
-                # Eligible applications not yet in this ranking (0 once finalized).
-                # Drives the 「尚未加入排名的申請」 prompt that points at 同步申請名單.
-                "pending_application_count": await service.count_pending_applications(ranking),
+                # Drive the 同步申請名單 reminder: eligible applications not yet in
+                # this ranking, and ranked ones no longer eligible (withdrawn /
+                # deleted / sub-type, college or term changed). Both 0 once the
+                # ranking is finalized AND distributed.
+                "pending_application_count": len(diff.pending_application_ids),
+                "stale_application_count": len(diff.stale_application_ids),
                 "created_at": ranking.created_at.isoformat(),
                 "college_review_end": (
                     config.college_review_end.isoformat() if config and config.college_review_end else None
@@ -642,8 +630,9 @@ async def update_ranking(
     """Update ranking metadata (name, etc.)"""
 
     try:
-        # Get ranking
-        stmt = select(CollegeRanking).where(CollegeRanking.id == ranking_id)
+        # Get ranking. FOR UPDATE serialises with a concurrent finalize, which may
+        # delete this draft (missing ⇒ 404) or lock it.
+        stmt = select(CollegeRanking).where(CollegeRanking.id == ranking_id).with_for_update()
         result = await db.execute(stmt)
         ranking = result.scalar_one_or_none()
 
@@ -774,6 +763,100 @@ async def update_ranking_order(
         ) from e
 
 
+@router.post("/rankings/{ranking_id}/sync")
+async def sync_ranking(
+    ranking_id: int,
+    current_user: User = Depends(require_college),
+    db: AsyncSession = Depends(get_db),
+):
+    """同步申請名單: bring a non-finalized ranking in line with the current applications.
+
+    Eligible applications not yet in the ranking are added (renewals after the last
+    ranked renewal, others at the end) and ranked ones that are no longer eligible
+    are removed; positions are renumbered 1..n. A ranking whose distribution was
+    executed (unlocked for 補充匯入) is append-only. 409 while finalized.
+    """
+
+    try:
+        ranking_check = (
+            await db.execute(select(CollegeRanking).where(CollegeRanking.id == ranking_id))
+        ).scalar_one_or_none()
+        if not ranking_check:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
+
+        # Only the owning college's reviewers or an admin may sync.
+        assert_can_manage_ranking(ranking_check, current_user)
+
+        service = CollegeReviewService(db)
+        # #63: block once college-review deadline has passed (admins bypass).
+        await service.assert_ranking_within_deadline_by_ranking(ranking_id, current_user)
+
+        result = await service.sync_ranking(ranking_id)
+        added_ids = result.added_application_ids
+        removed_ids = result.removed_application_ids
+
+        new_rows = await db.execute(
+            select(CollegeRankingItem.application_id, CollegeRankingItem.rank_position).where(
+                CollegeRankingItem.ranking_id == ranking_id
+            )
+        )
+        new_order = {str(app_id): pos for app_id, pos in new_rows.all()}
+
+        db.add(
+            AuditLog.create_log(
+                user_id=current_user.id,
+                action=AuditAction.update.value,
+                resource_type="college_ranking",
+                resource_id=str(ranking_id),
+                description=f"ranking synced with application list (+{len(added_ids)} / -{len(removed_ids)})",
+                # G8 (#970): sync renumbers a draft, so keep the prior order reconstructable
+                # (snapshot taken by the service under the ranking's row lock).
+                old_values={"rank_positions": result.previous_rank_positions},
+                new_values={
+                    "added_application_ids": added_ids,
+                    "removed_application_ids": removed_ids,
+                    "rank_positions": new_order,
+                },
+            )
+        )
+        await db.commit()
+
+        if added_ids or removed_ids:
+            message = f"已加入 {len(added_ids)} 位新申請者、移除 {len(removed_ids)} 筆已不符合的申請"
+        else:
+            message = "排名已與申請名單一致"
+
+        return ApiResponse(
+            success=True,
+            message=message,
+            data={
+                "id": result.ranking.id,
+                "added_application_count": len(added_ids),
+                "removed_application_count": len(removed_ids),
+                "total_applications": result.ranking.total_applications,
+            },
+        )
+
+    except AuthorizationError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except NotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except RankingNotFoundError as e:
+        logger.warning("Ranking not found for sync", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except RankingModificationError as e:
+        logger.warning("Cannot sync ranking", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    except CollegeReviewError as e:
+        logger.exception("College review error during ranking sync")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Unexpected error syncing ranking")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to sync ranking") from e
+
+
 async def _resolve_college_name(db: AsyncSession, college_code: Optional[str]) -> str:
     """Resolve a college code to its display name, academies table first.
 
@@ -824,7 +907,12 @@ async def finalize_ranking(
     db: AsyncSession = Depends(get_db),
     request: Request = None,
 ):
-    """Finalize a ranking (makes it read-only)"""
+    """Finalize (lock) a ranking and delete the other rankings of its scope.
+
+    Only the finalized ranking survives; while it stays locked no new ranking can be
+    created. Returns 409 (nothing deleted) when another ranking of the scope is
+    already finalized, was distributed or is used by a payment roster.
+    """
 
     try:
         from app.models.audit_log import AuditAction, AuditLog
@@ -849,18 +937,44 @@ async def finalize_ranking(
         service = CollegeReviewService(db)
         # #63: block once college-review deadline has passed (admins bypass).
         await service.assert_ranking_within_deadline_by_ranking(ranking_id, current_user)
-        ranking = await service.finalize_ranking(ranking_id=ranking_id, finalizer_id=current_user.id)
+        result = await service.finalize_ranking(ranking_id=ranking_id, finalizer_id=current_user.id)
+        ranking = result.ranking
+        deleted_ranking_ids = [deleted.id for deleted in result.deleted_rankings]
 
         # Log the finalize ranking operation
         new_values = {
             "is_finalized": ranking.is_finalized,
             "ranking_status": ranking.ranking_status,
             "finalized_at": ranking.finalized_at.isoformat() if ranking.finalized_at else None,
+            "deleted_ranking_ids": deleted_ranking_ids,
         }
 
         # Extract request metadata
         ip_address = request.client.host if request and request.client else None
         user_agent = request.headers.get("user-agent") if request else None
+
+        # One delete_ranking row per superseded ranking, carrying its final order
+        # (G8 #970: a deleted ranking's order must stay reconstructable).
+        for deleted in result.deleted_rankings:
+            db.add(
+                AuditLog.create_log(
+                    user_id=current_user.id,
+                    action=AuditAction.delete_ranking.value,
+                    resource_type="ranking",
+                    resource_id=str(deleted.id),
+                    description=(
+                        f"Deleted ranking: {deleted.ranking_name} (superseded when ranking {ranking.id} was finalized)"
+                    ),
+                    old_values={
+                        "ranking_name": deleted.ranking_name,
+                        "total_applications": deleted.total_applications,
+                        "rank_positions": deleted.rank_positions,
+                    },
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                    status="success",
+                )
+            )
 
         audit_log = AuditLog.create_log(
             user_id=current_user.id,
@@ -892,6 +1006,8 @@ async def finalize_ranking(
                 "is_finalized": ranking.is_finalized,
                 "finalized_at": ranking.finalized_at.isoformat(),
                 "ranking_status": ranking.ranking_status,
+                "deleted_ranking_ids": deleted_ranking_ids,
+                "deleted_ranking_count": len(deleted_ranking_ids),
             },
         )
 
@@ -905,6 +1021,18 @@ async def finalize_ranking(
     except RankingModificationError as e:
         logger.warning("Cannot finalize ranking", exc_info=True)
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    except RankingScopeConflictError as e:
+        logger.warning("Finalize refused by the ranking scope", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    except IntegrityError as e:
+        # Defensive: the partial unique index (another ranking of the scope got
+        # locked concurrently). The service's scope lock normally prevents it.
+        logger.warning("Finalize hit a constraint conflict for ranking %s", ranking_id, exc_info=True)
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="此學年度／學期已有其他鎖定的排名，請重新整理後再試",
+        ) from e
     except CollegeReviewError as e:
         logger.exception("College review error during finalization")
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
@@ -1016,10 +1144,11 @@ async def delete_ranking(
     request: Request = None,
 ):
     """
-    Delete a ranking
+    Delete a draft ranking
 
-    Only the creator or admin can delete a ranking.
-    Cannot delete finalized rankings.
+    The owning college's reviewers or an admin can delete a ranking. Finalized
+    rankings must be unlocked first (409); rankings whose distribution was executed
+    or that a payment roster uses are never deleted (409).
     """
 
     try:
@@ -1036,17 +1165,10 @@ async def delete_ranking(
         # Check permissions - the owning college's reviewers or an admin can delete
         assert_can_manage_ranking(ranking, current_user)
 
-        # #63: deleting is a ranking write too — with one ranking per college the
-        # only way to regenerate is delete + create, and create is deadline-gated,
-        # so a post-deadline delete would strand the college with no ranking.
-        await CollegeReviewService(db).assert_ranking_within_deadline_by_ranking(ranking_id, current_user)
-
-        # Check if ranking is finalized - cannot delete finalized rankings
-        if ranking.is_finalized:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Cannot delete finalized ranking. Please unfinalize it first.",
-            )
+        # #63: deleting is a ranking write too — create is deadline-gated, so a
+        # post-deadline delete could strand the college without the draft it needs.
+        service = CollegeReviewService(db)
+        await service.assert_ranking_within_deadline_by_ranking(ranking_id, current_user)
 
         # Capture ranking information for audit log before deletion
         old_values = {
@@ -1060,16 +1182,10 @@ async def delete_ranking(
             "ranking_status": ranking.ranking_status,
         }
 
-        # Delete ranking items first (cascade should handle this, but being explicit)
-        delete_items_stmt = select(CollegeRankingItem).where(CollegeRankingItem.ranking_id == ranking_id)
-        items_result = await db.execute(delete_items_stmt)
-        items = items_result.scalars().all()
-
-        for item in items:
-            await db.delete(item)
-
-        # Delete the ranking
-        await db.delete(ranking)
+        # The service re-checks under the scope lock: finalized ⇒ 409, settled or
+        # roster-referenced ⇒ 409; items are deleted before the ranking row.
+        deleted = await service.delete_ranking(ranking_id)
+        old_values["rank_positions"] = deleted.rank_positions
 
         # Log the delete ranking operation before committing
         ip_address = request.client.host if request and request.client else None
@@ -1080,7 +1196,7 @@ async def delete_ranking(
             action=AuditAction.delete_ranking.value,
             resource_type="ranking",
             resource_id=str(ranking_id),
-            description=f"Deleted ranking: {ranking.ranking_name}",
+            description=f"Deleted ranking: {deleted.ranking_name}",
             old_values=old_values,
             ip_address=ip_address,
             user_agent=user_agent,
@@ -1091,7 +1207,7 @@ async def delete_ranking(
 
         return ApiResponse(
             success=True,
-            message=f"Ranking '{ranking.ranking_name}' deleted successfully",
+            message=f"Ranking '{deleted.ranking_name}' deleted successfully",
             data={"ranking_id": ranking_id},
         )
 
@@ -1099,6 +1215,23 @@ async def delete_ranking(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except NotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except RankingNotFoundError as e:
+        logger.warning("Ranking not found for deletion", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except RankingModificationError as e:
+        logger.warning("Cannot delete finalized ranking", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    except RankingScopeConflictError as e:
+        logger.warning("Deletion refused for a settled or roster-referenced ranking", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    except IntegrityError as e:
+        # Defensive: a payment roster FK. The service's FOR UPDATE row lock makes a
+        # concurrent roster insert wait, so this should not fire after the check.
+        logger.warning("Delete hit a constraint conflict for ranking %s", ranking_id, exc_info=True)
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="此排名已執行分發或已用於造冊，無法刪除"
+        ) from e
     except HTTPException:
         raise
     except Exception as e:
@@ -1124,11 +1257,13 @@ async def import_ranking_from_excel(
     try:
         logger.info(f"User {current_user.id} importing {len(import_data)} rankings for ranking_id={ranking_id}")
 
-        # Load ranking with items
+        # Load ranking with items. FOR UPDATE serialises with a concurrent finalize,
+        # which may delete this draft (missing ⇒ 404) or lock it.
         stmt = (
             select(CollegeRanking)
             .options(selectinload(CollegeRanking.items).selectinload(CollegeRankingItem.application))
             .where(CollegeRanking.id == ranking_id)
+            .with_for_update()
         )
         result = await db.execute(stmt)
         ranking = result.scalar_one_or_none()

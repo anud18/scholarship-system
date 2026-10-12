@@ -18,7 +18,7 @@ from sqlalchemy.orm import joinedload, selectinload
 from app.models.application import Application
 from app.models.audit_log import AuditAction, AuditLog
 from app.models.college_review import CollegeRanking, CollegeRankingItem, ManualDistributionHistory
-from app.models.enums import ApplicationStatus, ReviewStage
+from app.models.enums import CANCELLED_ALLOCATION_STATUSES, ApplicationStatus, ReviewStage
 from app.models.review import ApplicationReview, ApplicationReviewItem
 from app.models.payment_roster import PaymentRoster, PaymentRosterItem, RosterStatus
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipSubTypeConfig
@@ -64,12 +64,11 @@ def _config_semester_condition(semester: str):
     return ScholarshipConfiguration.semester == semester
 
 
-# Application-level allocation states that mean "this student was pulled out of
+# CANCELLED_ALLOCATION_STATUSES (app.models.enums) = "this student was pulled out of
 # the distribution on purpose" (撤銷 / 停發). Cancelling frees the quota slot by
 # flipping CollegeRankingItem.is_allocated to False (see _cancel_allocation), so
-# WITHOUT this gate every unallocated-item path — above all the auto-allocation
+# WITHOUT that gate every unallocated-item path — above all the auto-allocation
 # preview — would read them as free candidates and hand the slot straight back.
-CANCELLED_ALLOCATION_STATUSES = ("revoked", "suspended")
 
 # Why 預設分發 could not place a student. Emitted per ranking item so the grid
 # can say WHICH student and WHY instead of inferring it from what it can see —
@@ -516,8 +515,9 @@ class ManualDistributionService:
           half 2 — approved renewals: Application(is_renewal, approved).
 
         The is_renewal==False guard on half 1 is load-bearing:
-        college_review_service.py:636-657 creates a CollegeRankingItem for
-        every application INCLUDING renewals (sorted first), and
+        CollegeReviewService.create_ranking / sync_ranking create a
+        CollegeRankingItem for every application INCLUDING renewals (sorted
+        first), and
         restore_allocation flips is_allocated=True on any item with an
         allocated_sub_type — so a revoked-then-restored renewal would otherwise
         be counted in BOTH halves.

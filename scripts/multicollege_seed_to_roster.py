@@ -201,9 +201,9 @@ async def stage_rank(db, reviewers):
     svc = CollegeReviewService(db)
     out = {}
     for code, uid in reviewers.items():
-        # One ranking per college per period: a re-run gets the existing
-        # (possibly already finalized) ranking back instead of a fresh row.
-        upsert = await svc.get_or_create_ranking(
+        # Every create inserts a new draft; it would 409 on a leftover locked
+        # ranking, but stage_seed already wiped every PhD/114 ranking.
+        ranking = await svc.create_ranking(
             scholarship_type_id=PHD_TYPE,
             sub_type_code="default",
             academic_year=YEAR,
@@ -211,15 +211,16 @@ async def stage_rank(db, reviewers):
             creator_id=uid,
             ranking_name=f"博士生獎學金 {YEAR} 全年",
         )
-        ranking = upsert.ranking
         await db.commit()
-        if ranking.is_finalized:
-            say(f"   college {code}: ranking {ranking.id} already finalized (re-run), keeping it")
-        else:
-            await svc.finalize_ranking(ranking_id=ranking.id, finalizer_id=uid)
-            await db.commit()
+        # Finalizing deletes the college's other drafts in the period — never
+        # another college's rankings (the #1034 cross-check below).
+        result = await svc.finalize_ranking(ranking_id=ranking.id, finalizer_id=uid)
+        await db.commit()
         out[code] = ranking.id
-        say(f"   college {code}: ranking {ranking.id} finalized ({ranking.total_applications} apps)")
+        say(
+            f"   college {code}: ranking {ranking.id} finalized ({ranking.total_applications} apps,"
+            f" {len(result.deleted_rankings)} other draft(s) deleted)"
+        )
     # cross-check: all finalized simultaneously (issue #1034 regression)
     finalized = (
         await db.execute(

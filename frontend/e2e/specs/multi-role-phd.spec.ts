@@ -17,7 +17,7 @@
  *   professor             → POST /professor/applications/{id}/review (approve)
  *                          → DB reviews has row with reviewer_id=professor
  *   cs_college            → POST /college-review/rankings
- *                          → DB college_rankings has the new ranking
+ *                          → DB college_rankings has the new (draft) ranking
  *   admin                 → smoke check: /applications/{id} returns 200 and
  *                          home page renders without crashing
  *
@@ -171,8 +171,9 @@ test.describe("博士生多角色審核鏈 | Multi-role PhD review chain", { tag
     const collegeLogin = await loginAs(browser, "cs_college");
     pushTrace(runState, collegeLogin.traceId);
 
-    // A college owns ONE ranking per period: drop C's leftover from a prior
-    // run so the create below yields a fresh row that includes this app.
+    // Drop C's leftover rankings from a prior run: a locked (finalized) one
+    // would make the create below answer 409. The draft this spec leaves
+    // behind is harmless — a college may keep several drafts per period.
     await deleteCollegeRankings({
       scholarshipTypeId: config.scholarship_type_id,
       subType: SUB_TYPE,
