@@ -2702,6 +2702,13 @@ class ApplicationService:
                                 "config_name": (
                                     app.scholarship_configuration.config_name if app.scholarship_configuration else None
                                 ),
+                                # 教授審查截止 for this application's track (renewal vs general),
+                                # so the professor queue can show the exact closing minute.
+                                "professor_review_end": (
+                                    app.scholarship_configuration.renewal_professor_review_end
+                                    if app.is_renewal
+                                    else app.scholarship_configuration.professor_review_end
+                                ),
                             }
                             if app.scholarship_configuration
                             else None

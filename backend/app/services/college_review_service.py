@@ -28,6 +28,7 @@ from app.models.review import ApplicationReview  # Unified review system
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User, UserRole
 from app.services.email_automation_service import email_automation_service
+from app.utils.date_utils import to_taipei_str
 
 func: Any = sa_func
 
@@ -139,7 +140,7 @@ class CollegeReviewService:
 
         now = datetime.now(timezone.utc)
         if deadline < now:
-            formatted = deadline.strftime("%Y-%m-%d %H:%M %Z").strip()
+            formatted = to_taipei_str(deadline)
             raise AuthorizationError(f"已過排名截止時間 ({formatted})，如需修改請聯絡管理員延期")
 
     async def assert_ranking_within_deadline_by_ranking(

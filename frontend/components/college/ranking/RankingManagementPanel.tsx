@@ -19,6 +19,7 @@ import { RefreshCw, Loader2, Clock, AlertTriangle, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { logger } from "@/lib/utils/logger";
+import { formatDeadline } from "@/lib/utils/format-deadline";
 
 // #63: surface the college-review deadline visibly on the ranking page
 // and warn / lock once the deadline approaches or passes.
@@ -839,9 +840,7 @@ export function RankingManagementPanel({
             {deadlineInfo.state === "passed" ? (
               <>
                 <strong>已過排名截止時間</strong>(
-                {deadlineInfo.deadline.toLocaleString(
-                  locale === "zh" ? "zh-TW" : "en-US"
-                )}
+                {formatDeadline(deadlineInfo.deadline)}
                 )。
                 {isAdmin
                   ? locale === "zh"
@@ -861,18 +860,14 @@ export function RankingManagementPanel({
                 {locale === "zh" ? "  ·  剩餘 " : " · "}
                 {formatCountdown(deadlineInfo.msToDeadline ?? 0, locale)}
                 {locale === "zh" ? "  ·  截止於 " : " · due "}
-                {deadlineInfo.deadline.toLocaleString(
-                  locale === "zh" ? "zh-TW" : "en-US"
-                )}
+                {formatDeadline(deadlineInfo.deadline)}
                 。
               </>
             ) : (
               <>
                 {locale === "zh" ? "排名截止時間" : "Ranking deadline"}:
                 {" "}
-                {deadlineInfo.deadline.toLocaleString(
-                  locale === "zh" ? "zh-TW" : "en-US"
-                )}
+                {formatDeadline(deadlineInfo.deadline)}
                 {locale === "zh" ? "  ·  剩餘 " : " · "}
                 {formatCountdown(deadlineInfo.msToDeadline ?? 0, locale)}
               </>
