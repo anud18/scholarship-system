@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { logger } from "@/lib/utils/logger";
+import { uppercaseInputValue } from "@/lib/utils/uppercase-input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1033,7 +1034,7 @@ export default function UserProfileManagement() {
                     onChange={e => {
                       setEditingProfile({
                         ...editingProfile,
-                        advisor_nycu_id: e.target.value,
+                        advisor_nycu_id: uppercaseInputValue(e.target),
                       });
                       // Clear advisor errors when user starts typing
                       if (advisorErrors.length > 0) {

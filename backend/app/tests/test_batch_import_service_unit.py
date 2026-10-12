@@ -952,6 +952,27 @@ async def test_bulk_check_eligibility_warns_missing_professor_account(db, schola
 
 
 @pytest.mark.asyncio
+async def test_bulk_check_eligibility_matches_professor_account_case_insensitively(
+    db, scholarship_with_config, monkeypatch
+):
+    """Mirrors assign_professor_from_profile: a lowercase account id still
+    counts as found for an uppercase advisor id, so no false warning."""
+    db.add(User(nycu_id="p000077", name="教授", role="professor", user_type="employee"))
+    await db.flush()
+    service = BatchImportService(db)
+
+    async def fake_snapshot(student_id, academic_year=None, semester=None):
+        return {"std_stdcode": student_id}
+
+    monkeypatch.setattr(service.student_service, "get_student_snapshot", fake_snapshot)
+
+    parsed_data = [{"student_id": "313554001", "sub_types": ["nstc"], "advisor_nycu_id": "P000077", "row_number": 2}]
+    warnings = await service.bulk_check_eligibility(parsed_data, scholarship_with_config.id, 114, None)
+
+    assert not [w for w in warnings if w["warning_type"] == "professor_not_found"]
+
+
+@pytest.mark.asyncio
 async def test_bulk_check_eligibility_real_check_no_missing_greenlet(db, scholarship_with_config, monkeypatch):
     """Runs the REAL check_student_eligibility with the ScholarshipType NOT in
     the session identity map (revalidate path). check_student_eligibility reads
