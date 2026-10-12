@@ -1,6 +1,7 @@
 """Pure-logic tests for the 統計各學院學生申請人數 / 獲獎人數 export service."""
 
 import io
+from types import SimpleNamespace
 
 from openpyxl import load_workbook
 
@@ -15,9 +16,9 @@ from app.services.college_stats_export_service import (
     UNSPECIFIED_SUB_TYPE_COLUMN,
     StatsRecord,
     StatsColumn,
-    build_award_stats_workbook,
     build_stats_columns,
     build_workbook,
+    scholarship_stats_columns,
     tally_college_counts,
 )
 
@@ -102,6 +103,7 @@ def test_workbook_matches_reference_layout():
         title="115學年度博士生獎學金 統計各學院學生申請人數",
         columns=columns,
         rows=tally_college_counts(records, columns),
+        sheet_name="統計各學院學生申請人數",
     )
 
     ws = load_workbook(io.BytesIO(payload)).active
@@ -116,7 +118,7 @@ def test_workbook_matches_reference_layout():
 
 def test_workbook_neutralises_formula_like_sub_type_names():
     columns = build_stats_columns([("custom", "=HYPERLINK(1)")], [])
-    payload = build_workbook(title="t", columns=columns, rows=tally_college_counts([], columns))
+    payload = build_workbook(title="t", columns=columns, rows=tally_college_counts([], columns), sheet_name="s")
     ws = load_workbook(io.BytesIO(payload)).active
     assert not str(ws["C2"].value).startswith("=")
 
@@ -137,13 +139,25 @@ def test_deactivated_sub_type_column_keeps_its_configured_name():
     assert [c.label for c in columns] == ["國科會", "自訂獎助"]
 
 
+def _scholarship(configs, inactive=()):
+    sub_type_configs = [
+        SimpleNamespace(sub_type_code=code, name=name, is_active=True, display_order=i)
+        for i, (code, name) in enumerate(configs, 1)
+    ] + [SimpleNamespace(sub_type_code=code, name=name, is_active=False, display_order=99) for code, name in inactive]
+    return SimpleNamespace(
+        sub_type_configs=sub_type_configs,
+        get_active_sub_type_configs=lambda: [c for c in sub_type_configs if c.is_active],
+    )
+
+
 def test_award_workbook_uses_award_sheet_name_and_agency_columns():
     records = [_rec(1, "C", "nstc"), _rec(2, "C", "moe_2w"), _rec(3, "E", "moe_1w")]
-    payload = build_award_stats_workbook(
+    columns = scholarship_stats_columns(_scholarship(PHD_CONFIGS), records, single_column_label=AWARD_COUNT_LABEL)
+    payload = build_workbook(
         title="115學年度博士生獎學金 統計各學院學生獲獎人數",
-        records=records,
-        sub_type_configs=PHD_CONFIGS,
-        known_names=dict(PHD_CONFIGS),
+        columns=columns,
+        rows=tally_college_counts(records, columns),
+        sheet_name=AWARD_REPORT_NAME,
     )
     ws = load_workbook(io.BytesIO(payload)).active
     assert ws.title == AWARD_REPORT_NAME
@@ -157,7 +171,12 @@ def test_award_workbook_uses_award_sheet_name_and_agency_columns():
     assert by_label[TOTAL_ROW_LABEL] == (1, 2)
 
 
-def test_award_workbook_without_sub_types_gets_single_award_column():
-    payload = build_award_stats_workbook(title="t", records=[_rec(1, "C")], sub_type_configs=[], known_names={})
-    ws = load_workbook(io.BytesIO(payload)).active
-    assert ws["C2"].value == AWARD_COUNT_LABEL
+def test_scholarship_columns_label_deactivated_sub_types_and_single_column():
+    scholarship = _scholarship([("nstc", "x")], inactive=[("custom_grant", "自訂獎助")])
+    columns = scholarship_stats_columns(
+        scholarship, [_rec(1, "C", "custom_grant")], single_column_label=AWARD_COUNT_LABEL
+    )
+    assert [c.label for c in columns] == ["國科會", "自訂獎助"]
+    assert scholarship_stats_columns(_scholarship([]), [_rec(1, "C")], single_column_label=AWARD_COUNT_LABEL) == [
+        StatsColumn(SINGLE_COLUMN_KEY, AWARD_COUNT_LABEL)
+    ]

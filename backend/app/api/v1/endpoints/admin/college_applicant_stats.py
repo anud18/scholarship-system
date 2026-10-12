@@ -22,10 +22,11 @@ from app.models.application import Application, ApplicationStatus
 from app.models.scholarship import ScholarshipType
 from app.models.user import User
 from app.services.college_stats_export_service import (
+    APPLICANT_COUNT_LABEL,
     APPLICANT_REPORT_NAME,
     StatsRecord,
-    build_stats_columns,
     build_workbook,
+    scholarship_stats_columns,
     stats_period_label,
     tally_college_counts,
 )
@@ -90,16 +91,17 @@ async def export_college_applicant_stats(
         )
         for user_id, student_data, sub_types in (await db.execute(stmt)).all()
     ]
-    columns = build_stats_columns(
-        [(c.sub_type_code, c.name) for c in scholarship.get_active_sub_type_configs()],
-        records,
-        known_names={c.sub_type_code: c.name for c in scholarship.sub_type_configs},
-    )
+    columns = scholarship_stats_columns(scholarship, records, single_column_label=APPLICANT_COUNT_LABEL)
     rows = tally_college_counts(records, columns)
 
     period = stats_period_label(academic_year, normalised_semester)
     scholarship_name = scholarship.name or scholarship.code
-    payload = build_workbook(title=f"{period}{scholarship_name} {APPLICANT_REPORT_NAME}", columns=columns, rows=rows)
+    payload = build_workbook(
+        title=f"{period}{scholarship_name} {APPLICANT_REPORT_NAME}",
+        columns=columns,
+        rows=rows,
+        sheet_name=APPLICANT_REPORT_NAME,
+    )
     filename = f"{sanitise_filename_part(f'{period}{scholarship_name}')}_{APPLICANT_REPORT_NAME}.xlsx"
 
     logger.info(

@@ -99,7 +99,9 @@ async def phd(db: AsyncSession):
     return st, config
 
 
-async def _application(db: AsyncSession, st: ScholarshipType, suffix: str, academy: str, sub_type: str) -> Application:
+async def _application(
+    db: AsyncSession, st: ScholarshipType, suffix: str, academy: str, sub_type: str, trm_academy: str | None = None
+) -> Application:
     user = await _user(db, f"award_stu_{suffix}", UserRole.student)
     application = Application(
         app_id=f"APP-{ACADEMIC_YEAR}-0-8{suffix}",
@@ -113,7 +115,12 @@ async def _application(db: AsyncSession, st: ScholarshipType, suffix: str, acade
         status=ApplicationStatus.approved,
         review_stage=ReviewStage.quota_distributed,
         agree_terms=True,
-        student_data={"std_stdcode": f"31{suffix}", "std_cname": suffix, "std_academyno": academy},
+        student_data={
+            "std_stdcode": f"31{suffix}",
+            "std_cname": suffix,
+            "std_academyno": academy,
+            **({"trm_academyno": trm_academy} if trm_academy else {}),
+        },
     )
     db.add(application)
     await db.commit()
@@ -131,7 +138,9 @@ def _sheet_counts(content: bytes) -> tuple:
     return ws, headers, counts
 
 
-async def _seed_distribution(db: AsyncSession, st: ScholarshipType, *, executed: bool = True) -> None:
+async def _seed_distribution(
+    db: AsyncSession, st: ScholarshipType, *, executed: bool = True, allocate: bool = True
+) -> None:
     ranking = CollegeRanking(
         scholarship_type_id=st.id,
         sub_type_code="default",
@@ -146,13 +155,14 @@ async def _seed_distribution(db: AsyncSession, st: ScholarshipType, *, executed:
     await db.refresh(ranking)
     rows = [
         # (student, academy, sub-type, allocated?)
-        ("d1", "C", "nstc", True),
+        ("d1", "C", "nstc", True),  # trm_academyno E: panel buckets by std first ⇒ 資訊
         ("d2", "C", "moe_1w", True),
         ("d3", "E", "moe_2w", True),
         ("d4", "E", "nstc", False),  # ranked but not allocated ⇒ not an award
     ]
     for rank, (suffix, academy, sub_type, allocated) in enumerate(rows, 1):
-        application = await _application(db, st, suffix, academy, sub_type)
+        allocated = allocated and allocate
+        application = await _application(db, st, suffix, academy, sub_type, trm_academy="E" if suffix == "d1" else None)
         db.add(
             CollegeRankingItem(
                 ranking_id=ranking.id,
@@ -201,6 +211,20 @@ async def test_distribution_award_stats_404_before_distribution_runs(admin_clien
 
 
 @pytest.mark.asyncio
+async def test_distribution_award_stats_404_when_nobody_is_allocated(admin_client, db, phd):
+    st, _ = phd
+    await _seed_distribution(db, st, allocate=False)
+
+    resp = await admin_client.get(
+        DISTRIBUTION_URL,
+        params={"scholarship_type_id": st.id, "academic_year": ACADEMIC_YEAR, "semester": "yearly"},
+    )
+
+    assert resp.status_code == 404
+    assert "尚無已分配" in resp.json()["message"]
+
+
+@pytest.mark.asyncio
 async def test_distribution_award_stats_rejects_unknown_semester(admin_client, phd):
     st, _ = phd
     resp = await admin_client.get(
@@ -210,14 +234,20 @@ async def test_distribution_award_stats_rejects_unknown_semester(admin_client, p
     assert resp.status_code == 422
 
 
-async def _seed_roster(db: AsyncSession, st: ScholarshipType, config: ScholarshipConfiguration, creator: User):
+async def _seed_roster(
+    db: AsyncSession,
+    st: ScholarshipType,
+    config: ScholarshipConfiguration,
+    creator: User,
+    roster_status: RosterStatus = RosterStatus.COMPLETED,
+):
     roster = PaymentRoster(
         roster_code="ROSTER-AWARD-2026-01",
         scholarship_configuration_id=config.id,
         period_label="2026-01",
         academic_year=ACADEMIC_YEAR,
         roster_cycle=RosterCycle.MONTHLY,
-        status=RosterStatus.COMPLETED,
+        status=roster_status,
         trigger_type=RosterTriggerType.MANUAL,
         created_by=creator.id,
         sub_type="nstc",
@@ -231,11 +261,12 @@ async def _seed_roster(db: AsyncSession, st: ScholarshipType, config: Scholarshi
         # (student, academy, allocated_sub_type snapshot, included?)
         ("r1", "C", "nstc", True),
         ("r2", "I", "nstc", True),
-        ("r3", "I", None, True),  # no item snapshot ⇒ falls back to the roster's sub_type
+        ("r3", "I", None, True),  # no item snapshot ⇒ the roster's sub_type, not the applied-for one
         ("r4", "C", "nstc", False),  # excluded / removed ⇒ not counted
     ]
     for suffix, academy, sub_type, included in rows:
-        application = await _application(db, st, suffix, academy, "nstc")
+        # Applied for moe_1w: proves the count never reads the applied-for sub-type.
+        application = await _application(db, st, suffix, academy, "moe_1w")
         db.add(
             PaymentRosterItem(
                 roster_id=roster.id,
@@ -245,6 +276,7 @@ async def _seed_roster(db: AsyncSession, st: ScholarshipType, config: Scholarshi
                 scholarship_name=st.name,
                 scholarship_amount=40000,
                 allocated_sub_type=sub_type,
+                scholarship_subtype="moe_1w",
                 is_included=included,
             )
         )
@@ -267,6 +299,16 @@ async def test_roster_award_stats_counts_included_items(admin_client, db, phd, a
     assert counts["資訊學院"] == (1, 0)
     assert counts["工學院"] == (2, 0)
     assert counts[TOTAL_ROW_LABEL] == (3, 0)
+
+
+@pytest.mark.asyncio
+async def test_roster_award_stats_409_for_unfinished_roster(admin_client, db, phd, admin):
+    st, config = phd
+    roster = await _seed_roster(db, st, config, admin, roster_status=RosterStatus.FAILED)
+
+    resp = await admin_client.get(ROSTER_URL.format(roster_id=roster.id))
+
+    assert resp.status_code == 409
 
 
 @pytest.mark.asyncio

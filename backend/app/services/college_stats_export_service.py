@@ -199,9 +199,7 @@ def tally_college_counts(records: Sequence[StatsRecord], columns: Sequence[Stats
     return rows + [StatsRow(TOTAL_ROW_LABEL, totals)]
 
 
-def build_workbook(
-    *, title: str, columns: Sequence[StatsColumn], rows: Sequence[StatsRow], sheet_name: str = APPLICANT_REPORT_NAME
-) -> bytes:
+def build_workbook(*, title: str, columns: Sequence[StatsColumn], rows: Sequence[StatsRow], sheet_name: str) -> bytes:
     """Render the count matrix in the reference sheet's style."""
     wb = Workbook()
     ws = wb.active
@@ -247,20 +245,17 @@ def build_workbook(
     return buf.getvalue()
 
 
-def build_award_stats_workbook(
-    *,
-    title: str,
-    records: Sequence[StatsRecord],
-    sub_type_configs: Sequence[Tuple[str, str]],
-    known_names: Mapping[str, str],
-) -> bytes:
-    """統計各學院學生獲獎人數 — one record per awarded (allocated) student slot."""
-    columns = build_stats_columns(
-        sub_type_configs, records, known_names=known_names, single_column_label=AWARD_COUNT_LABEL
-    )
-    return build_workbook(
-        title=title,
-        columns=columns,
-        rows=tally_college_counts(records, columns),
-        sheet_name=AWARD_REPORT_NAME,
+def scholarship_stats_columns(
+    scholarship, records: Sequence[StatsRecord], *, single_column_label: str
+) -> List[StatsColumn]:
+    """Count columns for ``scholarship`` (a ScholarshipType with sub_type_configs loaded).
+
+    The one place both the 申請人數 and 獲獎人數 sheets derive their columns
+    from the scholarship's sub-type configuration, so they label alike.
+    """
+    return build_stats_columns(
+        [(c.sub_type_code, c.name) for c in scholarship.get_active_sub_type_configs()],
+        records,
+        known_names={c.sub_type_code: c.name for c in scholarship.sub_type_configs},
+        single_column_label=single_column_label,
     )

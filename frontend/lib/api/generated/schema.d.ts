@@ -6755,7 +6755,8 @@ export interface paths {
          *     Export the per-college award count of the students included in this roster.
          *
          *     Counts the 納入造冊 items only (``is_included`` is the roster's sole
-         *     head-count criterion; manual removals are soft-excluded rows).
+         *     head-count criterion; manual removals are soft-excluded rows). Only a
+         *     finished (COMPLETED / LOCKED) roster has a final item set to count.
          */
         get: operations["export_roster_college_award_stats_api_v1_payment_rosters__roster_id__college_award_stats_export_get"];
         put?: never;
@@ -8071,7 +8072,10 @@ export interface paths {
          *
          *     Counts exactly the students the 分發結果名單 panel lists (same
          *     ``_load_allocated_groups`` loader), per college × funding agency of the
-         *     allocated sub-type. Aggregate counts only — no per-student PII leaves.
+         *     allocated sub-type. Renewals (續領生) never win a CollegeRankingItem, so —
+         *     like the panel — this sheet holds the distributed new awards only; the
+         *     per-造冊 sheet counts everyone actually paid. Aggregate counts only — no
+         *     per-student PII leaves.
          */
         get: operations["export_distribution_college_award_stats_api_v1_manual_distribution_distribution_summary_college_award_stats_export_get"];
         put?: never;
