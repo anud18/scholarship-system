@@ -109,6 +109,9 @@ services:
       # rename a non-event.)
       MINIO_BUCKET: scholarship-documents
       MINIO_SECURE: "false"
+      # Application document upload cap in bytes (config.py default is 10MB).
+      # 50MB to match staging/production.
+      MAX_FILE_SIZE: "52428800"
       # PII Encryption (issue #73): leave empty in dev to use the deterministic
       # dev key. In staging/prod a KMS sidecar populates these vars.
       PII_ENCRYPTION_KEYS: ""
