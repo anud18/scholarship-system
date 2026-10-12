@@ -15,6 +15,7 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.api.v1.endpoints.college_review._helpers import normalize_semester_value
 from app.core.deps import get_current_admin_user, get_db
 from app.db.deps import get_sync_db
 from app.db.session import AsyncSessionLocal
@@ -26,6 +27,8 @@ from app.models.scholarship import ScholarshipConfiguration, ScholarshipSubTypeC
 from app.models.user import User
 from app.schemas.application import RevokeRequest, SuspendRequest
 from app.services.application_audit_service import ApplicationAuditService
+from app.services.college_award_stats_service import award_record, build_award_stats_export
+from app.services.college_stats_export_service import stats_period_label
 from app.services.email_service import EmailService
 from app.services.manual_distribution_export_service import (
     ManualDistributionExportService,
@@ -34,7 +37,7 @@ from app.services.manual_distribution_export_service import (
 )
 from app.services.manual_distribution_service import ManualDistributionService
 from app.utils.date_utils import now_taipei_str
-from app.utils.export_download import XLSX_MEDIA_TYPE, sanitise_filename_part
+from app.utils.export_download import XLSX_MEDIA_TYPE, sanitise_filename_part, xlsx_attachment_response
 
 logger = logging.getLogger(__name__)
 
@@ -769,6 +772,55 @@ async def export_distribution_summary(
             "Content-Length": str(len(payload)),
         },
     )
+
+
+@router.get("/distribution-summary/college-award-stats/export")
+async def export_distribution_college_award_stats(
+    scholarship_type_id: int = Query(...),
+    academic_year: int = Query(..., ge=1, le=999),
+    semester: str = Query(..., pattern=r"^(first|second|yearly)$"),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_admin_user),
+):
+    """Export 統計各學院學生獲獎人數 (.xlsx) for the current 分發名單.
+
+    Counts exactly the students the 分發結果名單 panel lists (same
+    ``_load_allocated_groups`` loader), per college × funding agency of the
+    allocated sub-type. Renewals (續領生) never win a CollegeRankingItem, so —
+    like the panel — this sheet holds the distributed new awards only; the
+    per-造冊 sheet counts everyone actually paid. Aggregate counts only — no
+    per-student PII leaves.
+    """
+    groups = await _load_allocated_groups(
+        db,
+        scholarship_type_id=scholarship_type_id,
+        academic_year=academic_year,
+        semester=semester,
+    )
+    if groups is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="尚未完成分發，無法匯出")
+    if not groups:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="尚無已分配的學生可匯出")
+
+    export = await build_award_stats_export(
+        db,
+        scholarship_type_id=scholarship_type_id,
+        records=[
+            award_record(item.application.user_id, item.application.student_data, item.allocated_sub_type)
+            for group in groups
+            for item in group.items
+        ],
+        title_prefix=stats_period_label(academic_year, normalize_semester_value(semester)),
+    )
+    logger.info(
+        "distribution college-award-stats export issued: scholarship_type_id=%s year=%s semester=%s awards=%d",
+        scholarship_type_id,
+        academic_year,
+        semester,
+        export.record_count,
+        extra={"actor_user_id": current_user.id},
+    )
+    return xlsx_attachment_response(export.payload, export.filename)
 
 
 class GenerateRostersRequest(BaseModel):

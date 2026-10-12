@@ -879,3 +879,25 @@ export async function exportDistributionSummary(params: {
     "無法匯出分發名單"
   );
 }
+
+/**
+ * Download 統計各學院學生獲獎人數 (.xlsx) for the current 分發名單.
+ *
+ * Endpoint: GET /api/v1/manual-distribution/distribution-summary/college-award-stats/export
+ */
+export async function exportDistributionCollegeAwardStats(params: {
+  scholarshipTypeId: number;
+  academicYear: number;
+  semester: string;
+}): Promise<{ blob: Blob; filename: string }> {
+  const search = new URLSearchParams();
+  search.set("scholarship_type_id", String(params.scholarshipTypeId));
+  search.set("academic_year", String(params.academicYear));
+  search.set("semester", params.semester);
+  return fetchBinaryExport(
+    "/api/v1/manual-distribution/distribution-summary/college-award-stats/export",
+    search,
+    `${params.academicYear}學年度_統計各學院學生獲獎人數.xlsx`,
+    "無法匯出統計各學院學生獲獎人數"
+  );
+}

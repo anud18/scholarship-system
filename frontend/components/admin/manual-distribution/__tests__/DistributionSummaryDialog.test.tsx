@@ -33,11 +33,14 @@ async function clickExportItem(label: string) {
 }
 
 const mockExport = jest.fn();
+const mockAwardStatsExport = jest.fn();
 const mockTriggerBlobDownload = jest.fn();
 const mockToast = { success: jest.fn(), error: jest.fn() };
 
 jest.mock("@/lib/api/modules/manual-distribution", () => ({
   exportDistributionSummary: (...args: unknown[]) => mockExport(...args),
+  exportDistributionCollegeAwardStats: (...args: unknown[]) =>
+    mockAwardStatsExport(...args),
   resolveCollegeName: (
     names: Map<string, string>,
     code: string,
@@ -148,6 +151,27 @@ describe("DistributionSummaryDialog", () => {
 
     await waitFor(() => expect(mockExport).toHaveBeenCalledTimes(1));
     expect(mockExport.mock.calls[0][0].format).toBe("pdf");
+  });
+
+  it("exports 統計各學院獲獎人數 for the current selection", async () => {
+    mockAwardStatsExport.mockResolvedValue({
+      blob: new Blob(["x"]),
+      filename: "統計各學院學生獲獎人數.xlsx",
+    });
+    render(<DistributionSummaryDialog {...defaults} summary={summary()} isLoading={false} />);
+    await clickExportItem("統計各學院獲獎人數");
+
+    await waitFor(() => expect(mockAwardStatsExport).toHaveBeenCalledTimes(1));
+    expect(mockAwardStatsExport).toHaveBeenCalledWith({
+      scholarshipTypeId: 7,
+      academicYear: 114,
+      semester: "yearly",
+    });
+    expect(mockExport).not.toHaveBeenCalled();
+    expect(mockTriggerBlobDownload).toHaveBeenCalledWith({
+      blob: expect.any(Blob),
+      filename: "統計各學院學生獲獎人數.xlsx",
+    });
   });
 
   it("surfaces the backend message when the export fails", async () => {

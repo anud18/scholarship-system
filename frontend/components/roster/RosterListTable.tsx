@@ -25,6 +25,7 @@ import {
   Lock,
 } from "lucide-react";
 import { RosterDetailDialog } from "./RosterDetailDialog";
+import { RosterCollegeAwardStatsButton } from "./RosterCollegeAwardStatsButton";
 import { apiClient } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -440,6 +441,11 @@ export function RosterListTable({
                                 ? "生成中..."
                                 : "重新生成"}
                             </Button>
+                          )}
+                          {period.roster_id && (
+                            <RosterCollegeAwardStatsButton
+                              rosterId={period.roster_id}
+                            />
                           )}
                           <Button
                             size="sm"

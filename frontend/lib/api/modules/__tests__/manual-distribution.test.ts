@@ -14,6 +14,7 @@
 
 import {
   createManualDistributionApi,
+  exportDistributionCollegeAwardStats,
   exportDistributionSummary,
   isCancelledAllocation,
   mergeSuggestions,
@@ -705,5 +706,31 @@ describe("exportDistributionSummary", () => {
         semester: "yearly",
       })
     ).rejects.toThrow("無法匯出分發名單");
+  });
+});
+
+describe("exportDistributionCollegeAwardStats", () => {
+  it("hits the award-stats export with the selection params and falls back to a dated filename", async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      headers: { get: jest.fn().mockReturnValue("") },
+      blob: jest.fn().mockResolvedValue(new Blob(["xlsx"])),
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const result = await exportDistributionCollegeAwardStats({
+      scholarshipTypeId: 7,
+      academicYear: 114,
+      semester: "yearly",
+    });
+
+    const url = fetchMock.mock.calls[0][0] as string;
+    expect(url).toContain(
+      "/api/v1/manual-distribution/distribution-summary/college-award-stats/export?"
+    );
+    expect(url).toContain("scholarship_type_id=7");
+    expect(url).toContain("academic_year=114");
+    expect(url).toContain("semester=yearly");
+    expect(result.filename).toBe("114學年度_統計各學院學生獲獎人數.xlsx");
   });
 });

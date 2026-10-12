@@ -9,10 +9,8 @@ deleted) for one scholarship and academic year, per college × funding agency.
 
 import logging
 from typing import Optional
-from urllib.parse import quote as _url_quote
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
-from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -23,16 +21,17 @@ from app.db.deps import get_db
 from app.models.application import Application, ApplicationStatus
 from app.models.scholarship import ScholarshipType
 from app.models.user import User
-from app.services.college_applicant_stats_export_service import (
-    REPORT_NAME,
-    ApplicantRecord,
-    build_stats_columns,
+from app.services.college_stats_export_service import (
+    APPLICANT_COUNT_LABEL,
+    APPLICANT_REPORT_NAME,
+    StatsRecord,
     build_workbook,
+    scholarship_stats_columns,
+    stats_period_label,
     tally_college_counts,
 )
-from app.utils.academic_period import format_academic_period
 from app.utils.application_helpers import get_academy_code_from_data
-from app.utils.export_download import XLSX_MEDIA_TYPE, sanitise_filename_part
+from app.utils.export_download import sanitise_filename_part, xlsx_attachment_response
 
 logger = logging.getLogger(__name__)
 
@@ -52,12 +51,6 @@ async def _load_scholarship(db: AsyncSession, identifier: str) -> ScholarshipTyp
     if scholarship is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此獎學金類型")
     return scholarship
-
-
-def _period_label(academic_year: int, semester: Optional[str]) -> str:
-    if semester is None:
-        return f"{academic_year}學年度"
-    return format_academic_period(academic_year, semester)
 
 
 @router.get("/scholarships/{scholarship_identifier}/college-applicant-stats/export")
@@ -91,24 +84,25 @@ async def export_college_applicant_stats(
             else Application.semester == normalised_semester
         )
     records = [
-        ApplicantRecord(
+        StatsRecord(
             user_id=user_id,
             academy_code=get_academy_code_from_data(student_data or {}),
             sub_type_codes=tuple(sub_types or ()),
         )
         for user_id, student_data, sub_types in (await db.execute(stmt)).all()
     ]
-    columns = build_stats_columns(
-        [(c.sub_type_code, c.name) for c in scholarship.get_active_sub_type_configs()],
-        records,
-        known_names={c.sub_type_code: c.name for c in scholarship.sub_type_configs},
-    )
+    columns = scholarship_stats_columns(scholarship, records, single_column_label=APPLICANT_COUNT_LABEL)
     rows = tally_college_counts(records, columns)
 
-    period = _period_label(academic_year, normalised_semester)
+    period = stats_period_label(academic_year, normalised_semester)
     scholarship_name = scholarship.name or scholarship.code
-    payload = build_workbook(title=f"{period}{scholarship_name} {REPORT_NAME}", columns=columns, rows=rows)
-    filename = f"{sanitise_filename_part(f'{period}{scholarship_name}')}_{REPORT_NAME}.xlsx"
+    payload = build_workbook(
+        title=f"{period}{scholarship_name} {APPLICANT_REPORT_NAME}",
+        columns=columns,
+        rows=rows,
+        sheet_name=APPLICANT_REPORT_NAME,
+    )
+    filename = f"{sanitise_filename_part(f'{period}{scholarship_name}')}_{APPLICANT_REPORT_NAME}.xlsx"
 
     logger.info(
         "college-applicant-stats export issued: scholarship=%s year=%s semester=%s applications=%d",
@@ -119,11 +113,4 @@ async def export_college_applicant_stats(
         extra={"actor_user_id": current_user.id},
     )
 
-    return StreamingResponse(
-        iter([payload]),
-        media_type=XLSX_MEDIA_TYPE,
-        headers={
-            "Content-Disposition": f"attachment; filename*=UTF-8''{_url_quote(filename, safe='')}",
-            "Content-Length": str(len(payload)),
-        },
-    )
+    return xlsx_attachment_response(payload, filename)

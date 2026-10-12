@@ -6742,6 +6742,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/payment-rosters/{roster_id}/college-award-stats/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Roster College Award Stats
+         * @description 匯出該份造冊的統計各學院學生獲獎人數 (.xlsx)
+         *     Export the per-college award count of the students included in this roster.
+         *
+         *     Counts the 納入造冊 items only (``is_included`` is the roster's sole
+         *     head-count criterion; manual removals are soft-excluded rows). Only a
+         *     finished (COMPLETED / LOCKED) roster has a final item set to count.
+         */
+        get: operations["export_roster_college_award_stats_api_v1_payment_rosters__roster_id__college_award_stats_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/payment-rosters/{roster_id}/audit-logs": {
         parameters: {
             query?: never;
@@ -8026,6 +8051,33 @@ export interface paths {
          *     like the 學生資料彙整表 export does.
          */
         get: operations["export_distribution_summary_api_v1_manual_distribution_distribution_summary_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/distribution-summary/college-award-stats/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Distribution College Award Stats
+         * @description Export 統計各學院學生獲獎人數 (.xlsx) for the current 分發名單.
+         *
+         *     Counts exactly the students the 分發結果名單 panel lists (same
+         *     ``_load_allocated_groups`` loader), per college × funding agency of the
+         *     allocated sub-type. Renewals (續領生) never win a CollegeRankingItem, so —
+         *     like the panel — this sheet holds the distributed new awards only; the
+         *     per-造冊 sheet counts everyone actually paid. Aggregate counts only — no
+         *     per-student PII leaves.
+         */
+        get: operations["export_distribution_college_award_stats_api_v1_manual_distribution_distribution_summary_college_award_stats_export_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -22436,6 +22488,37 @@ export interface operations {
             };
         };
     };
+    export_roster_college_award_stats_api_v1_payment_rosters__roster_id__college_award_stats_export_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roster_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_roster_audit_logs_api_v1_payment_rosters__roster_id__audit_logs_get: {
         parameters: {
             query?: {
@@ -24480,6 +24563,39 @@ export interface operations {
                 semester: string;
                 /** @description Output format: xlsx (default) or pdf */
                 format?: "xlsx" | "pdf";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_distribution_college_award_stats_api_v1_manual_distribution_distribution_summary_college_award_stats_export_get: {
+        parameters: {
+            query: {
+                scholarship_type_id: number;
+                academic_year: number;
+                semester: string;
             };
             header?: never;
             path?: never;

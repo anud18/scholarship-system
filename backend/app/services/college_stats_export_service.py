@@ -1,16 +1,17 @@
-"""統計各學院學生申請人數 (per-college applicant count) Excel export.
+"""Per-college student count Excel exports — 統計各學院學生申請人數 / 獲獎人數.
 
-Pure logic — the admin endpoint loads and authorizes the applications, then
-hands this module plain ``ApplicantRecord`` values. Layout follows the office's
-reference sheet: 編號 / 學院 / one column per funding agency (國科會, 教育部, …),
-one row per college in the office's fixed order.
+Pure logic — the endpoints load and authorize the source rows (applications for
+the 申請人數 sheet; allocated distribution / roster items for the 獲獎人數
+sheet), then hand this module plain ``StatsRecord`` values. Both sheets share
+the office's reference layout: 編號 / 學院 / one column per funding agency
+(國科會, 教育部, …), one row per college in the office's fixed order.
 
 Columns are derived from the scholarship's own sub-type configuration, so a
 scholarship without the 國科會/教育部 sub-types still gets correct columns.
 Sub-types sharing a funding agency (``moe_1w`` / ``moe_2w`` → 教育部) collapse
 into one column; any other sub-type gets its own column under its configured
-name. A student is counted once per column even if they picked several
-sub-types that map to it.
+name. A student is counted once per column even if they picked (or were
+allocated) several sub-types that map to it.
 """
 
 from __future__ import annotations
@@ -23,11 +24,13 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
 
 from app.core.college_mappings import COLLEGE_MAPPINGS
+from app.utils.academic_period import format_academic_period
 from app.services.export_table_chassis import apply_xlsx_borders
 from app.utils.excel_safety import sanitize_excel_cell
 from app.utils.sub_type_agency import sub_type_agency_label
 
-REPORT_NAME = "統計各學院學生申請人數"
+APPLICANT_REPORT_NAME = "統計各學院學生申請人數"
+AWARD_REPORT_NAME = "統計各學院學生獲獎人數"
 
 # (row label, SIS academy codes counted in that row) in the office's reference
 # order. Labels are the colleges' full official names (the academies table only
@@ -57,7 +60,11 @@ COLLEGE_STATS_LAYOUT: Tuple[Tuple[str, FrozenSet[str]], ...] = (
 
 UNKNOWN_COLLEGE_LABEL = "未知學院"
 TOTAL_ROW_LABEL = "合計"
-ALL_APPLICANTS_COLUMN = "申請人數"
+APPLICANT_COUNT_LABEL = "申請人數"
+AWARD_COUNT_LABEL = "獲獎人數"
+# Key of the lone count column a scholarship without sub-types gets; its label
+# is the caller's (申請人數 / 獲獎人數).
+SINGLE_COLUMN_KEY = "__all__"
 UNSPECIFIED_SUB_TYPE_COLUMN = "未指定類別"
 
 # Placeholder sub-type codes used by scholarships that have no real sub-types.
@@ -72,8 +79,8 @@ _COUNT_COL_WIDTH = 16
 
 
 @dataclass(frozen=True)
-class ApplicantRecord:
-    """The three facts the tally needs from one application."""
+class StatsRecord:
+    """The three facts the tally needs from one counted row (application / award)."""
 
     user_id: int
     academy_code: Optional[str]
@@ -92,6 +99,13 @@ class StatsRow:
     counts: Tuple[int, ...]
 
 
+def stats_period_label(academic_year: int, semester: Optional[str]) -> str:
+    """Title period: ``115學年度`` for a whole year (semester None), else ``115學年度第一學期``."""
+    if semester is None:
+        return f"{academic_year}學年度"
+    return format_academic_period(academic_year, semester)
+
+
 def _normalize_code(code: Optional[str]) -> str:
     return (code or "").lower().strip()
 
@@ -106,8 +120,9 @@ def _real_sub_types(codes: Iterable[str]) -> List[str]:
 
 def build_stats_columns(
     sub_type_configs: Sequence[Tuple[str, str]],
-    records: Sequence[ApplicantRecord],
+    records: Sequence[StatsRecord],
     known_names: Optional[Mapping[str, str]] = None,
+    single_column_label: str = APPLICANT_COUNT_LABEL,
 ) -> List[StatsColumn]:
     """Columns for the count matrix.
 
@@ -116,7 +131,7 @@ def build_stats_columns(
     active (e.g. a deactivated sub-type) are appended so no applicant is
     silently dropped, labelled from ``known_names`` (every configured
     sub-type, active or not). A scholarship with no real sub-types gets a
-    single 申請人數 column.
+    single ``single_column_label`` column.
     """
     names = {_normalize_code(code): name for code, name in (known_names or {}).items()}
     names.update({_normalize_code(code): name for code, name in sub_type_configs})
@@ -133,15 +148,15 @@ def build_stats_columns(
         columns.append(StatsColumn(key=key, label=sub_type_agency_label(code) or names.get(code) or code))
 
     if not columns:
-        return [StatsColumn(key=ALL_APPLICANTS_COLUMN, label=ALL_APPLICANTS_COLUMN)]
+        return [StatsColumn(key=SINGLE_COLUMN_KEY, label=single_column_label)]
     if any(not _real_sub_types(r.sub_type_codes) for r in records):
         columns.append(StatsColumn(key=UNSPECIFIED_SUB_TYPE_COLUMN, label=UNSPECIFIED_SUB_TYPE_COLUMN))
     return columns
 
 
-def _record_column_keys(record: ApplicantRecord, column_keys: Set[str]) -> Set[str]:
-    if ALL_APPLICANTS_COLUMN in column_keys:
-        return {ALL_APPLICANTS_COLUMN}
+def _record_column_keys(record: StatsRecord, column_keys: Set[str]) -> Set[str]:
+    if SINGLE_COLUMN_KEY in column_keys:
+        return {SINGLE_COLUMN_KEY}
     keys = {_column_key(c) for c in _real_sub_types(record.sub_type_codes)}
     return keys or {UNSPECIFIED_SUB_TYPE_COLUMN}
 
@@ -152,7 +167,7 @@ def _row_label_for_extra_code(code: str) -> str:
     return COLLEGE_MAPPINGS.get(code) or f"{UNKNOWN_COLLEGE_LABEL}（{code}）"
 
 
-def tally_college_counts(records: Sequence[ApplicantRecord], columns: Sequence[StatsColumn]) -> List[StatsRow]:
+def tally_college_counts(records: Sequence[StatsRecord], columns: Sequence[StatsColumn]) -> List[StatsRow]:
     """One row per layout college, then any colleges outside the layout, then 合計.
 
     Every layout row is emitted even at zero (the sheet is a fixed form). Cell
@@ -184,11 +199,11 @@ def tally_college_counts(records: Sequence[ApplicantRecord], columns: Sequence[S
     return rows + [StatsRow(TOTAL_ROW_LABEL, totals)]
 
 
-def build_workbook(*, title: str, columns: Sequence[StatsColumn], rows: Sequence[StatsRow]) -> bytes:
+def build_workbook(*, title: str, columns: Sequence[StatsColumn], rows: Sequence[StatsRow], sheet_name: str) -> bytes:
     """Render the count matrix in the reference sheet's style."""
     wb = Workbook()
     ws = wb.active
-    ws.title = REPORT_NAME
+    ws.title = sheet_name
 
     font = Font(name=_FONT_NAME, size=_FONT_SIZE)
     centered = Alignment(horizontal="center", vertical="center", wrap_text=True)
@@ -228,3 +243,19 @@ def build_workbook(*, title: str, columns: Sequence[StatsColumn], rows: Sequence
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+def scholarship_stats_columns(
+    scholarship, records: Sequence[StatsRecord], *, single_column_label: str
+) -> List[StatsColumn]:
+    """Count columns for ``scholarship`` (a ScholarshipType with sub_type_configs loaded).
+
+    The one place both the 申請人數 and 獲獎人數 sheets derive their columns
+    from the scholarship's sub-type configuration, so they label alike.
+    """
+    return build_stats_columns(
+        [(c.sub_type_code, c.name) for c in scholarship.get_active_sub_type_configs()],
+        records,
+        known_names={c.sub_type_code: c.name for c in scholarship.sub_type_configs},
+        single_column_label=single_column_label,
+    )
