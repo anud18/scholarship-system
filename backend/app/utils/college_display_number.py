@@ -5,12 +5,18 @@ code. It does NOT replace the SIS code mapping — codes stay the identity
 everywhere; the number is only prefixed onto rendered college names.
 
 Mirrored in ``frontend/lib/college-display-number.ts`` — keep the two in sync.
+Every key must be a code in ``app.core.college_mappings.ACADEMY_TABLE`` (or a
+documented SIS alias of one); ``test_college_display_number.py`` enforces it.
+Comments carry the 對照表's full names; the system shows the short SIS names.
 """
 
 from typing import Any, Mapping, Optional
 
+from app.core.college_mappings import COLLEGE_MAPPINGS
+
 COLLEGE_DISPLAY_NUMBERS: dict[str, int] = {
     "A": 1,  # 人文藝術與社會學院
+    "8": 1,  # legacy SIS alias of A (人社院), see college_mappings.py
     "I": 2,  # 工學院
     "B": 3,  # 工程生物科學學院
     "K": 4,  # 客家文化學院
@@ -47,6 +53,15 @@ def format_college_name(code: Optional[str], name: Optional[str]) -> str:
 
 
 def format_student_college(student_data: Mapping[str, Any]) -> str:
-    """Numbered 學院 label for an application's SIS snapshot (``student_data``)."""
+    """Numbered 學院 label for an application's SIS snapshot (``student_data``).
+
+    The number and the name must describe the same college, so the code is paired
+    with the name it came with: the term row (trm_academyno + trm_academyname)
+    first, else the base row's std_academyno with its COLLEGE_MAPPINGS name.
+    std_academyno only fills in for a term row that carries a name but no code.
+    """
+    term_name = student_data.get("trm_academyname")
+    if term_name:
+        return format_college_name(student_data.get("trm_academyno") or student_data.get("std_academyno"), term_name)
     code = student_data.get("std_academyno") or student_data.get("trm_academyno")
-    return format_college_name(code, student_data.get("trm_academyname"))
+    return format_college_name(code, COLLEGE_MAPPINGS.get(str(code).strip()) if code else None)

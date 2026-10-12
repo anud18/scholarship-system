@@ -121,6 +121,13 @@ export function UserPermissionManagement() {
     Array<{ id: number; code: string; name: string }>
   >([]);
 
+  // Unresolved codes (academies still loading / unknown) show the bare code,
+  // never a numbered code like "6. C".
+  const renderCollegeBadgeLabel = (collegeCode: string) => {
+    const name = academies.find(a => a.code === collegeCode)?.name;
+    return name ? formatCollegeName(collegeCode, name) : collegeCode;
+  };
+
   // Fetch users
   const fetchUsers = async () => {
     setLoadingUsers(true);
@@ -766,10 +773,7 @@ export function UserPermissionManagement() {
                                 variant="outline"
                                 className="text-xs px-2 py-1 rounded-full whitespace-nowrap border-indigo-300 text-indigo-700 bg-indigo-50"
                               >
-                                {formatCollegeName(
-                                  user.college_code,
-                                  academies.find(a => a.code === user.college_code)?.name || user.college_code
-                                )}
+                                {renderCollegeBadgeLabel(user.college_code)}
                               </Badge>
                             )}
                           </div>

@@ -10,6 +10,7 @@
 
 export const COLLEGE_DISPLAY_NUMBERS: Readonly<Record<string, number>> = {
   A: 1, // 人文藝術與社會學院
+  "8": 1, // legacy SIS alias of A (人社院)
   I: 2, // 工學院
   B: 3, // 工程生物科學學院
   K: 4, // 客家文化學院
@@ -30,12 +31,19 @@ export const COLLEGE_DISPLAY_NUMBERS: Readonly<Record<string, number>> = {
   F: 19, // 產學創新研究學院
 };
 
-export function getCollegeDisplayNumber(code: string): number | undefined {
-  return COLLEGE_DISPLAY_NUMBERS[code.trim()];
+export function getCollegeDisplayNumber(
+  code: string | null | undefined
+): number | undefined {
+  const key = code?.trim();
+  if (!key || !Object.hasOwn(COLLEGE_DISPLAY_NUMBERS, key)) return undefined;
+  return COLLEGE_DISPLAY_NUMBERS[key];
 }
 
 /** "6. 資訊學院" for numbered codes; the bare name otherwise. */
-export function formatCollegeName(code: string, name: string): string {
+export function formatCollegeName(
+  code: string | null | undefined,
+  name: string
+): string {
   const number = getCollegeDisplayNumber(code);
   return number === undefined ? name : `${number}. ${name}`;
 }

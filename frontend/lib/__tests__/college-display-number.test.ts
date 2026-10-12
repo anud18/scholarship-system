@@ -5,9 +5,17 @@ import {
 } from "../college-display-number";
 
 describe("college-display-number", () => {
-  it("numbers 1..19 exactly once", () => {
-    const numbers = Object.values(COLLEGE_DISPLAY_NUMBERS).sort((a, b) => a - b);
+  it("numbers 1..19, with only legacy code 8 aliasing A", () => {
+    const { "8": legacy, ...rest } = COLLEGE_DISPLAY_NUMBERS;
+    expect(legacy).toBe(COLLEGE_DISPLAY_NUMBERS.A);
+    const numbers = Object.values(rest).sort((a, b) => a - b);
     expect(numbers).toEqual(Array.from({ length: 19 }, (_, i) => i + 1));
+  });
+
+  it("ignores prototype keys and nullish codes", () => {
+    expect(formatCollegeName("constructor", "x")).toBe("x");
+    expect(formatCollegeName(null, "x")).toBe("x");
+    expect(formatCollegeName(undefined, "x")).toBe("x");
   });
 
   it("prefixes numbered colleges with 'N. '", () => {
