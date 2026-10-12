@@ -1696,11 +1696,11 @@ export function EnhancedStudentPortal({
                               <p className="text-sm text-gray-600">
                                 {formatDeadline(
                                   scholarship.application_start_date
-                                )}{" "}
+                                ) ?? "-"}{" "}
                                 -{" "}
                                 {formatDeadline(
                                   scholarship.application_end_date
-                                )}
+                                ) ?? "-"}
                               </p>
                             </div>
                           </div>

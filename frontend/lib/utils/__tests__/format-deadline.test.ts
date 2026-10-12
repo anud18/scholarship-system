@@ -1,21 +1,21 @@
 import { formatDeadline } from "@/lib/utils/format-deadline";
 
 describe("formatDeadline", () => {
-  // Built from local wall-clock parts so the assertions hold in any TZ.
-  const localDeadline = new Date(2026, 9, 31, 23, 59, 59);
-
-  it("shows the date and the closing minute for a Date", () => {
-    expect(formatDeadline(localDeadline)).toBe("2026/10/31 23:59");
+  it("renders an API UTC instant in Taipei time to the minute", () => {
+    // 15:59:59Z is 23:59 in Taipei (UTC+8), whatever the browser zone.
+    expect(formatDeadline("2026-10-31T15:59:59Z")).toBe("2026/10/31 23:59");
   });
 
-  it("converts an API UTC ISO string to local wall-clock time", () => {
-    expect(formatDeadline(localDeadline.toISOString())).toBe(
-      "2026/10/31 23:59"
+  it("rolls the date over when the Taipei offset crosses midnight", () => {
+    expect(formatDeadline("2026-10-31T16:00:00+00:00")).toBe(
+      "2026/11/01 00:00"
     );
   });
 
-  it("pads single-digit months, days, hours and minutes", () => {
-    expect(formatDeadline(new Date(2026, 0, 5, 9, 5))).toBe("2026/01/05 09:05");
+  it("accepts a Date and pads single-digit parts", () => {
+    expect(formatDeadline(new Date("2026-01-05T01:05:00Z"))).toBe(
+      "2026/01/05 09:05"
+    );
   });
 
   it.each([null, undefined, "", "not-a-date"])(
