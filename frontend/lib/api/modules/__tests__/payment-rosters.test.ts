@@ -30,6 +30,7 @@ jest.mock("../../typed-client", () => ({
       GET: jest.fn(),
       POST: jest.fn(),
     },
+    getToken: jest.fn(() => "test-token"),
   },
 }));
 
@@ -308,5 +309,32 @@ describe("restoreRosterItem", () => {
     const api = createPaymentRostersApi();
     await api.restoreRosterItem(1, 2);
     expect(mockedRaw.POST.mock.calls[0][1].body).toEqual({ reason_note: null });
+  });
+});
+
+describe("exportCollegeAwardStats", () => {
+  it("downloads the roster-scoped 統計各學院學生獲獎人數 with Bearer auth", async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      headers: {
+        get: jest
+          .fn()
+          .mockReturnValue(
+            "attachment; filename*=UTF-8''ROSTER-1_%E7%B5%B1%E8%A8%88.xlsx"
+          ),
+      },
+      blob: jest.fn().mockResolvedValue(new Blob(["xlsx"])),
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const result = await createPaymentRostersApi().exportCollegeAwardStats(42);
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "/api/v1/payment-rosters/42/college-award-stats/export"
+    );
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe(
+      "Bearer test-token"
+    );
+    expect(result.filename).toBe("ROSTER-1_統計.xlsx");
   });
 });

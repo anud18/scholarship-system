@@ -9,6 +9,9 @@ package — needed them too.
 """
 
 import re
+from urllib.parse import quote
+
+from fastapi.responses import StreamingResponse
 
 XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 ZIP_MEDIA_TYPE = "application/zip"
@@ -25,3 +28,15 @@ def sanitise_filename_part(value: str) -> str:
     download never gets a nameless component.
     """
     return _UNSAFE_FILENAME_RE.sub("_", value).strip() or "untitled"
+
+
+def xlsx_attachment_response(payload: bytes, filename: str) -> StreamingResponse:
+    """Stream an in-memory .xlsx as an RFC 5987 attachment with Content-Length."""
+    return StreamingResponse(
+        iter([payload]),
+        media_type=XLSX_MEDIA_TYPE,
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename, safe='')}",
+            "Content-Length": str(len(payload)),
+        },
+    )

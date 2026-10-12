@@ -51,12 +51,14 @@ from app.schemas.roster import (
     RosterResponse,
     RosterStatisticsResponse,
 )
+from app.services.college_award_stats_service import build_award_stats_export
 from app.services.excel_export_service import ExcelExportService
 from app.services.roster_regeneration_service import RosterRegenerationService
 from app.services.roster_service import RosterService
 from app.services.student_verification_service import StudentVerificationService
 from app.utils.academic_period import get_roster_period_dates
 from app.utils.bank_account_fields import BANK_ACCOUNT_FIELD_LOOKUP
+from app.utils.export_download import xlsx_attachment_response
 from app.utils.pii_masking import mask_id_number
 
 logger = logging.getLogger(__name__)
@@ -2150,6 +2152,59 @@ async def delete_roster(
         logger.exception(f"Failed to delete roster {roster_id}")
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="刪除造冊失敗") from e
+
+
+@router.get("/{roster_id}/college-award-stats/export")
+async def export_roster_college_award_stats(
+    roster_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    匯出該份造冊的統計各學院學生獲獎人數 (.xlsx)
+    Export the per-college award count of the students included in this roster.
+
+    Counts the 納入造冊 items only (``is_included`` is the roster's sole
+    head-count criterion; manual removals are soft-excluded rows).
+    """
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
+    roster = (
+        await db.execute(
+            select(PaymentRoster)
+            .options(selectinload(PaymentRoster.scholarship_configuration))
+            .where(PaymentRoster.id == roster_id)
+        )
+    ).scalar_one_or_none()
+    if not roster:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到指定的造冊")
+
+    items = (
+        (
+            await db.execute(
+                select(PaymentRosterItem)
+                .options(selectinload(PaymentRosterItem.application))
+                .where(PaymentRosterItem.roster_id == roster_id, PaymentRosterItem.is_included.is_(True))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    export = await build_award_stats_export(
+        db,
+        scholarship_type_id=roster.scholarship_configuration.scholarship_type_id,
+        awards=[
+            (item.application, item.allocated_sub_type or roster.sub_type or item.scholarship_subtype) for item in items
+        ],
+        title_prefix=f"{roster.academic_year}學年度 {roster.period_label} 造冊 ",
+        filename_stem=roster.roster_code,
+    )
+    logger.info(
+        "roster college-award-stats export issued: roster_id=%s awards=%d",
+        roster_id,
+        export.record_count,
+        extra={"actor_user_id": current_user.id},
+    )
+    return xlsx_attachment_response(export.payload, export.filename)
 
 
 @router.get("/{roster_id}/audit-logs")

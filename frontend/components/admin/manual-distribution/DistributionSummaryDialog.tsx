@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Download, Eye, FileSpreadsheet, FileText, Loader2 } from "lucide-react";
+import { BarChart3, Download, Eye, FileSpreadsheet, FileText, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  exportDistributionCollegeAwardStats,
   exportDistributionSummary,
   resolveCollegeName,
   type DistributionSummaryResult,
@@ -33,7 +34,8 @@ interface DistributionSummaryDialogProps {
 /**
  * The 分發結果名單 modal: allocated students grouped by sub-type × 年度配額,
  * with 匯出 Excel / PDF backed by GET /manual-distribution/distribution-summary/export
- * (the backend export reads through the same loader as the list shown here).
+ * (the backend export reads through the same loader as the list shown here),
+ * plus 統計各學院學生獲獎人數 counted from the same list.
  */
 export function DistributionSummaryDialog({
   summary,
@@ -49,7 +51,7 @@ export function DistributionSummaryDialog({
 
   const hasRows = !!summary && summary.groups.length > 0;
 
-  const handleExport = async (format: "xlsx" | "pdf") => {
+  const handleExport = async (format: "xlsx" | "pdf" | "college-award-stats") => {
     // The modal only opens after a load with valid selections, but the guard
     // keeps a stale/cleared selection from sending academic_year=undefined.
     // Say so rather than no-opping — a dead button reads as a broken export.
@@ -63,12 +65,11 @@ export function DistributionSummaryDialog({
       // resolveCollegeName above, so a dynamic import would split nothing. The
       // lazy-import rule in frontend/CLAUDE.md targets heavy libs (xlsx,
       // react-pdf); rendering happens server-side here.
-      const result = await exportDistributionSummary({
-        scholarshipTypeId,
-        academicYear,
-        semester,
-        format,
-      });
+      const params = { scholarshipTypeId, academicYear, semester };
+      const result =
+        format === "college-award-stats"
+          ? await exportDistributionCollegeAwardStats(params)
+          : await exportDistributionSummary({ ...params, format });
       triggerBlobDownload(result);
       toast.success("匯出成功");
     } catch (e) {
@@ -212,6 +213,10 @@ export function DistributionSummaryDialog({
               <DropdownMenuItem onClick={() => handleExport("pdf")}>
                 <FileText className="mr-2 h-4 w-4" />
                 匯出 PDF
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport("college-award-stats")}>
+                <BarChart3 className="mr-2 h-4 w-4" />
+                統計各學院獲獎人數
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
