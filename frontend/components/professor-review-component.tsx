@@ -39,6 +39,7 @@ import apiClient, { Application, ApiResponse } from "@/lib/api";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import dynamic from "next/dynamic";
 import { User } from "@/types/user";
+import { formatDeadline } from "@/lib/utils/format-deadline";
 
 // The shared detail dialog is large; only fetch it once a professor opens one.
 const ApplicationReviewDialog = dynamic(
@@ -640,6 +641,7 @@ function ProfessorReviewComponentInner({
                           <TableHead>學生資訊</TableHead>
                           <TableHead>就讀學期數</TableHead>
                           <TableHead>獎學金類型</TableHead>
+                          <TableHead>審查截止</TableHead>
                           <TableHead>提交日期</TableHead>
                           <TableHead>狀態</TableHead>
                           <TableHead>操作</TableHead>
@@ -670,6 +672,11 @@ function ProfessorReviewComponentInner({
                                   </Badge>
                                 )}
                               </div>
+                            </TableCell>
+                            <TableCell>
+                              {formatDeadline(
+                                app.scholarship_configuration?.professor_review_end
+                              ) ?? "未設定"}
                             </TableCell>
                             <TableCell>
                               {app.submitted_at
@@ -748,7 +755,15 @@ function ProfessorReviewComponentInner({
                               <dt className="text-muted-foreground text-xs">就讀學期數</dt>
                               <dd>{app.student_data?.std_termcount || "-"}</dd>
                             </div>
-                            <div className="col-span-2">
+                            <div>
+                              <dt className="text-muted-foreground text-xs">審查截止</dt>
+                              <dd>
+                                {formatDeadline(
+                                  app.scholarship_configuration?.professor_review_end
+                                ) ?? "未設定"}
+                              </dd>
+                            </div>
+                            <div>
                               <dt className="text-muted-foreground text-xs">提交日期</dt>
                               <dd>
                                 {app.submitted_at

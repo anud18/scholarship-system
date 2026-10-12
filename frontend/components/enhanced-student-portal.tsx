@@ -82,6 +82,7 @@ import api, {
 import { ApplicationStatus } from "@/lib/enums";
 import { getApplicationTimeline } from "@/lib/utils/application-helpers";
 import { clsx } from "@/lib/utils";
+import { formatDeadline } from "@/lib/utils/format-deadline";
 import { User } from "@/types/user";
 
 // 使用API的Application類型
@@ -1693,13 +1694,13 @@ export function EnhancedStudentPortal({
                             </div>
                             <div className="p-3">
                               <p className="text-sm text-gray-600">
-                                {new Date(
+                                {formatDeadline(
                                   scholarship.application_start_date
-                                ).toLocaleDateString()}{" "}
+                                ) ?? "-"}{" "}
                                 -{" "}
-                                {new Date(
+                                {formatDeadline(
                                   scholarship.application_end_date
-                                ).toLocaleDateString()}
+                                ) ?? "-"}
                               </p>
                             </div>
                           </div>

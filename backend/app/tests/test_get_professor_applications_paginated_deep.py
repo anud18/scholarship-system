@@ -340,3 +340,48 @@ async def test_default_call_returns_all_applications_without_cap(db: AsyncSessio
     apps, total = await service.get_professor_applications_paginated(professor_id=prof.id)
     assert total == 25
     assert len(apps) == 25
+
+
+@pytest.mark.asyncio
+async def test_exposes_professor_review_end_for_the_application_track(db: AsyncSession):
+    """Each row carries the 教授審查截止 of its own track (renewal vs general)
+    so the professor queue can show the exact closing minute."""
+    student = await _seed_user(db, role=UserRole.student, nycu_id="profpag_stu_deadline")
+    prof = await _seed_user(db, role=UserRole.professor, nycu_id="profpag_prof_deadline")
+    cfg = await _seed_config(db, requires_prof=True, suffix="deadline")
+    general_end = datetime(2030, 1, 1, 15, 59, tzinfo=timezone.utc)
+    renewal_end = datetime(2029, 6, 30, 15, 59, tzinfo=timezone.utc)
+    cfg.professor_review_end = general_end
+    cfg.renewal_requires_professor_review = True
+    cfg.renewal_professor_review_end = renewal_end
+    await db.commit()
+
+    await _seed_app(
+        db,
+        student=student,
+        config=cfg,
+        status=ApplicationStatus.submitted.value,
+        professor_id=prof.id,
+        suffix="deadline_gen",
+    )
+    renewal = await _seed_app(
+        db,
+        student=student,
+        config=cfg,
+        status=ApplicationStatus.submitted.value,
+        professor_id=prof.id,
+        suffix="deadline_ren",
+    )
+    renewal.is_renewal = True
+    await db.commit()
+
+    service = ApplicationService(db)
+    apps, _ = await service.get_professor_applications_paginated(professor_id=prof.id)
+    ends = {a.app_id: a.scholarship_configuration["professor_review_end"] for a in apps}
+
+    def _utc(value: datetime) -> datetime:
+        # SQLite drops the offset; the stored value is UTC either way.
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+    assert _utc(ends["APP-PROFPAG-deadline_gen"]) == general_end
+    assert _utc(ends["APP-PROFPAG-deadline_ren"]) == renewal_end

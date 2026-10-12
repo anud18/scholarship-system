@@ -2702,6 +2702,11 @@ class ApplicationService:
                                 "config_name": (
                                     app.scholarship_configuration.config_name if app.scholarship_configuration else None
                                 ),
+                                # 教授審查截止 for this application's track (renewal vs general),
+                                # so the professor queue can show the exact closing minute.
+                                "professor_review_end": app.scholarship_configuration.professor_review_end_for(
+                                    bool(app.is_renewal)
+                                ),
                             }
                             if app.scholarship_configuration
                             else None
@@ -2809,7 +2814,7 @@ class ApplicationService:
 
                 # Check renewal review period
                 renewal_start = config.renewal_professor_review_start
-                renewal_end = config.renewal_professor_review_end
+                renewal_end = config.professor_review_end_for(True)
 
                 if renewal_start and renewal_end:
                     if renewal_start.tzinfo is None:
@@ -2827,7 +2832,7 @@ class ApplicationService:
                 # Check regular review period - from application start to professor review end
                 # Professor can review from when student submits application until professor review deadline
                 review_start = config.application_start_date  # Changed from professor_review_start
-                review_end = config.professor_review_end
+                review_end = config.professor_review_end_for(False)
 
                 if review_start and review_end:
                     if review_start.tzinfo is None:

@@ -115,6 +115,22 @@ async def test_raises_when_deadline_in_past_for_college_user(db: AsyncSession):
 
 
 @pytest.mark.asyncio
+async def test_passed_deadline_message_shows_taipei_minute(db: AsyncSession):
+    """The error shows the deadline in Taipei wall-clock time to the minute,
+    not the stored UTC value (15:59 UTC = 23:59 in Taipei)."""
+    college_user = _make_user(UserRole.college, "tpe")
+    db.add(college_user)
+    await db.commit()
+    await db.refresh(college_user)
+    sch, _ = await _make_scholarship_with_config(db, "tpe", datetime(2020, 1, 1, 15, 59, tzinfo=timezone.utc))
+
+    service = CollegeReviewService(db)
+    with pytest.raises(AuthorizationError) as exc_info:
+        await service.assert_ranking_within_deadline(sch.id, 114, "first", college_user)
+    assert "2020-01-01 23:59" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
 async def test_admin_bypasses_passed_deadline(db: AsyncSession):
     admin_user = _make_user(UserRole.admin, "bypass")
     db.add(admin_user)

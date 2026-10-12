@@ -649,6 +649,12 @@ class ScholarshipConfiguration(Base):
             return bool(self.renewal_requires_college_review)
         return bool(self.requires_college_review)
 
+    def professor_review_end_for(self, is_renewal: bool) -> Optional[datetime]:
+        """教授審查截止 for an application of the given kind."""
+        if is_renewal:
+            return self.renewal_professor_review_end
+        return self.professor_review_end
+
     @property
     def cycle(self) -> str:
         """Get cycle string representation for compatibility"""
