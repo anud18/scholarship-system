@@ -81,6 +81,7 @@ COLLEGE_NAMES = {"C": "資訊學院", "E": "電機學院"}
 # (stdcode, cname, ename, sex, academyno, academyname, depno, depname, enrollyear[, sub_type])
 # depno values are REAL departments.code rows so the 申請總表 join works:
 #   1550 資訊工程學系(C) · 155 資訊科學與工程研究所(C) · 3511 電機工程學系(E) · 183 電機學院博士班(E)
+#   · 4540 電機資訊國際博士學位學程(電資博學程, SIS academy Y -> E)
 StudentEntry = tuple
 
 # --- 續領生：113 新申請 → 114 續領（正在續領），115 為續領候選 ------------------
@@ -114,6 +115,9 @@ NEW_APPLICANTS_115 = [
     ("314551402", "新申請-郭芷瑄", "KUO,CHIH-HSUAN", 2, "C", "資訊學院", "155", "資訊科學與工程研究所", 114),
     ("315551403", "新申請-楊子萱", "YANG,TZU-HSUAN", 2, "E", "電機學院", "3511", "電機工程學系", 115),
     ("314551404", "新申請-許文傑", "HSU,WEN-CHIEH", 1, "E", "電機學院", "183", "電機學院博士班", 114),
+    # 電資博學程: SIS still files it under the retired 電資學院 (Y); the backend
+    # remaps Y -> E, so this applicant is reviewed and ranked by 電機學院.
+    ("314540405", "新申請-周以安", "CHOU,YI-AN", 1, "Y", "電資學院", "4540", "電機資訊國際博士學位學程", 114),
 ]
 
 # Advisor per college — both are seeded professor accounts (seed_test_users).

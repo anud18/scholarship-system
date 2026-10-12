@@ -89,11 +89,20 @@ def test_yangming_humanities_code_8_shares_the_humanities_row():
 
 
 def test_colleges_outside_layout_are_appended_before_total():
-    records = [_rec(1, "Y", "nstc"), _rec(2, None, "nstc"), _rec(3, "~", "nstc")]
+    records = [_rec(1, "X", "nstc"), _rec(2, None, "nstc"), _rec(3, "~", "nstc")]
     rows = tally_college_counts(records, build_stats_columns(PHD_CONFIGS, records))
     tail = [r.label for r in rows[len(COLLEGE_STATS_LAYOUT) :]]
-    assert tail == ["電資學院", f"{UNKNOWN_COLLEGE_LABEL}（~）", UNKNOWN_COLLEGE_LABEL, TOTAL_ROW_LABEL]
+    assert tail == ["電機資訊學院", f"{UNKNOWN_COLLEGE_LABEL}（~）", UNKNOWN_COLLEGE_LABEL, TOTAL_ROW_LABEL]
     assert rows[-1].counts == (3, 0)
+
+
+def test_retired_eecs_code_counts_in_ece_row():
+    """電資學院 (Y) is merged into 電機學院: a stray Y snapshot adds no extra row."""
+    records = [_rec(1, "E", "nstc"), _rec(2, "Y", "nstc")]
+    rows = tally_college_counts(records, build_stats_columns(PHD_CONFIGS, records))
+    by_label = {r.label: r.counts for r in rows}
+    assert by_label["電機學院"] == (2, 0)
+    assert len(rows) == len(COLLEGE_STATS_LAYOUT) + 1
 
 
 def test_workbook_matches_reference_layout():
