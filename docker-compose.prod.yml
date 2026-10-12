@@ -95,6 +95,11 @@ services:
       # spreadsheets carry student PII. That is the accepted trade for an
       # internal-only link; revisit it if this ever crosses an untrusted hop.
       MINIO_SECURE: ${MINIO_SECURE:-false}
+      # Application document upload cap in bytes (config.py default is 10MB).
+      # 50MB so an admin can set a document's 檔案大小限制 up to 50MB; the
+      # per-document limit still gates uploads in the form. Keep nginx
+      # `location /api/` client_max_body_size above this.
+      MAX_FILE_SIZE: ${MAX_FILE_SIZE:-52428800}
       # PII Encryption keys (issue #73). JSON map of {version: base64url 32-byte key}.
       # Required in production. Populated by the KMS sidecar at deploy time.
       PII_ENCRYPTION_KEYS: ${PII_ENCRYPTION_KEYS}
