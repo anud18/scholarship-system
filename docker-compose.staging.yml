@@ -46,6 +46,10 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       MINIO_BUCKET: ${MINIO_BUCKET}
       MINIO_SECURE: "false"
+      # Application document upload cap in bytes (config.py default is 10MB).
+      # 50MB to match production; keep nginx `location /api/`
+      # client_max_body_size above this.
+      MAX_FILE_SIZE: ${MAX_FILE_SIZE:-52428800}
       # PII Encryption keys (issue #73). JSON map of {version: base64url 32-byte key}.
       # Populated by the KMS sidecar at deploy time.
       PII_ENCRYPTION_KEYS: ${PII_ENCRYPTION_KEYS}
