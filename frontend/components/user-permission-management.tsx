@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { logger } from "@/lib/utils/logger";
+import { formatCollegeName } from "@/lib/college-display-number";
 import { useAuth } from "@/hooks/use-auth";
 import { apiClient } from "@/lib/api";
 import type { UserStats, UserCreate as UserCreateType } from "@/lib/api";
@@ -765,7 +766,10 @@ export function UserPermissionManagement() {
                                 variant="outline"
                                 className="text-xs px-2 py-1 rounded-full whitespace-nowrap border-indigo-300 text-indigo-700 bg-indigo-50"
                               >
-                                {academies.find(a => a.code === user.college_code)?.name || user.college_code}
+                                {formatCollegeName(
+                                  user.college_code,
+                                  academies.find(a => a.code === user.college_code)?.name || user.college_code
+                                )}
                               </Badge>
                             )}
                           </div>
