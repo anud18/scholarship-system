@@ -23,7 +23,7 @@ from typing import Dict, FrozenSet, Iterable, List, Mapping, Optional, Sequence,
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
 
-from app.core.college_mappings import COLLEGE_MAPPINGS
+from app.core.college_mappings import COLLEGE_MAPPINGS, normalize_academy_code
 from app.utils.academic_period import format_academic_period
 from app.services.export_table_chassis import apply_xlsx_borders
 from app.utils.excel_safety import sanitize_excel_cell
@@ -35,7 +35,8 @@ AWARD_REPORT_NAME = "統計各學院學生獲獎人數"
 # (row label, SIS academy codes counted in that row) in the office's reference
 # order. Labels are the colleges' full official names (the academies table only
 # carries SIS short names). Code 8 is the 陽明-campus code for the same 人社院
-# as A, so both feed one row.
+# as A, so both feed one row. Retired codes (電資學院 Y) are folded into their
+# surviving college by normalize_academy_code before the lookup.
 COLLEGE_STATS_LAYOUT: Tuple[Tuple[str, FrozenSet[str]], ...] = (
     ("人文藝術與社會學院", frozenset({"A", "8"})),
     ("工學院", frozenset({"I"})),
@@ -181,7 +182,7 @@ def tally_college_counts(records: Sequence[StatsRecord], columns: Sequence[Stats
     users: Dict[Tuple[str, str], Set[int]] = {}
     extra_labels: Dict[str, str] = {}
     for record in records:
-        code = (record.academy_code or "").strip()
+        code = normalize_academy_code((record.academy_code or "").strip())
         row_label = row_by_code.get(code)
         if row_label is None:
             row_label = _row_label_for_extra_code(code)

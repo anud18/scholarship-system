@@ -11,6 +11,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
+from app.core.college_mappings import ORIGINAL_ACADEMY_CODES_KEY, normalize_student_academy
 from app.core.config import settings
 from app.core.exceptions import StudentVerificationError
 from app.models.payment_roster import STUDENT_VERIFICATION_STATUS_LABELS, StudentVerificationStatus
@@ -69,9 +70,16 @@ class StudentVerificationService:
         """
         try:
             if self.mock_mode:
-                return self._mock_verification(student_id_number, student_name)
+                result = self._mock_verification(student_id_number, student_name)
             else:
-                return self._api_verification(student_id_number, student_name)
+                result = self._api_verification(student_id_number, student_name)
+            # roster generation merges student_info back into application.student_data,
+            # so retired academy codes (電資學院 Y) must be remapped here as well. The
+            # raw-code provenance stays out: the stored snapshot already holds the
+            # basic+term union, which a basic-only copy would overwrite every roster run.
+            student_info = normalize_student_academy(result.get("student_info") or {})
+            student_info = {k: v for k, v in student_info.items() if k != ORIGINAL_ACADEMY_CODES_KEY}
+            return {**result, "student_info": student_info}
 
         except Exception as e:
             logger.exception(f"Student verification failed for {student_id_number}")
