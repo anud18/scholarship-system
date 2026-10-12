@@ -10,7 +10,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import and_, or_, select, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ValidationError
@@ -155,7 +155,8 @@ async def assign_professor_from_profile(
         return None
 
     professor_stmt = select(User).where(
-        User.nycu_id == profile.advisor_nycu_id,
+        # 人事代號 is entered uppercased, but account nycu_ids may not be.
+        func.upper(User.nycu_id) == profile.advisor_nycu_id.upper(),
         User.role == UserRole.professor,
     )
     professor_result = await db.execute(professor_stmt)
@@ -232,7 +233,9 @@ async def backfill_professor_assignments(db: AsyncSession, professor: Optional[U
     if professor.role not in (UserRole.professor, UserRole.professor.value):
         return 0
 
-    advisee_user_ids = select(UserProfile.user_id).where(UserProfile.advisor_nycu_id == professor.nycu_id)
+    advisee_user_ids = select(UserProfile.user_id).where(
+        func.upper(UserProfile.advisor_nycu_id) == professor.nycu_id.upper()
+    )
 
     # Configurations on which an application of each kind is professor-actionable:
     # the workflow has a professor stage and its review window has not closed.

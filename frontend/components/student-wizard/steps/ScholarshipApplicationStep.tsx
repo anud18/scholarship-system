@@ -1294,7 +1294,7 @@ export function ScholarshipApplicationStep({
                   placeholder={fixedText.fields.advisor_nycu_id.placeholder}
                   value={advisorNycuId}
                   onChange={e => {
-                    setAdvisorNycuId(e.target.value);
+                    setAdvisorNycuId(e.target.value.toUpperCase());
                     setIsPersonalInfoDirty(true);
                     if (advisorErrors.length > 0) setAdvisorErrors([]);
                   }}

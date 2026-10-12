@@ -1033,7 +1033,7 @@ export default function UserProfileManagement() {
                     onChange={e => {
                       setEditingProfile({
                         ...editingProfile,
-                        advisor_nycu_id: e.target.value,
+                        advisor_nycu_id: e.target.value.toUpperCase(),
                       });
                       // Clear advisor errors when user starts typing
                       if (advisorErrors.length > 0) {

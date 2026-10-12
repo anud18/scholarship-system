@@ -313,6 +313,18 @@ async def test_skips_closed_professor_review_window(db: AsyncSession):
 
 
 @pytest.mark.asyncio
+async def test_claims_advisee_whose_advisor_id_differs_only_in_case(db: AsyncSession):
+    """The wizard uppercases 指導教授人事代號; the professor account's nycu_id may not be."""
+    student = await _seed_student_with_advisor(db, nycu_id="stu_case", advisor_nycu_id=PROF_NYCU_ID.upper())
+    cfg = await _seed_config(db, suffix="case")
+    app = await _seed_app(db, student=student, config=cfg, suffix="case")
+    professor = await _seed_user(db, role=UserRole.professor, nycu_id=PROF_NYCU_ID.lower())
+
+    assert await backfill_professor_assignments(db, professor) == 1
+    assert await _professor_id_of(db, app) == professor.id
+
+
+@pytest.mark.asyncio
 async def test_claims_when_review_window_is_not_configured(db: AsyncSession):
     """NULL bounds mean no time gate (can_professor_submit_review skips it)."""
     student = await _seed_student_with_advisor(db, nycu_id="stu_nowin", advisor_nycu_id=PROF_NYCU_ID)

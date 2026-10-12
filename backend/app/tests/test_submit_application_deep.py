@@ -222,6 +222,25 @@ async def test_submit_auto_assigns_professor_from_advisor_nycu_id(db: AsyncSessi
 
 
 @pytest.mark.asyncio
+async def test_submit_auto_assign_matches_advisor_nycu_id_case_insensitively(db: AsyncSession, silence_collaborators):
+    """The wizard uppercases 指導教授人事代號 as the student types, so an
+    uppercased advisor id must still match a professor account whose nycu_id
+    is stored in lowercase."""
+    student = await _seed_user(db, role=UserRole.student, name="S", nycu_id="s_sub_case")
+    professor = await _seed_user(db, role=UserRole.professor, name="P", nycu_id="prof_case", dept_code="CS")
+    await _seed_user_profile(db, user_id=student.id, advisor_nycu_id="PROF_CASE")
+
+    cfg = await _seed_config(db, suffix="case")
+    app = await _seed_app(db, student=student, config=cfg, status=ApplicationStatus.draft.value, suffix="case")
+    service = ApplicationService(db)
+
+    await service.submit_application(application_id=app.id, user=student)
+
+    await db.refresh(app)
+    assert app.professor_id == professor.id
+
+
+@pytest.mark.asyncio
 async def test_submit_does_not_overwrite_existing_professor_id(db: AsyncSession, silence_collaborators):
     """When professor_id is already set (e.g. admin pre-assigned), the
     auto-assign step is skipped."""
