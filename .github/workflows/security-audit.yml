@@ -27,10 +27,6 @@ name: "Security Audit"
 # workflows read the same .github/codeql/sarif-filter-patterns.txt.
 
 on:
-  # TEMPORARY: verification runs from the PR branch (workflow_dispatch only
-  # works once the file is on main). Remove before merging.
-  push:
-    branches: [ci/security-audit-workflow]
   workflow_dispatch:
     inputs:
       target_host:
