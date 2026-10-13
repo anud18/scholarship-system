@@ -1,0 +1,88 @@
+{% extends "base.html.j2" %}
+{% block title %}資安檢測總結報告{% endblock %}
+{% block body %}
+<h1>資安檢測總結報告</h1>
+{% include "_meta.html.j2" %}
+
+<h2>檢測結果總覽</h2>
+<h3>靜態原始碼分析（CodeQL）</h3>
+{% if codeql.produced %}
+<table>
+  <tr><th>語言</th>{% for s in severities %}<th class="num">{{ s }}</th>{% endfor %}<th class="num">合計</th></tr>
+  {% for lang, c in codeql.by_language.items() %}
+  <tr><td>{{ lang }}</td>{% for s in severities %}<td class="num">{{ c[s] }}</td>{% endfor %}
+      <td class="num"><strong>{{ c.values() | sum }}</strong></td></tr>
+  {% endfor %}
+  <tr><td><strong>合計</strong></td>{% for s in severities %}<td class="num"><strong>{{ codeql.counts[s] }}</strong></td>{% endfor %}
+      <td class="num"><strong>{{ codeql.findings | length }}</strong></td></tr>
+</table>
+{% else %}
+<p class="note"><strong>CodeQL 未產出結果</strong>：分析步驟失敗，本報告不涵蓋原始碼分析。</p>
+{% endif %}
+
+<h3>動態弱點掃描（OWASP ZAP，主動掃描）</h3>
+{% if zap.produced %}
+<table>
+  <tr>{% for r in zap_risks %}<th class="num">{{ r }}</th>{% endfor %}<th class="num">告警類型合計</th></tr>
+  <tr>{% for r in zap_risks %}<td class="num">{{ zap.counts[r] }}</td>{% endfor %}
+      <td class="num"><strong>{{ zap.alerts | length }}</strong></td></tr>
+</table>
+<p class="muted">ZAP 以「告警類型」計數；每一類型的受影響 URL 數列於 ZAP 詳細報告。</p>
+{% if zap.alerts %}
+<table>
+  <tr><th>告警</th><th>風險</th><th>信心</th><th>範圍</th><th class="num">實例數</th></tr>
+  {% for a in zap.alerts if a.risk != 'Informational' %}
+  <tr><td>{{ a.name }}</td><td><span class="sev sev-{{ a.risk }}">{{ a.risk }}</span></td>
+      <td>{{ a.confidence }}</td><td>{{ a.areas | join('、') }}</td><td class="num">{{ a.count }}</td></tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% else %}
+<p class="note"><strong>ZAP 未產出結果</strong>：掃描步驟失敗，本報告不涵蓋動態掃描。</p>
+{% endif %}
+
+<h2>受測環境</h2>
+<p>動態掃描的對象是以同一 commit 建置、<strong>與正式環境相同組態</strong>的完整服務堆疊，
+於 GitHub Actions self-hosted runner 上的隔離 Docker 網路中執行；掃描流量不會送往正式主機與正式資料。</p>
+<table class="meta">
+  <tr><td>前端</td><td>Next.js production build（<code>frontend/Dockerfile</code>，<code>NODE_ENV=production</code>）</td></tr>
+  <tr><td>後端</td><td>FastAPI（<code>backend/Dockerfile</code>，<code>ENVIRONMENT=production</code>、<code>DEBUG=false</code>、Mock SSO 關閉、API 文件關閉）</td></tr>
+  <tr><td>反向代理</td><td>正式環境設定檔 <code>nginx/nginx.prod.conf</code>（TLS 1.2/1.3、安全標頭、敏感路徑阻擋）</td></tr>
+  <tr><td>主機名稱</td><td><code>{{ meta.target_host }}</code>（Docker 網路別名，指向上述 nginx）</td></tr>
+  {% if meta.response_headers %}
+  <tr><td>首頁實際回應標頭</td><td><code class="pre">{{ meta.response_headers }}</code></td></tr>
+  {% endif %}
+</table>
+
+<h3>與正式環境的差異（解讀結果時須一併考量）</h3>
+<ol>
+  <li><strong>資料</strong>：使用開發用測試資料（虛構學生），非正式資料。</li>
+  <li><strong>TLS 憑證</strong>：使用臨時自簽憑證；憑證／信任鏈相關檢測不代表正式環境。</li>
+  <li><strong>nginx 流量限制</strong>：<code>limit_req_zone</code> 速率放寬為 {{ meta.relaxed_rate }}，
+      避免掃描請求被 429 擋下而降低涵蓋率；其餘 nginx 設定與正式環境完全相同。</li>
+  <li><strong>外部相依服務</strong>：學籍系統（SIS）為 mock 服務；Portal SSO JWT 伺服器指向不可達位址；
+      郵件寄至本機 mailpit。</li>
+  <li><strong>未納入</strong>：Grafana（<code>/monitoring</code>）為獨立產品，不在掃描範圍。</li>
+</ol>
+
+<h2>檢測方法</h2>
+<table class="meta">
+  <tr><td>CodeQL</td><td>語言：{{ codeql.languages | join('、') or '—' }}；
+      規則集：<code>.github/codeql/codeql-config.yml</code>；已排除的誤報規則見 <code>.github/codeql/sarif-filter-patterns.txt</code></td></tr>
+  <tr><td>ZAP － API</td><td>匯入 OpenAPI 規格（{{ meta.openapi_operations }} 個 operation），以管理員身分（Bearer token）
+      進行主動掃描，強度 Medium，上限 {{ meta.api_scan_minutes }} 分鐘</td></tr>
+  <tr><td>ZAP － 前端</td><td>傳統 Spider + AJAX Spider 各 {{ meta.spider_minutes }} 分鐘，未登入，
+      主動掃描上限 {{ meta.frontend_scan_minutes }} 分鐘</td></tr>
+</table>
+
+<h2>檢測限制</h2>
+<div class="note">
+<ol>
+  <li>前端爬取為未登入狀態；登入後頁面所呼叫的 API 已由 API 掃描（管理員權限）涵蓋，但跨角色存取控制（學生／教授／學院）未逐一測試。</li>
+  <li>自動化工具無法偵測商業邏輯缺陷；「未發現」代表「此工具在此範圍內未發現」，不等於「系統無弱點」。</li>
+  <li>主動掃描的爬取與時間上限使每次涵蓋的請求略有差異，比較兩次結果應以告警類型為準。</li>
+</ol>
+</div>
+
+<p>詳細結果請參閱同批產出的 <code>codeql-report.pdf</code> 與 <code>zap-report.pdf</code>。</p>
+{% endblock %}

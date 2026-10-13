@@ -121,24 +121,21 @@ jobs:
           echo "name=${{ matrix.language }}" >> $GITHUB_OUTPUT
         fi
 
-    # Filter false positives from Python SARIF before uploading
-    - name: Filter Python SARIF (Remove False Positives)
-      if: matrix.language == 'python'
-      uses: advanced-security/filter-sarif@v1
-      with:
-        patterns: |
-          -backend/app/api/v1/endpoints/admin/bank_verification.py:py/stack-trace-exposure
-        input: sarif-results/${{ steps.sarif-lang.outputs.name }}.sarif
-        output: sarif-results/${{ steps.sarif-lang.outputs.name }}.sarif
+    # Filter false positives before uploading. The pattern list is shared with
+    # security-audit.yml so the Code Scanning view and the audit PDF agree.
+    - name: Load SARIF filter patterns
+      id: sarif-patterns
+      run: |
+        {
+          echo 'patterns<<SARIF_PATTERNS_EOF'
+          grep -vE '^[[:space:]]*(#|$)' .github/codeql/sarif-filter-patterns.txt
+          echo 'SARIF_PATTERNS_EOF'
+        } >> "$GITHUB_OUTPUT"
 
-    # Filter false positives from JavaScript/TypeScript SARIF before uploading
-    - name: Filter JavaScript SARIF (Remove False Positives)
-      if: matrix.language == 'javascript-typescript'
+    - name: Filter SARIF (Remove False Positives)
       uses: advanced-security/filter-sarif@v1
       with:
-        patterns: |
-          -frontend/components/dynamic-application-form.tsx:js/client-side-unvalidated-url-redirection
-          -frontend/components/payment-roster-list.tsx:js/client-side-unvalidated-url-redirection
+        patterns: ${{ steps.sarif-patterns.outputs.patterns }}
         input: sarif-results/${{ steps.sarif-lang.outputs.name }}.sarif
         output: sarif-results/${{ steps.sarif-lang.outputs.name }}.sarif
 

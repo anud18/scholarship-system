@@ -1,0 +1,31 @@
+{% extends "base.html.j2" %}
+{% block title %}CodeQL 原始碼分析報告{% endblock %}
+{% block body %}
+<h1>CodeQL 原始碼分析報告</h1>
+{% include "_meta.html.j2" %}
+
+{% if not codeql.produced %}
+<p class="note"><strong>CodeQL 未產出任何 SARIF 結果</strong>：分析步驟失敗，請檢查 workflow log。</p>
+{% else %}
+<h2>依規則統計</h2>
+<table>
+  <tr><th>嚴重度</th><th>規則</th><th>說明</th><th class="num">數量</th></tr>
+  {% for s in severities %}{% for (sev, rule_id, rule_name), n in codeql.rules.items() if sev == s %}
+  <tr><td><span class="sev sev-{{ sev }}">{{ sev }}</span></td><td><code>{{ rule_id }}</code></td>
+      <td>{{ rule_name }}</td><td class="num">{{ n }}</td></tr>
+  {% endfor %}{% endfor %}
+</table>
+{% if not codeql.findings %}<p>未發現任何問題。</p>{% endif %}
+
+<h2>發現明細</h2>
+{% for f in codeql.findings %}
+<div class="finding sev-border-{{ f.severity }}">
+  <p><span class="sev sev-{{ f.severity }}">{{ f.severity }}</span> <code>{{ f.rule_id }}</code>
+     <span class="muted">（{{ f.language }}）</span></p>
+  {% if f.rule_name %}<p><strong>{{ f.rule_name }}</strong></p>{% endif %}
+  <p>{{ f.message }}</p>
+  <p class="mono">{{ f.file }}{% if f.line %}:{{ f.line }}{% endif %}</p>
+</div>
+{% endfor %}
+{% endif %}
+{% endblock %}
