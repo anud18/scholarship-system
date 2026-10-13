@@ -39,8 +39,8 @@ function driftActionText({
       : 'Press "同步申請名單" to append the new applications (a distributed ranking keeps its existing rows), then confirm the ranking.';
   }
   return locale === "zh"
-    ? "請按「同步申請名單」更新此排名（新續領生排在既有續領生之後，其他新申請排在名單末端、標示 N 的學生之前；不符合者移除），再調整排序。"
-    : 'Press "同步申請名單" to update this ranking (new renewals go after the existing renewals, other new applications at the end but ahead of any rows marked N; ineligible ones are removed), then adjust the order.';
+    ? "請按「同步申請名單」更新名單"
+    : 'Press "同步申請名單" to update the list.';
 }
 
 /**
