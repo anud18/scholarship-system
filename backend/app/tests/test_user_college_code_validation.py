@@ -190,3 +190,13 @@ async def test_auth_register_validates_college_code(client: AsyncClient):
 
     ok = await client.post("/api/v1/auth/register", json={**base, "nycu_id": "reg_ok", "college_code": "e"})
     assert ok.status_code == 201
+
+
+@pytest.mark.asyncio
+async def test_put_user_unchanged_lowercase_legacy_code_still_saves(client: AsyncClient, db: AsyncSession):
+    """A legacy code stored in lowercase is unchanged when re-sent, even though normalization uppercases."""
+    target = await _seed_user(db, nycu_id="put_legacy_lc", role=UserRole.college, college_code="old")
+    resp = await client.put(f"/api/v1/users/{target.id}", json={"college_code": "old", "name": "Renamed"})
+    assert resp.status_code == 200
+    await db.refresh(target)
+    assert (target.college_code, target.name) == ("old", "Renamed")

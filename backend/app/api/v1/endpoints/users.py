@@ -379,7 +379,9 @@ async def update_user(
     # re-sends college_code on every save, so only a CHANGED value is checked:
     # an account still holding a legacy code stays editable.
     if "college_code" in update_dict:
-        if normalize_college_code(update_dict["college_code"]) == user.college_code:
+        # Normalize both sides: a legacy value stored as e.g. "old" must still
+        # match the form's re-sent "old" and keep the account editable.
+        if normalize_college_code(update_dict["college_code"]) == normalize_college_code(user.college_code):
             update_dict = {k: v for k, v in update_dict.items() if k != "college_code"}
         else:
             update_dict = {
