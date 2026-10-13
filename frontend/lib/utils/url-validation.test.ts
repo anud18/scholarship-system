@@ -5,7 +5,7 @@
  * to ensure protection against open redirect vulnerabilities.
  */
 
-import { validateSameOriginUrl, buildSecurePreviewUrl, getAuthToken } from './url-validation';
+import { validateSameOriginUrl, buildSecurePreviewUrl, getAuthToken, resolveSafeNavigation } from './url-validation';
 
 describe('URL Validation Utilities', () => {
   // Mock window.location for tests
@@ -268,5 +268,57 @@ describe('URL Validation Utilities', () => {
       expect(url).toContain('rosterId=456');
       expect(url).toContain('token=valid-token-123');
     });
+  });
+});
+
+const ORIGIN = 'https://ss.aa.nycu.edu.tw';
+
+describe('resolveSafeNavigation', () => {
+  it('keeps same-site paths internal, including query and hash', () => {
+    expect(resolveSafeNavigation('/applications/12/documents?tab=1#top', ORIGIN)).toEqual({
+      kind: 'internal',
+      path: '/applications/12/documents?tab=1#top',
+    });
+  });
+
+  it('treats an absolute URL on the same origin as internal', () => {
+    expect(resolveSafeNavigation(`${ORIGIN}/admin/rosters`, ORIGIN)).toEqual({
+      kind: 'internal',
+      path: '/admin/rosters',
+    });
+  });
+
+  it('marks other http(s) origins as external', () => {
+    expect(resolveSafeNavigation('https://www.nycu.edu.tw/news', ORIGIN)).toEqual({
+      kind: 'external',
+      url: 'https://www.nycu.edu.tw/news',
+    });
+  });
+
+  it.each([
+    'javascript:alert(document.cookie)',
+    'JavaScript:alert(1)',
+    ' javascript:alert(1)',
+    'java\tscript:alert(1)',
+    'data:text/html,<script>alert(1)</script>',
+    'vbscript:msgbox(1)',
+  ])('refuses script-capable target %p', raw => {
+    expect(resolveSafeNavigation(raw, ORIGIN)).toBeNull();
+  });
+
+  it('sends protocol-relative and tab-smuggled paths off-site, never internal', () => {
+    expect(resolveSafeNavigation('//evil.example/x', ORIGIN)).toEqual({
+      kind: 'external',
+      url: 'https://evil.example/x',
+    });
+    expect(resolveSafeNavigation('/\t/evil.example/x', ORIGIN)?.kind).toBe('external');
+  });
+
+  it.each([null, undefined, '', '   '])('returns null for empty input %p', raw => {
+    expect(resolveSafeNavigation(raw, ORIGIN)).toBeNull();
+  });
+
+  it('returns null without an origin (server render)', () => {
+    expect(resolveSafeNavigation('/dashboard', null)).toBeNull();
   });
 });
