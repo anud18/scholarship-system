@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import get_current_user, require_admin
 from app.db.deps import get_db
 from app.main import app
+from app.models.student import Academy
 from app.models.user import User, UserRole, UserType
 
 
@@ -140,6 +141,9 @@ async def test_super_admin_cannot_change_own_role(db: AsyncSession):
 async def test_super_admin_can_promote_student(db: AsyncSession, new_role: UserRole):
     sa = await _seed_user(db, nycu_id=f"grantor_{new_role.value}", role=UserRole.super_admin)
     target = await _seed_user(db, nycu_id=f"promotee_{new_role.value}", role=UserRole.student)
+    # college_code must name a real academy (see test_user_college_code_validation.py).
+    db.add(Academy(code="E", name="電機學院"))
+    await db.commit()
 
     async with _client_as(sa, db) as ac:
         resp = await ac.put(
