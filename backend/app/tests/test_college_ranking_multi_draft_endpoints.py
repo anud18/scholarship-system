@@ -200,6 +200,23 @@ class TestCreateAlwaysAddsADraft:
         listing = await client.get(RANKINGS_URL)
         assert listing.json()["data"] == []
 
+    @pytest.mark.parametrize("how", [*UNDELETABLE, None])
+    async def test_listing_flags_what_the_backend_protects(self, client, login, db, users, scholarship, how):
+        # The UI disables 建立新排名 and a lock's deletion from these flags; item-level
+        # allocation state protects a ranking even before distribution_executed.
+        application = await add_application(db, scholarship.id, "a1")
+        ranking = await insert_ranking(db, scholarship.id, created_by=users["eng"].id, application_ids=[application.id])
+        ranking_id = ranking.id
+        if how:
+            await _settle(db, ranking_id, how, created_by=users["eng"].id, scholarship_id=scholarship.id)
+
+        login(users["eng"])
+        listing = await client.get(RANKINGS_URL)
+        assert listing.status_code == 200, listing.text
+        [row] = listing.json()["data"]
+        assert row["is_settled"] is (how in SETTLED_BY_DISTRIBUTION)
+        assert row["is_roster_referenced"] is (how == "roster")
+
     async def test_create_409_while_scope_holds_a_finalized_ranking(self, client, login, db, users, scholarship):
         await insert_ranking(db, scholarship.id, created_by=users["eng"].id, is_finalized=True, name="已確認版")
 
@@ -376,6 +393,35 @@ class TestFinalizeKeepsOneRanking:
         assert await count_items(db, target_id) == 1
         assert not await _is_finalized(db, target_id)
         assert await _audit_rows(db, AuditAction.finalize_ranking.value) == []
+
+    async def test_finalize_409_when_a_sibling_was_not_confirmed(self, client, login, db, users, scholarship):
+        # The confirm dialog lists the reviewer's last ranking-list load; a draft a
+        # colleague created since must not be deleted without being listed.
+        await add_application(db, scholarship.id, "a1")
+        login(users["eng"])
+        seen_id = await _create(client, scholarship.id)
+        target_id = await _create(client, scholarship.id)
+        login(users["eng2"])
+        late_id = await _create(client, scholarship.id, ranking_name="後來的草稿")
+
+        login(users["eng"])
+        # [] = the reviewer saw no sibling, so no dialog was shown.
+        for confirmed in ([], [seen_id]):
+            response = await client.post(
+                f"{RANKINGS_URL}/{target_id}/finalize", json={"expected_sibling_ids": confirmed}
+            )
+            assert response.status_code == 409, response.text
+            assert "後來的草稿" in response.json()["message"]
+        for ranking_id in (seen_id, target_id, late_id):
+            assert await ranking_exists(db, ranking_id)
+        assert not await _is_finalized(db, target_id)
+
+        # A confirmed id that is gone already (deleted meanwhile) is fine.
+        response = await client.post(
+            f"{RANKINGS_URL}/{target_id}/finalize", json={"expected_sibling_ids": [seen_id, late_id, 999999]}
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["data"]["deleted_ranking_ids"] == [seen_id, late_id]
 
     async def test_finalize_409_while_another_ranking_of_the_scope_is_finalized(
         self, client, login, db, users, scholarship

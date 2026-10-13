@@ -102,6 +102,9 @@ async def get_rankings(
         # Execute query (stable order: several drafts may share a period)
         result = await db.execute(stmt.order_by(CollegeRanking.id))
         rankings = result.scalars().all()
+        settled_ids, roster_referenced_ids = await CollegeReviewService(db).load_ranking_protection(
+            ranking.id for ranking in rankings
+        )
 
         # Preload scholarship configurations per (type, year, semester) to avoid N+1 queries
         config_cache: Dict[Tuple[int, int, Optional[str]], Optional[ScholarshipConfiguration]] = {}
@@ -191,6 +194,11 @@ async def get_rankings(
                     "allow_college_view_distribution": bool(config and config.allow_college_view_distribution),
                     "ranking_status": ranking.ranking_status,
                     "distribution_executed": ranking.distribution_executed,
+                    # Distributed or holding allocation results: blocks creating
+                    # another ranking in the scope and is never deleted.
+                    "is_settled": ranking.id in settled_ids,
+                    # Used by a 造冊 roster: never deleted.
+                    "is_roster_referenced": ranking.id in roster_referenced_ids,
                     "created_at": ranking.created_at.isoformat(),
                     "finalized_at": ranking.finalized_at.isoformat() if ranking.finalized_at else None,
                     "college_review_end": (
@@ -904,6 +912,14 @@ async def _notify_college_ranking_submitted(db: AsyncSession, ranking: CollegeRa
 @router.post("/rankings/{ranking_id}/finalize")
 async def finalize_ranking(
     ranking_id: int,
+    expected_sibling_ids: Optional[List[int]] = Body(
+        None,
+        embed=True,
+        description=(
+            "IDs of the other rankings in the scope the user confirmed deleting. When given, "
+            "any other ranking in the scope refuses the lock with 409."
+        ),
+    ),
     current_user: User = Depends(require_college),
     db: AsyncSession = Depends(get_db),
     request: Request = None,
@@ -912,7 +928,8 @@ async def finalize_ranking(
 
     Only the finalized ranking survives; while it stays locked no new ranking can be
     created. Returns 409 (nothing deleted) when another ranking of the scope is
-    already finalized, was distributed or is used by a payment roster.
+    already finalized, was distributed or is used by a payment roster, or is not in
+    `expected_sibling_ids` (created after the user's list was loaded).
     """
 
     try:
@@ -938,7 +955,11 @@ async def finalize_ranking(
         service = CollegeReviewService(db)
         # #63: block once college-review deadline has passed (admins bypass).
         await service.assert_ranking_within_deadline_by_ranking(ranking_id, current_user)
-        result = await service.finalize_ranking(ranking_id=ranking_id, finalizer_id=current_user.id)
+        result = await service.finalize_ranking(
+            ranking_id=ranking_id,
+            finalizer_id=current_user.id,
+            expected_sibling_ids=expected_sibling_ids,
+        )
         ranking = result.ranking
         deleted_ranking_ids = [deleted.id for deleted in result.deleted_rankings]
 

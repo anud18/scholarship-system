@@ -4748,7 +4748,8 @@ export interface paths {
          *
          *     Only the finalized ranking survives; while it stays locked no new ranking can be
          *     created. Returns 409 (nothing deleted) when another ranking of the scope is
-         *     already finalized, was distributed or is used by a payment roster.
+         *     already finalized, was distributed or is used by a payment roster, or is not in
+         *     `expected_sibling_ids` (created after the user's list was loaded).
          */
         post: operations["finalize_ranking_api_v1_college_review_rankings__ranking_id__finalize_post"];
         delete?: never;
@@ -9225,6 +9226,14 @@ export interface components {
         Body_extract_text_from_document_api_v1_user_profiles_document_ocr_post: {
             /** File */
             file: string;
+        };
+        /** Body_finalize_ranking_api_v1_college_review_rankings__ranking_id__finalize_post */
+        Body_finalize_ranking_api_v1_college_review_rankings__ranking_id__finalize_post: {
+            /**
+             * Expected Sibling Ids
+             * @description IDs of the other rankings in the scope the user confirmed deleting. When given, any other ranking in the scope refuses the lock with 409.
+             */
+            expected_sibling_ids?: number[] | null;
         };
         /** Body_import_whitelist_excel_api_v1_scholarship_configurations__id__whitelist_import_post */
         Body_import_whitelist_excel_api_v1_scholarship_configurations__id__whitelist_import_post: {
@@ -19752,7 +19761,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["Body_finalize_ranking_api_v1_college_review_rankings__ranking_id__finalize_post"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

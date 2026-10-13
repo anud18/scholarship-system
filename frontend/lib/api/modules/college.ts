@@ -233,15 +233,19 @@ export function createCollegeApi() {
     /**
      * Finalize ranking (lock and approve). Deletes the college's other
      * rankings in the same scope, so only the confirmed one remains.
-     * Type-safe: Path parameter validated against OpenAPI
+     * `expectedSiblingIds` are the rankings the user confirmed deleting; any
+     * other one in the scope (created since the list loaded) makes it 409.
+     * Type-safe: Path parameter and request body validated against OpenAPI
      */
     finalizeRanking: async (
-      rankingId: number
+      rankingId: number,
+      expectedSiblingIds: number[]
     ): Promise<ApiResponse<FinalizeRankingResult>> => {
       const response = await typedClient.raw.POST(
         "/api/v1/college-review/rankings/{ranking_id}/finalize",
         {
           params: { path: { ranking_id: rankingId } },
+          body: { expected_sibling_ids: expectedSiblingIds },
         }
       );
       return toApiResponse<FinalizeRankingResult>(response);

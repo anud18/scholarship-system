@@ -8,6 +8,7 @@ import {
   buildDefaultRankingName,
   findBlockingRanking,
   findScopeSiblings,
+  isUndeletableRanking,
   pickDefaultRankingId,
   resolveRankingTarget,
   type RankingScopeFields,
@@ -89,6 +90,19 @@ describe("findBlockingRanking", () => {
     expect(findBlockingRanking(rankings, target)?.id).toBe(2);
   });
 
+  it("blocks on allocation results before distribution_executed is set", () => {
+    // The backend's "settled" also covers items with allocation state (e.g.
+    // an allocate() saved, then the ranking unlocked); the list reports it.
+    const rankings = [ranking({ id: 1 }), ranking({ id: 2, is_settled: true })];
+    expect(findBlockingRanking(rankings, target)?.id).toBe(2);
+  });
+
+  it("does not block on a ranking only a roster references", () => {
+    // Matches the backend: create checks finalized/settled, not rosters.
+    const rankings = [ranking({ id: 1, is_roster_referenced: true })];
+    expect(findBlockingRanking(rankings, target)).toBeUndefined();
+  });
+
   it("prefers the finalized ranking over a distributed one", () => {
     const rankings = [
       ranking({ id: 1, distribution_executed: true }),
@@ -119,6 +133,21 @@ describe("findBlockingRanking", () => {
     const rankings = [ranking({ id: 1, college_code: null, is_finalized: true })];
     expect(findBlockingRanking(rankings, { ...target, college_code: undefined })?.id).toBe(1);
     expect(findBlockingRanking(rankings, target)).toBeUndefined();
+  });
+});
+
+describe("isUndeletableRanking", () => {
+  it("accepts a plain draft", () => {
+    expect(isUndeletableRanking(ranking({ id: 1 }))).toBe(false);
+  });
+
+  it.each([
+    ["locked", { is_finalized: true }],
+    ["distributed", { distribution_executed: true }],
+    ["holding allocation results", { is_settled: true }],
+    ["used by a roster", { is_roster_referenced: true }],
+  ])("refuses a ranking that is %s (the backend answers 409)", (_label, overrides) => {
+    expect(isUndeletableRanking(ranking({ id: 1, ...overrides }))).toBe(true);
   });
 });
 

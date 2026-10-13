@@ -27,6 +27,10 @@ interface CollegeRanking {
   ranking_name: string;
   is_finalized: boolean;
   distribution_executed: boolean;
+  /** Distributed or holding allocation results: blocks new rankings in the scope, never deleted. */
+  is_settled?: boolean;
+  /** Used by a 造冊 roster: never deleted. */
+  is_roster_referenced?: boolean;
   total_applications: number;
   allocated_count?: number;
   distribution_date?: string;

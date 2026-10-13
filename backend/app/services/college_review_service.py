@@ -10,7 +10,7 @@ This service handles college-level review operations including:
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 from sqlalchemy import and_, asc, case
 from sqlalchemy import func as sa_func
@@ -604,7 +604,12 @@ class CollegeReviewService(RankingScopeMixin):
 
         return ranking
 
-    async def finalize_ranking(self, ranking_id: int, finalizer_id: int) -> RankingFinalizeResult:
+    async def finalize_ranking(
+        self,
+        ranking_id: int,
+        finalizer_id: int,
+        expected_sibling_ids: Optional[Iterable[int]] = None,
+    ) -> RankingFinalizeResult:
         """Finalize (lock) a ranking and delete the other drafts of its scope.
 
         Only one ranking per scope survives 確認排名; while it stays locked no new
@@ -612,6 +617,10 @@ class CollegeReviewService(RankingScopeMixin):
         target row itself — admins may finalize a college's ranking. Refuses with
         RankingScopeConflictError (nothing deleted, target stays a draft) when a
         sibling is finalized, settled or referenced by a payment roster.
+
+        ``expected_sibling_ids`` are the drafts the user confirmed deleting. When
+        given, a sibling outside it (created after the user's list was loaded)
+        refuses the lock too, so nothing is deleted that the user never saw.
         """
 
         try:
@@ -645,6 +654,8 @@ class CollegeReviewService(RankingScopeMixin):
                 exclude_id=ranking.id,
                 for_update=True,
             )
+            if expected_sibling_ids is not None:
+                self._assert_siblings_confirmed(siblings, expected_sibling_ids)
             await self._assert_siblings_removable(siblings)
             deleted_rankings = await self._delete_rankings(siblings)
 
@@ -679,6 +690,7 @@ class CollegeReviewService(RankingScopeMixin):
 
         Finalized rankings must be unlocked first (RankingModificationError); settled
         or roster-referenced rankings are never deleted (RankingScopeConflictError).
+        Applications only this draft held lose the rank it wrote.
         """
         target = await self.db.get(CollegeRanking, ranking_id)
         if not target:
@@ -706,6 +718,7 @@ class CollegeReviewService(RankingScopeMixin):
             raise RankingScopeConflictError("此排名已執行分發或已用於造冊，無法刪除")
 
         [deleted] = await self._delete_rankings([ranking])
+        await self._clear_superseded_positions([deleted])
         await self.db.flush()
         return deleted
 

@@ -362,6 +362,16 @@ class RankingScopeMixin:
         )
         return set(result.scalars().all())
 
+    async def load_ranking_protection(self, ranking_ids: Iterable[int]) -> Tuple[Set[int], Set[int]]:
+        """(settled ids, roster-referenced ids) among ``ranking_ids``, for the ranking list.
+
+        A settled ranking blocks creating another ranking in its scope; neither kind
+        is ever deleted, by 刪除 or by another ranking's lock. The list exposes both
+        so the UI disables those actions instead of inviting a certain 409.
+        """
+        ids = list(ranking_ids)
+        return await self._load_settled_ids(ids), await self._load_roster_referenced_ids(ids)
+
     async def _is_settled(self, ranking: CollegeRanking) -> bool:
         return ranking.id in await self._load_settled_ids([ranking.id])
 
@@ -649,6 +659,21 @@ class RankingScopeMixin:
         await self.db.execute(delete(CollegeRanking).where(CollegeRanking.id.in_(ids)))
         return infos
 
+    def _assert_siblings_confirmed(self, siblings: List[CollegeRanking], expected_sibling_ids: Iterable[int]) -> None:
+        """409 when the scope holds a ranking the user did not confirm deleting.
+
+        The confirm dialog lists the siblings of the user's last ranking-list load;
+        another reviewer may have created a draft since. Siblings deleted meanwhile
+        are fine (fewer deletions than confirmed).
+        """
+        confirmed = set(expected_sibling_ids)
+        unconfirmed = [sibling for sibling in siblings if sibling.id not in confirmed]
+        if unconfirmed:
+            names = "、".join(f"「{self._ranking_label(sibling)}」" for sibling in unconfirmed)
+            raise RankingScopeConflictError(
+                f"此學年度／學期有新的排名 {names} 尚未列入確認，鎖定會將其刪除；請重新整理後再確認排名"
+            )
+
     async def _assert_siblings_removable(self, siblings: List[CollegeRanking]) -> None:
         """409 unless every sibling is a plain draft that finalize may delete."""
         finalized = next((sibling for sibling in siblings if sibling.is_finalized), None)
@@ -673,24 +698,28 @@ class RankingScopeMixin:
 
         The confirmed ranking is the source of truth; a deleted draft may have
         written its own order there (update_ranking_order mirrors every reorder).
-        An application only the ``superseded`` drafts held — no other ranking holds
-        it — loses the rank one of them wrote, so the review listing does not show
-        it as ranked.
+        Applications only the ``superseded`` drafts held lose the rank they wrote
+        (see _clear_superseded_positions).
         """
-        superseded = list(superseded)
-        kept_ids: Set[int] = set()
         for item, app in await self._load_item_rows(ranking_id):
-            kept_ids.add(item.application_id)
             if app is not None and app.final_ranking_position != item.rank_position:
                 app.final_ranking_position = item.rank_position
+        await self._clear_superseded_positions(superseded)
 
+    async def _clear_superseded_positions(self, superseded: Iterable[DeletedRankingInfo]) -> None:
+        """Clear the rank deleted rankings wrote on applications no ranking holds any more.
+
+        Without this the review listing keeps showing such an application as ranked.
+        An application another ranking still holds (the confirmed one, or another
+        scope's) keeps its value; see _application_ids_ranked_elsewhere.
+        """
+        superseded = list(superseded)
         orphan_positions: Dict[int, Set[int]] = {}
         for info in superseded:
             for application_id, rank_position in info.rank_positions.items():
-                if int(application_id) not in kept_ids:
-                    orphan_positions.setdefault(int(application_id), set()).add(rank_position)
+                orphan_positions.setdefault(int(application_id), set()).add(rank_position)
         ranked_elsewhere = await self._application_ids_ranked_elsewhere(
-            orphan_positions, [ranking_id, *(info.id for info in superseded)]
+            orphan_positions, [info.id for info in superseded]
         )
         orphan_ids = set(orphan_positions) - ranked_elsewhere
         if not orphan_ids:

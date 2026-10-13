@@ -4,9 +4,9 @@
  * A ranking's scope is (scholarship type, sub-type, academic year, semester,
  * college). A college may keep several DRAFT rankings per scope; 確認排名 locks
  * one of them and the backend deletes the others, so a scope never holds more
- * than one finalized ranking. While a finalized (or already distributed)
- * ranking exists in the scope the backend refuses to create another (409) —
- * the panel uses these helpers to say so before the user clicks.
+ * than one finalized ranking. While a finalized (or settled) ranking exists
+ * in the scope the backend refuses to create another (409) — the panel uses
+ * these helpers to say so before the user clicks.
  */
 
 /** The ranking-list fields the scope rules read (GET /college-review/rankings). */
@@ -20,6 +20,30 @@ export interface RankingScopeFields {
   college_code?: string | null;
   is_finalized?: boolean | null;
   distribution_executed?: boolean | null;
+  /**
+   * Distributed, or holding allocation results before distribution_executed
+   * is set (backend `_load_settled_ids`).
+   */
+  is_settled?: boolean | null;
+  /** Used by a 造冊 roster. */
+  is_roster_referenced?: boolean | null;
+}
+
+/** Distribution state that blocks creating another ranking in the scope. */
+function isSettled(ranking: RankingScopeFields): boolean {
+  return ranking.is_settled === true || ranking.distribution_executed === true;
+}
+
+/**
+ * The backend never deletes this ranking: not by 刪除, and not by another
+ * ranking's lock (that lock answers 409 and deletes nothing).
+ */
+export function isUndeletableRanking(ranking: RankingScopeFields): boolean {
+  return (
+    ranking.is_finalized === true ||
+    isSettled(ranking) ||
+    ranking.is_roster_referenced === true
+  );
 }
 
 /** The five fields that make up a ranking's scope. */
@@ -69,8 +93,8 @@ export function findScopeSiblings<T extends RankingScopeFields>(
 
 /**
  * The ranking that blocks creating another one in `target`'s scope: a
- * finalized ranking first, else a distributed one. Compares the full scope,
- * so `rankings` may span scholarships and periods.
+ * finalized ranking first, else a settled one. Compares the full scope, so
+ * `rankings` may span scholarships and periods.
  */
 export function findBlockingRanking<T extends RankingScopeFields>(
   rankings: readonly T[],
@@ -79,7 +103,7 @@ export function findBlockingRanking<T extends RankingScopeFields>(
   const inScope = rankings.filter(ranking => isSameScope(ranking, target));
   return (
     inScope.find(ranking => ranking.is_finalized === true) ??
-    inScope.find(ranking => ranking.distribution_executed === true)
+    inScope.find(isSettled)
   );
 }
 

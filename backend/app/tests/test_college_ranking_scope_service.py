@@ -308,6 +308,77 @@ class TestDeleteRanking:
         assert not await ranking_exists(db, ranking_id)
         assert await count_items(db, ranking_id) == 0
 
+    async def test_applications_only_the_deleted_draft_held_lose_the_rank_it_wrote(
+        self, service, db, users, scholarship
+    ):
+        only_doomed = await add_application(db, scholarship.id, "only_doomed", order=0)
+        also_kept = await add_application(db, scholarship.id, "also_kept", order=1)
+        written_elsewhere = await add_application(db, scholarship.id, "elsewhere", order=2)
+        doomed = await insert_ranking(
+            db,
+            scholarship.id,
+            created_by=users["eng"].id,
+            application_ids=[only_doomed.id, also_kept.id, written_elsewhere.id],
+        )
+        await insert_ranking(db, scholarship.id, created_by=users["eng"].id, application_ids=[also_kept.id])
+        only_doomed.final_ranking_position = 1  # the doomed draft's order
+        also_kept.final_ranking_position = 2  # the doomed draft's order, but another draft holds it
+        written_elsewhere.final_ranking_position = 9  # some other ranking's order
+        await db.commit()
+
+        await service.delete_ranking(doomed.id)
+        await db.commit()
+
+        assert await final_positions(db, [only_doomed.id, also_kept.id, written_elsewhere.id]) == {
+            only_doomed.id: None,
+            also_kept.id: 2,
+            written_elsewhere.id: 9,
+        }
+
+
+class TestFinalizeConfirmedSiblings:
+    async def test_none_skips_the_check_and_deletes_every_sibling(self, service, db, users, scholarship):
+        # API callers that do not send expected_sibling_ids (scripts, e2e) keep the plain lock.
+        sibling_ids = [await _create(service, db, scholarship.id, users["eng"].id) for _ in range(2)]
+        target_id = await _create(service, db, scholarship.id, users["eng"].id)
+
+        result = await service.finalize_ranking(target_id, users["eng"].id, expected_sibling_ids=None)
+
+        assert [deleted.id for deleted in result.deleted_rankings] == sibling_ids
+
+    async def test_unconfirmed_sibling_refuses_before_anything_is_deleted(self, service, db, users, scholarship):
+        seen_id = await _create(service, db, scholarship.id, users["eng"].id)
+        target_id = await _create(service, db, scholarship.id, users["eng"].id)
+        late_id = await _create(service, db, scholarship.id, users["eng"].id, ranking_name="後來的草稿")
+
+        with pytest.raises(RankingScopeConflictError, match="後來的草稿"):
+            await service.finalize_ranking(target_id, users["eng"].id, expected_sibling_ids=[seen_id])
+        await db.rollback()
+
+        for ranking_id in (seen_id, target_id, late_id):
+            assert await ranking_exists(db, ranking_id)
+        assert not (await db.get(CollegeRanking, target_id)).is_finalized
+
+
+class TestRankingProtectionFlags:
+    async def test_splits_settled_and_roster_referenced_rankings(self, service, db, users, scholarship):
+        application = await add_application(db, scholarship.id, "a1")
+        allocated = await insert_ranking(
+            db, scholarship.id, created_by=users["eng"].id, application_ids=[application.id]
+        )
+        used = await insert_ranking(db, scholarship.id, created_by=users["eng"].id)
+        draft = await insert_ranking(db, scholarship.id, created_by=users["eng"].id)
+        (await first_item(db, allocated.id)).is_allocated = True
+        config = await make_config(db, scholarship.id, code="protection_cfg", academic_year=100)
+        await add_payment_roster(db, ranking_id=used.id, config_id=config.id, created_by=users["eng"].id)
+        await db.commit()
+
+        assert await service.load_ranking_protection([allocated.id, used.id, draft.id]) == (
+            {allocated.id},
+            {used.id},
+        )
+        assert await service.load_ranking_protection([]) == (set(), set())
+
 
 class TestSettledPredicate:
     """_load_settled_ids: the SQL pre-filter must not drop any row the Python predicate keeps."""

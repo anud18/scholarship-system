@@ -161,13 +161,13 @@ describe("createCollegeApi", () => {
 
   // ─── finalize / unfinalize distinct paths ─────────────────────────
 
-  it("finalizeRanking and unfinalizeRanking hit DISTINCT paths (both POST, no body)", async () => {
+  it("finalizeRanking and unfinalizeRanking hit DISTINCT paths (both POST)", async () => {
     // Pin: distinct paths — pin so refactor consolidating into a
     // single toggle PATCH with body doesn't break the locking
     // semantics admin UI relies on.
     mockedRaw.POST.mockResolvedValue({});
     const api = createCollegeApi();
-    await api.finalizeRanking(42);
+    await api.finalizeRanking(42, []);
     await api.unfinalizeRanking(42);
     expect(mockedRaw.POST.mock.calls[0][0]).toBe(
       "/api/v1/college-review/rankings/{ranking_id}/finalize"
@@ -175,6 +175,23 @@ describe("createCollegeApi", () => {
     expect(mockedRaw.POST.mock.calls[1][0]).toBe(
       "/api/v1/college-review/rankings/{ranking_id}/unfinalize"
     );
+    expect("body" in mockedRaw.POST.mock.calls[1][1]).toBe(false);
+  });
+
+  it("finalizeRanking sends the sibling ids the user confirmed deleting", async () => {
+    // Pin: the lock deletes the scope's other rankings; the backend refuses
+    // (409) when one exists that the confirm dialog did not list. An empty
+    // list (no dialog shown) must still be sent, never omitted.
+    mockedRaw.POST.mockResolvedValue({});
+    const api = createCollegeApi();
+    await api.finalizeRanking(42, [7, 9]);
+    await api.finalizeRanking(43, []);
+    expect(mockedRaw.POST).toHaveBeenNthCalledWith(
+      1,
+      "/api/v1/college-review/rankings/{ranking_id}/finalize",
+      { params: { path: { ranking_id: 42 } }, body: { expected_sibling_ids: [7, 9] } }
+    );
+    expect(mockedRaw.POST.mock.calls[1][1].body).toEqual({ expected_sibling_ids: [] });
   });
 
   // ─── syncRanking (同步申請名單) ───────────────────────────────────

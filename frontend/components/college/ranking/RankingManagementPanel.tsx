@@ -315,17 +315,35 @@ export function RankingManagementPanel({
   // area empty: the finalized one if the period has it (after a lock it is the
   // only ranking left in its scope), else the newest draft. Re-runs when the
   // selection no longer matches the filter (period switched, or the selected
-  // draft was deleted by another ranking's lock).
+  // draft was deleted by another ranking's lock). A period without rankings
+  // drops the previous one, so its table and banners never show under the
+  // empty state.
   useEffect(() => {
     const isSelectionValid = filteredRankings.some(
       ranking => ranking.id === selectedRanking
     );
     if (isSelectionValid) return;
     const targetId = pickDefaultRankingId(filteredRankings);
-    if (targetId === null) return;
-    setSelectedRanking(targetId);
-    fetchRankingDetails(targetId);
-  }, [filteredRankings, selectedRanking, setSelectedRanking, fetchRankingDetails]);
+    if (targetId !== null) {
+      setSelectedRanking(targetId);
+      fetchRankingDetails(targetId);
+      return;
+    }
+    if (selectedRanking === null && rankingData === null) return;
+    latestDetailRequestRef.current++; // a detail response still in flight is dropped
+    setSelectedRanking(null);
+    setRankingData(null);
+    setActiveConfigDeadline(null);
+    setIsRankingLoading(false);
+  }, [
+    filteredRankings,
+    selectedRanking,
+    rankingData,
+    setSelectedRanking,
+    setRankingData,
+    setIsRankingLoading,
+    fetchRankingDetails,
+  ]);
 
   // Auto-refresh when switching to ranking tab or when data version changes
   useEffect(() => {
@@ -526,16 +544,25 @@ export function RankingManagementPanel({
     useState<FinalizeCandidate | null>(null);
   const [isFinalizing, setIsFinalizing] = useState(false);
 
+  // `expectedSiblingIds`: the scope's other rankings the user saw (and, when
+  // there were any, confirmed deleting). The backend refuses (409) if the
+  // scope holds one more, e.g. a draft a colleague created since.
   const finalizeRanking = useCallback(
-    async (rankingId: number) => {
+    async (rankingId: number, expectedSiblingIds: number[]) => {
       setIsFinalizing(true);
       try {
-        const response = await apiClient.college.finalizeRanking(rankingId);
+        const response = await apiClient.college.finalizeRanking(
+          rankingId,
+          expectedSiblingIds
+        );
         if (!response.success) {
           toast.error(
             response.message ||
               (locale === "zh" ? "無法鎖定排名" : "Failed to lock the ranking")
           );
+          // A refusal may come from rankings this list does not show yet;
+          // reload so the next 確認排名 lists them.
+          await fetchRankings();
           return;
         }
         const deletedCount = response.data?.deleted_ranking_count ?? 0;
@@ -583,7 +610,8 @@ export function RankingManagementPanel({
       const target = rankings.find(ranking => ranking.id === rankingId);
       const siblings = target ? findScopeSiblings(rankings, target) : [];
       if (!target || siblings.length === 0) {
-        void finalizeRanking(rankingId);
+        // Nothing listed to delete: the backend refuses if a sibling exists.
+        void finalizeRanking(rankingId, []);
         return;
       }
       setFinalizeCandidate({ id: rankingId, name: target.ranking_name, siblings });
@@ -593,7 +621,10 @@ export function RankingManagementPanel({
 
   const handleConfirmFinalize = useCallback(async () => {
     if (!finalizeCandidate) return;
-    await finalizeRanking(finalizeCandidate.id);
+    await finalizeRanking(
+      finalizeCandidate.id,
+      finalizeCandidate.siblings.map(sibling => sibling.id)
+    );
     setFinalizeCandidate(null);
   }, [finalizeCandidate, finalizeRanking]);
 
