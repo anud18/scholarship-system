@@ -159,3 +159,24 @@ export const CROSS_ORIGIN_EMBEDDER_POLICY = "require-corp";
  */
 export const SONNER_EMPTY_STYLE_HASH = "'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='";
 export const SONNER_STYLE_HASH = "'sha256-Od9mHMH7x2G6QuoV3hsPkDCwIyqbg2DX3F5nLeCYQBc='";
+
+/**
+ * Content-Security-Policy for root-level `frontend/public/` files (icons,
+ * images, fonts), declared ONLY in the nginx public-asset block, which also
+ * hides any upstream CSP so exactly one policy is sent.
+ *
+ * WHY: ZAP's 2026-10 active scan filed /favicon.ico as "CSP Header Not Set"
+ * (Medium). Requests the middleware matcher skips (asset-like extensions) got
+ * no CSP at all — including Next's HTML 404 page for a missing asset, and any
+ * SVG opened directly as a document, whose scripts would run on this origin.
+ * An `<img>` load ignores the image's own CSP, so normal rendering is
+ * unaffected; a 404 page for a missing asset URL now renders unstyled, which
+ * is intended.
+ *
+ * No `style-src 'unsafe-inline'`: none of the public SVGs use inline styles,
+ * and it would trade this finding for ZAP 10055 (issue #1273 removed it from
+ * the page policy). Kept off every worker script — `/_next/static/` JS and
+ * `/pdf.worker.min.mjs` — because a worker obeys its own response's CSP.
+ */
+export const STATIC_ASSET_CSP =
+  "default-src 'none'; img-src 'self' data:; frame-ancestors 'self'; base-uri 'none'; form-action 'none'";
