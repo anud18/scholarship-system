@@ -55,6 +55,16 @@ def test_counts_only_moe_sub_types_as_distinct_students():
     assert (row.field, row.applicants, row.awardees) == ("01教育", 2, 1)
 
 
+def test_awardee_counts_as_applicant_even_without_the_moe_code_on_their_application():
+    # An empty / placeholder sub-type list lets the distribution allocate any sub-type.
+    applicants = [_record(1, "4460", "general")]
+    awardees = [_record(1, "4460", "moe_1w")]
+
+    row = _by_department(tally_department_counts(applicants, awardees))["教育研究所"]
+
+    assert (row.applicants, row.awardees) == (1, 1)
+
+
 def test_every_layout_row_is_emitted_and_unmapped_departments_follow():
     rows = tally_department_counts(
         [_record(1, "103", "moe_1w"), _record(2, "9999", "moe_1w"), _record(3, None, "moe_1w")], []

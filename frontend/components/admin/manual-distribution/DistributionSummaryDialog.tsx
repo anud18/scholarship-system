@@ -33,6 +33,22 @@ type ExportKind =
   | "college-award-stats"
   | "moe-department-award-stats";
 
+type ExportParams = {
+  scholarshipTypeId: number;
+  academicYear: number;
+  semester: string;
+};
+
+const EXPORTERS: Record<
+  ExportKind,
+  (params: ExportParams) => Promise<{ blob: Blob; filename: string }>
+> = {
+  xlsx: params => exportDistributionSummary({ ...params, format: "xlsx" }),
+  pdf: params => exportDistributionSummary({ ...params, format: "pdf" }),
+  "college-award-stats": exportDistributionCollegeAwardStats,
+  "moe-department-award-stats": exportDistributionMoeDepartmentAwardStats,
+};
+
 interface DistributionSummaryDialogProps {
   summary: DistributionSummaryResult | null;
   isLoading: boolean;
@@ -81,12 +97,7 @@ export function DistributionSummaryDialog({
       // lazy-import rule in frontend/CLAUDE.md targets heavy libs (xlsx,
       // react-pdf); rendering happens server-side here.
       const params = { scholarshipTypeId, academicYear, semester };
-      const result =
-        format === "college-award-stats"
-          ? await exportDistributionCollegeAwardStats(params)
-          : format === "moe-department-award-stats"
-            ? await exportDistributionMoeDepartmentAwardStats(params)
-            : await exportDistributionSummary({ ...params, format });
+      const result = await EXPORTERS[format](params);
       triggerBlobDownload(result);
       toast.success("匯出成功");
     } catch (e) {

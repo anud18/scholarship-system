@@ -4,7 +4,8 @@ One row per 系所 of the office's reference form, grouped under its 教育部�
 學科標準分類 field (``MOE_DEPARTMENT_FIELD_LAYOUT``):
 
 - 申請人數: students who applied for a 教育部 sub-type (any sub-type whose
-  funding agency is 教育部 — ``moe_1w`` / ``moe_2w``).
+  funding agency is 教育部 — ``moe_1w`` / ``moe_2w``) through the 甄選 —
+  renewals (續領) are excluded — plus every 正取 student.
 - 通過甄選人數(正取): students the 分發名單 allocated a 教育部 sub-type.
 - 加碼補助人數: left blank for the office to fill in by hand.
 
@@ -159,11 +160,17 @@ def tally_department_counts(
 ) -> List[DepartmentStatsRow]:
     """Every layout row (zeros included — it is a fixed form), then unmapped 系所 by name.
 
-    Only records carrying a 教育部 sub-type count. No 合計 row here — the
-    workbook adds it.
+    Only records carrying a 教育部 sub-type count, and 正取 students always
+    count as applicants too. No 合計 row here — the workbook adds it.
     """
-    applicant_users = _moe_users_by_row(applicants)
     awardee_users = _moe_users_by_row(awardees)
+    # Every 正取 student was selected from the applicants, so they count as one
+    # even when their own sub-type list lacks the 教育部 code the distribution
+    # allocated (an empty list lets the distribution assign any sub-type) —
+    # a row never shows more 正取 than 申請.
+    applicant_users = _moe_users_by_row(applicants)
+    for key, users in awardee_users.items():
+        applicant_users[key] = applicant_users.get(key, set()) | users
 
     keys = [(field, label) for field, rows in MOE_DEPARTMENT_FIELD_LAYOUT for label, _ in rows]
     layout_keys = set(keys)
@@ -290,7 +297,11 @@ async def build_moe_department_award_stats_export(
     統計各學院學生申請人數.
     """
     applicant_rows = await load_applicant_rows(
-        db, scholarship_type_id=scholarship.id, academic_year=academic_year, semester=semester
+        db,
+        scholarship_type_id=scholarship.id,
+        academic_year=academic_year,
+        semester=semester,
+        include_renewals=False,
     )
     name_by_code = await _department_names(
         db, [row.student_data for row in applicant_rows] + [data for _, data, _ in awards]

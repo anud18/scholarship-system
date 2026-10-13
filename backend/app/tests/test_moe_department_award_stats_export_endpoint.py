@@ -18,11 +18,12 @@ from app.core.deps import get_current_admin_user, get_current_user
 from app.main import app
 from app.models.application import Application
 from app.models.college_review import CollegeRanking, CollegeRankingItem
-from app.models.enums import ApplicationStatus, ReviewStage, SubTypeSelectionMode
+from app.models.enums import ApplicationStatus, ReviewStage, Semester, SubTypeSelectionMode
 from app.models.scholarship import ScholarshipSubTypeConfig, ScholarshipType
 from app.models.student import Department
 from app.models.user import User, UserRole, UserType
 from app.services.moe_department_award_stats_service import TOTAL_ROW_LABEL, UNMAPPED_FIELD_LABEL
+from app.services.stats_applicant_source import load_applicant_rows
 
 ACADEMIC_YEAR = 114
 URL = "/api/v1/manual-distribution/distribution-summary/moe-department-award-stats/export"
@@ -84,7 +85,14 @@ async def phd(db: AsyncSession) -> ScholarshipType:
 
 
 async def _application(
-    db: AsyncSession, st: ScholarshipType, suffix: str, depno: str, sub_types, status=ApplicationStatus.submitted
+    db: AsyncSession,
+    st: ScholarshipType,
+    suffix: str,
+    depno: str,
+    sub_types,
+    status=ApplicationStatus.submitted,
+    *,
+    is_renewal: bool = False,
 ) -> Application:
     user = await _user(db, f"moe_dept_stu_{suffix}", UserRole.student)
     application = Application(
@@ -99,6 +107,7 @@ async def _application(
         status=status,
         review_stage=ReviewStage.quota_distributed,
         agree_terms=True,
+        is_renewal=is_renewal,
         student_data={"std_stdcode": f"31{suffix}", "std_academyno": "C", "std_depno": depno},
     )
     db.add(application)
@@ -145,6 +154,7 @@ ROWS = [
     ("05", "103", ["moe_1w"], "moe_1w", SUBMITTED),  # 系所 missing from the form
     ("06", "4460", ["nstc"], "nstc", SUBMITTED),  # 國科會 only ⇒ not counted
     ("07", "4460", ["moe_1w"], None, ApplicationStatus.draft),  # draft ⇒ not an applicant
+    ("08", "4460", ["general"], "moe_2w", SUBMITTED),  # allocated 教育部 without listing it ⇒ applicant too
 ]
 
 
@@ -161,6 +171,8 @@ def _rows(content: bytes):
 @pytest.mark.asyncio
 async def test_counts_moe_applicants_and_awardees_per_department(admin_client, db, phd):
     await _seed_distribution(db, phd, ROWS)
+    # 續領 never enters the 甄選 ⇒ not a 申請人數.
+    await _application(db, phd, "09", "4460", ["moe_1w"], ApplicationStatus.approved, is_renewal=True)
 
     resp = await admin_client.get(URL, params={"scholarship_type_id": phd.id, **PARAMS})
 
@@ -169,14 +181,14 @@ async def test_counts_moe_applicants_and_awardees_per_department(admin_client, d
     assert "114學年度統計教育部博士生獎學金-各系所獲獎生人數.xlsx" in filename
     ws, body, total = _rows(resp.content)
     assert ws["A1"].value == "114學年度統計教育部博士生獎學金-各系所獲獎生人數"
-    assert body["教育研究所"] == (1, 1)
+    assert body["教育研究所"] == (2, 2)
     assert body["資訊科學與工程研究所"] == (2, 0)
     assert body["跨領域神經科學博士學位學程"] == (1, 1)
     assert body["電機資訊國際博士學位學程"] == (1, 1)
     assert body["應用藝術研究所"] == (0, 0)
     assert ws.cell(row=ws.max_row - 1, column=1).value == UNMAPPED_FIELD_LABEL
     assert ws.cell(row=ws.max_row, column=1).value == TOTAL_ROW_LABEL
-    assert total == (5, 3)
+    assert total == (6, 4)
 
 
 @pytest.mark.asyncio
@@ -213,3 +225,19 @@ async def test_rejects_unknown_semester(admin_client, phd):
     )
 
     assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("semester", ["yearly", "annual", "Yearly"])
+async def test_applicant_loader_treats_every_yearly_spelling_as_null_semester(db, phd, semester):
+    await _application(db, phd, "21", "4460", ["moe_1w"])  # semester NULL
+    stored_yearly = await _application(db, phd, "22", "4460", ["moe_2w"])
+    stored_yearly.semester = Semester.yearly
+    await db.commit()
+    first = await _application(db, phd, "23", "4460", ["nstc"])
+    first.semester = Semester.first
+    await db.commit()
+
+    rows = await load_applicant_rows(db, scholarship_type_id=phd.id, academic_year=ACADEMIC_YEAR, semester=semester)
+
+    assert sorted(row.sub_type_codes for row in rows) == [("moe_1w",), ("moe_2w",)]
