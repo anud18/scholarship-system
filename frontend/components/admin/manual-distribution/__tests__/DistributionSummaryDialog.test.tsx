@@ -34,6 +34,7 @@ async function clickExportItem(label: string) {
 
 const mockExport = jest.fn();
 const mockAwardStatsExport = jest.fn();
+const mockMoeDepartmentStatsExport = jest.fn();
 const mockTriggerBlobDownload = jest.fn();
 const mockToast = { success: jest.fn(), error: jest.fn() };
 
@@ -41,6 +42,8 @@ jest.mock("@/lib/api/modules/manual-distribution", () => ({
   exportDistributionSummary: (...args: unknown[]) => mockExport(...args),
   exportDistributionCollegeAwardStats: (...args: unknown[]) =>
     mockAwardStatsExport(...args),
+  exportDistributionMoeDepartmentAwardStats: (...args: unknown[]) =>
+    mockMoeDepartmentStatsExport(...args),
   resolveCollegeName: (
     names: Map<string, string>,
     code: string,
@@ -171,6 +174,28 @@ describe("DistributionSummaryDialog", () => {
     expect(mockTriggerBlobDownload).toHaveBeenCalledWith({
       blob: expect.any(Blob),
       filename: "統計各學院學生獲獎人數.xlsx",
+    });
+  });
+
+  it("exports 統計教育部各系所獲獎生人數 for the current selection", async () => {
+    mockMoeDepartmentStatsExport.mockResolvedValue({
+      blob: new Blob(["x"]),
+      filename: "統計教育部博士生獎學金-各系所獲獎生人數.xlsx",
+    });
+    render(<DistributionSummaryDialog {...defaults} summary={summary()} isLoading={false} />);
+    await clickExportItem("統計教育部各系所獲獎生人數");
+
+    await waitFor(() => expect(mockMoeDepartmentStatsExport).toHaveBeenCalledTimes(1));
+    expect(mockMoeDepartmentStatsExport).toHaveBeenCalledWith({
+      scholarshipTypeId: 7,
+      academicYear: 114,
+      semester: "yearly",
+    });
+    expect(mockExport).not.toHaveBeenCalled();
+    expect(mockAwardStatsExport).not.toHaveBeenCalled();
+    expect(mockTriggerBlobDownload).toHaveBeenCalledWith({
+      blob: expect.any(Blob),
+      filename: "統計教育部博士生獎學金-各系所獲獎生人數.xlsx",
     });
   });
 
