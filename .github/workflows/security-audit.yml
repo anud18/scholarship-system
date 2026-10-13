@@ -159,7 +159,9 @@ jobs:
           done
           docker info --format 'docker {{.ServerVersion}} on {{.OperatingSystem}}' \
             || { echo "::error::docker is not usable by the runner user"; exit 1; }
-          docker compose version
+
+      - name: Ensure docker compose and buildx
+        run: .github/security-audit/ensure_docker_plugins.sh
 
       - name: Prepare work dir, secrets and nginx conf
         run: |
@@ -342,6 +344,9 @@ jobs:
         with:
           name: security-audit-zap
           path: in/zap
+
+      - name: Ensure docker compose and buildx
+        run: .github/security-audit/ensure_docker_plugins.sh
 
       - name: Render PDFs
         env:
