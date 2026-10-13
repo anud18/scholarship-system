@@ -7,6 +7,9 @@
 {% if not codeql.produced %}
 <p class="note"><strong>CodeQL 未產出任何 SARIF 結果</strong>：分析步驟失敗，請檢查 workflow log。</p>
 {% else %}
+{% if codeql.missing %}
+<p class="note"><strong>部分語言未產出結果</strong>：{{ codeql.missing | join('、') }} 的 CodeQL 分析失敗，以下不涵蓋這些語言。</p>
+{% endif %}
 <h2>依規則統計</h2>
 <table>
   <tr><th>嚴重度</th><th>規則</th><th>說明</th><th class="num">數量</th></tr>

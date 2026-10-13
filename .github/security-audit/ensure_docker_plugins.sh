@@ -25,6 +25,11 @@ fi
 
 export DOCKER_CONFIG="$RUNNER_TEMP/docker-config"
 mkdir -p "$DOCKER_CONFIG/cli-plugins"
+# Carry over registry auth: a fresh DOCKER_CONFIG would otherwise make every
+# later pull anonymous (and subject to Docker Hub's anonymous rate limit).
+if [ -f "${HOME}/.docker/config.json" ]; then
+  cp "${HOME}/.docker/config.json" "$DOCKER_CONFIG/config.json"
+fi
 
 install_plugin() {
   local name=$1 url=$2 sha=$3

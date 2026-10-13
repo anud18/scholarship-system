@@ -128,7 +128,7 @@ jobs:
       run: |
         {
           echo 'patterns<<SARIF_PATTERNS_EOF'
-          grep -vE '^[[:space:]]*(#|$)' .github/codeql/sarif-filter-patterns.txt
+          grep -vE '^[[:space:]]*(#|$)' .github/codeql/sarif-filter-patterns.txt || true
           echo 'SARIF_PATTERNS_EOF'
         } >> "$GITHUB_OUTPUT"
 

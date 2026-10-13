@@ -19,6 +19,9 @@
 {% else %}
 <p class="note"><strong>CodeQL 未產出結果</strong>：分析步驟失敗，本報告不涵蓋原始碼分析。</p>
 {% endif %}
+{% if codeql.produced and codeql.missing %}
+<p class="note"><strong>部分語言未產出結果</strong>：{{ codeql.missing | join('、') }} 的 CodeQL 分析失敗，上表不涵蓋這些語言。</p>
+{% endif %}
 
 <h3>動態弱點掃描（OWASP ZAP，主動掃描）</h3>
 {% if zap.produced %}
@@ -63,6 +66,8 @@
   <li><strong>外部相依服務</strong>：學籍系統（SIS）為 mock 服務；Portal SSO JWT 伺服器指向不可達位址；
       郵件寄至本機 mailpit。</li>
   <li><strong>未納入</strong>：Grafana（<code>/monitoring</code>）為獨立產品，不在掃描範圍。</li>
+  <li><strong>其他</strong>：Redis 未設密碼（僅內部網路使用，不在掃描範圍）；API 規格（OpenAPI）於開發模式下匯出，
+      因正式環境關閉 API 文件，路由與正式環境相同。</li>
 </ol>
 
 <h2>檢測方法</h2>

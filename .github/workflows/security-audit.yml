@@ -112,7 +112,7 @@ jobs:
         run: |
           {
             echo 'patterns<<SARIF_PATTERNS_EOF'
-            grep -vE '^[[:space:]]*(#|$)' .github/codeql/sarif-filter-patterns.txt
+            grep -vE '^[[:space:]]*(#|$)' .github/codeql/sarif-filter-patterns.txt || true
             echo 'SARIF_PATTERNS_EOF'
           } >> "$GITHUB_OUTPUT"
 
@@ -153,6 +153,10 @@ jobs:
           for v in API_SCAN_MINUTES FRONTEND_SCAN_MINUTES SPIDER_MINUTES; do
             [[ "${!v}" =~ ^[1-9][0-9]{0,2}$ ]] || { echo "::error::$v must be 1-999, got '${!v}'"; exit 1; }
           done
+          # Leave ~60 of the job's 240 minutes for builds, seeding and reports.
+          TOTAL=$((API_SCAN_MINUTES + FRONTEND_SCAN_MINUTES + 2 * SPIDER_MINUTES))
+          [ "$TOTAL" -le 180 ] \
+            || { echo "::error::scan time api+frontend+2*spider = $TOTAL min exceeds 180 (job timeout 240)"; exit 1; }
           docker info --format 'docker {{.ServerVersion}} on {{.OperatingSystem}}' \
             || { echo "::error::docker is not usable by the runner user"; exit 1; }
 
@@ -223,7 +227,9 @@ jobs:
               -sk -o /dev/null -w '%{http_code}' "https://${TARGET_HOST}$1"
           }
           for i in $(seq 1 60); do
-            home=$(probe /) ; api=$(probe /api/v1/auth/me)
+            # curl exits non-zero (and prints 000) while nginx is still binding;
+            # that must retry, not trip errexit.
+            home=$(probe / || true) ; api=$(probe /api/v1/auth/me || true)
             echo "attempt $i: / -> $home, /api/v1/auth/me -> $api"
             # 401 proves the request crossed nginx into FastAPI.
             if [ "$home" = "200" ] && [ "$api" = "401" ]; then break; fi
@@ -270,7 +276,7 @@ jobs:
             echo "::error::unfilled placeholder in zap-plan.yaml"; exit 1
           fi
           set +e
-          docker run --rm --network "$SCAN_NETWORK" \
+          docker run --rm --name "$COMPOSE_PROJECT_NAME-zap" --network "$SCAN_NETWORK" \
             -v "$SCAN_OUT_DIR:/zap/wrk:rw" \
             "$ZAP_IMAGE" zap.sh -cmd -autorun /zap/wrk/zap-plan.yaml 2>&1 | tee "$WORK/zap-console.log"
           rc=${PIPESTATUS[0]}
@@ -278,6 +284,10 @@ jobs:
           echo "ZAP exited with $rc"
           test -s "$SCAN_OUT_DIR/zap-raw-report.json" \
             || { echo "::error::ZAP produced no report (exit $rc)"; exit 1; }
+          # A plan job that errored can still leave a report behind; that is a
+          # partial scan and must not pass as complete (the outputs are still
+          # collected and rendered by the always() steps below).
+          [ "$rc" -eq 0 ] || { echo "::error::ZAP automation plan failed (exit $rc); the scan is incomplete"; exit 1; }
 
       - name: Collect ZAP output
         if: always()
@@ -305,7 +315,11 @@ jobs:
       - name: Tear down
         if: always()
         run: |
-          docker compose --profile setup down -v --remove-orphans || true
+          # A cancelled job can leave the ZAP container attached to the network,
+          # which would make `compose down` unable to remove it.
+          docker rm -f "$COMPOSE_PROJECT_NAME-zap" 2>/dev/null || true
+          docker compose --profile setup down -v --remove-orphans || echo "::warning::compose down failed"
+          docker network rm "$SCAN_NETWORK" 2>/dev/null || true
           # Container-written files are uid 1000; hand them back before removal
           # so the next job on this self-hosted runner can clean its temp dir.
           if [ -n "${WORK:-}" ] && [ -d "$WORK" ]; then

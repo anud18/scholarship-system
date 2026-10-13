@@ -33,6 +33,9 @@ ZAP_RISK_ORDER = ["High", "Medium", "Low", "Informational"]
 ZAP_CONFIDENCE = {0: "False Positive", 1: "Low", 2: "Medium", 3: "High", 4: "Confirmed"}
 SARIF_LEVEL = {"error": "High", "warning": "Medium", "note": "Low", "none": "Info"}
 LANGUAGE_NAMES = {"python": "Python", "javascript": "JavaScript/TypeScript", "actions": "GitHub Actions"}
+# One SARIF per CodeQL matrix leg (security-audit.yml). A missing one means that
+# leg failed and must be called out, not silently dropped from the tables.
+EXPECTED_SARIF = ("actions", "javascript", "python")
 MAX_INSTANCES_PER_ALERT = 10
 HTTP_METHODS = {"get", "post", "put", "patch", "delete"}
 META_ENV = {
@@ -58,7 +61,9 @@ def paragraphs(text: str) -> list:
 def codeql_severity(result: dict, rule: dict) -> str:
     score = rule.get("properties", {}).get("security-severity")
     if score is None:
-        return SARIF_LEVEL.get(result.get("level", "warning"), "Medium")
+        # A result omits `level` when it equals the rule's default.
+        default_level = rule.get("defaultConfiguration", {}).get("level", "warning")
+        return SARIF_LEVEL.get(result.get("level", default_level), "Medium")
     score = float(score)
     if score >= 9.0:
         return "Critical"
@@ -67,6 +72,13 @@ def codeql_severity(result: dict, rule: dict) -> str:
     if score >= 4.0:
         return "Medium"
     return "Low"
+
+
+def rules_by_id(run: dict) -> dict:
+    """CodeQL pack output keeps rules in tool.extensions[].rules, not tool.driver.rules."""
+    tool = run.get("tool", {})
+    components = [tool.get("driver", {}), *tool.get("extensions", [])]
+    return {rule["id"]: rule for component in components for rule in component.get("rules", []) if "id" in rule}
 
 
 def parse_sarif(sarif_dir: pathlib.Path) -> dict:
@@ -78,7 +90,7 @@ def parse_sarif(sarif_dir: pathlib.Path) -> dict:
         for run in json.loads(sarif_file.read_text(encoding="utf-8")).get("runs", []):
             driver = run.get("tool", {}).get("driver", {})
             version = version or driver.get("semanticVersion", "")
-            rules = {r["id"]: r for r in driver.get("rules", [])}
+            rules = rules_by_id(run)
             for result in run.get("results", []):
                 rule = rules.get(result.get("ruleId"), {})
                 location = (result.get("locations") or [{}])[0].get("physicalLocation", {})
@@ -95,8 +107,10 @@ def parse_sarif(sarif_dir: pathlib.Path) -> dict:
                 )
     findings.sort(key=lambda f: (SEVERITIES.index(f["severity"]), f["language"], f["file"], f["line"]))
     by_language = {lang: Counter(f["severity"] for f in findings if f["language"] == lang) for lang in languages}
+    present = {f.stem for f in files}
     return {
         "produced": bool(files),
+        "missing": [LANGUAGE_NAMES.get(stem, stem) for stem in EXPECTED_SARIF if stem not in present],
         "version": version,
         "languages": languages,
         "findings": findings,
@@ -182,6 +196,7 @@ def main() -> None:
 
     counts = {
         "codeql_produced": codeql["produced"],
+        "codeql_missing_languages": codeql["missing"],
         "zap_produced": zap["produced"],
         **{f"codeql_{s.lower()}": codeql["counts"][s] for s in SEVERITIES},
         **{f"zap_{r.lower()}": zap["counts"][r] for r in ZAP_RISK_ORDER},
