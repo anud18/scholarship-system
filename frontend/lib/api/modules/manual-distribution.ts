@@ -901,3 +901,26 @@ export async function exportDistributionCollegeAwardStats(params: {
     "無法匯出統計各學院學生獲獎人數"
   );
 }
+
+/**
+ * Download 統計教育部博士生獎學金-各系所獲獎生人數 (.xlsx): per 系所 (grouped by
+ * 教育部學科標準分類 field), 教育部 applicants and the 分發名單's 教育部 awardees.
+ *
+ * Endpoint: GET /api/v1/manual-distribution/distribution-summary/moe-department-award-stats/export
+ */
+export async function exportDistributionMoeDepartmentAwardStats(params: {
+  scholarshipTypeId: number;
+  academicYear: number;
+  semester: string;
+}): Promise<{ blob: Blob; filename: string }> {
+  const search = new URLSearchParams();
+  search.set("scholarship_type_id", String(params.scholarshipTypeId));
+  search.set("academic_year", String(params.academicYear));
+  search.set("semester", params.semester);
+  return fetchBinaryExport(
+    "/api/v1/manual-distribution/distribution-summary/moe-department-award-stats/export",
+    search,
+    `${params.academicYear}學年度_統計教育部各系所獲獎生人數.xlsx`,
+    "無法匯出統計教育部各系所獲獎生人數"
+  );
+}

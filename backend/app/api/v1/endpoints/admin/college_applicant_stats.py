@@ -18,7 +18,6 @@ from sqlalchemy.orm import selectinload
 from app.api.v1.endpoints.college_review._helpers import normalize_semester_value
 from app.core.security import require_admin
 from app.db.deps import get_db
-from app.models.application import Application, ApplicationStatus
 from app.models.scholarship import ScholarshipType
 from app.models.user import User
 from app.services.college_stats_export_service import (
@@ -30,15 +29,13 @@ from app.services.college_stats_export_service import (
     stats_period_label,
     tally_college_counts,
 )
+from app.services.stats_applicant_source import load_applicant_rows
 from app.utils.application_helpers import get_academy_code_from_data
 from app.utils.export_download import sanitise_filename_part, xlsx_attachment_response
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-# Same exclusion as the 審核管理 list (GET /admin/scholarships/{id}/applications).
-_EXCLUDED_STATUSES = (ApplicationStatus.draft.value, ApplicationStatus.deleted.value)
 
 
 async def _load_scholarship(db: AsyncSession, identifier: str) -> ScholarshipType:
@@ -68,33 +65,21 @@ async def export_college_applicant_stats(
     """Download 統計各學院學生申請人數 (.xlsx) for one scholarship and academic year."""
     scholarship = await _load_scholarship(db, scholarship_identifier)
 
-    # Only the three fields the tally reads — skip submitted_form_data & co.
-    stmt = select(Application.user_id, Application.student_data, Application.scholarship_subtype_list).where(
-        Application.scholarship_type_id == scholarship.id,
-        Application.academic_year == academic_year,
-        Application.deleted_at.is_(None),
-        Application.status.notin_(_EXCLUDED_STATUSES),
+    applicants = await load_applicant_rows(
+        db, scholarship_type_id=scholarship.id, academic_year=academic_year, semester=semester
     )
-    normalised_semester = normalize_semester_value(semester)
-    if semester is not None:
-        # "yearly" normalises to None ⇒ year-based scholarships store NULL.
-        stmt = stmt.where(
-            Application.semester.is_(None)
-            if normalised_semester is None
-            else Application.semester == normalised_semester
-        )
     records = [
         StatsRecord(
-            user_id=user_id,
-            academy_code=get_academy_code_from_data(student_data or {}),
-            sub_type_codes=tuple(sub_types or ()),
+            user_id=row.user_id,
+            academy_code=get_academy_code_from_data(row.student_data or {}),
+            sub_type_codes=tuple(row.sub_type_codes),
         )
-        for user_id, student_data, sub_types in (await db.execute(stmt)).all()
+        for row in applicants
     ]
     columns = scholarship_stats_columns(scholarship, records, single_column_label=APPLICANT_COUNT_LABEL)
     rows = tally_college_counts(records, columns)
 
-    period = stats_period_label(academic_year, normalised_semester)
+    period = stats_period_label(academic_year, normalize_semester_value(semester))
     scholarship_name = scholarship.name or scholarship.code
     payload = build_workbook(
         title=f"{period}{scholarship_name} {APPLICANT_REPORT_NAME}",

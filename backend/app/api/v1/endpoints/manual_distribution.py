@@ -36,6 +36,11 @@ from app.services.manual_distribution_export_service import (
     build_recipient_row,
 )
 from app.services.manual_distribution_service import ManualDistributionService
+from app.services.moe_department_award_stats_service import (
+    build_moe_department_award_stats_export,
+    load_scholarship,
+    scholarship_has_moe_sub_type,
+)
 from app.utils.date_utils import now_taipei_str
 from app.utils.export_download import XLSX_MEDIA_TYPE, sanitise_filename_part, xlsx_attachment_response
 
@@ -818,6 +823,61 @@ async def export_distribution_college_award_stats(
         academic_year,
         semester,
         export.record_count,
+        extra={"actor_user_id": current_user.id},
+    )
+    return xlsx_attachment_response(export.payload, export.filename)
+
+
+@router.get("/distribution-summary/moe-department-award-stats/export")
+async def export_distribution_moe_department_award_stats(
+    scholarship_type_id: int = Query(...),
+    academic_year: int = Query(..., ge=1, le=999),
+    semester: str = Query(..., pattern=r"^(first|second|yearly)$"),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_admin_user),
+):
+    """Export 統計教育部博士生獎學金-各系所獲獎生人數 (.xlsx) for the current 分發名單.
+
+    Per 系所 (grouped by 教育部 學科標準分類 field): 申請人數 = students who
+    applied for a 教育部 sub-type, 通過甄選人數(正取) = students the 分發名單
+    (same ``_load_allocated_groups`` loader as the panel) allocated one. 加碼補助
+    is left blank. Aggregate counts only — no per-student PII leaves.
+    """
+    groups = await _load_allocated_groups(
+        db,
+        scholarship_type_id=scholarship_type_id,
+        academic_year=academic_year,
+        semester=semester,
+    )
+    if groups is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="尚未完成分發，無法匯出")
+    if not groups:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="尚無已分配的學生可匯出")
+    # Loaded after the ranking check: finalized rankings FK onto this type, so it exists.
+    scholarship = await load_scholarship(db, scholarship_type_id)
+    if not scholarship_has_moe_sub_type(scholarship):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="此獎學金未設定教育部類別，無法匯出")
+
+    export = await build_moe_department_award_stats_export(
+        db,
+        scholarship=scholarship,
+        academic_year=academic_year,
+        semester=semester,
+        awards=[
+            (item.application.user_id, item.application.student_data, item.allocated_sub_type)
+            for group in groups
+            for item in group.items
+        ],
+        title_prefix=stats_period_label(academic_year, normalize_semester_value(semester)),
+    )
+    logger.info(
+        "distribution moe-department-award-stats export issued: scholarship_type_id=%s year=%s semester=%s "
+        "moe_applicants=%d moe_awardees=%d",
+        scholarship_type_id,
+        academic_year,
+        semester,
+        export.applicant_count,
+        export.awardee_count,
         extra={"actor_user_id": current_user.id},
     )
     return xlsx_attachment_response(export.payload, export.filename)

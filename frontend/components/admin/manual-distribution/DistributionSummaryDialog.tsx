@@ -1,7 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { BarChart3, Download, Eye, FileSpreadsheet, FileText, Loader2 } from "lucide-react";
+import {
+  BarChart3,
+  Download,
+  Eye,
+  FileSpreadsheet,
+  FileText,
+  Loader2,
+  School,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,11 +20,34 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   exportDistributionCollegeAwardStats,
+  exportDistributionMoeDepartmentAwardStats,
   exportDistributionSummary,
   resolveCollegeName,
   type DistributionSummaryResult,
 } from "@/lib/api/modules/manual-distribution";
 import { triggerBlobDownload } from "@/lib/utils/download";
+
+type ExportKind =
+  | "xlsx"
+  | "pdf"
+  | "college-award-stats"
+  | "moe-department-award-stats";
+
+type ExportParams = {
+  scholarshipTypeId: number;
+  academicYear: number;
+  semester: string;
+};
+
+const EXPORTERS: Record<
+  ExportKind,
+  (params: ExportParams) => Promise<{ blob: Blob; filename: string }>
+> = {
+  xlsx: params => exportDistributionSummary({ ...params, format: "xlsx" }),
+  pdf: params => exportDistributionSummary({ ...params, format: "pdf" }),
+  "college-award-stats": exportDistributionCollegeAwardStats,
+  "moe-department-award-stats": exportDistributionMoeDepartmentAwardStats,
+};
 
 interface DistributionSummaryDialogProps {
   summary: DistributionSummaryResult | null;
@@ -35,7 +66,7 @@ interface DistributionSummaryDialogProps {
  * The 分發結果名單 modal: allocated students grouped by sub-type × 年度配額,
  * with 匯出 Excel / PDF backed by GET /manual-distribution/distribution-summary/export
  * (the backend export reads through the same loader as the list shown here),
- * plus 統計各學院學生獲獎人數 counted from the same list.
+ * plus 統計各學院學生獲獎人數 and 統計教育部各系所獲獎生人數 counted from the same list.
  */
 export function DistributionSummaryDialog({
   summary,
@@ -51,7 +82,7 @@ export function DistributionSummaryDialog({
 
   const hasRows = !!summary && summary.groups.length > 0;
 
-  const handleExport = async (format: "xlsx" | "pdf" | "college-award-stats") => {
+  const handleExport = async (format: ExportKind) => {
     // The modal only opens after a load with valid selections, but the guard
     // keeps a stale/cleared selection from sending academic_year=undefined.
     // Say so rather than no-opping — a dead button reads as a broken export.
@@ -66,10 +97,7 @@ export function DistributionSummaryDialog({
       // lazy-import rule in frontend/CLAUDE.md targets heavy libs (xlsx,
       // react-pdf); rendering happens server-side here.
       const params = { scholarshipTypeId, academicYear, semester };
-      const result =
-        format === "college-award-stats"
-          ? await exportDistributionCollegeAwardStats(params)
-          : await exportDistributionSummary({ ...params, format });
+      const result = await EXPORTERS[format](params);
       triggerBlobDownload(result);
       toast.success("匯出成功");
     } catch (e) {
@@ -217,6 +245,12 @@ export function DistributionSummaryDialog({
               <DropdownMenuItem onClick={() => handleExport("college-award-stats")}>
                 <BarChart3 className="mr-2 h-4 w-4" />
                 統計各學院獲獎人數
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => handleExport("moe-department-award-stats")}
+              >
+                <School className="mr-2 h-4 w-4" />
+                統計教育部各系所獲獎生人數
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

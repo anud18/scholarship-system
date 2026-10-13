@@ -8117,6 +8117,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/manual-distribution/distribution-summary/moe-department-award-stats/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Distribution Moe Department Award Stats
+         * @description Export 統計教育部博士生獎學金-各系所獲獎生人數 (.xlsx) for the current 分發名單.
+         *
+         *     Per 系所 (grouped by 教育部 學科標準分類 field): 申請人數 = students who
+         *     applied for a 教育部 sub-type, 通過甄選人數(正取) = students the 分發名單
+         *     (same ``_load_allocated_groups`` loader as the panel) allocated one. 加碼補助
+         *     is left blank. Aggregate counts only — no per-student PII leaves.
+         */
+        get: operations["export_distribution_moe_department_award_stats_api_v1_manual_distribution_distribution_summary_moe_department_award_stats_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/manual-distribution/generate-rosters-from-distribution": {
         parameters: {
             query?: never;
@@ -24665,6 +24690,39 @@ export interface operations {
         };
     };
     export_distribution_college_award_stats_api_v1_manual_distribution_distribution_summary_college_award_stats_export_get: {
+        parameters: {
+            query: {
+                scholarship_type_id: number;
+                academic_year: number;
+                semester: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_distribution_moe_department_award_stats_api_v1_manual_distribution_distribution_summary_moe_department_award_stats_export_get: {
         parameters: {
             query: {
                 scholarship_type_id: number;
