@@ -338,6 +338,30 @@ class RankingScopeMixin:
         )
         return set(result.scalars().all())
 
+    async def _application_ids_ranked_elsewhere(
+        self, application_ids: Iterable[int], excluded_ranking_ids: Iterable[int]
+    ) -> Set[int]:
+        """Applications still held by a ranking outside ``excluded_ranking_ids``.
+
+        Application.final_ranking_position is a single value, yet an application can
+        also sit in rankings of other scopes (a sub-type ranking and the "default"
+        one, a college ranking and an admin global one) whose positions may coincide.
+        A matching value therefore does not prove which ranking wrote it, so it is
+        never cleared while another ranking still holds the application.
+        """
+        ids = set(application_ids)
+        if not ids:
+            return set()
+        result = await self.db.execute(
+            select(CollegeRankingItem.application_id)
+            .where(
+                CollegeRankingItem.application_id.in_(ids),
+                CollegeRankingItem.ranking_id.notin_(set(excluded_ranking_ids)),
+            )
+            .distinct()
+        )
+        return set(result.scalars().all())
+
     async def _is_settled(self, ranking: CollegeRanking) -> bool:
         return ranking.id in await self._load_settled_ids([ranking.id])
 
@@ -489,15 +513,16 @@ class RankingScopeMixin:
         Rows the college rejected ('N' in the Excel import, parked at the end) stay
         behind every new applicant.
         """
+        ranked_elsewhere = await self._application_ids_ranked_elsewhere(stale_ids, [ranking.id])
         kept: List[Tuple[Optional[CollegeRankingItem], Optional[Application]]] = []
         for item, app in item_rows:
             if item.application_id not in stale_ids:
                 kept.append((item, app))
                 continue
             await self.db.delete(item)
-            # Leave no rank behind on an application this ranking no longer holds —
-            # unless another ranking wrote a different value there since.
-            if app is not None and app.final_ranking_position == item.rank_position:
+            # Leave no rank behind on an application no ranking holds any more —
+            # unless a ranking since gone wrote a different value there.
+            if app is not None and app.id not in ranked_elsewhere and app.final_ranking_position == item.rank_position:
                 app.final_ranking_position = None
 
         rejected_from = len(kept)
@@ -648,9 +673,11 @@ class RankingScopeMixin:
 
         The confirmed ranking is the source of truth; a deleted draft may have
         written its own order there (update_ranking_order mirrors every reorder).
-        An application only the ``superseded`` drafts held loses the rank one of
-        them wrote, so the review listing does not show it as ranked.
+        An application only the ``superseded`` drafts held — no other ranking holds
+        it — loses the rank one of them wrote, so the review listing does not show
+        it as ranked.
         """
+        superseded = list(superseded)
         kept_ids: Set[int] = set()
         for item, app in await self._load_item_rows(ranking_id):
             kept_ids.add(item.application_id)
@@ -662,9 +689,13 @@ class RankingScopeMixin:
             for application_id, rank_position in info.rank_positions.items():
                 if int(application_id) not in kept_ids:
                     orphan_positions.setdefault(int(application_id), set()).add(rank_position)
-        if not orphan_positions:
+        ranked_elsewhere = await self._application_ids_ranked_elsewhere(
+            orphan_positions, [ranking_id, *(info.id for info in superseded)]
+        )
+        orphan_ids = set(orphan_positions) - ranked_elsewhere
+        if not orphan_ids:
             return
-        result = await self.db.execute(select(Application).where(Application.id.in_(orphan_positions)))
+        result = await self.db.execute(select(Application).where(Application.id.in_(orphan_ids)))
         for app in result.scalars().all():
             if app.final_ranking_position in orphan_positions[app.id]:
                 app.final_ranking_position = None

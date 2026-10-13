@@ -20,12 +20,15 @@ Steps:
 No data change is needed: the old index guaranteed at most one ranking per scope,
 so the partial index cannot be violated by existing rows.
 
+This runs after merge_academy_y_into_e_001 on purpose: its Y -> E ranking merge
+looks up THE E ranking of a period, which only holds while the old index does.
+
 Downgrade drops the partial index and re-creates the full unique index ONLY when
 no scope holds more than one ranking. Otherwise it logs a warning and leaves the
 old index absent — a downgrade never deletes a college's rankings.
 
 Revision ID: college_ranking_multi_draft_001
-Revises: college_ranking_single_001
+Revises: merge_academy_y_into_e_001
 Create Date: 2026-10-13
 """
 
@@ -36,7 +39,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "college_ranking_multi_draft_001"
-down_revision = "college_ranking_single_001"
+down_revision = "merge_academy_y_into_e_001"
 branch_labels = None
 depends_on = None
 

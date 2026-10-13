@@ -220,6 +220,33 @@ class TestFinalizeScope:
             written_elsewhere.id: 9,
         }
 
+    async def test_deleted_draft_leaves_the_rank_while_another_scope_holds_the_application(
+        self, service, db, users, scholarship
+    ):
+        # The "default" sub-type ranking spans every sub-type, so it holds the same
+        # application at the same position: the value may be its own.
+        both = await add_application(db, scholarship.id, "both", order=0)
+        other = await add_application(db, scholarship.id, "other", order=1)
+        await insert_ranking(db, scholarship.id, created_by=users["eng"].id, application_ids=[both.id], name="doomed")
+        kept = await insert_ranking(
+            db, scholarship.id, created_by=users["eng"].id, application_ids=[other.id], name="kept"
+        )
+        await insert_ranking(
+            db,
+            scholarship.id,
+            created_by=users["eng"].id,
+            sub_type_code="default",
+            application_ids=[both.id],
+            name="default scope",
+        )
+        both.final_ranking_position = 1
+        await db.commit()
+
+        await service.finalize_ranking(kept.id, users["eng"].id)
+        await db.commit()
+
+        assert await final_positions(db, [both.id, other.id]) == {both.id: 1, other.id: 1}
+
     async def test_roster_referenced_sibling_blocks_finalize_until_the_roster_is_gone(
         self, service, db, users, scholarship
     ):
@@ -439,6 +466,31 @@ class TestSyncRanking:
             gone.id: None,
             overwritten.id: 7,
         }
+
+    async def test_removed_application_keeps_the_rank_while_another_scope_holds_it(
+        self, service, db, users, scholarship
+    ):
+        # An admin global ranking (college_code NULL) holds the same application at
+        # the same position, so the value may be its own.
+        gone = await add_application(db, scholarship.id, "gone", order=0)
+        ranking = await insert_ranking(db, scholarship.id, created_by=users["eng"].id, application_ids=[gone.id])
+        await insert_ranking(
+            db,
+            scholarship.id,
+            created_by=users["admin"].id,
+            college_code=None,
+            application_ids=[gone.id],
+            name="global",
+        )
+        gone.final_ranking_position = 1
+        gone.status = ApplicationStatus.withdrawn
+        await db.commit()
+
+        result = await service.sync_ranking(ranking.id)
+        await db.commit()
+
+        assert result.removed_application_ids == [gone.id]
+        assert await final_positions(db, [gone.id]) == {gone.id: 1}
 
     async def test_new_applicants_go_before_college_rejected_rows(self, service, db, users, scholarship):
         ranked = await add_application(db, scholarship.id, "ranked", order=0)

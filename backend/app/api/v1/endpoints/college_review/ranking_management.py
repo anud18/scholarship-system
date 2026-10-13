@@ -772,9 +772,10 @@ async def sync_ranking(
     """同步申請名單: bring a non-finalized ranking in line with the current applications.
 
     Eligible applications not yet in the ranking are added (renewals after the last
-    ranked renewal, others at the end) and ranked ones that are no longer eligible
-    are removed; positions are renumbered 1..n. A ranking whose distribution was
-    executed (unlocked for 補充匯入) is append-only. 409 while finalized.
+    ranked renewal, others at the end but ahead of any trailing college-rejected 'N'
+    rows) and ranked ones that are no longer eligible are removed; positions are
+    renumbered 1..n. A ranking whose distribution was executed (unlocked for
+    補充匯入) is append-only: new rows go after the last position. 409 while finalized.
     """
 
     try:

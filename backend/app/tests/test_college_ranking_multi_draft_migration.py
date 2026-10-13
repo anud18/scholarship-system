@@ -79,9 +79,10 @@ def _normalise(ddl: str) -> str:
     return re.sub(r"\s+", " ", ddl).lower()
 
 
-def test_revision_chains_after_the_single_ranking_migration(migration):
+def test_revision_chains_after_the_academy_y_merge(migration):
+    # The Y -> E ranking merge must run while one ranking per scope still holds.
     assert migration.revision == "college_ranking_multi_draft_001"
-    assert migration.down_revision == "college_ranking_single_001"
+    assert migration.down_revision == "merge_academy_y_into_e_001"
     assert migration.OLD_INDEX_NAME == OLD_INDEX
     assert migration.NEW_INDEX_NAME == NEW_INDEX
 

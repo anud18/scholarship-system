@@ -143,11 +143,18 @@ export function RankingManagementPanel({
   // "建立排名" for the first time).
   const [panelDeadline, setPanelDeadline] = useState<string | null>(null);
 
+  // Only the latest detail request may write rankingData: a slower response
+  // for a card the user has already left must not land under the new one.
+  const latestDetailRequestRef = useRef(0);
+
   const fetchRankingDetails = useCallback(
     async (rankingId: number) => {
+      const requestId = ++latestDetailRequestRef.current;
+      const isLatestRequest = () => requestId === latestDetailRequestRef.current;
       setIsRankingLoading(true);
       try {
         const response = await apiClient.college.getRanking(rankingId);
+        if (!isLatestRequest()) return;
         if (response.success && response.data) {
           // Transform the API response
           // Shape from GET /college-review/rankings/{id} — backend's
@@ -281,7 +288,7 @@ export function RankingManagementPanel({
       } catch (error) {
         logger.error("Failed to fetch ranking details", { error: error });
       } finally {
-        setIsRankingLoading(false);
+        if (isLatestRequest()) setIsRankingLoading(false);
       }
     },
     [setIsRankingLoading, setRankingData, setActiveConfigDeadline]
@@ -297,6 +304,12 @@ export function RankingManagementPanel({
   useEffect(() => {
     selectedRankingRef.current = selectedRanking;
   }, [selectedRanking]);
+  // After an awaited action on a ranking: is that ranking still the open one,
+  // or did the user pick another card while the request was in flight?
+  const isStillSelected = useCallback(
+    (rankingId: number) => selectedRankingRef.current === rankingId,
+    []
+  );
 
   // Open a ranking as soon as the list is known instead of leaving the detail
   // area empty: the finalized one if the period has it (after a lock it is the
@@ -593,7 +606,7 @@ export function RankingManagementPanel({
         const response = await apiClient.college.unfinalizeRanking(rankingId);
         if (response.success) {
           await fetchRankings();
-          if (rankingData && rankingId === selectedRanking) {
+          if (rankingData && isStillSelected(rankingId)) {
             setRankingData({ ...rankingData, isFinalized: false });
             // Unlocking re-enables syncing; re-read so the pending / stale
             // counts and the sync button reflect the draft state.
@@ -619,6 +632,7 @@ export function RankingManagementPanel({
     [
       selectedRanking,
       rankingData,
+      isStillSelected,
       fetchRankings,
       fetchRankingDetails,
       setRankingData,
@@ -634,11 +648,12 @@ export function RankingManagementPanel({
   // another draft.
   const [isSyncing, setIsSyncing] = useState(false);
   const handleSyncRanking = useCallback(async () => {
-    if (!selectedRanking) return;
+    const rankingId = selectedRanking;
+    if (!rankingId) return;
 
     setIsSyncing(true);
     try {
-      const response = await apiClient.college.syncRanking(selectedRanking);
+      const response = await apiClient.college.syncRanking(rankingId);
       if (!response.success) {
         toast.error(
           response.message ||
@@ -648,7 +663,7 @@ export function RankingManagementPanel({
       }
       const added = response.data?.added_application_count ?? 0;
       const removed = response.data?.removed_application_count ?? 0;
-      await fetchRankingDetails(selectedRanking);
+      if (isStillSelected(rankingId)) await fetchRankingDetails(rankingId);
       await fetchRankings();
       incrementDataVersion();
 
@@ -683,6 +698,7 @@ export function RankingManagementPanel({
     }
   }, [
     selectedRanking,
+    isStillSelected,
     fetchRankingDetails,
     fetchRankings,
     incrementDataVersion,
