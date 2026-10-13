@@ -3,32 +3,50 @@ Test cases for College Review Service
 
 Tests critical functionality including:
 - Ranking operations with concurrent access protection
+- Ranking scope rules (several drafts, finalize keeps one) at the statement level
 - Error handling and validation
 - Permission checks and data integrity
+
+DB-backed coverage of the scope rules lives in test_college_ranking_scope_service.py.
 """
 
-from unittest.mock import AsyncMock, MagicMock, Mock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from app.models.college_review import CollegeRanking, CollegeRankingItem
+from app.services.college_ranking_scope import _has_allocation_state
 from app.services.college_review_service import (
+    RANKING_SCOPE_LOCK_NAMESPACE,
     CollegeReviewError,
     CollegeReviewService,
     InvalidRankingDataError,
+    RankingDiff,
     RankingModificationError,
     RankingNotFoundError,
+    RankingScopeConflictError,
     ReviewPermissionError,
 )
 
 
-def _ranking_key_queries(statements):
-    """Select statements whose WHERE targets the college_rankings key (the reuse lookup)."""
-    return [
-        s
-        for s in statements
-        if getattr(s, "whereclause", None) is not None and "college_rankings.sub_type_code" in str(s.whereclause)
-    ]
+def _where_sql(stmt) -> str:
+    """A statement's WHERE rendered with literal binds (asserts the exact predicate)."""
+    return str(stmt.whereclause.compile(compile_kwargs={"literal_binds": True}))
+
+
+def _scope_sql(semester, college_code) -> str:
+    conditions = CollegeReviewService._scope_conditions(2, "default", 114, semester, college_code)
+    return " AND ".join(str(c.compile(compile_kwargs={"literal_binds": True})) for c in conditions)
+
+
+def _mock_result(scalar=None, rows=()):
+    """One db.execute() result serving scalar_one_or_none / scalars().all() / all()."""
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = scalar
+    result.scalars.return_value.all.return_value = list(rows)
+    result.all.return_value = list(rows)
+    return result
 
 
 class TestCollegeReviewService:
@@ -39,6 +57,7 @@ class TestCollegeReviewService:
         """Create service instance with a mock database session."""
         db = MagicMock()
         db.execute = AsyncMock()
+        db.get = AsyncMock()
         db.add = MagicMock()
         db.flush = AsyncMock()
         db.refresh = AsyncMock()
@@ -59,31 +78,78 @@ class TestCollegeReviewService:
             ranking_status="draft",
         )
 
-    async def test_ranking_finalization_concurrent_protection(self, service, sample_ranking):
-        """Test that ranking finalization calls the DB with locking queries"""
-        # Mock ranking query results
-        result = MagicMock()
-        result.scalar_one_or_none.return_value = sample_ranking
-        service.db.execute = AsyncMock(side_effect=[result])
+    async def test_finalize_locks_the_target_then_only_its_own_scope(self, service):
+        """finalize re-reads the target FOR UPDATE, then row-locks the siblings of the
+        TARGET's scope only: same college (equality — another college's ranking must
+        never be touched, issue #1034), same yearly-normalised semester, target excluded."""
+        target = CollegeRanking(
+            id=6,
+            scholarship_type_id=2,
+            sub_type_code="default",
+            academic_year=114,
+            semester=None,
+            college_code="E",
+            is_finalized=False,
+            ranking_status="draft",
+        )
+        service.db.get = AsyncMock(return_value=target)
+        captured = []
 
-        await service.finalize_ranking(ranking_id=1, finalizer_id=2001)
+        def _record(stmt, *args, **kwargs):
+            captured.append(stmt)
+            # 1st: target FOR UPDATE; 2nd: siblings (none); 3rd: item rows to mirror (none).
+            return _mock_result(scalar=target if len(captured) == 1 else None)
 
-        # finalize_ranking issues exactly one SELECT: the target ranking with a
-        # FOR UPDATE lock. There is no sibling-conflict query any more because a
-        # college owns a single ranking per period.
-        assert service.db.execute.call_count == 1
+        service.db.execute = AsyncMock(side_effect=_record)
+
+        result = await service.finalize_ranking(ranking_id=6, finalizer_id=99)
+
+        assert result.ranking is target
+        assert result.deleted_rankings == []
+        assert target.is_finalized is True
+        assert target.ranking_status == "finalized"
+        assert target.finalized_by == 99
         service.db.flush.assert_called_once()
+
+        assert len(captured) == 3, f"expected target lock, sibling scan, item rows; got {len(captured)}"
+        target_lock, sibling_scan = captured[0], captured[1]
+        assert target_lock._for_update_arg is not None
+        assert "college_rankings.id = 6" in _where_sql(target_lock)
+
+        assert sibling_scan._for_update_arg is not None, "siblings must be row-locked before they are deleted"
+        where_sql = _where_sql(sibling_scan)
+        assert "college_rankings.college_code = 'E'" in where_sql
+        assert "college_code !=" not in where_sql
+        assert "created_by" not in where_sql
+        assert "college_rankings.semester IS NULL OR college_rankings.semester = 'yearly'" in where_sql
+        assert "college_rankings.id != 6" in where_sql
 
     async def test_finalize_already_finalized_ranking(self, service):
         """Test finalizing an already finalized ranking"""
         finalized_ranking = CollegeRanking(id=1, is_finalized=True, ranking_status="finalized")
 
-        result = MagicMock()
-        result.scalar_one_or_none.return_value = finalized_ranking
-        service.db.execute = AsyncMock(return_value=result)
+        service.db.get = AsyncMock(return_value=finalized_ranking)
+        service.db.execute = AsyncMock(return_value=_mock_result(scalar=finalized_ranking))
 
         with pytest.raises(RankingModificationError):
             await service.finalize_ranking(ranking_id=1, finalizer_id=2001)
+
+    async def test_finalize_missing_ranking(self, service):
+        service.db.get = AsyncMock(return_value=None)
+
+        with pytest.raises(RankingNotFoundError):
+            await service.finalize_ranking(ranking_id=404, finalizer_id=2001)
+        service.db.execute.assert_not_called()
+
+    async def test_finalize_ranking_deleted_by_a_concurrent_finalize(self, service, sample_ranking):
+        """The plain get still sees the draft, but the FOR UPDATE re-read (after the
+        scope lock) finds it gone: a sibling's finalize deleted it meanwhile."""
+        service.db.get = AsyncMock(return_value=sample_ranking)
+        service.db.execute = AsyncMock(return_value=_mock_result(scalar=None))
+
+        with pytest.raises(RankingNotFoundError):
+            await service.finalize_ranking(ranking_id=1, finalizer_id=2001)
+        service.db.flush.assert_not_called()
 
     async def test_update_ranking_order_validation(self, service, sample_ranking):
         """Test ranking order update with validation"""
@@ -118,35 +184,20 @@ class TestCollegeReviewService:
         with pytest.raises(InvalidRankingDataError):
             await service.update_ranking_order(ranking_id=1, new_order=new_order)
 
-    async def test_create_ranking_reuse_is_scoped_by_college(self, service):
-        """Regression: the reuse-existing-unfinalized-ranking lookup must be scoped by
-        college_code, otherwise one college's unfinalized ranking is handed to other
-        colleges creating a ranking for the same (type, sub_type, year). Those colleges
-        could not see it (get_rankings is also college-scoped) and their applications
-        were never ranked, so only one college survived into admin distribution.
-        Reproduced live; see issue #1034.
-        """
+    async def test_create_ranking_scope_lookup_is_scoped_by_college(self, service):
+        """Regression (issue #1034): the scope lookup behind create_ranking's 409 guard
+        must be scoped by the creator's college_code (equality), otherwise one college's
+        locked ranking would block — or a sibling scan would reach — other colleges."""
         captured = []
 
         def _record(stmt, *args, **kwargs):
             captured.append(stmt)
-            result = MagicMock()
-            # First query is the creator lookup → return a college reviewer; the
-            # subsequent existence / apps queries return nothing.
-            if len(captured) == 1:
-                creator = MagicMock()
-                creator.college_code = "E"
-                result.scalar_one_or_none.return_value = creator
-            else:
-                result.scalar_one_or_none.return_value = None
-            scalars = MagicMock()
-            scalars.all.return_value = []
-            result.scalars.return_value = scalars
-            return result
+            # 1st query is the creator lookup → a college reviewer; nothing else exists.
+            return _mock_result(scalar=SimpleNamespace(college_code="E") if len(captured) == 1 else None)
 
         service.db.execute = AsyncMock(side_effect=_record)
 
-        await service.get_or_create_ranking(
+        await service.create_ranking(
             scholarship_type_id=2,
             sub_type_code="default",
             academic_year=114,
@@ -154,136 +205,112 @@ class TestCollegeReviewService:
             creator_id=52,
         )
 
-        # The reuse-existence check is the statement whose WHERE filters on the ranking key.
-        # Render with literal binds so we assert the EXACT predicate (operator + value),
-        # not just the substring "college_code" — a substring check would also pass for an
-        # inverted `!=` or an unconditional `IS NULL`, which would be wrong.
-        existence = _ranking_key_queries(captured)
-        assert existence, "expected a reuse-existence query on the college_rankings key"
-        where_sql = str(existence[0].whereclause.compile(compile_kwargs={"literal_binds": True}))
-        assert "college_code = 'E'" in where_sql, (
-            "reuse must be scoped to the creator's college (equality), so each college "
-            f"shares one ranking and colleges stay isolated; got WHERE: {where_sql}"
-        )
-        assert "college_code !=" not in where_sql, f"reuse must use equality, not !=; got: {where_sql}"
+        scope_queries = [
+            stmt
+            for stmt in captured
+            if getattr(stmt, "whereclause", None) is not None
+            and "college_rankings.sub_type_code" in str(stmt.whereclause)
+        ]
+        assert scope_queries, "expected a scope lookup on the college_rankings key"
+        where_sql = _where_sql(scope_queries[0])
+        assert "college_code = 'E'" in where_sql, f"scope must be the creator's college; got: {where_sql}"
+        assert "college_code !=" not in where_sql, f"scope must use equality, not !=; got: {where_sql}"
         assert "created_by" not in where_sql, (
-            "reuse must NOT be scoped by created_by (that breaks multi-reviewer-per-college "
-            f"sharing); got WHERE: {where_sql}"
+            "scope must NOT be per creator (every reviewer of the college shares its rankings); "
+            f"got WHERE: {where_sql}"
         )
-        assert "is_finalized" not in where_sql, (
-            "a college owns ONE ranking per period, finalized or not — reuse must not skip "
-            f"finalized rankings (that re-opens the multi-ranking loophole); got WHERE: {where_sql}"
-        )
+        # No ranking in scope ⇒ a new draft of the creator's college is inserted.
+        [added] = [call.args[0] for call in service.db.add.call_args_list if isinstance(call.args[0], CollegeRanking)]
+        assert added.college_code == "E"
+        assert added.semester is None
 
-    async def test_create_ranking_reuse_admin_uses_null_college(self, service):
-        """A creator with no college (admin/super_admin → college_code None) reuses the
-        global ranking via `college_code IS NULL`, not an equality on an empty value."""
-        captured = []
-
-        def _record(stmt, *args, **kwargs):
-            captured.append(stmt)
-            result = MagicMock()
-            if len(captured) == 1:
-                creator = MagicMock()
-                creator.college_code = None  # admin-like creator
-                result.scalar_one_or_none.return_value = creator
-            else:
-                result.scalar_one_or_none.return_value = None
-            scalars = MagicMock()
-            scalars.all.return_value = []
-            result.scalars.return_value = scalars
-            return result
-
-        service.db.execute = AsyncMock(side_effect=_record)
-
-        await service.get_or_create_ranking(
-            scholarship_type_id=2,
-            sub_type_code="default",
-            academic_year=114,
-            semester="yearly",
-            creator_id=1,
-        )
-
-        existence = _ranking_key_queries(captured)
-        assert existence, "expected a reuse-existence query"
-        where_sql = str(existence[0].whereclause.compile(compile_kwargs={"literal_binds": True}))
-        assert "college_code IS NULL" in where_sql, f"admin/global reuse must match IS NULL; got: {where_sql}"
-
-    async def test_create_ranking_returns_existing_even_when_finalized(self, service):
-        """Single-ranking rule: when the college already owns a ranking for this period
-        (here a finalized one) create_ranking hands it back and creates nothing."""
-        existing = CollegeRanking(
+    async def test_create_ranking_refuses_while_scope_holds_a_finalized_ranking(self, service):
+        locked = CollegeRanking(
             id=7,
             scholarship_type_id=2,
             sub_type_code="default",
             academic_year=114,
             semester=None,
             college_code="E",
+            ranking_name="114 學年度排名",
             is_finalized=True,
             ranking_status="finalized",
         )
-        captured = []
+        calls = []
 
         def _record(stmt, *args, **kwargs):
-            captured.append(stmt)
-            result = MagicMock()
-            if len(captured) == 1:
-                creator = MagicMock()
-                creator.college_code = "E"
-                result.scalar_one_or_none.return_value = creator
-            else:
-                result.scalar_one_or_none.return_value = existing
-            return result
+            calls.append(stmt)
+            if len(calls) == 1:
+                return _mock_result(scalar=SimpleNamespace(college_code="E"))
+            return _mock_result(rows=[locked])  # the scope lookup
 
         service.db.execute = AsyncMock(side_effect=_record)
 
-        result = await service.get_or_create_ranking(
-            scholarship_type_id=2,
-            sub_type_code="default",
-            academic_year=114,
-            semester="yearly",
-            creator_id=52,
-        )
-
-        assert result.ranking is existing
-        assert result.created is False
-        assert result.added_application_ids == []
+        with pytest.raises(RankingScopeConflictError) as exc:
+            await service.create_ranking(
+                scholarship_type_id=2,
+                sub_type_code="default",
+                academic_year=114,
+                semester="yearly",
+                creator_id=52,
+            )
+        assert "114 學年度排名" in str(exc.value)
+        assert "解除鎖定" in str(exc.value)
         service.db.add.assert_not_called()
-        # creator lookup + existence check only — no application query, no insert
-        assert len(captured) == 2
+        # creator lookup + scope lookup only — no application query, no insert
+        assert len(calls) == 2
 
-    async def test_finalize_touches_only_the_target_ranking(self, service):
-        """A college owns exactly one ranking per period, so finalize must not run any
-        sibling "un-finalize others" query — it locks and flips the target row only.
-        (Another college's ranking must never be affected: issue #1034.)"""
-        captured = []
-        target = MagicMock()
-        target.id = 6
-        target.college_code = "E"
-        target.semester = "yearly"
-        target.scholarship_type_id = 2
-        target.sub_type_code = "default"
-        target.academic_year = 114
-        target.is_finalized = False
+    def test_scope_conditions_match_the_college_by_equality(self):
+        where_sql = _scope_sql("first", "E")
+        assert "college_rankings.college_code = 'E'" in where_sql
+        assert "college_rankings.semester = 'first'" in where_sql
+        assert "college_rankings.scholarship_type_id = 2" in where_sql
+        assert "college_rankings.sub_type_code = 'default'" in where_sql
+        assert "college_rankings.academic_year = 114" in where_sql
 
-        def _record(stmt, *args, **kwargs):
-            captured.append(stmt)
-            result = MagicMock()
-            result.scalar_one_or_none.return_value = target
-            return result
+    @pytest.mark.parametrize("college_code", [None, ""])
+    def test_scope_conditions_admin_global_ranking_matches_null_or_empty_college(self, college_code):
+        # Mirrors the index's COALESCE(college_code, ''): NULL and '' are one scope.
+        where_sql = _scope_sql("first", college_code)
+        assert "college_rankings.college_code IS NULL OR college_rankings.college_code = ''" in where_sql
 
-        service.db.execute = AsyncMock(side_effect=_record)
-        service.db.flush = AsyncMock()
+    @pytest.mark.parametrize("semester", [None, "yearly", "Semester.yearly"])
+    def test_scope_conditions_yearly_matches_null_or_legacy_spelling(self, semester):
+        # Mirrors the index's COALESCE(semester, 'yearly').
+        where_sql = _scope_sql(semester, "E")
+        assert "college_rankings.semester IS NULL OR college_rankings.semester = 'yearly'" in where_sql
 
-        await service.finalize_ranking(ranking_id=6, finalizer_id=99)
+    @pytest.mark.parametrize(
+        "semester, college_code, scope_key",
+        [
+            ("yearly", "E", "2:nstc:114:yearly:E"),
+            (None, None, "2:nstc:114:yearly:"),
+            ("first", "E", "2:nstc:114:first:E"),
+        ],
+    )
+    async def test_lock_ranking_scope_takes_a_postgres_advisory_lock(self, semester, college_code, scope_key):
+        db = MagicMock()
+        db.get_bind = MagicMock(return_value=SimpleNamespace(dialect=SimpleNamespace(name="postgresql")))
+        db.execute = AsyncMock()
 
-        assert target.is_finalized is True
-        assert target.ranking_status == "finalized"
-        assert target.finalized_by == 99
-        assert len(captured) == 1, f"finalize must issue only the target lock query; got {len(captured)}"
-        where_sql = str(captured[0].whereclause.compile(compile_kwargs={"literal_binds": True}))
-        assert "college_rankings.id = 6" in where_sql
-        assert "is_finalized" not in where_sql
+        await CollegeReviewService(db)._lock_ranking_scope(2, "nstc", 114, semester, college_code)
+
+        db.execute.assert_awaited_once()
+        statement, params = db.execute.await_args.args
+        assert "pg_advisory_xact_lock(:namespace, hashtext(:scope_key))" in str(statement)
+        assert params == {"namespace": RANKING_SCOPE_LOCK_NAMESPACE, "scope_key": scope_key}
+        # pg_advisory_xact_lock(int4, int4): the namespace must fit a signed int4.
+        assert -(2**31) <= RANKING_SCOPE_LOCK_NAMESPACE < 2**31
+
+    @pytest.mark.parametrize("dialect_name", ["sqlite", None])
+    async def test_lock_ranking_scope_is_skipped_off_postgres(self, dialect_name):
+        db = MagicMock()
+        db.get_bind = MagicMock(return_value=SimpleNamespace(dialect=SimpleNamespace(name=dialect_name)))
+        db.execute = AsyncMock()
+
+        await CollegeReviewService(db)._lock_ranking_scope(2, "nstc", 114, "first", "E")
+
+        db.execute.assert_not_called()
 
     def test_exception_hierarchy(self):
         """Test that custom exceptions inherit properly"""
@@ -291,7 +318,54 @@ class TestCollegeReviewService:
         assert issubclass(RankingModificationError, CollegeReviewError)
         assert issubclass(InvalidRankingDataError, CollegeReviewError)
         assert issubclass(ReviewPermissionError, CollegeReviewError)
+        assert issubclass(RankingScopeConflictError, CollegeReviewError)
         assert issubclass(CollegeReviewError, Exception)
+
+
+def _item(**overrides):
+    """A ranking-item column row as _load_settled_ids reads it (no allocation state)."""
+    columns = {
+        "is_allocated": False,
+        "allocated_sub_type": None,
+        "allocation_config_id": None,
+        "backup_position": None,
+        "backup_allocations": None,
+        "status": "ranked",
+    }
+    return SimpleNamespace(**{**columns, **overrides})
+
+
+class TestRankingScopePredicates:
+    """Pure helpers behind the 'settled ranking' rule and the sync reminder."""
+
+    @pytest.mark.parametrize(
+        "overrides",
+        [
+            {"is_allocated": True},
+            # 撤銷/停發 clear is_allocated but keep the slot for 復發.
+            {"allocated_sub_type": "nstc"},
+            {"allocation_config_id": 3},
+            {"backup_position": 1},
+            {"backup_allocations": [{"sub_type": "nstc", "backup_position": 1}]},
+            {"status": "allocated"},
+            {"status": "rejected"},
+            {"status": "waitlisted"},
+        ],
+    )
+    def test_item_with_distribution_state_is_settled(self, overrides):
+        assert _has_allocation_state(_item(**overrides)) is True
+
+    @pytest.mark.parametrize(
+        "overrides",
+        [{}, {"status": None}, {"backup_allocations": []}, {"backup_allocations": {}}, {"is_allocated": None}],
+    )
+    def test_plain_ranked_item_is_not_settled(self, overrides):
+        assert _has_allocation_state(_item(**overrides)) is False
+
+    def test_ranking_diff_has_changes(self):
+        assert RankingDiff(pending_application_ids=[], stale_application_ids=[]).has_changes is False
+        assert RankingDiff(pending_application_ids=[1], stale_application_ids=[]).has_changes is True
+        assert RankingDiff(pending_application_ids=[], stale_application_ids=[2]).has_changes is True
 
 
 class TestAssertCanManageRanking:

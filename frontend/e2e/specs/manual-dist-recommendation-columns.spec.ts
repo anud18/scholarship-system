@@ -19,8 +19,8 @@
  * decision surface.
  *
  * This spec seeds four ranked applications (all college C, scholarship phd /
- * config 5 / 114 全年) appended to college C's single finalized ranking
- * (created via SQL only when the college has none) directly via SQL,
+ * config 5 / 114 全年) appended to college C's finalized ranking for the
+ * period (inserted via SQL only when none is finalized) directly via SQL,
  * logs in as admin, opens the manual-distribution grid, asserts the chips, and
  * saves labeled screenshot evidence. It only READS the grid — no allocate /
  * finalize is triggered, so it leaves distribution state untouched.
@@ -207,31 +207,26 @@ async function seed(): Promise<void> {
   const appDbId: Record<string, number> = {};
   for (const r of appRows) appDbId[r.app_id] = r.id;
 
-  // 2. THE college ranking (college C, phd, 114, yearly). A college owns exactly
-  //    one ranking per period (unique index), so reuse the existing one — on a
-  //    fresh seed that is C's finalized + distributed 114 ranking — and only
-  //    insert our tagged ranking when the college has none. Cleanup removes the
-  //    tagged ranking only, never a reused one.
-  const { rows: existingRk } = await pool.query<{ id: number }>(
+  // 2. THE college ranking (college C, phd, 114, yearly). The grid only reads
+  //    finalized rankings, and at most ONE ranking per period may be finalized
+  //    (partial unique index) — so reuse the finalized one (on a fresh seed
+  //    that is C's finalized + distributed 114 ranking) and only insert our
+  //    tagged finalized ranking when none is finalized. Draft rankings may
+  //    coexist and are left alone: force-finalizing one would violate the
+  //    index. Cleanup removes the tagged ranking only, never a reused one.
+  const { rows: finalizedRk } = await pool.query<{ id: number }>(
     `SELECT id FROM college_rankings
       WHERE scholarship_type_id = $1
         AND sub_type_code = 'default'
         AND academic_year = $2
         AND COALESCE(semester, 'yearly') = 'yearly'
-        AND college_code = $3`,
+        AND college_code = $3
+        AND is_finalized IS TRUE`,
     [SCHOLARSHIP_TYPE_ID, ACADEMIC_YEAR, COLLEGE_CODE]
   );
   let rankingId: number;
-  if (existingRk[0]) {
-    rankingId = existingRk[0].id;
-    // The grid only reads finalized rankings; a reused draft must be finalized.
-    await pool.query(
-      `UPDATE college_rankings
-          SET is_finalized = true, ranking_status = 'finalized',
-              finalized_at = COALESCE(finalized_at, now()), finalized_by = COALESCE(finalized_by, $2)
-        WHERE id = $1`,
-      [rankingId, COLLEGE_REVIEWER_ID]
-    );
+  if (finalizedRk[0]) {
+    rankingId = finalizedRk[0].id;
   } else {
     const { rows: rk } = await pool.query<{ id: number }>(
       `INSERT INTO college_rankings

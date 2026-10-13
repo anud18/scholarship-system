@@ -9,13 +9,13 @@ This service handles college-level review operations including:
 """
 
 import logging
-from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 from sqlalchemy import and_, asc, case
 from sqlalchemy import func as sa_func
 from sqlalchemy import or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -27,6 +27,22 @@ from app.models.enums import REVIEWABLE_APPLICATION_STATUSES, Semester
 from app.models.review import ApplicationReview  # Unified review system
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User, UserRole
+from app.services.college_ranking_scope import (  # noqa: F401 - re-exported for callers
+    RANKING_SCOPE_LOCK_NAMESPACE,
+    DeletedRankingInfo,
+    RankingDiff,
+    RankingFinalizeResult,
+    RankingScopeMixin,
+    RankingSyncResult,
+)
+from app.services.college_review_errors import (  # noqa: F401 - re-exported for callers
+    CollegeReviewError,
+    InvalidRankingDataError,
+    RankingModificationError,
+    RankingNotFoundError,
+    RankingScopeConflictError,
+    ReviewPermissionError,
+)
 from app.services.email_automation_service import email_automation_service
 from app.utils.date_utils import to_taipei_str
 
@@ -35,49 +51,7 @@ func: Any = sa_func
 logger = logging.getLogger(__name__)
 
 
-# Custom exceptions for college review operations
-class CollegeReviewError(Exception):
-    """Base exception for college review operations"""
-
-    pass
-
-
-class RankingNotFoundError(CollegeReviewError):
-    """Raised when a ranking is not found"""
-
-    pass
-
-
-class RankingModificationError(CollegeReviewError):
-    """Raised when attempting to modify a finalized ranking"""
-
-    pass
-
-
-class InvalidRankingDataError(CollegeReviewError):
-    """Raised when ranking data is invalid"""
-
-    pass
-
-
-class ReviewPermissionError(CollegeReviewError):
-    """Raised when user lacks permission for review operation"""
-
-    pass
-
-
-@dataclass(frozen=True)
-class RankingUpsertResult:
-    """Outcome of get_or_create_ranking: the college's single ranking for the period."""
-
-    ranking: CollegeRanking
-    created: bool
-    # Applications appended to an existing DRAFT ranking because they became
-    # eligible after it was created (empty on create or when finalized).
-    added_application_ids: List[int] = field(default_factory=list)
-
-
-class CollegeReviewService:
+class CollegeReviewService(RankingScopeMixin):
     """Service for managing college-level reviews and rankings"""
 
     def __init__(self, db: AsyncSession):
@@ -242,43 +216,6 @@ class CollegeReviewService:
             return 1  # 按年造冊，一年 1 期
         else:
             return 1  # 預設為 1
-
-    @staticmethod
-    def _normalize_semester_value(semester: Optional[Any]) -> Optional[str]:
-        """Normalize semester representations to canonical string or None for yearly."""
-        if semester is None:
-            return None
-
-        value = semester.value if hasattr(semester, "value") else str(semester).strip()
-        lower = value.lower()
-
-        if lower.startswith("semester."):
-            lower = lower.split(".", 1)[1]
-
-        if lower in {"", "none"}:
-            return None
-
-        if lower in {"yearly"}:
-            return None
-
-        try:
-            return Semester(lower).value
-        except ValueError:
-            return None
-
-    @staticmethod
-    def _is_yearly_semester(semester: Optional[Any]) -> bool:
-        """Return True if semester represents a yearly cycle."""
-        if semester is None:
-            return True
-
-        value = semester.value if hasattr(semester, "value") else str(semester).strip()
-        lower = value.lower()
-
-        if lower.startswith("semester."):
-            lower = lower.split(".", 1)[1]
-
-        return lower in {"yearly"}
 
     # create_or_update_review() method removed - replaced by unified ApplicationReview system
     # Use ReviewService.create_review() instead for all review operations
@@ -458,203 +395,23 @@ class CollegeReviewService:
 
         return formatted_applications
 
-    async def find_ranking(
+    # ------------------------------------------------------------------
+    # Ranking scope: several drafts, at most one finalized
+    # ------------------------------------------------------------------
+    #
+    # A ranking's scope is (scholarship_type_id, sub_type_code, academic_year,
+    # yearly-normalised semester, college_code). A college may keep several DRAFT
+    # rankings per scope to compare them; finalizing one deletes the others, and no
+    # new ranking can be created while a finalized (or distributed) one exists.
+
+    async def _resolve_total_quota(
         self,
         scholarship_type_id: int,
         sub_type_code: str,
         academic_year: int,
-        semester: Optional[str],
-        college_code: Optional[str],
-    ) -> Optional[CollegeRanking]:
-        """Return THE ranking a college owns for (type, sub_type, year, semester), or None.
-
-        A college can hold at most one ranking per period — finalized or not — so this
-        lookup ignores ``is_finalized``. Scoping by college_code (not created_by) means
-        every reviewer of a college shares that college's single ranking while different
-        colleges never collide (issue #1034). ``college_code=None`` addresses the
-        admin/super_admin global ranking.
-        """
-        normalized_semester = self._normalize_semester_value(semester)
-
-        conditions = [
-            CollegeRanking.scholarship_type_id == scholarship_type_id,
-            CollegeRanking.sub_type_code == sub_type_code,
-            CollegeRanking.academic_year == academic_year,
-        ]
-
-        if college_code is None:
-            conditions.append(CollegeRanking.college_code.is_(None))
-        else:
-            conditions.append(CollegeRanking.college_code == college_code)
-
-        if normalized_semester is None:
-            conditions.append(or_(CollegeRanking.semester.is_(None), CollegeRanking.semester == Semester.yearly.value))
-        else:
-            conditions.append(CollegeRanking.semester == normalized_semester)
-
-        stmt = select(CollegeRanking).where(and_(*conditions)).limit(1)
-        result = await self.db.execute(stmt)
-        return result.scalar_one_or_none()
-
-    @staticmethod
-    def _ranking_sort_key(app: Application) -> tuple:
-        """Renewal students first, then by professor rank, then earlier submission."""
-        sort_group = 0 if app.is_renewal else 1  # 0 = renewal (top), 1 = new
-        # If application has final_ranking_position, use it; otherwise use a large number (lowest priority)
-        rank = app.final_ranking_position if app.final_ranking_position else 999999
-        # Use submitted_at as secondary sort (earlier submissions get higher priority if same rank)
-        submitted_at = app.submitted_at or app.created_at
-        return (sort_group, rank, submitted_at.timestamp())
-
-    async def _eligible_applications(
-        self,
-        scholarship_type_id: int,
-        sub_type_code: str,
-        academic_year: int,
-        semester: Optional[str],
-        college_code: Optional[str],
-    ) -> List[Application]:
-        """Applications a college ranking of this key should contain right now.
-
-        Same semester logic as get_applications_for_review; ``sub_type_code == "default"``
-        spans every sub-type. ``college_code`` restricts to the college's own students via
-        the SIS snapshot (std_academyno); None (admin global ranking) means all colleges.
-        """
-        normalized_semester = self._normalize_semester_value(semester)
-
-        conditions = [
-            Application.scholarship_type_id == scholarship_type_id,
-            Application.academic_year == academic_year,
-            Application.deleted_at.is_(None),  # Exclude soft-deleted applications
-            # Valid statuses for ranking: the same reviewed/approved states the
-            # review listings surface (shared constant keeps the sites in sync).
-            Application.status.in_(REVIEWABLE_APPLICATION_STATUSES),
-        ]
-
-        if sub_type_code != "default":
-            conditions.append(Application.sub_scholarship_type == sub_type_code)
-
-        if self._is_yearly_semester(semester):
-            conditions.append(or_(Application.semester.is_(None), Application.semester == Semester.yearly.value))
-        elif normalized_semester:
-            conditions.append(
-                or_(Application.semester == Semester(normalized_semester), Application.semester.is_(None))
-            )
-
-        if college_code:
-            # std_academyno is the college field in the student_data SIS snapshot
-            conditions.append(sa_func.json_extract_path_text(Application.student_data, "std_academyno") == college_code)
-
-        result = await self.db.execute(select(Application).where(and_(*conditions)))
-        return list(result.scalars().all())
-
-    async def count_pending_applications(self, ranking: CollegeRanking) -> int:
-        """How many eligible applications are NOT yet in this ranking.
-
-        Mirrors what ``_sync_new_applications`` would append, without writing, so the
-        UI can prompt 「同步申請名單」 only when there is something to add. A finalized
-        ranking never syncs, so it always reports zero.
-        """
-        if ranking.is_finalized:
-            return 0
-
-        existing_ids = set(
-            (
-                await self.db.execute(
-                    select(CollegeRankingItem.application_id).where(CollegeRankingItem.ranking_id == ranking.id)
-                )
-            )
-            .scalars()
-            .all()
-        )
-        eligible = await self._eligible_applications(
-            ranking.scholarship_type_id,
-            ranking.sub_type_code,
-            ranking.academic_year,
-            ranking.semester,
-            ranking.college_code,
-        )
-        return sum(1 for app in eligible if app.id not in existing_ids)
-
-    async def _sync_new_applications(self, ranking: CollegeRanking) -> List[int]:
-        """Append applications that became eligible after the ranking was created.
-
-        A college owns one ranking per period, so late professor approvals can no
-        longer be picked up by creating another ranking. New applications are appended
-        after the current last position (existing order is untouched) so the college
-        can re-rank them. Returns the appended application ids.
-        """
-        items_result = await self.db.execute(
-            select(CollegeRankingItem.application_id, CollegeRankingItem.rank_position).where(
-                CollegeRankingItem.ranking_id == ranking.id
-            )
-        )
-        rows = items_result.all()
-        existing_ids = {row[0] for row in rows}
-        last_position = max((row[1] or 0 for row in rows), default=0)
-
-        eligible = await self._eligible_applications(
-            ranking.scholarship_type_id,
-            ranking.sub_type_code,
-            ranking.academic_year,
-            ranking.semester,
-            ranking.college_code,
-        )
-        new_applications = sorted((app for app in eligible if app.id not in existing_ids), key=self._ranking_sort_key)
-        if not new_applications:
-            return []
-
-        for offset, app in enumerate(new_applications, 1):
-            self.db.add(
-                CollegeRankingItem(ranking_id=ranking.id, application_id=app.id, rank_position=last_position + offset)
-            )
-        ranking.total_applications = len(existing_ids) + len(new_applications)
-        await self.db.flush()
-        return [app.id for app in new_applications]
-
-    async def get_or_create_ranking(
-        self,
-        scholarship_type_id: int,
-        sub_type_code: str,
-        academic_year: int,
-        semester: Optional[str],
-        creator_id: int,
-        ranking_name: Optional[str] = None,
-    ) -> RankingUpsertResult:
-        """Return the creator's college ranking for this period, creating it if absent.
-
-        Idempotent: a college owns exactly one ranking per (type, sub_type, year,
-        semester), so a later call returns the existing row (even when finalized)
-        instead of creating another. While that ranking is still a draft, applications
-        that became eligible since it was created are appended to it (see
-        ``_sync_new_applications``). The DB unique index
-        ``uq_college_rankings_single_per_college`` backs the rule up against races.
-        """
-        normalized_semester = self._normalize_semester_value(semester)
-
-        # Resolve the creator's college up front: rankings are scoped per college, so
-        # the college owns the row and drives both the reuse lookup and the application
-        # filter. NULL college_code means an admin/super_admin global ranking.
-        creator_result = await self.db.execute(select(User).where(User.id == creator_id))
-        creator = creator_result.scalar_one_or_none()
-        creator_college = creator.college_code if creator else None
-
-        existing_ranking = await self.find_ranking(
-            scholarship_type_id=scholarship_type_id,
-            sub_type_code=sub_type_code,
-            academic_year=academic_year,
-            semester=semester,
-            college_code=creator_college,
-        )
-        if existing_ranking:
-            added_ids = [] if existing_ranking.is_finalized else await self._sync_new_applications(existing_ranking)
-            return RankingUpsertResult(ranking=existing_ranking, created=False, added_application_ids=added_ids)
-
-        applications = await self._eligible_applications(
-            scholarship_type_id, sub_type_code, academic_year, semester, creator_college
-        )
-
-        # Get quota information from configuration
+        normalized_semester: Optional[str],
+    ) -> Optional[int]:
+        """Quota a new ranking records, from the period's active configuration."""
         config_stmt = select(ScholarshipConfiguration).where(
             and_(
                 ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
@@ -686,8 +443,45 @@ class CollegeReviewService:
             # If no quota limit set but total_quota exists, use it as a reference
             elif config.total_quota:
                 total_quota = config.total_quota
+        return total_quota
 
-        # Create ranking
+    async def create_ranking(
+        self,
+        scholarship_type_id: int,
+        sub_type_code: str,
+        academic_year: int,
+        semester: Optional[str],
+        creator_id: int,
+        ranking_name: Optional[str] = None,
+    ) -> CollegeRanking:
+        """Create a NEW draft ranking of the creator's college for this period.
+
+        A college may keep several drafts per (type, sub_type, year, semester).
+        Raises RankingScopeConflictError while the scope holds a finalized ranking
+        (unlock it first) or a settled one (distribution executed — sync it instead),
+        so no competing draft can appear next to it.
+        """
+        normalized_semester = self._normalize_semester_value(semester)
+
+        # Resolve the creator's college up front: rankings are scoped per college, so
+        # the college owns the row and drives both the scope checks and the application
+        # filter. NULL college_code means an admin/super_admin global ranking.
+        creator_result = await self.db.execute(select(User).where(User.id == creator_id))
+        creator = creator_result.scalar_one_or_none()
+        creator_college = creator.college_code if creator else None
+
+        await self._lock_ranking_scope(scholarship_type_id, sub_type_code, academic_year, semester, creator_college)
+        await self._assert_scope_accepts_new_ranking(
+            scholarship_type_id, sub_type_code, academic_year, semester, creator_college
+        )
+
+        applications = await self._eligible_applications(
+            scholarship_type_id, sub_type_code, academic_year, semester, creator_college
+        )
+        total_quota = await self._resolve_total_quota(
+            scholarship_type_id, sub_type_code, academic_year, normalized_semester
+        )
+
         ranking = CollegeRanking(
             scholarship_type_id=scholarship_type_id,
             sub_type_code=sub_type_code,
@@ -716,7 +510,7 @@ class CollegeReviewService:
 
         await self.db.flush()  # Flush changes within transaction
 
-        return RankingUpsertResult(ranking=ranking, created=True, added_application_ids=[])
+        return ranking
 
     async def get_ranking(self, ranking_id: int) -> Optional[CollegeRanking]:
         """Get a ranking with all its items and relationships using proper eager loading"""
@@ -810,30 +604,66 @@ class CollegeReviewService:
 
         return ranking
 
-    async def finalize_ranking(self, ranking_id: int, finalizer_id: int) -> CollegeRanking:
-        """Finalize a ranking (makes it read-only) with concurrent access protection"""
+    async def finalize_ranking(
+        self,
+        ranking_id: int,
+        finalizer_id: int,
+        expected_sibling_ids: Optional[Iterable[int]] = None,
+    ) -> RankingFinalizeResult:
+        """Finalize (lock) a ranking and delete the other drafts of its scope.
+
+        Only one ranking per scope survives 確認排名; while it stays locked no new
+        ranking can be created (create_ranking returns 409). The scope comes from the
+        target row itself — admins may finalize a college's ranking. Refuses with
+        RankingScopeConflictError (nothing deleted, target stays a draft) when a
+        sibling is finalized, settled or referenced by a payment roster.
+
+        ``expected_sibling_ids`` are the drafts the user confirmed deleting. When
+        given, a sibling outside it (created after the user's list was loaded)
+        refuses the lock too, so nothing is deleted that the user never saw.
+        """
 
         try:
-            # Get ranking with pessimistic locking to prevent concurrent modifications
-            ranking_stmt = select(CollegeRanking).where(CollegeRanking.id == ranking_id).with_for_update()
+            target = await self.db.get(CollegeRanking, ranking_id)
+            if not target:
+                raise RankingNotFoundError(f"Ranking with ID {ranking_id} not found")
 
-            ranking_result = await self.db.execute(ranking_stmt)
-            ranking = ranking_result.scalar_one_or_none()
+            await self._lock_ranking_scope(
+                target.scholarship_type_id,
+                target.sub_type_code,
+                target.academic_year,
+                target.semester,
+                target.college_code,
+            )
 
+            # Re-read under the lock: a concurrent finalize of a sibling may have
+            # deleted this draft, or a concurrent finalize of this one locked it.
+            ranking = await self._select_ranking_for_update(ranking_id)
             if not ranking:
                 raise RankingNotFoundError(f"Ranking with ID {ranking_id} not found")
 
             if ranking.is_finalized:
                 raise RankingModificationError("Ranking is already finalized")
 
-            # A college owns exactly one ranking per period (unique index
-            # uq_college_rankings_single_per_college), so there is no sibling ranking
-            # to un-finalize here: finalizing only ever touches this row. Other
-            # colleges' rankings are never affected (issue #1034).
+            siblings = await self.list_scope_rankings(
+                ranking.scholarship_type_id,
+                ranking.sub_type_code,
+                ranking.academic_year,
+                ranking.semester,
+                ranking.college_code,
+                exclude_id=ranking.id,
+                for_update=True,
+            )
+            if expected_sibling_ids is not None:
+                self._assert_siblings_confirmed(siblings, expected_sibling_ids)
+            await self._assert_siblings_removable(siblings)
+            deleted_rankings = await self._delete_rankings(siblings)
+
             ranking.is_finalized = True
             ranking.finalized_at = datetime.now(timezone.utc)
             ranking.finalized_by = finalizer_id
             ranking.ranking_status = "finalized"
+            await self._mirror_final_ranking_positions(ranking.id, deleted_rankings)
 
             await self.db.flush()  # Flush within transaction context
 
@@ -845,15 +675,61 @@ class CollegeReviewService:
                 action="finalize",
             ).inc()
 
-            return ranking
+            return RankingFinalizeResult(ranking=ranking, deleted_rankings=deleted_rankings)
 
-        except (RankingNotFoundError, RankingModificationError):
-            raise  # Re-raise specific exceptions
+        except (RankingNotFoundError, RankingModificationError, RankingScopeConflictError, IntegrityError):
+            # IntegrityError is mapped to 409 by the endpoint. Defensive only: the
+            # scope lock keeps the partial unique index from firing, and a roster
+            # insert on a sibling blocks on its FOR UPDATE row lock until we commit.
+            raise
         except Exception as e:
             raise BusinessLogicError(f"Failed to finalize ranking {ranking_id}") from e
 
+    async def delete_ranking(self, ranking_id: int) -> DeletedRankingInfo:
+        """Delete a draft ranking (and its items), returning its rank snapshot.
+
+        Finalized rankings must be unlocked first (RankingModificationError); settled
+        or roster-referenced rankings are never deleted (RankingScopeConflictError).
+        Applications only this draft held lose the rank it wrote.
+        """
+        target = await self.db.get(CollegeRanking, ranking_id)
+        if not target:
+            raise RankingNotFoundError(f"Ranking with ID {ranking_id} not found")
+
+        await self._lock_ranking_scope(
+            target.scholarship_type_id,
+            target.sub_type_code,
+            target.academic_year,
+            target.semester,
+            target.college_code,
+        )
+
+        ranking = await self._select_ranking_for_update(ranking_id)
+        if not ranking:
+            raise RankingNotFoundError(f"Ranking with ID {ranking_id} not found")
+
+        if ranking.is_finalized:
+            raise RankingModificationError("Cannot delete finalized ranking. Please unfinalize it first.")
+
+        protected_ids = await self._load_settled_ids([ranking.id]) | await self._load_roster_referenced_ids(
+            [ranking.id]
+        )
+        if ranking.id in protected_ids:
+            raise RankingScopeConflictError("此排名已執行分發或已用於造冊，無法刪除")
+
+        [deleted] = await self._delete_rankings([ranking])
+        await self._clear_superseded_positions([deleted])
+        await self.db.flush()
+        return deleted
+
     async def unfinalize_ranking(self, ranking_id: int) -> CollegeRanking:
-        """Unfinalize a ranking (makes it editable again)"""
+        """Unfinalize a ranking (makes it editable again).
+
+        Unlocking re-allows creating rankings in the scope (unless it is settled) and
+        syncing this one — the path 補充匯入 students take into a distributed ranking
+        (unlock → 同步申請名單 → 確認排名), so it is deliberately not gated on
+        distribution.
+        """
 
         try:
             # Get ranking with pessimistic locking

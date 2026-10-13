@@ -958,7 +958,8 @@ class RosterService:
         # 此處僅 gate 在 is_allocated + academic_year（未含 is_finalized /
         # distribution_executed）。其正確性依賴 _get_eligible_applications 已先以
         # 「finalized + executed」篩選過申請：一個申請在同學年度只會有一筆有效正取
-        # （finalize 時會反鎖同 slot 的其他排名），故 .first() 取到的即為授權子類型。
+        # （同 scope 至多一份鎖定排名；finalize 時刪除同 scope 的其他草稿排名），
+        # 故 .first() 取到的即為授權子類型。
         if not allocated_sub_type:
             alloc_item = (
                 self.db.query(CollegeRankingItem)

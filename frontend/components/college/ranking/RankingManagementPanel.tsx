@@ -15,11 +15,20 @@ import { Button } from "@/components/ui/button";
 import { CollegeRankingTable } from "@/components/college-ranking-table";
 import { ConfigSelector } from "../shared/ConfigSelector";
 import { RankingCardList } from "../shared/RankingCardList";
-import { RefreshCw, Loader2, Clock, AlertTriangle, Lock } from "lucide-react";
+import { Plus, RefreshCw, Loader2, Clock, AlertTriangle, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { logger } from "@/lib/utils/logger";
 import { formatDeadline } from "@/lib/utils/format-deadline";
+import {
+  buildDefaultRankingName,
+  findBlockingRanking,
+  findScopeSiblings,
+  pickDefaultRankingId,
+  resolveRankingTarget,
+} from "./ranking-scope";
+import { FinalizeRankingDialog, type FinalizeCandidate } from "./FinalizeRankingDialog";
+import { RankingDriftBanner } from "./RankingDriftBanner";
 
 // #63: surface the college-review deadline visibly on the ranking page
 // and warn / lock once the deadline approaches or passes.
@@ -134,11 +143,18 @@ export function RankingManagementPanel({
   // "建立排名" for the first time).
   const [panelDeadline, setPanelDeadline] = useState<string | null>(null);
 
+  // Only the latest detail request may write rankingData: a slower response
+  // for a card the user has already left must not land under the new one.
+  const latestDetailRequestRef = useRef(0);
+
   const fetchRankingDetails = useCallback(
     async (rankingId: number) => {
+      const requestId = ++latestDetailRequestRef.current;
+      const isLatestRequest = () => requestId === latestDetailRequestRef.current;
       setIsRankingLoading(true);
       try {
         const response = await apiClient.college.getRanking(rankingId);
+        if (!isLatestRequest()) return;
         if (response.success && response.data) {
           // Transform the API response
           // Shape from GET /college-review/rankings/{id} — backend's
@@ -194,7 +210,9 @@ export function RankingManagementPanel({
             academic_year?: number;
             semester?: string | null;
             is_finalized?: boolean;
+            distribution_executed?: boolean;
             pending_application_count?: number;
+            stale_application_count?: number;
             college_review_end?: string | null;
           };
           const transformedApplications = (rankingPayload.items || []).map(
@@ -262,13 +280,15 @@ export function RankingManagementPanel({
             academicYear: rankingPayload.academic_year || 0,
             semester: rankingPayload.semester,
             isFinalized: rankingPayload.is_finalized || false,
+            distributionExecuted: rankingPayload.distribution_executed || false,
             pendingApplicationCount: rankingPayload.pending_application_count ?? 0,
+            staleApplicationCount: rankingPayload.stale_application_count ?? 0,
           });
         }
       } catch (error) {
         logger.error("Failed to fetch ranking details", { error: error });
       } finally {
-        setIsRankingLoading(false);
+        if (isLatestRequest()) setIsRankingLoading(false);
       }
     },
     [setIsRankingLoading, setRankingData, setActiveConfigDeadline]
@@ -284,21 +304,46 @@ export function RankingManagementPanel({
   useEffect(() => {
     selectedRankingRef.current = selectedRanking;
   }, [selectedRanking]);
+  // After an awaited action on a ranking: is that ranking still the open one,
+  // or did the user pick another card while the request was in flight?
+  const isStillSelected = useCallback(
+    (rankingId: number) => selectedRankingRef.current === rankingId,
+    []
+  );
 
-  // Single-ranking rule: a college has at most one ranking for the selected
-  // scholarship / year / semester, so open it as soon as it is known instead
-  // of making the user pick from a list. Re-runs when the selection changes
-  // (the previously selected ranking then no longer matches the filter).
+  // Open a ranking as soon as the list is known instead of leaving the detail
+  // area empty: the finalized one if the period has it (after a lock it is the
+  // only ranking left in its scope), else the newest draft. Re-runs when the
+  // selection no longer matches the filter (period switched, or the selected
+  // draft was deleted by another ranking's lock). A period without rankings
+  // drops the previous one, so its table and banners never show under the
+  // empty state.
   useEffect(() => {
-    if (filteredRankings.length === 0) return;
     const isSelectionValid = filteredRankings.some(
       ranking => ranking.id === selectedRanking
     );
     if (isSelectionValid) return;
-    const targetId = filteredRankings[0].id;
-    setSelectedRanking(targetId);
-    fetchRankingDetails(targetId);
-  }, [filteredRankings, selectedRanking, setSelectedRanking, fetchRankingDetails]);
+    const targetId = pickDefaultRankingId(filteredRankings);
+    if (targetId !== null) {
+      setSelectedRanking(targetId);
+      fetchRankingDetails(targetId);
+      return;
+    }
+    if (selectedRanking === null && rankingData === null) return;
+    latestDetailRequestRef.current++; // a detail response still in flight is dropped
+    setSelectedRanking(null);
+    setRankingData(null);
+    setActiveConfigDeadline(null);
+    setIsRankingLoading(false);
+  }, [
+    filteredRankings,
+    selectedRanking,
+    rankingData,
+    setSelectedRanking,
+    setRankingData,
+    setIsRankingLoading,
+    fetchRankingDetails,
+  ]);
 
   // Auto-refresh when switching to ranking tab or when data version changes
   useEffect(() => {
@@ -337,19 +382,19 @@ export function RankingManagementPanel({
       const academicConfig = await getAcademicConfig();
       const scholarshipConfigData = await getScholarshipConfig();
 
-      const currentScholarshipType = availableOptions?.scholarship_types.find(
-        type => type.code === activeScholarshipTab
+      const { scholarshipTypeId, subTypeCode } = resolveRankingTarget(
+        availableOptions?.scholarship_types,
+        scholarshipConfigData,
+        activeScholarshipTab
       );
-
-      const configScholarship = scholarshipConfigData.find(
-        config => config.name === currentScholarshipType?.name
-      );
-
-      const targetScholarshipId =
-        configScholarship?.id || scholarshipConfigData[0]?.id;
-      const targetSubTypeCode =
-        configScholarship?.subTypes[0]?.code ||
-        scholarshipConfigData[0]?.subTypes[0]?.code;
+      if (!scholarshipTypeId || !subTypeCode) {
+        toast.error(
+          locale === "zh"
+            ? "無法判斷要建立排名的獎學金類型，請重新整理頁面"
+            : "Could not determine the scholarship for the new ranking. Please refresh the page."
+        );
+        return;
+      }
       const useYear = selectedAcademicYear || academicConfig.currentYear;
       const useSemester = selectedSemester || academicConfig.currentSemester;
 
@@ -360,29 +405,31 @@ export function RankingManagementPanel({
             ? "下學期"
             : "全年";
 
-      // A college owns ONE ranking per (scholarship, year, semester). The
-      // backend returns the existing ranking (reused: true) instead of
-      // creating a second one, and while that ranking is still a draft it
-      // appends applications approved since it was created — so the same
-      // call doubles as 「同步申請名單」.
+      // Always creates a NEW draft; a college may keep several per period and
+      // picks one with 確認排名. The backend answers 409 (shown below as
+      // response.message) while a locked or distributed ranking exists in the
+      // scope. The name carries a timestamp so the drafts are distinguishable.
       const response = await apiClient.college.createRanking({
-        scholarship_type_id: targetScholarshipId,
-        sub_type_code: targetSubTypeCode,
+        scholarship_type_id: scholarshipTypeId,
+        sub_type_code: subTypeCode,
         academic_year: useYear,
         semester: useSemester === Semester.YEARLY ? null : useSemester,
-        ranking_name: `${scholarshipType.name} - ${useYear} ${semesterName}`,
+        ranking_name: buildDefaultRankingName({
+          scholarshipName: scholarshipType.name,
+          academicYear: useYear,
+          semesterLabel: semesterName,
+          existingNames: rankings.map(ranking => ranking.ranking_name),
+        }),
       });
 
       if (response.success && response.data) {
         try {
           // Refresh rankings list
           await fetchRankings();
-          // Select the (new or existing) ranking
+          // Select the new ranking
           const newRanking = response.data as {
             id: number;
             ranking_name?: string;
-            reused?: boolean;
-            added_application_count?: number;
           };
           setSelectedRanking(newRanking.id);
           // Load ranking details
@@ -390,26 +437,11 @@ export function RankingManagementPanel({
           // Increment data version
           incrementDataVersion();
 
-          const addedCount = newRanking.added_application_count ?? 0;
-          if (newRanking.reused && addedCount > 0) {
-            toast.success(
-              locale === "zh"
-                ? `已將 ${addedCount} 位新申請者加入排名末端，請重新調整順序`
-                : `${addedCount} new applicant(s) appended to the ranking; please re-order`
-            );
-          } else if (newRanking.reused) {
-            toast.info(
-              locale === "zh"
-                ? "申請名單已是最新，沒有新的申請者"
-                : "The ranking is already up to date; no new applicants"
-            );
-          } else {
-            toast.success(
-              locale === "zh"
-                ? `排名「${newRanking.ranking_name || "新排名"}」已成功建立`
-                : `Ranking "${newRanking.ranking_name || "New Ranking"}" has been created successfully`
-            );
-          }
+          toast.success(
+            locale === "zh"
+              ? `排名「${newRanking.ranking_name || "新排名"}」已成功建立`
+              : `Ranking "${newRanking.ranking_name || "New Ranking"}" has been created successfully`
+          );
         } catch (fetchError) {
           logger.error("Failed to load ranking after creation", { fetchError: fetchError });
           toast.error(
@@ -444,6 +476,7 @@ export function RankingManagementPanel({
     selectedAcademicYear,
     selectedSemester,
     scholarshipType.name,
+    rankings,
     fetchRankings,
     setSelectedRanking,
     fetchRankingDetails,
@@ -504,44 +537,96 @@ export function RankingManagementPanel({
     ]
   );
 
-  const handleFinalizeRanking = useCallback(
-    async (targetRankingId?: number) => {
-      const rankingId = targetRankingId ?? selectedRanking;
-      if (!rankingId) return;
+  // 確認排名 confirmation, open while the target has drafts beside it that the
+  // lock will delete. Holds a snapshot so the dialog text cannot shift if the
+  // list refreshes underneath it.
+  const [finalizeCandidate, setFinalizeCandidate] =
+    useState<FinalizeCandidate | null>(null);
+  const [isFinalizing, setIsFinalizing] = useState(false);
 
+  // `expectedSiblingIds`: the scope's other rankings the user saw (and, when
+  // there were any, confirmed deleting). The backend refuses (409) if the
+  // scope holds one more, e.g. a draft a colleague created since.
+  const finalizeRanking = useCallback(
+    async (rankingId: number, expectedSiblingIds: number[]) => {
+      setIsFinalizing(true);
       try {
-        const response = await apiClient.college.finalizeRanking(rankingId);
-        if (response.success) {
-          await fetchRankings();
-          if (rankingData && rankingId === selectedRanking) {
-            // A locked ranking never syncs, so the pending prompt goes away too.
-            setRankingData({
-              ...rankingData,
-              isFinalized: true,
-              pendingApplicationCount: 0,
-            });
-          }
-          incrementDataVersion();
-          toast.success(
-            locale === "zh"
-              ? "排名已成功鎖定"
-              : "Ranking has been locked successfully"
+        const response = await apiClient.college.finalizeRanking(
+          rankingId,
+          expectedSiblingIds
+        );
+        if (!response.success) {
+          toast.error(
+            response.message ||
+              (locale === "zh" ? "無法鎖定排名" : "Failed to lock the ranking")
           );
+          // A refusal may come from rankings this list does not show yet;
+          // reload so the next 確認排名 lists them.
+          await fetchRankings();
+          return;
         }
+        const deletedCount = response.data?.deleted_ranking_count ?? 0;
+        // The lock deletes the scope's other rankings — possibly the one that
+        // was open (finalizing via another card's lock toggle). Select the
+        // confirmed ranking BEFORE the list refresh so the auto-select effect
+        // never reopens a deleted id, and re-read its details first so the
+        // table never shows a deleted ranking's rows under the new selection
+        // (the backend also recomputes the pending / stale counts on lock).
+        setSelectedRanking(rankingId);
+        await fetchRankingDetails(rankingId);
+        await fetchRankings();
+        incrementDataVersion();
+        toast.success(
+          locale === "zh"
+            ? `排名已鎖定${deletedCount > 0 ? `，已刪除其他 ${deletedCount} 份排名` : ""}`
+            : `Ranking locked${deletedCount > 0 ? `; ${deletedCount} other ranking(s) deleted` : ""}`
+        );
       } catch (error) {
         logger.error("Failed to finalize ranking", { error: error });
+        toast.error(
+          locale === "zh" ? "鎖定排名時發生錯誤" : "An error occurred while locking the ranking"
+        );
+      } finally {
+        setIsFinalizing(false);
       }
     },
     [
-      selectedRanking,
-      rankingData,
       fetchRankings,
-      setRankingData,
-      toast,
+      fetchRankingDetails,
+      setSelectedRanking,
       locale,
       incrementDataVersion,
     ]
   );
+
+  // Both 確認排名 entry points (card lock toggle and the table button) land
+  // here. Without siblings in the scope there is nothing to delete, so lock
+  // directly; otherwise ask first — the deletion cannot be undone.
+  const handleFinalizeRanking = useCallback(
+    (targetRankingId?: number) => {
+      const rankingId = targetRankingId ?? selectedRanking;
+      if (!rankingId) return;
+
+      const target = rankings.find(ranking => ranking.id === rankingId);
+      const siblings = target ? findScopeSiblings(rankings, target) : [];
+      if (!target || siblings.length === 0) {
+        // Nothing listed to delete: the backend refuses if a sibling exists.
+        void finalizeRanking(rankingId, []);
+        return;
+      }
+      setFinalizeCandidate({ id: rankingId, name: target.ranking_name, siblings });
+    },
+    [selectedRanking, rankings, finalizeRanking]
+  );
+
+  const handleConfirmFinalize = useCallback(async () => {
+    if (!finalizeCandidate) return;
+    await finalizeRanking(
+      finalizeCandidate.id,
+      finalizeCandidate.siblings.map(sibling => sibling.id)
+    );
+    setFinalizeCandidate(null);
+  }, [finalizeCandidate, finalizeRanking]);
 
   const handleUnfinalizeRanking = useCallback(
     async (targetRankingId?: number) => {
@@ -552,24 +637,33 @@ export function RankingManagementPanel({
         const response = await apiClient.college.unfinalizeRanking(rankingId);
         if (response.success) {
           await fetchRankings();
-          if (rankingData && rankingId === selectedRanking) {
+          if (rankingData && isStillSelected(rankingId)) {
             setRankingData({ ...rankingData, isFinalized: false });
-            // Unlocking re-enables syncing; re-read so the pending count is real
-            // rather than the zero a finalized ranking always reports.
+            // Unlocking re-enables syncing; re-read so the pending / stale
+            // counts and the sync button reflect the draft state.
             await fetchRankingDetails(rankingId);
           }
           incrementDataVersion();
           toast.success(
-            locale === "zh" ? "排名已成功解除鎖定" : "Ranking unlocked"
+            locale === "zh" ? "排名已解除鎖定" : "Ranking unlocked"
+          );
+        } else {
+          toast.error(
+            response.message ||
+              (locale === "zh" ? "無法解除鎖定" : "Failed to unlock the ranking")
           );
         }
       } catch (error) {
         logger.error("Failed to unfinalize ranking", { error: error });
+        toast.error(
+          locale === "zh" ? "解除鎖定時發生錯誤" : "An error occurred while unlocking the ranking"
+        );
       }
     },
     [
       selectedRanking,
       rankingData,
+      isStillSelected,
       fetchRankings,
       fetchRankingDetails,
       setRankingData,
@@ -578,6 +672,69 @@ export function RankingManagementPanel({
       incrementDataVersion,
     ]
   );
+
+  // 同步申請名單: update the selected draft in place — newly eligible
+  // applications are added, ones no longer eligible removed (a distributed
+  // ranking only gains rows). Never POST /rankings here: that always creates
+  // another draft.
+  const [isSyncing, setIsSyncing] = useState(false);
+  const handleSyncRanking = useCallback(async () => {
+    const rankingId = selectedRanking;
+    if (!rankingId) return;
+
+    setIsSyncing(true);
+    try {
+      const response = await apiClient.college.syncRanking(rankingId);
+      if (!response.success) {
+        toast.error(
+          response.message ||
+            (locale === "zh" ? "無法同步申請名單" : "Failed to sync the application list")
+        );
+        return;
+      }
+      const added = response.data?.added_application_count ?? 0;
+      const removed = response.data?.removed_application_count ?? 0;
+      if (isStillSelected(rankingId)) await fetchRankingDetails(rankingId);
+      await fetchRankings();
+      incrementDataVersion();
+
+      if (added === 0 && removed === 0) {
+        toast.info(
+          locale === "zh"
+            ? "排名已與申請名單一致"
+            : "The ranking already matches the application list"
+        );
+        return;
+      }
+      const zhParts = [
+        added > 0 ? `加入 ${added} 位新申請者` : null,
+        removed > 0 ? `移除 ${removed} 筆已不符合的申請` : null,
+      ].filter(Boolean);
+      const enParts = [
+        added > 0 ? `added ${added} new applicant(s)` : null,
+        removed > 0 ? `removed ${removed} application(s) no longer eligible` : null,
+      ].filter(Boolean);
+      toast.success(
+        locale === "zh" ? `已${zhParts.join("、")}` : `Synced: ${enParts.join(", ")}`
+      );
+    } catch (error) {
+      logger.error("Failed to sync ranking", { error: error });
+      toast.error(
+        locale === "zh"
+          ? "同步申請名單時發生錯誤"
+          : "An error occurred while syncing the application list"
+      );
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [
+    selectedRanking,
+    isStillSelected,
+    fetchRankingDetails,
+    fetchRankings,
+    incrementDataVersion,
+    locale,
+  ]);
 
   const handleImportExcel = useCallback(
     async (
@@ -637,9 +794,19 @@ export function RankingManagementPanel({
         incrementDataVersion();
         setShowDeleteRankingDialog(false);
         setRankingToDelete(null);
+      } else {
+        // e.g. 409: a distributed or roster-referenced ranking cannot be deleted.
+        toast.error(
+          response.message ||
+            (locale === "zh" ? "無法刪除排名" : "Failed to delete the ranking")
+        );
+        setShowDeleteRankingDialog(false);
       }
     } catch (error) {
       logger.error("Failed to delete ranking", { error: error });
+      toast.error(
+        locale === "zh" ? "刪除排名時發生錯誤" : "An error occurred while deleting the ranking"
+      );
     }
   }, [
     rankingToDelete,
@@ -650,6 +817,7 @@ export function RankingManagementPanel({
     setShowDeleteRankingDialog,
     setRankingToDelete,
     incrementDataVersion,
+    locale,
   ]);
 
   const handleEditRankingName = useCallback(
@@ -775,6 +943,52 @@ export function RankingManagementPanel({
     [deadlineISO, now]
   );
   const isAdmin = user.role === "admin" || user.role === "super_admin";
+  const isLockedByDeadline = deadlineInfo.state === "passed" && !isAdmin;
+
+  // 建立新排名 is refused (409) while the scope it creates into holds a locked
+  // or distributed ranking; resolve that scope exactly like createNewRanking
+  // (full scope against every ranking, not the period filter's view) so the
+  // button can be disabled with the reason up front. Until a period is picked
+  // the scope is unknown and the backend's 409 is the only guard.
+  const blockingRanking = useMemo(() => {
+    const { scholarshipTypeId, subTypeCode } = resolveRankingTarget(
+      availableOptions?.scholarship_types,
+      scholarshipConfig,
+      activeScholarshipTab
+    );
+    if (
+      !scholarshipTypeId ||
+      !subTypeCode ||
+      typeof selectedAcademicYear !== "number" ||
+      !selectedSemester
+    ) {
+      return undefined;
+    }
+    return findBlockingRanking(rankings, {
+      scholarship_type_id: scholarshipTypeId,
+      sub_type_code: subTypeCode,
+      academic_year: selectedAcademicYear,
+      semester: selectedSemester === Semester.YEARLY ? null : selectedSemester,
+      college_code: user.college_code ?? null,
+    });
+  }, [
+    availableOptions,
+    scholarshipConfig,
+    activeScholarshipTab,
+    selectedAcademicYear,
+    selectedSemester,
+    rankings,
+    user.college_code,
+  ]);
+  const createBlockedReason = blockingRanking
+    ? blockingRanking.is_finalized
+      ? locale === "zh"
+        ? "已有鎖定的排名，解除鎖定後才能新增排名"
+        : "A locked ranking exists; unlock it to create another"
+      : locale === "zh"
+        ? "已有執行分發的排名，無法再新增排名"
+        : "A distributed ranking exists; no new ranking can be created"
+    : null;
 
   return (
     <>
@@ -800,21 +1014,44 @@ export function RankingManagementPanel({
             locale={locale}
           />
 
-          {/* One ranking per college per period: creation lives in the
-              empty state below; once a DRAFT ranking exists the same call
-              pulls in applications approved after it was created. */}
+          {/* 同步申請名單 updates the selected draft in place (POST
+              /rankings/{id}/sync); a locked ranking must be unlocked first. */}
           {filteredRankings.length > 0 &&
             rankingData &&
             !rankingData.isFinalized && (
               <Button
                 variant="outline"
-                onClick={createNewRanking}
-                disabled={deadlineInfo.state === "passed" && !isAdmin}
+                onClick={handleSyncRanking}
+                disabled={isSyncing || isLockedByDeadline}
               >
-                <RefreshCw className="h-4 w-4 mr-2" />
+                <RefreshCw
+                  className={`h-4 w-4 mr-2 ${isSyncing ? "animate-spin" : ""}`}
+                />
                 同步申請名單
               </Button>
             )}
+
+          {/* Each click creates another draft to compare; blocked while the
+              scope holds a locked / distributed ranking (backend 409s too). */}
+          <div className="flex flex-col items-end gap-1">
+            <Button
+              onClick={createNewRanking}
+              disabled={isLockedByDeadline || Boolean(blockingRanking)}
+              title={
+                blockingRanking
+                  ? `${createBlockedReason}（${blockingRanking.ranking_name}）`
+                  : undefined
+              }
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              建立新排名
+            </Button>
+            {createBlockedReason && (
+              <p className="text-xs text-muted-foreground">
+                {createBlockedReason}
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
@@ -876,34 +1113,23 @@ export function RankingManagementPanel({
         </div>
       )}
 
-      {/* Applications that became eligible after the ranking was built. A college
-          owns one ranking per period, so these can only get in via 同步申請名單 —
-          without a prompt they would sit outside the ranking unnoticed. Mirrors
-          the deadline banner's shape; hidden once the ranking is locked. */}
-      {rankingData &&
-        !rankingData.isFinalized &&
-        rankingData.pendingApplicationCount > 0 && (
-          <div className="rounded-md border p-3 text-sm flex items-start gap-2 border-sky-300 bg-sky-50 text-sky-900">
-            <RefreshCw className="h-4 w-4 mt-0.5 shrink-0" />
-            <div className="flex-1 leading-relaxed">
-              <strong>
-                {locale === "zh"
-                  ? `有 ${rankingData.pendingApplicationCount} 筆申請尚未加入排名`
-                  : `${rankingData.pendingApplicationCount} application(s) not yet in the ranking`}
-              </strong>
-              {locale === "zh"
-                ? "。請按「同步申請名單」將它們加入名單末端，再調整排序。"
-                : ' Press "同步申請名單" to append them, then adjust the order.'}
-            </div>
-          </div>
-        )}
+      {rankingData && (
+        <RankingDriftBanner
+          locale={locale}
+          pendingCount={rankingData.pendingApplicationCount}
+          staleCount={rankingData.staleApplicationCount}
+          isFinalized={rankingData.isFinalized}
+          distributionExecuted={rankingData.distributionExecuted}
+          isLockedByDeadline={isLockedByDeadline}
+        />
+      )}
 
       {/* Ranking Selection */}
       <Card>
         <CardHeader>
-          <CardTitle>本學院排名</CardTitle>
+          <CardTitle>學院排名</CardTitle>
           <CardDescription>
-            每個學院在同一學年度與學期只能有一份排名；教授後續核准的申請可用「同步申請名單」加入，如需整份重新產生請先刪除現有排名
+            可建立多份排名比較；按「確認排名」鎖定後，其他排名會被刪除、只保留這一份，鎖定期間無法再新增排名（解除鎖定後可再新增）
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -944,7 +1170,10 @@ export function RankingManagementPanel({
               deadlineInfo.state === "passed" && !isAdmin
                 ? undefined
                 : ranking => {
-                    setRankingToDelete(ranking);
+                    // The card hands back its view model; keep the full list row.
+                    const target = filteredRankings.find(r => r.id === ranking.id);
+                    if (!target) return;
+                    setRankingToDelete(target);
                     setShowDeleteRankingDialog(true);
                   }
             }
@@ -995,6 +1224,14 @@ export function RankingManagementPanel({
           )}
         </div>
       )}
+
+      <FinalizeRankingDialog
+        locale={locale}
+        candidate={finalizeCandidate}
+        isFinalizing={isFinalizing}
+        onCancel={() => setFinalizeCandidate(null)}
+        onConfirm={handleConfirmFinalize}
+      />
 
       {/* Delete Ranking Dialog */}
       <Dialog

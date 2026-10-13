@@ -67,6 +67,12 @@ PROFESSOR_ACTIONABLE_APPLICATION_STATUSES = [
     ApplicationStatus.under_review.value,  # 審批中
 ]
 
+# Application.quota_allocation_status values that mean "pulled out of the
+# distribution on purpose" (撤銷 / 停發) and reversible via 復發. Shared by manual
+# distribution (never hand the slot back) and the ranking sync (never drop the
+# parked application from its ranking).
+CANCELLED_ALLOCATION_STATUSES = ("revoked", "suspended")
+
 
 # ── Apply-flow visibility sets ───────────────────────────────────────
 # Partition every ApplicationStatus value into three buckets that decide

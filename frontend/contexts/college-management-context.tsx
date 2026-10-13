@@ -27,12 +27,19 @@ interface CollegeRanking {
   ranking_name: string;
   is_finalized: boolean;
   distribution_executed: boolean;
+  /** Distributed or holding allocation results: blocks new rankings in the scope, never deleted. */
+  is_settled?: boolean;
+  /** Used by a 造冊 roster: never deleted. */
+  is_roster_referenced?: boolean;
   total_applications: number;
   allocated_count?: number;
   distribution_date?: string;
   scholarship_type_id?: number;
+  sub_type_code: string;
   academic_year?: number;
   semester?: string | null;
+  /** Owning college; null for an admin's global ranking. Part of the ranking scope. */
+  college_code?: string | null;
   allow_college_view_distribution?: boolean;
   [key: string]: unknown;
 }
@@ -61,8 +68,11 @@ interface RankingData {
   academicYear: number;
   semester?: string | null;
   isFinalized: boolean;
+  distributionExecuted: boolean;
   /** Eligible applications not yet in this ranking; drives the 同步申請名單 prompt. */
   pendingApplicationCount: number;
+  /** Ranked applications no longer eligible (withdrawn, deleted, sub-type / college / term changed). */
+  staleApplicationCount: number;
 }
 
 interface CollegeManagementContextType {

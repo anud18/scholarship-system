@@ -2,7 +2,9 @@
 // Drives the real frontend UI as each college reviewer + admin, and uses the
 // DB as ground truth at each step. Encodes the #1029 / #1034 regression check:
 // finalizing one college's ranking must NOT un-finalize the others, and admin
-// distribution must see ALL colleges (not just the last finalized one).
+// distribution must see ALL colleges (not just the last finalized one). It also
+// checks the lock collapse: finalizing deletes the SAME college's other draft
+// rankings for the period (never another college's), leaving exactly one.
 //
 // Run (from the skill scripts/ dir, dev stack up):
 //   NODE_PATH=$(npm root -g) \
@@ -14,9 +16,13 @@
 //  * Auth restore needs BOTH auth_token AND a user blob in localStorage
 //    (frontend/hooks/use-auth.tsx) — same contract as build-storage-state.sh.
 //    Token-only => silently bounced to /dev-login.
-//  * College "建立排名" creates a ranking for the config's first sub-type,
-//    which is "default" (aggregates ALL sub-types). distribution reads every
-//    finalized ranking regardless of sub_type, so "default" is fine.
+//  * College "建立排名" (empty state) / "建立新排名" (header) creates a NEW draft
+//    for the config's first sub-type, which is "default" (aggregates ALL
+//    sub-types). distribution reads every finalized ranking regardless of
+//    sub_type, so "default" is fine. Both are blocked (disabled / HTTP 409)
+//    while the college already has a locked ranking for the period.
+//  * Match "確認排名" with exact:true — the ranking cards' lock toggle is
+//    labelled "確認排名（鎖定）" and may belong to a different draft.
 //  * The admin distribution panel defaults to the FIRST semester, which often
 //    has no data -> empty grid. You MUST select the correct semester (全年 for
 //    yearly cycles) or the grid is empty and finalize finds nothing.
@@ -44,15 +50,33 @@ const DBQ = path.join(__dirname, 'db-query.sh');
 const log = [];
 const say = m => { const l = `[${new Date().toISOString()}] ${m}`; console.log(l); log.push(l); };
 
+// Single-value query. psql -c prints header, value, then the row count; strip the
+// decoration (header / '----' / '(1 row)') — the value row is the 2nd remaining line.
+function queryValue(sql) {
+  const out = execFileSync('bash', [DBQ, sql], { encoding: 'utf8' });
+  const line = out.split('\n').map(s => s.trim()).filter(s => s && !s.startsWith('-') && !/^\(/.test(s));
+  return line[1] || '';
+}
+
 // Ground-truth: which colleges currently hold a finalized ranking.
 function finalizedColleges() {
-  const out = execFileSync('bash', [DBQ,
-    "SELECT string_agg(DISTINCT college_code, ',' ORDER BY college_code) FROM college_rankings WHERE is_finalized IS TRUE;"],
-    { encoding: 'utf8' });
-  const line = out.split('\n').map(s => s.trim()).filter(s => s && !s.startsWith('-') && !/^\(/.test(s));
-  // psql -c prints header then value then row count; the value row is the 2nd non-decoration line
-  const val = line[1] || '';
+  const val = queryValue(
+    "SELECT string_agg(DISTINCT college_code, ',' ORDER BY college_code) FROM college_rankings WHERE is_finalized IS TRUE;");
   return val.split(',').map(s => s.trim()).filter(Boolean).sort();
+}
+
+// Lock collapse: rankings of this college that share a period (type, sub-type,
+// year, semester) with its finalized ranking. Finalizing deletes them, so 0.
+function siblingsOfFinalized(code) {
+  if (!/^[A-Za-z0-9_]+$/.test(code)) throw new Error(`unexpected college code: ${code}`);
+  return Number(queryValue(`SELECT count(*) FROM college_rankings f
+      JOIN college_rankings r ON r.id <> f.id
+       AND r.college_code = f.college_code
+       AND r.scholarship_type_id = f.scholarship_type_id
+       AND r.sub_type_code = f.sub_type_code
+       AND r.academic_year = f.academic_year
+       AND COALESCE(r.semester, 'yearly') = COALESCE(f.semester, 'yearly')
+     WHERE f.is_finalized IS TRUE AND f.college_code = '${code}';`));
 }
 
 async function mockAuth(request, nycu_id) {
@@ -85,16 +109,26 @@ async function finalizeCollege(browser, c, idx) {
     await page.getByRole('combobox').first().click({ timeout: 15000 });
     await page.getByRole('option', { name: `${YEAR_LABEL} ${SEM_LABEL}` }).first().click({ timeout: 15000 });
     await page.waitForTimeout(1000);
-    // One ranking per college per period: "建立排名" only renders while the
-    // college has none; an existing ranking is auto-opened instead.
-    const create = page.getByRole('button', { name: '建立排名' }).first();
+    // The empty-state "建立排名" only renders while the college has no ranking
+    // for the period; otherwise an existing ranking (locked first, else the
+    // newest draft) is auto-opened and gets finalized instead.
+    const create = page.getByRole('button', { name: '建立排名', exact: true }).first();
     const needsCreate = await create.waitFor({ state: 'visible', timeout: 5000 }).then(() => true, () => false);
     if (needsCreate) await create.click({ timeout: 30000 });
-    const finalize = page.getByRole('button', { name: '確認排名' }).first();
+    const finalize = page.getByRole('button', { name: '確認排名', exact: true }).first();
     await finalize.waitFor({ timeout: 30000 });
     await page.waitForTimeout(1500);
     await finalize.click();
-    await page.getByText(/排名已成功鎖定|此排名已確認/).first().waitFor({ timeout: 30000 });
+    // With other drafts in the period, finalizing first asks to delete them;
+    // without any it locks straight away (toast 「排名已鎖定…」).
+    const collapse = page.getByRole('button', { name: '確認並刪除其他排名' }).first();
+    const locked = page.getByText(/排名已鎖定|此排名已確認/).first();
+    await collapse.or(locked).first().waitFor({ timeout: 30000 });
+    if (await collapse.isVisible()) {
+      say(`  College ${c.code}: confirming deletion of its other draft rankings`);
+      await collapse.click({ timeout: 15000 });
+      await locked.waitFor({ timeout: 30000 });
+    }
     await page.screenshot({ path: `${OUT}/college-${c.code}-finalized.png`, fullPage: true });
     say(`  College ${c.code} finalized OK`);
   } catch (e) {
@@ -108,6 +142,8 @@ async function finalizeCollege(browser, c, idx) {
   const missing = want.filter(x => !got.includes(x));
   say(`  finalized colleges now=[${got}] expected superset of [${want}]`);
   if (missing.length) throw new Error(`REGRESSION (#1034): finalizing ${c.code} dropped colleges ${missing}`);
+  const siblings = siblingsOfFinalized(c.code);
+  if (siblings !== 0) throw new Error(`lock collapse: college ${c.code} still has ${siblings} other ranking(s) next to its finalized one`);
 }
 
 async function adminDistributeAndRoster(browser) {
@@ -150,8 +186,7 @@ async function adminDistributeAndRoster(browser) {
     await page.waitForTimeout(3000);
     // Strip psql decoration (header / '----' / '(1 row)') the same way finalizedColleges does —
     // a naive /\d+/g .pop() would grab the "1" from "(1 row)", not the real count.
-    const rosterOut = execFileSync('bash', [DBQ, 'SELECT count(*) FROM payment_rosters;'], { encoding: 'utf8' });
-    res.roster = rosterOut.split('\n').map(s => s.trim()).filter(s => s && !s.startsWith('-') && !/^\(/.test(s))[1];
+    res.roster = queryValue('SELECT count(*) FROM payment_rosters;');
     say(`  payment_rosters=${res.roster}`);
     await page.screenshot({ path: `${OUT}/roster.png`, fullPage: true });
   } catch (e) {

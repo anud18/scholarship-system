@@ -32,7 +32,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.application import Application, ApplicationStatus
@@ -321,20 +321,28 @@ async def _get_or_create_finalized_ranking(
 ) -> Optional[CollegeRanking]:
     """Finalized + distribution-executed college ranking for `year`, holding the
     college's 新申請 as allocated items — exactly what the matrix 造冊/preview
-    path joins on. Returns None when the ranking already existed."""
+    path joins on. Returns None when the period already has a finalized ranking
+    (seeded earlier, or locked by hand). Draft rankings made by hand on this dev DB
+    are deleted first, as 確認排名 would: a locked period keeps one ranking."""
     year = config.academic_year
     existing = (
         await session.execute(
-            select(CollegeRanking).where(
+            select(CollegeRanking.id, CollegeRanking.is_finalized).where(
                 CollegeRanking.scholarship_type_id == phd.id,
                 CollegeRanking.academic_year == year,
+                or_(CollegeRanking.semester.is_(None), CollegeRanking.semester == "yearly"),
                 CollegeRanking.college_code == college_code,
                 CollegeRanking.sub_type_code == RANKING_SUB_TYPE_CODE,
             )
         )
-    ).scalar_one_or_none()
-    if existing:
+    ).all()
+    if any(row.is_finalized for row in existing):
         return None
+    draft_ids = [row.id for row in existing]
+    if draft_ids:
+        await session.execute(delete(CollegeRankingItem).where(CollegeRankingItem.ranking_id.in_(draft_ids)))
+        await session.execute(delete(CollegeRanking).where(CollegeRanking.id.in_(draft_ids)))
+        logger.info("AY115 demo: deleted draft rankings %s of %s/%s before seeding", draft_ids, college_code, year)
 
     finalized_at = _submitted_at(year) + timedelta(days=30)
     ranking = CollegeRanking(

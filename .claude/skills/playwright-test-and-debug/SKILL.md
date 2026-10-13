@@ -263,7 +263,7 @@ SELECT created_at, action, status, description, trace_id
 | `ORDER BY role` returns unexpected order (e.g. students before admins) | Postgres enum columns sort by **declaration order**, not alphabetical. The enum is declared `student, professor, college, admin, super_admin`, so `ORDER BY role` puts students first | Either `ORDER BY role::text` (alphabetical) or live with declaration order |
 | Admin 獎學金分發 grid is empty even though finalized rankings exist | The panel's 學期 `<select>` defaults to the FIRST semester, which usually has no data | Explicitly `selectOption({label:'全年'})` (yearly) / the right semester before reading the grid — `/manual-distribution/students` returns `[]` for the wrong semester |
 | Playwright wait on a college name (`電機學院`) never resolves in the distribution panel | The 所屬學院 filter `<option>`s carry that text but are **hidden** (closed `<select>`) | Wait on the visible `儲存目前配置` button instead; read colleges from the filter's `<option>` values via `evaluateAll` |
-| College `建立排名` makes a `sub_type_code="default"` ranking, not `nstc` | The UI uses the config's first sub-type (`subTypes[0]`), which is `default` (aggregates all sub-types) | Expected — `get_students_for_distribution` reads **every** finalized ranking regardless of `sub_type`, so distribution still works |
+| College `建立排名` / `建立新排名` makes a `sub_type_code="default"` ranking, not `nstc` | The UI uses the config's first sub-type (`subTypes[0]`), which is `default` (aggregates all sub-types) | Expected — `get_students_for_distribution` reads **every** finalized ranking regardless of `sub_type`, so distribution still works |
 
 ## Regression test scenarios
 
@@ -540,6 +540,11 @@ Verifies the full college pipeline across **multiple colleges**: each college re
 finalizes its own ranking, then admin distributes and generates rosters. The regression
 this guards (#1034): **finalizing one college's ranking must NOT un-finalize the others**,
 and admin distribution must surface **all** colleges — not just the last one finalized.
+A college may hold several **draft** rankings per period; finalizing (確認排名) deletes
+that SAME college's other rankings for the period (type, sub-type, year, semester) and
+keeps only the confirmed one — never another college's. While it stays locked the college
+cannot create another ranking (`建立新排名` disabled, `POST /college-review/rankings` → 409)
+until it unlocks (解除鎖定).
 
 **Trigger when**: `college_review_service.py`, `manual_distribution_service.py`,
 `roster_service.py`, or anything under `api/v1/endpoints/college_review/` changes.
@@ -567,14 +572,20 @@ OUT=/tmp/mc-verify node scripts/verify-multi-college-distribution.js
 ```
 Exit 0 ⇒ all colleges stayed finalized, distribution surfaced all of them, **and** the
 distribution run completed without error. Screenshots + `result.json` + `log.txt` land in `$OUT`. The script starts from a clean slate — if rankings
-already exist (re-run), `scripts/reset-db.sh` first: a college owns ONE ranking per
-period, so `建立排名` returns the existing (stale) ranking instead of a fresh row.
+already exist (re-run), `scripts/reset-db.sh` first: a college that already has a locked
+(finalized) ranking for the period cannot create or finalize another one (`建立新排名`
+disabled / 409, no `確認排名` button), so the driver times out. Leftover drafts alone are
+fine — the newest one is auto-opened and finalizing it deletes the rest.
 
 **What it asserts (and the exact UI it drives):**
-1. Per college (login → tab `學生排序` → `建立排名` → `確認排名`, toast `排名已成功鎖定`):
+1. Per college (login → tab `學生排序` → `建立排名` (empty state; only when the college has
+   no ranking yet) → `確認排名` (exact match — the card lock toggle is `確認排名（鎖定）`) →
+   when other drafts exist, dialog `確認排名` → `確認並刪除其他排名` → toast starting with
+   `排名已鎖定` (`，已刪除其他 N 份排名` when drafts were deleted)):
    after each finalize, `SELECT DISTINCT college_code FROM college_rankings WHERE is_finalized`
    must be a **superset** of all colleges finalized so far. Progression should be
-   `[A] → [A,B] → [A,B,C] → [A,B,C,E]` — any drop is the #1034 regression.
+   `[A] → [A,B] → [A,B,C] → [A,B,C,E]` — any drop is the #1034 regression. The college must
+   also have **no other ranking** left in its finalized ranking's period (lock collapse).
 2. Admin (`獎學金分發` tab → type tab → pick `學年度`+`全年` → `儲存目前配置` → `確認分發` →
    dialog `確認執行分發？` → `確認執行`): the 所屬學院 filter lists **all** colleges; result
    message `分發完成：核准 N 人，拒絕 M 人`; DB shows `distribution_executed=true` and the

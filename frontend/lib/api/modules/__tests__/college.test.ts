@@ -8,11 +8,12 @@
  *
  * Wave 6a137 pins the dispatch invariants — URL paths, body
  * shapes, verbatim createRanking payloads (no force_new escape hatch),
- * legacy-vs-unified review path distinction, and the binary-
- * export Content-Disposition filename extraction + error
- * fallback chain in fetchBinaryExport (lib/api/modules/binary-export.ts).
+ * the path-only syncRanking POST, legacy-vs-unified review path
+ * distinction, and the binary-export Content-Disposition filename
+ * extraction + error fallback chain in fetchBinaryExport
+ * (lib/api/modules/binary-export.ts).
  *
- * 24 cases.
+ * 32 cases.
  */
 
 import {
@@ -100,12 +101,12 @@ describe("createCollegeApi", () => {
     expect(query).toEqual({});
   });
 
-  // ─── createRanking posts the payload as-is (one ranking per college) ──
+  // ─── createRanking posts the payload as-is (always a new draft) ───
 
   it("createRanking posts the payload verbatim with no force_new flag", async () => {
-    // A college owns a single ranking per period: the backend hands back the
-    // existing ranking instead of creating another, so the client must not
-    // send any force_new escape hatch. Pin so it doesn't creep back in.
+    // Every POST creates a new draft; the backend alone decides when the
+    // scope is closed (409 while a locked ranking exists), so the client
+    // must not send any force_new escape hatch. Pin so it doesn't creep back in.
     mockedRaw.POST.mockResolvedValueOnce({});
     const api = createCollegeApi();
     const payload = {
@@ -160,13 +161,13 @@ describe("createCollegeApi", () => {
 
   // ─── finalize / unfinalize distinct paths ─────────────────────────
 
-  it("finalizeRanking and unfinalizeRanking hit DISTINCT paths (both POST, no body)", async () => {
+  it("finalizeRanking and unfinalizeRanking hit DISTINCT paths (both POST)", async () => {
     // Pin: distinct paths — pin so refactor consolidating into a
     // single toggle PATCH with body doesn't break the locking
     // semantics admin UI relies on.
     mockedRaw.POST.mockResolvedValue({});
     const api = createCollegeApi();
-    await api.finalizeRanking(42);
+    await api.finalizeRanking(42, []);
     await api.unfinalizeRanking(42);
     expect(mockedRaw.POST.mock.calls[0][0]).toBe(
       "/api/v1/college-review/rankings/{ranking_id}/finalize"
@@ -174,6 +175,38 @@ describe("createCollegeApi", () => {
     expect(mockedRaw.POST.mock.calls[1][0]).toBe(
       "/api/v1/college-review/rankings/{ranking_id}/unfinalize"
     );
+    expect("body" in mockedRaw.POST.mock.calls[1][1]).toBe(false);
+  });
+
+  it("finalizeRanking sends the sibling ids the user confirmed deleting", async () => {
+    // Pin: the lock deletes the scope's other rankings; the backend refuses
+    // (409) when one exists that the confirm dialog did not list. An empty
+    // list (no dialog shown) must still be sent, never omitted.
+    mockedRaw.POST.mockResolvedValue({});
+    const api = createCollegeApi();
+    await api.finalizeRanking(42, [7, 9]);
+    await api.finalizeRanking(43, []);
+    expect(mockedRaw.POST).toHaveBeenNthCalledWith(
+      1,
+      "/api/v1/college-review/rankings/{ranking_id}/finalize",
+      { params: { path: { ranking_id: 42 } }, body: { expected_sibling_ids: [7, 9] } }
+    );
+    expect(mockedRaw.POST.mock.calls[1][1].body).toEqual({ expected_sibling_ids: [] });
+  });
+
+  // ─── syncRanking (同步申請名單) ───────────────────────────────────
+
+  it("syncRanking POSTs /{ranking_id}/sync with the path param only (no body)", async () => {
+    // Pin: 同步申請名單 updates the SELECTED ranking in place. It must never
+    // fall back to POST /rankings, which now always creates another draft.
+    mockedRaw.POST.mockResolvedValueOnce({});
+    const api = createCollegeApi();
+    await api.syncRanking(42);
+    expect(mockedRaw.POST).toHaveBeenCalledWith(
+      "/api/v1/college-review/rankings/{ranking_id}/sync",
+      { params: { path: { ranking_id: 42 } } }
+    );
+    expect("body" in mockedRaw.POST.mock.calls[0][1]).toBe(false);
   });
 
   // ─── importRankingExcel body is array ─────────────────────────────

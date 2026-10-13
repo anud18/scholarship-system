@@ -4641,13 +4641,12 @@ export interface paths {
         put?: never;
         /**
          * Create Ranking
-         * @description Create the caller's college ranking for a scholarship sub-type and period.
+         * @description Create a NEW draft ranking of the caller's college for a scholarship sub-type and period.
          *
-         *     A college owns at most ONE ranking per (scholarship type, sub-type, academic
-         *     year, semester). If that ranking already exists — finalized or not — it is
-         *     returned with ``data.reused = true`` instead of creating a second one; while
-         *     it is still a draft, applications that became eligible since it was created
-         *     are appended to it (``data.added_application_count``).
+         *     A college may keep several draft rankings per (scholarship type, sub-type,
+         *     academic year, semester) and compare them; 確認排名 (finalize) keeps one and
+         *     deletes the others. Returns HTTP 409 while the caller's scope holds a finalized
+         *     ranking (unlock it first) or a distributed one (sync it instead).
          */
         post: operations["create_ranking_api_v1_college_review_rankings_post"];
         delete?: never;
@@ -4676,10 +4675,11 @@ export interface paths {
         post?: never;
         /**
          * Delete Ranking
-         * @description Delete a ranking
+         * @description Delete a draft ranking
          *
-         *     Only the creator or admin can delete a ranking.
-         *     Cannot delete finalized rankings.
+         *     The owning college's reviewers or an admin can delete a ranking. Finalized
+         *     rankings must be unlocked first (409); rankings whose distribution was executed
+         *     or that a payment roster uses are never deleted (409).
          */
         delete: operations["delete_ranking_api_v1_college_review_rankings__ranking_id__delete"];
         options?: never;
@@ -4707,6 +4707,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/college-review/rankings/{ranking_id}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sync Ranking
+         * @description 同步申請名單: bring a non-finalized ranking in line with the current applications.
+         *
+         *     Eligible applications not yet in the ranking are added (renewals after the last
+         *     ranked renewal, others at the end but ahead of any trailing college-rejected 'N'
+         *     rows) and ranked ones that are no longer eligible are removed; positions are
+         *     renumbered 1..n. A ranking whose distribution was executed (unlocked for
+         *     補充匯入) is append-only: new rows go after the last position. 409 while finalized.
+         */
+        post: operations["sync_ranking_api_v1_college_review_rankings__ranking_id__sync_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/college-review/rankings/{ranking_id}/finalize": {
         parameters: {
             query?: never;
@@ -4718,7 +4744,12 @@ export interface paths {
         put?: never;
         /**
          * Finalize Ranking
-         * @description Finalize a ranking (makes it read-only)
+         * @description Finalize (lock) a ranking and delete the other rankings of its scope.
+         *
+         *     Only the finalized ranking survives; while it stays locked no new ranking can be
+         *     created. Returns 409 (nothing deleted) when another ranking of the scope is
+         *     already finalized, was distributed or is used by a payment roster, or is not in
+         *     `expected_sibling_ids` (created after the user's list was loaded).
          */
         post: operations["finalize_ranking_api_v1_college_review_rankings__ranking_id__finalize_post"];
         delete?: never;
@@ -9195,6 +9226,14 @@ export interface components {
         Body_extract_text_from_document_api_v1_user_profiles_document_ocr_post: {
             /** File */
             file: string;
+        };
+        /** Body_finalize_ranking_api_v1_college_review_rankings__ranking_id__finalize_post */
+        Body_finalize_ranking_api_v1_college_review_rankings__ranking_id__finalize_post: {
+            /**
+             * Expected Sibling Ids
+             * @description IDs of the other rankings in the scope the user confirmed deleting. When given, any other ranking in the scope refuses the lock with 409.
+             */
+            expected_sibling_ids?: number[] | null;
         };
         /** Body_import_whitelist_excel_api_v1_scholarship_configurations__id__whitelist_import_post */
         Body_import_whitelist_excel_api_v1_scholarship_configurations__id__whitelist_import_post: {
@@ -19682,7 +19721,7 @@ export interface operations {
             };
         };
     };
-    finalize_ranking_api_v1_college_review_rankings__ranking_id__finalize_post: {
+    sync_ranking_api_v1_college_review_rankings__ranking_id__sync_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -19692,6 +19731,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    finalize_ranking_api_v1_college_review_rankings__ranking_id__finalize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ranking_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["Body_finalize_ranking_api_v1_college_review_rankings__ranking_id__finalize_post"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
