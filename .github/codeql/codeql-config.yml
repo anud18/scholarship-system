@@ -14,9 +14,9 @@ packs:
 # SUPPRESSED ALERTS
 #
 # CodeQL does NOT support inline comment suppressions (e.g., `# lgtm[...]`,
-# `# codeql[...]`). File-specific query exclusions are handled via the
-# filter-sarif GitHub Action steps ("Filter ... SARIF") in
-# .github/workflows/codeql.yml.
+# `# codeql[...]`). File-specific query exclusions are listed in
+# .github/codeql/sarif-filter-patterns.txt and applied by the filter-sarif
+# step of both .github/workflows/codeql.yml and security-audit.yml.
 #
 # Current suppressions (via filter-sarif):
 #

@@ -1,0 +1,113 @@
+# ZAP Automation Framework plan for .github/workflows/security-audit.yml.
+#
+# Two contexts on the one production hostname (nginx routes both):
+#   api      — /api/**, imported from the OpenAPI spec and actively scanned
+#              with a super_admin Bearer token (the widest authorised surface).
+#   frontend — every non-/api page, crawled (traditional + AJAX spider, the
+#              Next.js app is client-rendered) and actively scanned
+#              unauthenticated.
+# The dollar-brace placeholders are filled in by security-audit.yml before ZAP
+# reads the plan (ZAP does not expand them in integer / URL job parameters);
+# the workflow refuses to run the plan if any is left unfilled.
+
+env:
+  contexts:
+    - name: api
+      urls:
+        - https://${TARGET_HOST}/api/v1/
+      includePaths:
+        - "https://${TARGET_HOST}/api/.*"
+    - name: frontend
+      urls:
+        - https://${TARGET_HOST}/
+      includePaths:
+        - "https://${TARGET_HOST}/.*"
+      excludePaths:
+        - "https://${TARGET_HOST}/api/.*"
+        # Grafana is a separate product behind the same nginx; not ours to scan.
+        - "https://${TARGET_HOST}/monitoring.*"
+  parameters:
+    failOnError: true
+    failOnWarning: false
+    progressToStdout: true
+
+jobs:
+  - type: passiveScan-config
+    parameters:
+      maxAlertsPerRule: 20
+      enableTags: false
+
+  - type: replacer
+    parameters:
+      deleteAllRules: true
+    rules:
+      - description: inject-super-admin-bearer
+        url: "https://${TARGET_HOST}/api/.*"
+        matchType: req_header
+        matchString: Authorization
+        matchRegex: false
+        replacementString: "Bearer ${ZAP_AUTH_TOKEN}"
+
+  - type: openapi
+    parameters:
+      apiFile: /zap/wrk/openapi.json
+      targetUrl: https://${TARGET_HOST}
+      context: api
+
+  - type: spider
+    parameters:
+      context: frontend
+      maxDuration: ${SPIDER_MINUTES}
+
+  - type: spiderAjax
+    parameters:
+      context: frontend
+      maxDuration: ${SPIDER_MINUTES}
+      browserId: firefox-headless
+
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 10
+
+  - type: activeScan
+    name: activeScan-api
+    parameters:
+      context: api
+      maxScanDurationInMins: ${API_SCAN_MINUTES}
+      maxRuleDurationInMins: 10
+      threadPerHost: 5
+      defaultStrength: medium
+      defaultThreshold: medium
+
+  - type: activeScan
+    name: activeScan-frontend
+    parameters:
+      context: frontend
+      maxScanDurationInMins: ${FRONTEND_SCAN_MINUTES}
+      maxRuleDurationInMins: 5
+      threadPerHost: 5
+      defaultStrength: medium
+      defaultThreshold: medium
+
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 10
+
+  - type: outputSummary
+    parameters:
+      format: Long
+      summaryFile: /zap/wrk/zap-summary.json
+
+  - type: report
+    parameters:
+      template: traditional-json
+      reportDir: /zap/wrk/
+      reportFile: zap-raw-report.json
+      reportTitle: ZAP Active Scan - https://${TARGET_HOST}
+
+  - type: report
+    parameters:
+      template: traditional-html
+      reportDir: /zap/wrk/
+      reportFile: zap-raw-report.html
+      reportTitle: ZAP Active Scan - https://${TARGET_HOST}

@@ -1,0 +1,9 @@
+# filter-sarif exclusion patterns (one per line, `-<path-glob>:<rule-glob>`),
+# applied to every language's SARIF before it is uploaded or reported.
+# Single source of truth for codeql.yml (Code Scanning upload) and
+# security-audit.yml (PDF report) — add a suppression here and both honour it.
+# Justifications live in codeql-config.yml. Blank lines and #-comments are
+# stripped before the list reaches the action.
+-backend/app/api/v1/endpoints/admin/bank_verification.py:py/stack-trace-exposure
+-frontend/components/dynamic-application-form.tsx:js/client-side-unvalidated-url-redirection
+-frontend/components/payment-roster-list.tsx:js/client-side-unvalidated-url-redirection

@@ -1,0 +1,414 @@
+name: "Security Audit"
+
+# CodeQL + OWASP ZAP ACTIVE scan, rendered to PDF for submission as the
+# production environment's security-test evidence.
+#
+# WHAT IS SCANNED
+#   ZAP never touches the real production host. It attacks a production
+#   REPLICA built from the dispatched commit (.github/security-audit/
+#   docker-compose.yml): production-mode backend/frontend images behind the
+#   real nginx/nginx.prod.conf, answering to the production hostname through a
+#   docker network alias, with throwaway seeded data. Every deviation from
+#   production is listed in the summary PDF.
+#
+# WHERE
+#   The self-hosted runner labelled `testing`. Nothing publishes a host port —
+#   the stack and the ZAP container share a private per-run docker network —
+#   so the scan cannot collide with anything else on that machine.
+#
+# OUTPUT (artifact `security-audit-report-<sha>`)
+#   security-audit-summary.pdf  executive summary, environment, method, limits
+#   codeql-report.pdf           every CodeQL finding
+#   zap-report.pdf              every ZAP alert with instances
+#   plus the raw SARIF / ZAP JSON+HTML they were rendered from.
+#
+# CodeQL here does NOT upload to Code Scanning — codeql.yml owns that, and a
+# second uploader once kept suppressed false positives open for months. Both
+# workflows read the same .github/codeql/sarif-filter-patterns.txt.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_host:
+        description: "Production hostname the replica answers to (appears in the report)"
+        required: false
+        type: string
+        default: ss.aa.nycu.edu.tw
+      api_scan_minutes:
+        description: "Max minutes for the authenticated API active scan"
+        required: false
+        type: number
+        default: 60
+      frontend_scan_minutes:
+        description: "Max minutes for the frontend active scan"
+        required: false
+        type: number
+        default: 20
+      spider_minutes:
+        description: "Minutes for each frontend crawl (spider + AJAX spider)"
+        required: false
+        type: number
+        default: 5
+
+concurrency:
+  group: security-audit
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  ZAP_IMAGE: ghcr.io/zaproxy/zaproxy:stable
+  # The scan copy of nginx.prod.conf gets this limit_req_zone rate instead of
+  # production's 20-50r/s (else ZAP measures 429s). Printed in the report.
+  RELAXED_RATE: 1000r/s
+  # inputs are empty on non-dispatch events; fall back to the dispatch defaults.
+  TARGET_HOST: ${{ inputs.target_host || 'ss.aa.nycu.edu.tw' }}
+  API_SCAN_MINUTES: ${{ inputs.api_scan_minutes || 60 }}
+  FRONTEND_SCAN_MINUTES: ${{ inputs.frontend_scan_minutes || 20 }}
+  SPIDER_MINUTES: ${{ inputs.spider_minutes || 5 }}
+
+jobs:
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: [self-hosted, testing]
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+      # Not uploading, but codeql-action posts status reports through this API.
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            sarif: actions
+          - language: javascript-typescript
+            sarif: javascript
+          - language: python
+            sarif: python
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          config-file: ./.github/codeql/codeql-config.yml
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/security-audit/language:${{ matrix.language }}"
+          output: sarif-results
+          upload: false
+
+      - name: Load SARIF filter patterns
+        id: sarif-patterns
+        run: |
+          {
+            echo 'patterns<<SARIF_PATTERNS_EOF'
+            grep -vE '^[[:space:]]*(#|$)' .github/codeql/sarif-filter-patterns.txt || true
+            echo 'SARIF_PATTERNS_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Filter SARIF (Remove False Positives)
+        uses: advanced-security/filter-sarif@v1
+        with:
+          patterns: ${{ steps.sarif-patterns.outputs.patterns }}
+          input: sarif-results/${{ matrix.sarif }}.sarif
+          output: sarif-results/${{ matrix.sarif }}.sarif
+
+      - name: Upload SARIF
+        uses: actions/upload-artifact@v6
+        with:
+          name: security-audit-sarif-${{ matrix.sarif }}
+          path: sarif-results/${{ matrix.sarif }}.sarif
+          retention-days: 7
+
+  zap:
+    name: ZAP active scan (production replica)
+    runs-on: [self-hosted, testing]
+    # Image builds + seed + up to api+frontend scan minutes + crawls.
+    timeout-minutes: 240
+    permissions:
+      contents: read
+    env:
+      COMPOSE_FILE: .github/security-audit/docker-compose.yml
+      COMPOSE_PROJECT_NAME: secaudit-${{ github.run_id }}-${{ github.run_attempt }}
+      SCAN_NETWORK: secaudit-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Validate inputs and runner
+        run: |
+          set -euo pipefail
+          [[ "$TARGET_HOST" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]] \
+            || { echo "::error::target_host '$TARGET_HOST' is not a hostname"; exit 1; }
+          for v in API_SCAN_MINUTES FRONTEND_SCAN_MINUTES SPIDER_MINUTES; do
+            [[ "${!v}" =~ ^[1-9][0-9]{0,2}$ ]] || { echo "::error::$v must be 1-999, got '${!v}'"; exit 1; }
+          done
+          # Leave ~60 of the job's 240 minutes for builds, seeding and reports.
+          TOTAL=$((API_SCAN_MINUTES + FRONTEND_SCAN_MINUTES + 2 * SPIDER_MINUTES))
+          [ "$TOTAL" -le 180 ] \
+            || { echo "::error::scan time api+frontend+2*spider = $TOTAL min exceeds 180 (job timeout 240)"; exit 1; }
+          docker info --format 'docker {{.ServerVersion}} on {{.OperatingSystem}}' \
+            || { echo "::error::docker is not usable by the runner user"; exit 1; }
+
+      - name: Ensure docker compose and buildx
+        run: .github/security-audit/ensure_docker_plugins.sh
+
+      - name: Prepare work dir, secrets and nginx conf
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/secaudit"
+          # A crashed earlier run may have left uid-1000 files the runner user
+          # cannot delete; remove through a container.
+          docker run --rm -v "$RUNNER_TEMP:/t" alpine:3.22 rm -rf /t/secaudit
+          mkdir -p "$WORK/out" "$WORK/ssl"
+          # ZAP (uid 1000) and the backend image (uid 1000) write here.
+          chmod 777 "$WORK/out"
+
+          # Per-run secrets: the replica must never share a key with a real env.
+          SECRET_KEY=$(head -c 48 /dev/urandom | base64 | tr -d '\n/+=')
+          PII_KEY=$(head -c 32 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=\n')
+          echo "::add-mask::$SECRET_KEY"
+          echo "::add-mask::$PII_KEY"
+          {
+            echo "WORK=$WORK"
+            echo "SCAN_OUT_DIR=$WORK/out"
+            echo "NGINX_CONF=$WORK/nginx.conf"
+            echo "NGINX_SSL_DIR=$WORK/ssl"
+            echo "SCAN_SECRET_KEY=$SECRET_KEY"
+            echo "SCAN_PII_KEYS={\"v1\": \"$PII_KEY\"}"
+          } >> "$GITHUB_ENV"
+
+          # nginx.prod.conf verbatim except the limit_req_zone rates: at the
+          # production 20r/s the active scan measures the rate limiter (429s)
+          # instead of the application.
+          sed -E "s|(limit_req_zone .* rate=)[0-9]+r/s;|\1${RELAXED_RATE};|" \
+            nginx/nginx.prod.conf > "$WORK/nginx.conf"
+          ZONES=$(grep -c '^[[:space:]]*limit_req_zone' "$WORK/nginx.conf")
+          RELAXED=$(grep -c "rate=${RELAXED_RATE};" "$WORK/nginx.conf" || true)
+          if [ "$ZONES" -ne "$RELAXED" ]; then
+            echo "::error::relaxed $RELAXED of $ZONES limit_req_zone lines; nginx.prod.conf changed shape"
+            exit 1
+          fi
+          diff nginx/nginx.prod.conf "$WORK/nginx.conf" || true
+
+      - name: Build images
+        run: docker compose build backend frontend mock-student-api
+
+      - name: Generate TLS cert
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" \
+            -v "$PWD/.github/security-audit/make_cert.py:/make_cert.py:ro" \
+            -v "$NGINX_SSL_DIR:/ssl" \
+            secaudit/backend:local python /make_cert.py "$TARGET_HOST" /ssl
+
+      - name: Start data services, migrate, seed, dump OpenAPI
+        run: |
+          set -euo pipefail
+          docker compose up -d --wait postgres redis minio mailpit mock-student-api
+          docker compose --profile setup run --rm setup
+          test -s "$SCAN_OUT_DIR/openapi.json"
+
+      - name: Start production-mode backend, frontend and nginx
+        run: |
+          set -euo pipefail
+          docker compose up -d --wait --wait-timeout 300 backend frontend nginx
+          probe() {
+            docker run --rm --network "$SCAN_NETWORK" curlimages/curl:8.11.1 \
+              -sk -o /dev/null -w '%{http_code}' "https://${TARGET_HOST}$1"
+          }
+          for i in $(seq 1 60); do
+            # curl exits non-zero (and prints 000) while nginx is still binding;
+            # that must retry, not trip errexit.
+            home=$(probe / || true) ; api=$(probe /api/v1/auth/me || true)
+            echo "attempt $i: / -> $home, /api/v1/auth/me -> $api"
+            # 401 proves the request crossed nginx into FastAPI.
+            if [ "$home" = "200" ] && [ "$api" = "401" ]; then break; fi
+            [ "$i" -eq 60 ] && { echo "::error::replica not ready through nginx"; exit 1; }
+            sleep 5
+          done
+          docker run --rm --network "$SCAN_NETWORK" curlimages/curl:8.11.1 \
+            -skI "https://${TARGET_HOST}/" > "$WORK/response-headers.txt"
+          cat "$WORK/response-headers.txt"
+
+      - name: Mint scanner token
+        run: |
+          set -euo pipefail
+          # super_admin: the widest authorised surface the API exposes.
+          USER_ID=$(docker compose exec -T postgres psql -U scholarship_user -d scholarship_db -tAc \
+            "SELECT id FROM users WHERE nycu_id = 'super_admin'")
+          [ -n "$USER_ID" ] || { echo "::error::seeded super_admin user not found"; exit 1; }
+          TOKEN=$(docker compose exec -T backend python -c \
+            "from datetime import timedelta; from app.core.security import create_access_token; \
+          print(create_access_token({'sub': '$USER_ID'}, timedelta(hours=6)))" | tail -1)
+          echo "::add-mask::$TOKEN"
+          # A bad token would silently degrade the scan to unauthenticated.
+          CODE=$(docker run --rm --network "$SCAN_NETWORK" curlimages/curl:8.11.1 \
+            -sk -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOKEN" \
+            "https://${TARGET_HOST}/api/v1/auth/me")
+          [ "$CODE" = "200" ] || { echo "::error::scanner token rejected ($CODE)"; exit 1; }
+          echo "ZAP_AUTH_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+
+      - name: Run ZAP active scan
+        id: zap
+        run: |
+          set -euo pipefail
+          # ZAP does not expand ${VARS} in typed job parameters (integers,
+          # replacer URLs), so fill them in here. All values were validated above
+          # (the token is base64url + dots), so none can break the sed. The
+          # rendered plan holds the token: it stays in $WORK, never an artifact.
+          sed -e "s|\${TARGET_HOST}|${TARGET_HOST}|g" \
+              -e "s|\${SPIDER_MINUTES}|${SPIDER_MINUTES}|g" \
+              -e "s|\${API_SCAN_MINUTES}|${API_SCAN_MINUTES}|g" \
+              -e "s|\${FRONTEND_SCAN_MINUTES}|${FRONTEND_SCAN_MINUTES}|g" \
+              -e "s|\${ZAP_AUTH_TOKEN}|${ZAP_AUTH_TOKEN}|g" \
+              .github/security-audit/zap-plan.yaml > "$SCAN_OUT_DIR/zap-plan.yaml"
+          if grep -n '\${' "$SCAN_OUT_DIR/zap-plan.yaml"; then
+            echo "::error::unfilled placeholder in zap-plan.yaml"; exit 1
+          fi
+          set +e
+          docker run --rm --name "$COMPOSE_PROJECT_NAME-zap" --network "$SCAN_NETWORK" \
+            -v "$SCAN_OUT_DIR:/zap/wrk:rw" \
+            "$ZAP_IMAGE" zap.sh -cmd -autorun /zap/wrk/zap-plan.yaml 2>&1 | tee "$WORK/zap-console.log"
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "ZAP exited with $rc"
+          test -s "$SCAN_OUT_DIR/zap-raw-report.json" \
+            || { echo "::error::ZAP produced no report (exit $rc)"; exit 1; }
+          # A plan job that errored can still leave a report behind; that is a
+          # partial scan and must not pass as complete (the outputs are still
+          # collected and rendered by the always() steps below).
+          [ "$rc" -eq 0 ] || { echo "::error::ZAP automation plan failed (exit $rc); the scan is incomplete"; exit 1; }
+
+      - name: Collect ZAP output
+        if: always()
+        run: |
+          mkdir -p zap-artifact
+          for f in "$SCAN_OUT_DIR"/zap-raw-report.json "$SCAN_OUT_DIR"/zap-raw-report.html \
+                   "$SCAN_OUT_DIR"/zap-summary.json "$SCAN_OUT_DIR"/openapi.json \
+                   "$WORK"/response-headers.txt "$WORK"/zap-console.log; do
+            [ -f "$f" ] && cp "$f" zap-artifact/
+          done
+          ls -la zap-artifact
+
+      - name: Upload ZAP output
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: security-audit-zap
+          path: zap-artifact/
+          retention-days: 7
+
+      - name: Dump service logs on failure
+        if: failure()
+        run: docker compose logs --tail=200 backend frontend nginx || true
+
+      - name: Tear down
+        if: always()
+        run: |
+          # A cancelled job can leave the ZAP container attached to the network,
+          # which would make `compose down` unable to remove it.
+          docker rm -f "$COMPOSE_PROJECT_NAME-zap" 2>/dev/null || true
+          docker compose --profile setup down -v --remove-orphans || echo "::warning::compose down failed"
+          docker network rm "$SCAN_NETWORK" 2>/dev/null || true
+          # Container-written files are uid 1000; hand them back before removal
+          # so the next job on this self-hosted runner can clean its temp dir.
+          if [ -n "${WORK:-}" ] && [ -d "$WORK" ]; then
+            docker run --rm -v "$WORK:/w" alpine:3.22 chown -R "$(id -u):$(id -g)" /w || true
+            rm -rf "$WORK"
+          fi
+
+  report:
+    name: Render PDF reports
+    needs: [codeql, zap]
+    # Render even when a scan failed: the PDFs then say which part was not
+    # produced, and this job fails below so the run is not mistaken for clean.
+    if: always()
+    runs-on: [self-hosted, testing]
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Download SARIF
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          pattern: security-audit-sarif-*
+          path: in/sarif
+
+      - name: Download ZAP output
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: security-audit-zap
+          path: in/zap
+
+      - name: Ensure docker compose and buildx
+        run: .github/security-audit/ensure_docker_plugins.sh
+
+      - name: Render PDFs
+        env:
+          AUDIT_REPO: ${{ github.repository }}
+          AUDIT_REF: ${{ github.ref_name }}
+          AUDIT_COMMIT: ${{ github.sha }}
+          AUDIT_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p in/sarif in/zap reports
+          docker build -q -t secaudit/report:local -f .github/security-audit/report.Dockerfile .github/security-audit
+          docker run --rm --user "$(id -u):$(id -g)" \
+            -e AUDIT_REPO -e AUDIT_REF -e AUDIT_COMMIT -e AUDIT_RUN_URL -e TARGET_HOST \
+            -e API_SCAN_MINUTES -e FRONTEND_SCAN_MINUTES -e SPIDER_MINUTES -e RELAXED_RATE \
+            -v "$PWD/in:/in:ro" -v "$PWD/reports:/reports" \
+            secaudit/report:local --sarif-dir /in/sarif --zap-dir /in/zap --out-dir /reports
+          cp -r in/sarif reports/codeql-sarif
+          cp in/zap/zap-raw-report.* reports/ 2>/dev/null || true
+          ls -la reports
+
+      - name: Upload report
+        uses: actions/upload-artifact@v6
+        with:
+          name: security-audit-report-${{ github.sha }}
+          path: reports/
+          retention-days: 90
+
+      - name: Job summary
+        env:
+          CODEQL_RESULT: ${{ needs.codeql.result }}
+          ZAP_RESULT: ${{ needs.zap.result }}
+        run: |
+          set -euo pipefail
+          c() { grep -o "\"$1\": [a-z0-9]*" reports/counts.json | awk '{print $2}'; }
+          {
+            echo "## Security Audit — https://${TARGET_HOST} (production replica)"
+            echo ""
+            echo "Commit \`${{ github.sha }}\` · CodeQL job: **$CODEQL_RESULT** · ZAP job: **$ZAP_RESULT**"
+            echo ""
+            echo "| CodeQL | Critical | High | Medium | Low | Info |"
+            echo "|---|---:|---:|---:|---:|---:|"
+            echo "| findings | $(c codeql_critical) | $(c codeql_high) | $(c codeql_medium) | $(c codeql_low) | $(c codeql_info) |"
+            echo ""
+            echo "| ZAP (alert types) | High | Medium | Low | Info |"
+            echo "|---|---:|---:|---:|---:|"
+            echo "| alerts | $(c zap_high) | $(c zap_medium) | $(c zap_low) | $(c zap_informational) |"
+            echo ""
+            echo "📄 PDFs: artifact \`security-audit-report-${{ github.sha }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail if a scan did not complete
+        if: needs.codeql.result != 'success' || needs.zap.result != 'success'
+        run: |
+          echo "::error::CodeQL=${{ needs.codeql.result }} ZAP=${{ needs.zap.result }} — the PDFs mark the missing part as not produced; do not submit them as a complete audit."
+          exit 1

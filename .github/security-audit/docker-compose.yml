@@ -1,0 +1,196 @@
+# Production-replica scan target for .github/workflows/security-audit.yml.
+#
+# Same images, same runtime mode and the same nginx.prod.conf as production,
+# wired the way docker-compose.prod.yml wires them (service names `backend` /
+# `frontend` are what nginx.prod.conf proxies to), but with throwaway data:
+#   * PostgreSQL / RustFS / Redis are fresh, seeded with the DEV seed (fake
+#     students), never a copy of production data.
+#   * SIS is the mock-student-api; Portal SSO points at an unreachable host;
+#     SMTP goes to mailpit — so an active scan cannot reach a real system.
+#
+# NO host ports are published. Everything — including the ZAP container —
+# talks over the private `${SCAN_NETWORK}` network, so the scan cannot collide
+# with whatever else the self-hosted runner is running, and nginx answers to
+# the production hostname via a network alias.
+#
+# Required env (exported by the workflow):
+#   SCAN_NETWORK, TARGET_HOST, SCAN_SECRET_KEY, SCAN_PII_KEYS,
+#   NGINX_CONF (rate-limit-relaxed copy of nginx/nginx.prod.conf), NGINX_SSL_DIR
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: scholarship_db
+      POSTGRES_USER: scholarship_user
+      POSTGRES_PASSWORD: scholarship_pass
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - ../../backend/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scholarship_user -d scholarship_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks: [scan]
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks: [scan]
+
+  minio:
+    image: rustfs/rustfs:1.0.0-beta.8
+    environment:
+      RUSTFS_ACCESS_KEY: minioadmin
+      RUSTFS_SECRET_KEY: minioadmin123
+      RUSTFS_VOLUMES: /data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 5s
+      timeout: 10s
+      retries: 12
+    networks: [scan]
+
+  mailpit:
+    image: axllent/mailpit:v1.21
+    networks: [scan]
+
+  mock-student-api:
+    build:
+      context: ../../mock-student-api
+    image: secaudit/mock-student-api:local
+    command: uvicorn main:app --host 0.0.0.0 --port 8080
+    environment:
+      DATABASE_URL: postgresql://scholarship_user:scholarship_pass@postgres:5432/scholarship_db
+      MOCK_HMAC_KEY_HEX: 4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a
+      STRICT_TIME_CHECK: "false"
+      STRICT_ENCODE_CHECK: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [scan]
+
+  backend:
+    build:
+      context: ../../backend
+      additional_contexts:
+        frontend_emails: ../../frontend/emails
+    image: secaudit/backend:local
+    # Production settings — mirrors docker-compose.prod.yml's backend block.
+    environment: &backend-env
+      DATABASE_URL: postgresql+asyncpg://scholarship_user:scholarship_pass@postgres:5432/scholarship_db
+      DATABASE_URL_SYNC: postgresql://scholarship_user:scholarship_pass@postgres:5432/scholarship_db
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: ${SCAN_SECRET_KEY:?}
+      DEBUG: "false"
+      MAX_FILE_SIZE: "52428800"
+      ENVIRONMENT: production
+      CORS_ORIGINS: https://${TARGET_HOST:?}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin123
+      MINIO_BUCKET: scholarship-files
+      MINIO_SECURE: "false"
+      # Explicit per-run key: production refuses the deterministic dev key, and
+      # an empty value makes every std_pid endpoint 500 (which ZAP then reports
+      # as phantom SQL-injection Highs).
+      PII_ENCRYPTION_KEYS: ${SCAN_PII_KEYS:?}
+      PII_ENCRYPTION_ACTIVE_VERSION: v1
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      EMAIL_FROM: noreply@${TARGET_HOST}
+      EMAIL_FROM_NAME: Security Audit
+      PORTAL_SSO_ENABLED: "true"
+      PORTAL_JWT_SERVER_URL: http://portal-jwt.invalid/verify
+      PORTAL_TEST_MODE: "false"
+      STUDENT_API_ENABLED: "true"
+      STUDENT_API_BASE_URL: http://mock-student-api:8080
+      STUDENT_API_TIMEOUT: "10.0"
+      STUDENT_API_ENCODE_TYPE: UTF-8
+      ENABLE_MOCK_SSO: "false"
+      BASE_URL: https://${TARGET_HOST}
+      FRONTEND_URL: https://${TARGET_HOST}
+      FRONTEND_INTERNAL_URL: http://frontend:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      mock-student-api:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+    networks: [scan]
+
+  # One-off: migrate, seed DEV data and dump the OpenAPI spec. Runs in
+  # development mode because production seeds only an admin (nothing for an
+  # authenticated scan to exercise) and hides /openapi.json. Shares the
+  # backend's keys so the data it encrypts is readable by the production run.
+  setup:
+    image: secaudit/backend:local
+    profiles: [setup]
+    environment:
+      <<: *backend-env
+      ENVIRONMENT: development
+      DEBUG: "false"
+    volumes:
+      - ${SCAN_OUT_DIR:?}:/out
+    command:
+      - sh
+      - -c
+      - >-
+        alembic upgrade head &&
+        python -m app.seed &&
+        python -c "import json; from app.main import app; json.dump(app.openapi(), open('/out/openapi.json', 'w'))"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      mock-student-api:
+        condition: service_started
+    networks: [scan]
+
+  frontend:
+    build:
+      context: ../../frontend
+    image: secaudit/frontend:local
+    environment:
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: 1
+      NEXT_PUBLIC_API_URL: https://${TARGET_HOST}
+      NEXT_PUBLIC_NYCU_PORTAL_URL: https://portal.nycu.edu.tw
+      INTERNAL_API_URL: http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [scan]
+
+  nginx:
+    image: nginx:alpine
+    volumes:
+      - ${NGINX_CONF:?}:/etc/nginx/nginx.conf:ro
+      - ${NGINX_SSL_DIR:?}:/etc/nginx/ssl:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      scan:
+        aliases:
+          - ${TARGET_HOST}
+
+networks:
+  scan:
+    name: ${SCAN_NETWORK:?}
