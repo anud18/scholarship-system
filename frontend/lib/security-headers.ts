@@ -162,13 +162,16 @@ export const SONNER_STYLE_HASH = "'sha256-Od9mHMH7x2G6QuoV3hsPkDCwIyqbg2DX3F5nLe
 
 /**
  * Content-Security-Policy for root-level `frontend/public/` files (icons,
- * images, fonts), declared ONLY in the nginx public-asset block, which also
- * hides any upstream CSP so exactly one policy is sent.
+ * images, fonts). Sent by middleware.ts's static-asset branch and by the nginx
+ * public-asset block, which hides the upstream copy so exactly one policy is
+ * sent.
  *
- * WHY: ZAP's 2026-10 active scan filed /favicon.ico as "CSP Header Not Set"
- * (Medium). Requests the middleware matcher skips (asset-like extensions) got
- * no CSP at all — including Next's HTML 404 page for a missing asset, and any
- * SVG opened directly as a document, whose scripts would run on this origin.
+ * WHY: ZAP filed /favicon.ico as "CSP Header Not Set" (Medium) — the 2026-10
+ * active scan through nginx, then the release baseline against `next start`.
+ * Asset-like URLs got no CSP at all — including Next's HTML 404 page for a
+ * missing asset, and any SVG opened directly as a document, whose scripts
+ * would run on this origin. Both layers send it because the baseline scan
+ * bypasses nginx.
  * An `<img>` load ignores the image's own CSP, so normal rendering is
  * unaffected; a 404 page for a missing asset URL now renders unstyled, which
  * is intended.

@@ -147,8 +147,9 @@ describe("nginx <-> middleware security-header parity (issue #1223 B)", () => {
      * duplicated value ("same-origin, same-origin") is a parse FAILURE that
      * browsers treat as unsafe-none — crossOriginIsolated was observed false
      * behind nginx. The upstream copy must therefore be hidden wherever nginx
-     * emits its own: once at server level, and re-declared in the pdf.worker
-     * block (whose own proxy_hide_header lines stop inheritance).
+     * emits its own: once at server level, and re-declared in the pdf.worker,
+     * /_next/static/ and public-asset blocks (whose own proxy_hide_header lines
+     * stop inheritance; the middleware sends CORP on static assets too).
      */
     it("hides the upstream copy of every sf-item header nginx re-emits", () => {
       for (const header of [
@@ -156,7 +157,7 @@ describe("nginx <-> middleware security-header parity (issue #1223 B)", () => {
         "Cross-Origin-Embedder-Policy",
         "Cross-Origin-Resource-Policy",
       ]) {
-        expect(conf.split(`proxy_hide_header ${header};`).length - 1).toBe(2);
+        expect(conf.split(`proxy_hide_header ${header};`).length - 1).toBe(4);
       }
 
       // Next.js sets its own Cache-Control on every static path nginx caches
@@ -276,8 +277,35 @@ describe.each(NGINX_CONFIGS)("%s static-asset CSP", (relPath) => {
     expect(blockOf("woff2")).toContain("proxy_hide_header Content-Security-Policy;");
   });
 
+  // The middleware now sends these on static paths too, and each block's own
+  // proxy_hide_header stops inheritance of the server-level hides. A doubled
+  // sf-item value is invalid and browsers ignore it; nosniff is kept single.
+  it.each(["/_next/static/", "woff2"])("the %s block hides the upstream copies it re-declares", (marker) => {
+    const block = blockOf(marker);
+    for (const header of [
+      "Cross-Origin-Resource-Policy",
+      "Cross-Origin-Opener-Policy",
+      "Cross-Origin-Embedder-Policy",
+      "X-Content-Type-Options",
+    ]) {
+      expect(block).toContain(`proxy_hide_header ${header};`);
+      expect(block).toMatch(new RegExp(`add_header\\s+${header}\\s`));
+    }
+  });
+
   it("does not allow inline styles (would re-file ZAP 10055)", () => {
     expect(STATIC_ASSET_CSP).not.toContain("unsafe-inline");
+  });
+
+  it("keeps /api/ routes out of the asset regex (no year-long public cache)", () => {
+    const line = blockOf("woff2").split("\n")[0];
+    expect(line).toContain("^(?!/api/)");
+    expect(line).toMatch(/location ~ "/); // case-sensitive guard, not ~*
+  });
+
+  it("routes every /_next/static/ path to its ^~ block, never the asset regex", () => {
+    // Without ^~ the asset regex wins for /_next/static/media/*.woff2|svg.
+    expect(conf).toContain("location ^~ /_next/static/ {");
   });
 
   it.each(["/_next/static/", "= /pdf.worker.min.mjs"])("keeps it off the worker-capable block %s", (marker) => {
