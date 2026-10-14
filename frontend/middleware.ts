@@ -10,34 +10,44 @@ import {
   STATIC_ASSET_CSP,
 } from "@/lib/security-headers";
 
-/** Mirrors the asset-extension list in `config.matcher` below. */
-const STATIC_ASSET_EXTENSION = /\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|eot)$/i;
+const STATIC_ASSET_EXTENSION = /\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|eot)$/;
 
-function isStaticAsset(pathname: string): boolean {
-  if (pathname.startsWith("/_next/static/")) return true;
-  return !pathname.startsWith("/api/") && STATIC_ASSET_EXTENSION.test(pathname);
+type StaticAssetKind = "chunk" | "public";
+
+/**
+ * The ONLY place that decides which branch a request takes — `config.matcher`
+ * sends every path here. Lowercased because Next's matchers are case-
+ * insensitive: `/API/x.png` must stay an API route, `/_NEXT/STATIC/x.js` a chunk.
+ */
+function staticAssetKind(pathname: string): StaticAssetKind | null {
+  const path = pathname.toLowerCase();
+  if (path.startsWith("/_next/static/")) return "chunk";
+  if (path === "/api" || path.startsWith("/api/")) return null;
+  return STATIC_ASSET_EXTENSION.test(path) ? "public" : null;
 }
 
 /**
- * Headers for build chunks and root-level `public/` files — the paths the page
- * matcher skips. Without this branch `next start` served them bare, which the
- * release ZAP baseline (it scans Next directly, no nginx) filed as "CSP Header
- * Not Set" on /favicon.ico (Medium) plus missing CORP / nosniff /
- * Permissions-Policy (Low). nginx re-declares CORP and nosniff on these paths
- * and hides the upstream copies, so behind nginx each is still sent once.
+ * Headers for build chunks and root-level `public/` files. The matcher used to
+ * skip them, so `next start` served them bare — the release ZAP baseline (it
+ * scans Next directly, no nginx) filed "CSP Header Not Set" on /favicon.ico
+ * (Next's HTML 404, Medium) and missing CORP / nosniff / Permissions-Policy
+ * (Low). The same constants as the page branch, minus the nonce machinery:
+ * these responses never render app markup. COOP/COEP/Permissions-Policy only
+ * matter on documents, but a missing asset IS a document (that HTML 404).
  *
- * No nonce work here: these responses never render app markup.
+ * Behind nginx both static blocks hide the upstream COOP/COEP/CORP they
+ * re-declare (a doubled value is invalid), so each is still sent once.
  */
-function staticAssetResponse(pathname: string): NextResponse {
+function staticAssetResponse(kind: StaticAssetKind): NextResponse {
   const response = NextResponse.next();
   response.headers.set("X-Content-Type-Options", "nosniff");
+  response.headers.set("Permissions-Policy", PERMISSIONS_POLICY);
+  response.headers.set("Cross-Origin-Opener-Policy", CROSS_ORIGIN_OPENER_POLICY);
   response.headers.set("Cross-Origin-Resource-Policy", CROSS_ORIGIN_RESOURCE_POLICY);
-  if (pathname.startsWith("/_next/static/")) {
-    // JS chunks: ZAP checks Permissions-Policy on scripts too. No CSP — a
-    // worker chunk obeys its own response's CSP, and STATIC_ASSET_CSP is
-    // `default-src 'none'`.
-    response.headers.set("Permissions-Policy", PERMISSIONS_POLICY);
-  } else {
+  response.headers.set("Cross-Origin-Embedder-Policy", CROSS_ORIGIN_EMBEDDER_POLICY);
+  // No CSP on chunks: a worker chunk obeys its own response's CSP, and
+  // STATIC_ASSET_CSP is `default-src 'none'`.
+  if (kind === "public") {
     response.headers.set("Content-Security-Policy", STATIC_ASSET_CSP);
   }
   return response;
@@ -49,9 +59,8 @@ function staticAssetResponse(pathname: string): NextResponse {
  */
 
 export function middleware(request: NextRequest) {
-  if (isStaticAsset(request.nextUrl.pathname)) {
-    return staticAssetResponse(request.nextUrl.pathname);
-  }
+  const assetKind = staticAssetKind(request.nextUrl.pathname);
+  if (assetKind) return staticAssetResponse(assetKind);
 
   // Generate a cryptographically secure nonce using Web Crypto API (Edge Runtime compatible)
   const nonceArray = new Uint8Array(16);
@@ -239,17 +248,9 @@ export function middleware(request: NextRequest) {
 // Configure which routes should trigger this middleware
 export const config = {
   matcher: [
-    /*
-     * Pages and API routes: every request path except
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public folder files
-     */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|eot)).*)",
-    // Static assets, handled by staticAssetResponse(). /pdf.worker.min.mjs
-    // (.mjs) is not one of them: it stays on the page branch above.
-    "/_next/static/:path*",
-    "/((?!api/).*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|eot))",
+    // Every path except _next/image (unused: images.unoptimized).
+    // staticAssetKind() picks the branch — keep extension lists out of here,
+    // an unanchored copy once let `/a.png.bak` skip the middleware entirely.
+    "/((?!_next/image).*)",
   ],
 };

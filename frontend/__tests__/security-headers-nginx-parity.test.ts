@@ -277,16 +277,15 @@ describe.each(NGINX_CONFIGS)("%s static-asset CSP", (relPath) => {
     expect(blockOf("woff2")).toContain("proxy_hide_header Content-Security-Policy;");
   });
 
-  // The middleware now sends CORP/nosniff on these paths too, and each block's
-  // own proxy_hide_header stops inheritance of the server-level hides. A
-  // doubled CORP/COOP/COEP is an invalid value that browsers ignore.
+  // The middleware now sends COOP/COEP/CORP on these paths too, and each
+  // block's own proxy_hide_header stops inheritance of the server-level hides.
+  // A doubled sf-item value is invalid and browsers ignore it.
   it.each(["/_next/static/", "woff2"])("the %s block hides the upstream copies it re-declares", (marker) => {
     const block = blockOf(marker);
     for (const header of [
       "Cross-Origin-Resource-Policy",
       "Cross-Origin-Opener-Policy",
       "Cross-Origin-Embedder-Policy",
-      "X-Content-Type-Options",
     ]) {
       expect(block).toContain(`proxy_hide_header ${header};`);
       expect(block).toMatch(new RegExp(`add_header\\s+${header}\\s`));
@@ -295,6 +294,11 @@ describe.each(NGINX_CONFIGS)("%s static-asset CSP", (relPath) => {
 
   it("does not allow inline styles (would re-file ZAP 10055)", () => {
     expect(STATIC_ASSET_CSP).not.toContain("unsafe-inline");
+  });
+
+  it("routes every /_next/static/ path to its ^~ block, never the asset regex", () => {
+    // Without ^~ the asset regex wins for /_next/static/media/*.woff2|svg.
+    expect(conf).toContain("location ^~ /_next/static/ {");
   });
 
   it.each(["/_next/static/", "= /pdf.worker.min.mjs"])("keeps it off the worker-capable block %s", (marker) => {
