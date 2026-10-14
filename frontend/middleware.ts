@@ -7,7 +7,41 @@ import {
   PERMISSIONS_POLICY,
   SONNER_EMPTY_STYLE_HASH,
   SONNER_STYLE_HASH,
+  STATIC_ASSET_CSP,
 } from "@/lib/security-headers";
+
+/** Mirrors the asset-extension list in `config.matcher` below. */
+const STATIC_ASSET_EXTENSION = /\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|eot)$/i;
+
+function isStaticAsset(pathname: string): boolean {
+  if (pathname.startsWith("/_next/static/")) return true;
+  return !pathname.startsWith("/api/") && STATIC_ASSET_EXTENSION.test(pathname);
+}
+
+/**
+ * Headers for build chunks and root-level `public/` files — the paths the page
+ * matcher skips. Without this branch `next start` served them bare, which the
+ * release ZAP baseline (it scans Next directly, no nginx) filed as "CSP Header
+ * Not Set" on /favicon.ico (Medium) plus missing CORP / nosniff /
+ * Permissions-Policy (Low). nginx re-declares CORP and nosniff on these paths
+ * and hides the upstream copies, so behind nginx each is still sent once.
+ *
+ * No nonce work here: these responses never render app markup.
+ */
+function staticAssetResponse(pathname: string): NextResponse {
+  const response = NextResponse.next();
+  response.headers.set("X-Content-Type-Options", "nosniff");
+  response.headers.set("Cross-Origin-Resource-Policy", CROSS_ORIGIN_RESOURCE_POLICY);
+  if (pathname.startsWith("/_next/static/")) {
+    // JS chunks: ZAP checks Permissions-Policy on scripts too. No CSP — a
+    // worker chunk obeys its own response's CSP, and STATIC_ASSET_CSP is
+    // `default-src 'none'`.
+    response.headers.set("Permissions-Policy", PERMISSIONS_POLICY);
+  } else {
+    response.headers.set("Content-Security-Policy", STATIC_ASSET_CSP);
+  }
+  return response;
+}
 
 /**
  * Next.js Middleware for Content Security Policy (CSP)
@@ -15,6 +49,10 @@ import {
  */
 
 export function middleware(request: NextRequest) {
+  if (isStaticAsset(request.nextUrl.pathname)) {
+    return staticAssetResponse(request.nextUrl.pathname);
+  }
+
   // Generate a cryptographically secure nonce using Web Crypto API (Edge Runtime compatible)
   const nonceArray = new Uint8Array(16);
   crypto.getRandomValues(nonceArray);
@@ -202,12 +240,16 @@ export function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Match all request paths except:
+     * Pages and API routes: every request path except
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - public folder files
      */
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|eot)).*)",
+    // Static assets, handled by staticAssetResponse(). /pdf.worker.min.mjs
+    // (.mjs) is not one of them: it stays on the page branch above.
+    "/_next/static/:path*",
+    "/((?!api/).*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|eot))",
   ],
 };

@@ -147,8 +147,9 @@ describe("nginx <-> middleware security-header parity (issue #1223 B)", () => {
      * duplicated value ("same-origin, same-origin") is a parse FAILURE that
      * browsers treat as unsafe-none — crossOriginIsolated was observed false
      * behind nginx. The upstream copy must therefore be hidden wherever nginx
-     * emits its own: once at server level, and re-declared in the pdf.worker
-     * block (whose own proxy_hide_header lines stop inheritance).
+     * emits its own: once at server level, and re-declared in the pdf.worker,
+     * /_next/static/ and public-asset blocks (whose own proxy_hide_header lines
+     * stop inheritance; the middleware sends CORP on static assets too).
      */
     it("hides the upstream copy of every sf-item header nginx re-emits", () => {
       for (const header of [
@@ -156,7 +157,7 @@ describe("nginx <-> middleware security-header parity (issue #1223 B)", () => {
         "Cross-Origin-Embedder-Policy",
         "Cross-Origin-Resource-Policy",
       ]) {
-        expect(conf.split(`proxy_hide_header ${header};`).length - 1).toBe(2);
+        expect(conf.split(`proxy_hide_header ${header};`).length - 1).toBe(4);
       }
 
       // Next.js sets its own Cache-Control on every static path nginx caches
@@ -274,6 +275,22 @@ describe.each(NGINX_CONFIGS)("%s static-asset CSP", (relPath) => {
     // prod's regex also matches .js/.css, which the middleware matcher does NOT
     // skip — the upstream nonce CSP would otherwise be sent alongside this one.
     expect(blockOf("woff2")).toContain("proxy_hide_header Content-Security-Policy;");
+  });
+
+  // The middleware now sends CORP/nosniff on these paths too, and each block's
+  // own proxy_hide_header stops inheritance of the server-level hides. A
+  // doubled CORP/COOP/COEP is an invalid value that browsers ignore.
+  it.each(["/_next/static/", "woff2"])("the %s block hides the upstream copies it re-declares", (marker) => {
+    const block = blockOf(marker);
+    for (const header of [
+      "Cross-Origin-Resource-Policy",
+      "Cross-Origin-Opener-Policy",
+      "Cross-Origin-Embedder-Policy",
+      "X-Content-Type-Options",
+    ]) {
+      expect(block).toContain(`proxy_hide_header ${header};`);
+      expect(block).toMatch(new RegExp(`add_header\\s+${header}\\s`));
+    }
   });
 
   it("does not allow inline styles (would re-file ZAP 10055)", () => {
