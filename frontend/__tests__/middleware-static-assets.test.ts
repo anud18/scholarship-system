@@ -44,6 +44,8 @@ function expectCommonAssetHeaders(headers: Headers) {
   expect(headers.get("Cross-Origin-Opener-Policy")).toBe(CROSS_ORIGIN_OPENER_POLICY);
   expect(headers.get("Cross-Origin-Resource-Policy")).toBe(CROSS_ORIGIN_RESOURCE_POLICY);
   expect(headers.get("Cross-Origin-Embedder-Policy")).toBe(CROSS_ORIGIN_EMBEDDER_POLICY);
+  // the only anti-framing control on a chunk's HTML 404, which gets no CSP
+  expect(headers.get("X-Frame-Options")).toBe("DENY");
   // no per-request nonce machinery on assets
   expect(headers.get("X-CSP-Nonce")).toBeNull();
 }
@@ -78,12 +80,13 @@ describe("middleware static-asset headers", () => {
     expectCommonAssetHeaders(headers);
   });
 
-  it("classifies case-insensitively, like Next's matcher", () => {
-    expect(headersFor("/_NEXT/STATIC/chunks/a.js").get("Content-Security-Policy")).toBeNull();
-    expect(headersFor("/ICON.SVG").get("Content-Security-Policy")).toBe(STATIC_ASSET_CSP);
+  // Next serves assets only under their exact case; any other spelling renders
+  // the app's HTML 404, which must keep the nonce CSP (a chunk gets none).
+  it.each(["/_NEXT/STATIC/chunks/a.js", "/ICON.SVG"])("%s is not an asset: page branch", (path) => {
+    expect(headersFor(path).get("Content-Security-Policy")).toContain("nonce-");
   });
 
-  it.each(["/api/v1/files/1/photo.png", "/API/x.png"])(
+  it.each(["/api/v1/files/1/photo.png", "/api"])(
     "%s is an API route: page policy, never the asset branch",
     (path) => {
       const headers = headersFor(path);

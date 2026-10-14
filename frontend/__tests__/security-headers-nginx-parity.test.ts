@@ -277,15 +277,16 @@ describe.each(NGINX_CONFIGS)("%s static-asset CSP", (relPath) => {
     expect(blockOf("woff2")).toContain("proxy_hide_header Content-Security-Policy;");
   });
 
-  // The middleware now sends COOP/COEP/CORP on these paths too, and each
-  // block's own proxy_hide_header stops inheritance of the server-level hides.
-  // A doubled sf-item value is invalid and browsers ignore it.
+  // The middleware now sends these on static paths too, and each block's own
+  // proxy_hide_header stops inheritance of the server-level hides. A doubled
+  // sf-item value is invalid and browsers ignore it; nosniff is kept single.
   it.each(["/_next/static/", "woff2"])("the %s block hides the upstream copies it re-declares", (marker) => {
     const block = blockOf(marker);
     for (const header of [
       "Cross-Origin-Resource-Policy",
       "Cross-Origin-Opener-Policy",
       "Cross-Origin-Embedder-Policy",
+      "X-Content-Type-Options",
     ]) {
       expect(block).toContain(`proxy_hide_header ${header};`);
       expect(block).toMatch(new RegExp(`add_header\\s+${header}\\s`));
@@ -294,6 +295,12 @@ describe.each(NGINX_CONFIGS)("%s static-asset CSP", (relPath) => {
 
   it("does not allow inline styles (would re-file ZAP 10055)", () => {
     expect(STATIC_ASSET_CSP).not.toContain("unsafe-inline");
+  });
+
+  it("keeps /api/ routes out of the asset regex (no year-long public cache)", () => {
+    const line = blockOf("woff2").split("\n")[0];
+    expect(line).toContain("^(?!/api/)");
+    expect(line).toMatch(/location ~ "/); // case-sensitive guard, not ~*
   });
 
   it("routes every /_next/static/ path to its ^~ block, never the asset regex", () => {

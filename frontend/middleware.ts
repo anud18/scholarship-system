@@ -16,14 +16,36 @@ type StaticAssetKind = "chunk" | "public";
 
 /**
  * The ONLY place that decides which branch a request takes — `config.matcher`
- * sends every path here. Lowercased because Next's matchers are case-
- * insensitive: `/API/x.png` must stay an API route, `/_NEXT/STATIC/x.js` a chunk.
+ * sends every path here. Case-SENSITIVE on purpose: Next serves `/_next/static`
+ * and `public/` files only under their exact case, and any other spelling
+ * renders the app's HTML 404, which must keep the page branch's nonce CSP.
  */
 function staticAssetKind(pathname: string): StaticAssetKind | null {
-  const path = pathname.toLowerCase();
-  if (path.startsWith("/_next/static/")) return "chunk";
-  if (path === "/api" || path.startsWith("/api/")) return null;
-  return STATIC_ASSET_EXTENSION.test(path) ? "public" : null;
+  if (pathname.startsWith("/_next/static/")) return "chunk";
+  if (pathname === "/api" || pathname.startsWith("/api/")) return null;
+  return STATIC_ASSET_EXTENSION.test(pathname) ? "public" : null;
+}
+
+/**
+ * The isolation/sniffing headers every response gets, page or asset.
+ *
+ * Issue #1223 section B. Permissions-Policy / COOP / CORP / COEP are mirrored
+ * VERBATIM at the server level and in every re-declaring location block of
+ * nginx.prod.conf / nginx.staging.conf — see lib/security-headers.ts for why
+ * the layers must not drift, and __tests__/security-headers-nginx-parity.test.ts
+ * which pins it.
+ *
+ * COEP on EVERY matched route, framed proxies included: a require-corp parent
+ * page refuses any nested document that does not itself declare COEP, so the
+ * /api/v1/preview* and /api/email/* responses need this header just as much
+ * as the pages that frame them — see lib/security-headers.ts.
+ */
+function applySharedSecurityHeaders(headers: Headers): void {
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("Permissions-Policy", PERMISSIONS_POLICY);
+  headers.set("Cross-Origin-Opener-Policy", CROSS_ORIGIN_OPENER_POLICY);
+  headers.set("Cross-Origin-Resource-Policy", CROSS_ORIGIN_RESOURCE_POLICY);
+  headers.set("Cross-Origin-Embedder-Policy", CROSS_ORIGIN_EMBEDDER_POLICY);
 }
 
 /**
@@ -31,20 +53,18 @@ function staticAssetKind(pathname: string): StaticAssetKind | null {
  * skip them, so `next start` served them bare — the release ZAP baseline (it
  * scans Next directly, no nginx) filed "CSP Header Not Set" on /favicon.ico
  * (Next's HTML 404, Medium) and missing CORP / nosniff / Permissions-Policy
- * (Low). The same constants as the page branch, minus the nonce machinery:
- * these responses never render app markup. COOP/COEP/Permissions-Policy only
- * matter on documents, but a missing asset IS a document (that HTML 404).
+ * (Low). No nonce machinery: these responses never render app markup — but a
+ * missing asset IS a document (that HTML 404), hence the document headers and
+ * X-Frame-Options (the only anti-framing control on a chunk 404, which gets
+ * no CSP).
  *
- * Behind nginx both static blocks hide the upstream COOP/COEP/CORP they
- * re-declare (a doubled value is invalid), so each is still sent once.
+ * Behind nginx both static blocks hide the upstream copies of the headers they
+ * re-declare, so each is still sent once.
  */
 function staticAssetResponse(kind: StaticAssetKind): NextResponse {
   const response = NextResponse.next();
-  response.headers.set("X-Content-Type-Options", "nosniff");
-  response.headers.set("Permissions-Policy", PERMISSIONS_POLICY);
-  response.headers.set("Cross-Origin-Opener-Policy", CROSS_ORIGIN_OPENER_POLICY);
-  response.headers.set("Cross-Origin-Resource-Policy", CROSS_ORIGIN_RESOURCE_POLICY);
-  response.headers.set("Cross-Origin-Embedder-Policy", CROSS_ORIGIN_EMBEDDER_POLICY);
+  applySharedSecurityHeaders(response.headers);
+  response.headers.set("X-Frame-Options", "DENY");
   // No CSP on chunks: a worker chunk obeys its own response's CSP, and
   // STATIC_ASSET_CSP is `default-src 'none'`.
   if (kind === "public") {
@@ -214,21 +234,8 @@ export function middleware(request: NextRequest) {
   // a mixed DENY/SAMEORIGIN pair across nginx + middleware is treated as invalid
   // and still blocks, so both layers must agree (see nginx /api/v1/preview block).
   response.headers.set("X-Frame-Options", isFramablePreview ? "SAMEORIGIN" : "DENY");
-  response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-
-  // Issue #1223 section B. These three are mirrored VERBATIM at the server level
-  // and in every re-declaring location block of nginx.prod.conf /
-  // nginx.staging.conf — see lib/security-headers.ts for why the layers must not
-  // drift, and __tests__/security-headers-nginx-parity.test.ts which pins it.
-  response.headers.set("Permissions-Policy", PERMISSIONS_POLICY);
-  response.headers.set("Cross-Origin-Opener-Policy", CROSS_ORIGIN_OPENER_POLICY);
-  response.headers.set("Cross-Origin-Resource-Policy", CROSS_ORIGIN_RESOURCE_POLICY);
-  // COEP on EVERY matched route, framed proxies included: a require-corp parent
-  // page refuses any nested document that does not itself declare COEP, so the
-  // /api/v1/preview* and /api/email/* responses need this header just as much
-  // as the pages that frame them — see lib/security-headers.ts.
-  response.headers.set("Cross-Origin-Embedder-Policy", CROSS_ORIGIN_EMBEDDER_POLICY);
+  applySharedSecurityHeaders(response.headers);
 
   // AppScan 2026-08-13 "Cacheable SSL Page Found": every /api response carries
   // authenticated, per-user data — forbid browsers and shared caches from
