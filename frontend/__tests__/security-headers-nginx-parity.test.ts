@@ -22,6 +22,7 @@ import {
   CROSS_ORIGIN_OPENER_POLICY,
   CROSS_ORIGIN_RESOURCE_POLICY,
   PERMISSIONS_POLICY,
+  STATIC_ASSET_CSP,
 } from "@/lib/security-headers";
 
 function mockRequest(url: string) {
@@ -242,5 +243,44 @@ describe("nginx <-> middleware security-header parity (issue #1223 B)", () => {
     expect(PERMISSIONS_POLICY).not.toContain("clipboard-write=()");
     // Paste events are not gated by clipboard-read, so it stays denied.
     expect(PERMISSIONS_POLICY).toContain("clipboard-read=()");
+  });
+});
+
+/**
+ * ZAP 2026-10 (10038, Medium): root-level /public files were served with no CSP.
+ * The public-asset block — and ONLY that block — declares STATIC_ASSET_CSP. It
+ * must never reach /_next/static/ or /pdf.worker.min.mjs, where a worker obeys
+ * its own response's CSP and `default-src 'none'` would break it.
+ */
+describe.each(NGINX_CONFIGS)("%s static-asset CSP", (relPath) => {
+  const conf = readConf(relPath);
+
+  /** Text of the block opened by the first `location` line containing `marker`. */
+  function blockOf(marker: string): string {
+    const start = conf.split("\n").findIndex((line) => line.includes("location") && line.includes(marker));
+    expect(start).toBeGreaterThanOrEqual(0);
+    const lines = conf.split("\n").slice(start);
+    const end = lines.findIndex((line, i) => i > 0 && /^\s{8}\}\s*$/.test(line));
+    expect(end).toBeGreaterThan(0); // never silently span the rest of the file
+    return lines.slice(0, end).join("\n");
+  }
+
+  it("declares STATIC_ASSET_CSP exactly once, in the public-asset block", () => {
+    expect(declaredValues(conf, "Content-Security-Policy")).toEqual([STATIC_ASSET_CSP]);
+    expect(declaredValues(blockOf("woff2"), "Content-Security-Policy")).toEqual([STATIC_ASSET_CSP]);
+  });
+
+  it("hides the upstream CSP there, so a page-like response never carries two policies", () => {
+    // prod's regex also matches .js/.css, which the middleware matcher does NOT
+    // skip — the upstream nonce CSP would otherwise be sent alongside this one.
+    expect(blockOf("woff2")).toContain("proxy_hide_header Content-Security-Policy;");
+  });
+
+  it("does not allow inline styles (would re-file ZAP 10055)", () => {
+    expect(STATIC_ASSET_CSP).not.toContain("unsafe-inline");
+  });
+
+  it.each(["/_next/static/", "= /pdf.worker.min.mjs"])("keeps it off the worker-capable block %s", (marker) => {
+    expect(declaredValues(blockOf(marker), "Content-Security-Policy")).toEqual([]);
   });
 });
