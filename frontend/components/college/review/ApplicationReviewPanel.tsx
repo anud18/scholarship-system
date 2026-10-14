@@ -104,7 +104,6 @@ export function ApplicationReviewPanel({
     availableOptions,
     rankingData,
     collegeDisplayName,
-    updateApplicationStatus,
     fetchCollegeApplications,
     activeScholarshipTab,
     activeTab,
@@ -252,7 +251,9 @@ export function ApplicationReviewPanel({
     // Only refresh when:
     // 1. Current tab is "review"
     // 2. Data version has changed (indicating updates from other tabs)
-    if (activeTab === "review") {
+    // Wait for the shell's auto-selection: fetching before a scholarship/year is
+    // chosen pulls the unfiltered list, only to be replaced moments later.
+    if (activeTab === "review" && activeScholarshipTab && selectedAcademicYear) {
       logger.debug(
         `[ApplicationReviewPanel] Auto-refreshing applications (dataVersion: ${dataVersion})`
       );
@@ -297,112 +298,6 @@ export function ApplicationReviewPanel({
 
     return true;
   });
-
-  const handleApprove = async (appId: number, comments?: string) => {
-    try {
-      const result = await updateApplicationStatus(
-        appId,
-        "approved",
-        comments || "學院核准通過"
-      );
-      logger.debug(`College approved application ${appId}`, result);
-
-      // 檢查是否自動重新執行了分發
-      const redistribution = result?.redistribution_info;
-      if (redistribution?.auto_redistributed) {
-        const processedCount = redistribution.rankings_processed || 1;
-        const successfulCount = redistribution.successful_count || 0;
-        toast.success(
-          locale === "zh"
-            ? `審核完成並已自動重新執行分配，處理 ${processedCount} 個排名（成功 ${successfulCount} 個），分配 ${redistribution.total_allocated} 名學生`
-            : `Review completed with auto-redistribution for ${processedCount} rankings (${successfulCount} successful), ${redistribution.total_allocated} students allocated`,
-          { duration: 6000 }
-        );
-      } else {
-        // 顯示成功提示
-        toast.success(locale === "zh" ? "核准成功" : "Approval Successful", {
-          description:
-            locale === "zh" ? "申請已核准" : "Application has been approved",
-        });
-      }
-
-      // 關閉 dialog
-      setSelectedApplication(null);
-
-      // 重新載入申請列表以顯示最新狀態
-      await fetchCollegeApplications(
-        selectedAcademicYear,
-        selectedSemester,
-        activeScholarshipTab
-      );
-
-      // 觸發 dataVersion 更新，通知其他 tab 重新載入數據
-      incrementDataVersion();
-    } catch (error) {
-      logger.error("Failed to approve application", { error: error });
-      toast.error(locale === "zh" ? "核准失敗" : "Approval Failed", {
-        description:
-          error instanceof Error
-            ? error.message
-            : locale === "zh"
-              ? "無法核准此申請"
-              : "Could not approve this application",
-      });
-    }
-  };
-
-  const handleReject = async (appId: number, comments?: string) => {
-    try {
-      const result = await updateApplicationStatus(
-        appId,
-        "rejected",
-        comments || "學院駁回申請"
-      );
-      logger.debug(`College rejected application ${appId}`, result);
-
-      // 檢查是否自動重新執行了分發
-      const redistribution = result?.redistribution_info;
-      if (redistribution?.auto_redistributed) {
-        const processedCount = redistribution.rankings_processed || 1;
-        const successfulCount = redistribution.successful_count || 0;
-        toast.success(
-          locale === "zh"
-            ? `審核完成並已自動重新執行分配，處理 ${processedCount} 個排名（成功 ${successfulCount} 個），分配 ${redistribution.total_allocated} 名學生`
-            : `Review completed with auto-redistribution for ${processedCount} rankings (${successfulCount} successful), ${redistribution.total_allocated} students allocated`,
-          { duration: 6000 }
-        );
-      } else {
-        // 顯示成功提示
-        toast.success(locale === "zh" ? "駁回成功" : "Rejection Successful", {
-          description:
-            locale === "zh" ? "申請已駁回" : "Application has been rejected",
-        });
-      }
-
-      // 關閉 dialog
-      setSelectedApplication(null);
-
-      // 重新載入申請列表以顯示最新狀態
-      await fetchCollegeApplications(
-        selectedAcademicYear,
-        selectedSemester,
-        activeScholarshipTab
-      );
-
-      // 觸發 dataVersion 更新，通知其他 tab 重新載入數據
-      incrementDataVersion();
-    } catch (error) {
-      logger.error("Failed to reject application", { error: error });
-      toast.error(locale === "zh" ? "駁回失敗" : "Rejection Failed", {
-        description:
-          error instanceof Error
-            ? error.message
-            : locale === "zh"
-              ? "無法駁回此申請"
-              : "Could not reject this application",
-      });
-    }
-  };
 
   const handleExportApplications = async () => {
     try {
@@ -707,12 +602,7 @@ export function ApplicationReviewPanel({
               const [year, semester] = value.split("-");
               setSelectedAcademicYear(parseInt(year));
               setSelectedSemester(semester || undefined);
-              // 重新載入該獎學金類型的申請資料
-              fetchCollegeApplications(
-                parseInt(year),
-                semester || undefined,
-                activeScholarshipTab
-              );
+              // 申請資料由上方的 effect 依新的學年/學期自動重新載入
             }}
             locale={locale}
           />
@@ -1175,8 +1065,6 @@ export function ApplicationReviewPanel({
         locale={locale}
         academicYear={selectedAcademicYear}
         user={user}
-        onApprove={handleApprove}
-        onReject={handleReject}
         onRequestDocs={app => {
           setApplicationToRequestDocs(app);
           setShowDocumentRequestDialog(true);

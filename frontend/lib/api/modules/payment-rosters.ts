@@ -8,6 +8,7 @@ import { typedClient } from '../typed-client';
 import { toApiResponse } from '../compat';
 import type { ApiResponse } from '../types';
 import type { components } from '../generated/schema';
+import { fetchBinaryExport } from './binary-export';
 
 /** Schema 型別別名：造冊建立請求 */
 type RosterCreateRequest = components['schemas']['RosterCreateRequest'];
@@ -375,6 +376,20 @@ export function createPaymentRostersApi() {
       );
       return toApiResponse(response);
     },
+
+    /**
+     * 下載該份造冊的「統計各學院學生獲獎人數」(.xlsx)，只計納入造冊的學生
+     * GET /api/v1/payment-rosters/{roster_id}/college-award-stats/export
+     */
+    exportCollegeAwardStats: async (
+      roster_id: number
+    ): Promise<{ blob: Blob; filename: string }> =>
+      fetchBinaryExport(
+        `/api/v1/payment-rosters/${roster_id}/college-award-stats/export`,
+        new URLSearchParams(),
+        '統計各學院學生獲獎人數.xlsx',
+        '無法匯出統計各學院學生獲獎人數'
+      ),
 
     /**
      * 重新生成造冊：依當下的分發名單、學生資料與設定重建全部明細

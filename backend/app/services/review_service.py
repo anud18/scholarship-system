@@ -247,47 +247,10 @@ class ReviewService:
             return all_subtypes
 
         elif role_str == "college":
-            # 學院可以審查：
-            # 1. 尚未被拒絕的項目
-            # 2. 被自己（college）拒絕的項目（可覆蓋修改）
-            # 3. 但不能審查被 professor 拒絕的項目
-            reviewable = []
-            for code in all_subtypes:
-                status = subtype_status.get(code, {}).get("status")
-
-                # 安全地獲取 rejected_by_role
-                rejected_by = subtype_status.get(code, {}).get("rejected_by")
-                if rejected_by and isinstance(rejected_by, dict):
-                    rejected_by_role = rejected_by.get("role")
-                    # 正規化 role（處理可能的 enum 對象或字符串）
-                    if hasattr(rejected_by_role, "value"):
-                        rejected_by_role = rejected_by_role.value
-                    elif rejected_by_role:
-                        rejected_by_role = str(rejected_by_role).lower()
-                else:
-                    rejected_by_role = None
-
-                # 新邏輯：
-                # 如果未被拒絕 → 可審查
-                # 如果被 professor 拒絕 → 不可審查
-                # 如果被其他角色拒絕（college/admin） → 可以覆蓋修改
-                if status != "rejected":
-                    is_reviewable = True  # 未被拒絕
-                elif rejected_by_role == "professor":
-                    is_reviewable = False  # 被 professor 拒絕 → 不可審查
-                else:
-                    is_reviewable = True  # 被其他角色拒絕 → 可以覆蓋修改
-
-                logger.info(
-                    f"[Auth Debug] Code '{code}': status={status}, rejected_by={rejected_by_role}, "
-                    f"is_reviewable={is_reviewable}"
-                )
-
-                if is_reviewable:
-                    reviewable.append(code)
-
-            logger.info(f"[Auth Debug] College role - reviewable subtypes: {reviewable}")
-            return reviewable
+            # 學院沒有審查操作：學院僅透過排名（CollegeRankingItem.college_rejected）
+            # 表達推薦／不推薦。既有的學院審查紀錄仍由累積狀態讀取，但不可再新增。
+            logger.info("[Auth Debug] College role - no reviewable subtypes (ranking-only)")
+            return []
 
         elif role_str in ["admin", "super_admin"]:
             # 管理員可以審查：
@@ -549,8 +512,10 @@ class ReviewService:
         ``approved`` even when ``requires_college_review=True``, which both
         bypassed college review and locked the student out of ``withdraw``
         (only ``submitted``/``under_review`` are withdrawable). Returning
-        True here keeps the app at ``under_review`` until the college (or
-        any later required role) signs off.
+        True here keeps the app at ``under_review`` until the college signs
+        off. The college has no review submission of its own: its sign-off is
+        the finalized ranking, and 確認分發 (manual distribution finalize) is
+        what moves the application on to approved/rejected.
         """
         if not latest_reviewer_role or not application.scholarship_configuration_id:
             return False

@@ -6,6 +6,7 @@ import { useCollegeManagement } from "@/contexts/college-management-context";
 import { useReferenceData } from "@/hooks/use-reference-data";
 import { apiClient } from "@/lib/api";
 import { exportDepartmentSummaryBulk } from "@/lib/api/modules/college";
+import { triggerAttachmentDownload } from "@/lib/utils/download";
 import type {
   DistributionStudent,
   LocalAlloc,
@@ -21,6 +22,7 @@ import type {
 } from "@/lib/api/modules/manual-distribution";
 import { DistributionSummaryDialog } from "./DistributionSummaryDialog";
 import {
+  ALL_SUB_TYPES_UNREVIEWED,
   buildCollegeNameMap,
   getSavedAllocation,
   isCancelledAllocation,
@@ -31,7 +33,6 @@ import {
   summarizeReasons,
   toStagedItems,
   unallocatedReasonLabel,
-  type UnallocatedReason,
 } from "@/lib/api/modules/manual-distribution";
 import { buildCollegeQuotaGrid } from "@/lib/api/modules/college-quota-grid";
 import { User } from "@/types/user";
@@ -73,6 +74,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Download,
+  FileArchive,
   Clock,
   Eye,
   Shield,
@@ -302,6 +304,48 @@ export function ManualDistributionPanel({
     }
   }, [summaryDept, scholarshipType.id, selectedAcademicYear, selectedSemester]);
 
+  // 匯出申請資料 — the same application-materials ZIP the college review page
+  // offers, scoped by the 學院 dropdown above; 「全部學院」 gives the whole
+  // school with one folder per college.
+  const [isExportingPackage, setIsExportingPackage] = useState(false);
+  const handleExportPackage = useCallback(async () => {
+    if (!summaryDept || !scholarshipType.id || !selectedAcademicYear) {
+      toast.error("缺少必要的篩選條件");
+      return;
+    }
+    const token = localStorage.getItem("auth_token");
+    if (!token) {
+      toast.error("請重新登入");
+      return;
+    }
+    setIsExportingPackage(true);
+    try {
+      const { downloadUrl, filename } = await apiClient.college.exportPackage({
+        scholarship_type_id: scholarshipType.id,
+        academic_year: selectedAcademicYear,
+        semester:
+          selectedSemester &&
+          ["first", "second", "annual"].includes(selectedSemester)
+            ? selectedSemester
+            : undefined,
+        college_code:
+          summaryDept === ALL_ACADEMIES_SYSTEM ? undefined : summaryDept,
+        token,
+      });
+      // Possibly multi-GB (#1376): hand it to the browser's download manager.
+      triggerAttachmentDownload(downloadUrl, filename);
+      toast.info("已交由瀏覽器下載，請於下載列查看進度與結果", {
+        description: filename,
+      });
+    } catch (err) {
+      toast.error("匯出申請資料失敗", {
+        description: err instanceof Error ? err.message : undefined,
+      });
+    } finally {
+      setIsExportingPackage(false);
+    }
+  }, [summaryDept, scholarshipType.id, selectedAcademicYear, selectedSemester]);
+
   const [students, setStudents] = useState<DistributionStudent[]>([]);
   const [quotaStatus, setQuotaStatus] = useState<QuotaStatus>({});
   // Map<ranking_item_id, LocalAlloc | null>
@@ -315,12 +359,6 @@ export function ManualDistributionPanel({
   useEffect(() => {
     localAllocationsRef.current = localAllocations;
   }, [localAllocations]);
-  // Why the last 預設分發 run left a row 未決, keyed by ranking_item_id. Comes
-  // straight from the backend, which is the only place that can tell a review
-  // reject from an exhausted quota. Cleared whenever the grid is reseeded.
-  const [unallocatedReasons, setUnallocatedReasons] = useState<
-    Map<number, UnallocatedReason>
-  >(new Map());
   const [collegeFilter, setCollegeFilter] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
@@ -489,7 +527,6 @@ export function ManualDistributionPanel({
     setIsLoading(true);
     setSaveMessage(null);
     setPreviewApplied(false);
-    setUnallocatedReasons(new Map());
     try {
       const [studentsResp, quotaResp] = await Promise.all([
         apiClient.manualDistribution.getStudents(
@@ -555,9 +592,6 @@ export function ManualDistributionPanel({
         setStudents(studentsResp.data);
         setPreviewApplied(merged.filled > 0);
         setLocalAllocations(merged.next);
-        setUnallocatedReasons(
-          hasQuota ? reasonsBySuggestion(previewSuggestions) : new Map()
-        );
       }
       if (quotaResp.success && quotaResp.data) {
         setQuotaStatus(quotaResp.data);
@@ -593,10 +627,8 @@ export function ManualDistributionPanel({
       setStudents(studentsResp.data);
       setLocalAllocations(seedAllocations(studentsResp.data));
       // The reseed is server-only, so any auto-preview suggestions are gone
-      // (saved or discarded) — clear the "已自動預設分配" notice, and with it
-      // the reasons, which described a screen that no longer exists.
+      // (saved or discarded) — clear the "已自動預設分配" notice.
       setPreviewApplied(false);
-      setUnallocatedReasons(new Map());
     }
     if (quotaResp.success && quotaResp.data) {
       setQuotaStatus(quotaResp.data);
@@ -757,12 +789,6 @@ export function ManualDistributionPanel({
     // Unticking returns the row to 未決 — nothing else is remembered about it.
     // A 未決 row is open to 預設分發 again and its slot is free for someone
     // else; to keep a student out of the round entirely, use 撤銷/停發.
-    setUnallocatedReasons(prev => {
-      if (!prev.has(rankingItemId)) return prev;
-      const next = new Map(prev);
-      next.delete(rankingItemId);
-      return next;
-    });
     setLocalAllocations(prev => {
       const next = new Map(prev);
       const prevAlloc = next.get(rankingItemId);
@@ -1067,27 +1093,7 @@ export function ManualDistributionPanel({
           setLocalAllocations(next);
           setPreviewApplied(true);
         }
-        // Refresh the explanation for every row this run considered: a row it
-        // actually staged loses its old one, an unplaced row takes the
-        // backend's verdict. Rows out of scope keep whatever an earlier run
-        // said. Keyed on what the merge STAGED, not on what the server
-        // suggested — a suggestion the merge dropped as ineligible leaves the
-        // row 未決, so clearing its reason would strip the only explanation on
-        // screen.
         const runReasons = reasonsBySuggestion(suggestions);
-        setUnallocatedReasons(prev => {
-          const merged = new Map(prev);
-          for (const s of suggestions) {
-            if (s.sub_type_code && next.get(s.ranking_item_id)) {
-              merged.delete(s.ranking_item_id);
-            }
-          }
-          for (const [itemId, reason] of runReasons) {
-            merged.set(itemId, reason);
-          }
-          return merged;
-        });
-
         const breakdown = summarizeReasons(runReasons)
           .map(
             ({ reason, count }) =>
@@ -1201,7 +1207,7 @@ export function ManualDistributionPanel({
             <div className="flex gap-2 flex-wrap">
               <Select value={summaryDept} onValueChange={setSummaryDept}>
                 <SelectTrigger className="w-[200px] h-9">
-                  <SelectValue placeholder="選擇學院匯出總表" />
+                  <SelectValue placeholder="選擇學院匯出" />
                 </SelectTrigger>
                 <SelectContent>
                   {visibleAcademies.map((a: { code: string; name: string }) => (
@@ -1211,7 +1217,7 @@ export function ManualDistributionPanel({
                   ))}
                   {(user.role === "admin" || user.role === "super_admin") && (
                     <SelectItem value={ALL_ACADEMIES_SYSTEM}>
-                      全部學院 (ZIP)
+                      全部學院
                     </SelectItem>
                   )}
                 </SelectContent>
@@ -1224,6 +1230,25 @@ export function ManualDistributionPanel({
               >
                 <Download className="h-4 w-4 mr-1" />
                 匯出申請總表
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={
+                  isExportingPackage ||
+                  !summaryDept ||
+                  !scholarshipType.id ||
+                  !selectedAcademicYear
+                }
+                title={
+                  summaryDept === ALL_ACADEMIES_SYSTEM
+                    ? "匯出全校申請資料 ZIP，每個學院一個資料夾"
+                    : "匯出所選學院的申請資料 ZIP（與學院端相同）"
+                }
+                onClick={handleExportPackage}
+              >
+                <FileArchive className="h-4 w-4 mr-1" />
+                {isExportingPackage ? "匯出中..." : "匯出申請資料"}
               </Button>
               {/* 分發名單 (受獎名冊) 的 Excel/PDF 匯出在「查看分發名單」對話框內
                   ——與畫面上的名單同一份資料來源，見 DistributionSummaryDialog。 */}
@@ -1281,7 +1306,6 @@ export function ManualDistributionPanel({
                         setLocalAllocations(
                           new Map(students.map(s => [s.ranking_item_id, null]))
                         );
-                        setUnallocatedReasons(new Map());
                       }}
                     >
                       確認清空
@@ -1793,15 +1817,11 @@ export function ManualDistributionPanel({
                           {collegeStudents.map(student => {
                             const rejectedSubTypes =
                               student.rejected_sub_types || [];
+                            const unreviewedSubTypes =
+                              student.professor_unreviewed_sub_types || [];
                             const curAlloc = localAllocations.get(
                               student.ranking_item_id
                             );
-                            // Only meaningful while the row is still 未決: once
-                            // it carries an allocation, whatever stopped an
-                            // earlier run no longer describes it.
-                            const unallocatedReason = curAlloc
-                              ? undefined
-                              : unallocatedReasons.get(student.ranking_item_id);
                             // Phase 8.2: surface challenge metadata from the
                             // /state payload (keyed by application_id).
                             const challengeMeta = challengeAppMap.get(
@@ -1874,11 +1894,10 @@ export function ManualDistributionPanel({
                                     (student.applied_sub_types || []).length >
                                       0) ? (
                                     <div className="flex flex-col gap-0.5">
-                                      {/* Same convention as 學院推薦: a chip
-                                          per applied sub-type, and a missing
-                                          professor verdict renders as 未推薦
-                                          — it no longer blocks allocation,
-                                          the admin decides. */}
+                                      {/* A chip per applied sub-type; a
+                                          missing professor verdict renders
+                                          as 未推薦 and greys that sub-type's
+                                          核配 cell out (see isUnreviewed). */}
                                       <SubTypeVerdictChips
                                         appliedSubTypes={
                                           student.applied_sub_types || []
@@ -1909,11 +1928,10 @@ export function ManualDistributionPanel({
                                 </td>
                                 <td className="px-1.5 py-1.5 border border-slate-200 leading-snug">
                                   <div className="flex flex-col gap-0.5">
-                                    {/* The ranking IS the college's primary
-                                        verdict: rows only exist once the
+                                    {/* The ranking IS the college's verdict —
+                                        its only one: rows only exist once the
                                         college finalized its ranking, and
-                                        N (college_rejected) means 不推薦.
-                                        Review-tab verdicts supplement it. */}
+                                        N (college_rejected) means 不推薦. */}
                                     {student.college_rejected ? (
                                       <span
                                         className={VERDICT_CHIP.reject}
@@ -1929,42 +1947,31 @@ export function ManualDistributionPanel({
                                         排名: 推薦
                                       </span>
                                     )}
-                                    <SubTypeVerdictChips
-                                      appliedSubTypes={
-                                        student.applied_sub_types || []
-                                      }
-                                      items={student.college_review_items || []}
-                                      quotaStatus={quotaStatus}
-                                      noVerdictTitle="學院未對此子類型作出推薦審核"
-                                    />
-                                    {/* Why the last 預設分發 left this row
-                                        blank, straight from the backend.
-                                        撤銷/停發 is omitted — the row's own
-                                        status control already says so. */}
-                                    {unallocatedReason && (
-                                      <span
-                                        className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200"
-                                        title={`預設分發未分配：${unallocatedReasonLabel(unallocatedReason)}`}
-                                      >
-                                        未分配:{" "}
-                                        {unallocatedReasonLabel(
-                                          unallocatedReason
-                                        )}
-                                      </span>
-                                    )}
                                   </div>
                                 </td>
                                 {subTypeCols.map(col => {
-                                  const isApplied =
-                                    student.applied_sub_types.includes(
-                                      col.sub_type
-                                    );
                                   // rejected_sub_types arrive lowercased from
                                   // the backend; normalize the config key so
                                   // case-differing sub-type codes still match.
-                                  const isRejected = rejectedSubTypes.includes(
-                                    col.sub_type.toLowerCase().trim()
+                                  const normalizedSubType = col.sub_type
+                                    .toLowerCase()
+                                    .trim();
+                                  // applied_sub_types are free-form strings
+                                  // ("NSTC", " nstc") — compare normalized, as
+                                  // the backend does.
+                                  const isApplied = student.applied_sub_types.some(
+                                    t => t.toLowerCase().trim() === normalizedSubType
                                   );
+                                  const isRejected =
+                                    rejectedSubTypes.includes(normalizedSubType);
+                                  // 教授未推薦: a required professor verdict is
+                                  // still missing on this sub-type (decided by
+                                  // the backend, which also refuses the tick).
+                                  const isUnreviewed =
+                                    unreviewedSubTypes.includes(
+                                      ALL_SUB_TYPES_UNREVIEWED
+                                    ) ||
+                                    unreviewedSubTypes.includes(normalizedSubType);
                                   const isChecked =
                                     curAlloc?.sub_type === col.sub_type &&
                                     curAlloc?.config_id === col.config_id;
@@ -2013,15 +2020,17 @@ export function ManualDistributionPanel({
                                     isFinalizing ||
                                     isRestoring ||
                                     autoAllocatingCollege !== null;
-                                  // A rejected sub-type can't be (re)checked,
-                                  // but a cell that is ALREADY checked must
-                                  // stay clickable so the admin can uncheck it
-                                  // — finalize hard-blocks rejected
-                                  // allocations with 「請先取消該勾選」, which
-                                  // would deadlock against a disabled cell.
+                                  // A rejected or 教授未推薦 sub-type can't be
+                                  // (re)checked, but a cell that is ALREADY
+                                  // checked must stay clickable so the admin
+                                  // can uncheck it — finalize hard-blocks
+                                  // rejected allocations with 「請先取消該勾選」,
+                                  // which would deadlock against a disabled
+                                  // cell.
                                   const disabled =
                                     !isApplied ||
-                                    (isRejected && !isChecked) ||
+                                    ((isRejected || isUnreviewed) &&
+                                      !isChecked) ||
                                     atCapacity ||
                                     isFallbackColumn ||
                                     isCancelled ||
@@ -2036,9 +2045,11 @@ export function ManualDistributionPanel({
                                             ? "opacity-40 bg-red-50"
                                             : !isApplied
                                               ? "opacity-40"
-                                              : isFallbackColumn
-                                                ? "opacity-40 bg-amber-100/40"
-                                                : ""
+                                              : isUnreviewed
+                                                ? "opacity-40 bg-slate-100"
+                                                : isFallbackColumn
+                                                  ? "opacity-40 bg-amber-100/40"
+                                                  : ""
                                       }`}
                                     >
                                       <input
@@ -2057,6 +2068,10 @@ export function ManualDistributionPanel({
                                                 ? isChecked
                                                   ? `審核不同意 ${col.display_name}，請取消勾選`
                                                   : `審核不同意（不推薦）${col.display_name}`
+                                                : isUnreviewed
+                                                  ? isChecked
+                                                    ? `教授未推薦 ${col.display_name}，取消勾選後無法再勾選`
+                                                    : `教授未推薦 ${col.display_name}，無法核配`
                                                 : atCapacity
                                                   ? `${col.display_name} 名額已滿`
                                                   : collegeFull

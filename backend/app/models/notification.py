@@ -7,9 +7,10 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from sqlalchemy import JSON, Boolean, Column, DateTime, Enum, ForeignKey, Index, Integer, String, Text, UniqueConstraint
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, validates
 from sqlalchemy.sql import func
 
+from app.core.url_safety import validate_action_url
 from app.db.base_class import Base
 
 
@@ -199,6 +200,12 @@ class Notification(Base):
     def age_in_hours(self) -> float:
         """Get notification age in hours (Facebook-style)"""
         return (datetime.now(timezone.utc) - self.created_at).total_seconds() / 3600
+
+    @validates("href", "action_url")
+    def _validate_link(self, _key: str, value: Optional[str]) -> Optional[str]:
+        # Both columns are navigated to on click; enforce the allowlist for
+        # every writer (services, templates), not just the request schemas.
+        return validate_action_url(value)
 
     @property
     def effective_href(self) -> Optional[str]:

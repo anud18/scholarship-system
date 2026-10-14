@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { logger } from "@/lib/utils/logger";
+import { resolveSafeNavigation } from "@/lib/utils/url-validation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -334,6 +335,12 @@ export function NotificationPanel({
             <div className="p-4 space-y-3">
               {notifications.map((notification) => {
                 const { title, message } = getNotificationText(notification);
+                // Stored links predating backend validation may be javascript:/data:
+                // — resolve once and hide the button when there is no safe target.
+                const actionTarget = resolveSafeNavigation(
+                  notification.action_url,
+                  typeof window === "undefined" ? null : window.location.origin
+                );
                 const isExpanded = expandedNotifications.has(notification.id);
                 const needsExpansion = isMessageLong(message);
 
@@ -420,21 +427,19 @@ export function NotificationPanel({
                               {formatDate(notification.created_at)}
                             </span>
 
-                            {notification.action_url && (
+                            {actionTarget && (
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={e => {
                                   e.stopPropagation();
-                                  if (notification.action_url) {
-                                    if (!notification.is_read) {
-                                      handleMarkAsRead(notification.id);
-                                    }
-                                    if (notification.action_url.startsWith("http")) {
-                                      window.open(notification.action_url, "_blank");
-                                    } else {
-                                      window.location.href = notification.action_url;
-                                    }
+                                  if (!notification.is_read) {
+                                    handleMarkAsRead(notification.id);
+                                  }
+                                  if (actionTarget.kind === "external") {
+                                    window.open(actionTarget.url, "_blank", "noopener,noreferrer");
+                                  } else {
+                                    window.location.href = actionTarget.path;
                                   }
                                 }}
                                 className="h-7 px-2 text-xs font-medium"

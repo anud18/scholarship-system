@@ -100,7 +100,7 @@ PROFESSOR_REVIEW_NOTIFICATION_CONDITION_QUERY = """
                         u.id IS NULL
                         OR up.advisor_nycu_id IS NULL
                         OR up.advisor_nycu_id = ''
-                        OR up.advisor_nycu_id = u.nycu_id
+                        OR UPPER(up.advisor_nycu_id) = UPPER(u.nycu_id)
                     )
                 ) emails
                 WHERE email IS NOT NULL

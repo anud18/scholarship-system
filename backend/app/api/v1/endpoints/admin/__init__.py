@@ -28,6 +28,7 @@ from .applications import router as applications_router
 from .audit_logs import router as audit_logs_router
 from .bank_verification import router as bank_verification_router
 from .cache import router as cache_router
+from .college_applicant_stats import router as college_applicant_stats_router
 from .configurations import router as configurations_router
 from .dashboard import router as dashboard_router
 from .email_templates import router as email_templates_router
@@ -49,6 +50,7 @@ router.include_router(system_settings_router, tags=["Admin - System Settings"])
 router.include_router(applications_router, tags=["Admin - Applications"])
 router.include_router(announcements_router, tags=["Admin - Announcements"])
 router.include_router(scholarships_router, tags=["Admin - Scholarships"])
+router.include_router(college_applicant_stats_router, tags=["Admin - Scholarships"])
 router.include_router(permissions_router, tags=["Admin - Permissions"])
 router.include_router(rules_router, tags=["Admin - Rules"])
 router.include_router(email_templates_router, tags=["Admin - Email Templates"])

@@ -66,6 +66,11 @@ const nextConfig = {
     webpackBuildWorker: true,
     // Faster dev builds via package-level import optimization
     optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
+    // middleware.ts matches /api/*, and Next buffers at most 10MB of a
+    // request body through middleware by default — larger uploads reach the
+    // /api rewrite truncated (socket hang up). Match the backend's 50MB
+    // MAX_FILE_SIZE plus multipart overhead (same as nginx /api/ 55M).
+    middlewareClientMaxBodySize: '55mb',
   },
 
   // API Proxy for development environment

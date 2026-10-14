@@ -19,6 +19,13 @@ identical.
 
 from typing import Any, Dict
 
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
+
+# Excel's hard per-cell text limit; a longer string makes Excel report the file
+# as corrupt.
+EXCEL_CELL_MAX_CHARS = 32767
+_TRUNCATION_MARK = "…（已截斷）"
+
 # Characters that make a spreadsheet interpret the cell as a formula when they
 # lead the value. Tab/CR/LF are included because some importers strip a leading
 # apostrophe-less control char and re-expose the following `=`.
@@ -33,13 +40,20 @@ def is_formula_injection_risk(value: Any) -> bool:
 def sanitize_excel_cell(value: Any) -> Any:
     """Return ``value`` made safe to write into an openpyxl cell.
 
-    Only ``str`` values are altered — and only when they begin with a
-    formula-trigger character, by prefixing a single apostrophe. All other
-    types (int/float/bool/datetime/None/…) pass through unchanged so numeric and
-    date cells keep their native type and formatting.
+    Only ``str`` values are altered: control characters openpyxl refuses
+    (IllegalCharacterError — e.g. Word's \x0b line break in pasted free text)
+    are dropped, text over Excel's cell limit is truncated, and a value that
+    begins with a formula-trigger character gets a single apostrophe prefix.
+    All other types (int/float/bool/datetime/None/…) pass through unchanged so
+    numeric and date cells keep their native type and formatting.
     """
+    if not isinstance(value, str):
+        return value
+    value = ILLEGAL_CHARACTERS_RE.sub("", value)
     if is_formula_injection_risk(value):
-        return "'" + value
+        value = "'" + value
+    if len(value) > EXCEL_CELL_MAX_CHARS:
+        value = value[: EXCEL_CELL_MAX_CHARS - len(_TRUNCATION_MARK)] + _TRUNCATION_MARK
     return value
 
 

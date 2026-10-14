@@ -353,7 +353,7 @@ monitoring/config/grafana/provisioning/alerting/
 ├── rules-system.yml      (5 rules: CPU, memory, disk, load)
 ├── rules-container.yml   (4 rules: container down, CPU, memory, restarts)
 ├── rules-database.yml    (2 rules: Redis down, Redis memory)
-├── rules-monitoring.yml  (3 rules: Prometheus target down, Loki, storage)
+├── rules-monitoring.yml  (4 rules: Prometheus target down, Loki, storage, compaction failing)
 ├── contact-points.yml    (GitHub Issue webhook)
 └── notification-policies.yml
 ```

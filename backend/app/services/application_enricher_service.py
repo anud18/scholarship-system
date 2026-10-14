@@ -31,6 +31,12 @@ from app.utils.i18n import ScholarshipI18n
 
 logger = logging.getLogger(__name__)
 
+# Cap concurrent live SIS term lookups so a large list cannot flood the external API
+MAX_CONCURRENT_PERIOD_LOOKUPS = 8
+
+# Semester → SIS term code; yearly scholarships (None) accept either term
+SEMESTER_TERM_CODES = {"first": "1", "second": "2"}
+
 
 class ApplicationEnricherService:
     """批量增強申請數據服務"""
@@ -140,13 +146,17 @@ class ApplicationEnricherService:
 
     async def _fetch_scholarship_period_data(self, applications: List[Dict]) -> Dict[int, Optional[Dict]]:
         """
-        並行獲取所有申請的獎學金期間數據
+        取得所有申請的獎學金期間數據
+
+        優先使用 student_data 快照中的 trm_* 欄位（送件時已用同樣的學期規則抓取），
+        只有快照缺少對應學期資料的申請才即時查詢 SIS，且限制並行數，
+        避免清單每筆都打一次（學年制最多兩次）外部 API。
 
         Returns:
             {application_id: period_data}
         """
-        tasks = []
-        task_keys = []
+        period_map: Dict[int, Optional[Dict]] = {}
+        live_lookups = []
 
         for app in applications:
             # Skip only if academic_year is missing (semester can be None for yearly scholarships)
@@ -154,36 +164,65 @@ class ApplicationEnricherService:
                 continue
 
             student_data = app.get("student_data", {}) if isinstance(app.get("student_data"), dict) else {}
+            snapshot_period = self._period_data_from_snapshot(student_data, app["academic_year"], app.get("semester"))
+            if snapshot_period is not None:
+                period_map[app["id"]] = snapshot_period
+                continue
+
             student_id = get_nycu_id_from_data(student_data)
-
             if student_id and student_id != "N/A" and student_id != "未提供學號":
-                task = self._get_period_data_for_app(student_id, app["academic_year"], app["semester"])
-                tasks.append(task)
-                task_keys.append(app["id"])
+                live_lookups.append((app["id"], student_id, app["academic_year"], app.get("semester")))
 
-        if not tasks:
-            logger.debug("No scholarship period data to fetch")
-            return {}
+        if not live_lookups:
+            return period_map
 
-        logger.info(f"Fetching scholarship period data for {len(tasks)} students in parallel...")
+        logger.info(
+            f"Fetching live scholarship period data for {len(live_lookups)} applications without snapshot term data"
+        )
 
-        # 並行執行所有 API 調用
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        semaphore = asyncio.Semaphore(MAX_CONCURRENT_PERIOD_LOOKUPS)
 
-        # 統計成功率
-        success_count = sum(1 for r in results if not isinstance(r, Exception) and r is not None)
-        logger.info(f"Scholarship period data fetch completed: {success_count}/{len(tasks)} succeeded")
+        async def bounded_lookup(student_id: str, academic_year: int, semester: Optional[str]) -> Optional[Dict]:
+            async with semaphore:
+                return await self._get_period_data_for_app(student_id, academic_year, semester)
 
-        # 建立映射（失敗的會是 None）
-        period_map = {}
-        for key, result in zip(task_keys, results):
+        results = await asyncio.gather(
+            *(bounded_lookup(sid, year, sem) for _, sid, year, sem in live_lookups), return_exceptions=True
+        )
+
+        success_count = 0
+        for (app_id, *_), result in zip(live_lookups, results):
             if isinstance(result, Exception):
-                logger.debug(f"Failed to fetch period data for application {key}: {result}")
-                period_map[key] = None
+                logger.debug(f"Failed to fetch period data for application {app_id}: {result}")
+                period_map[app_id] = None
             else:
-                period_map[key] = result
+                period_map[app_id] = result
+                success_count += result is not None
+        logger.info(f"Scholarship period data fetch completed: {success_count}/{len(live_lookups)} succeeded")
 
         return period_map
+
+    @staticmethod
+    def _period_data_from_snapshot(student_data: Dict, academic_year: int, semester: Optional[str]) -> Optional[Dict]:
+        """
+        從 student_data 快照取出與申請學年/學期相符的學期資料
+
+        快照的學期規則與 _get_period_data_for_app 相同（first→1、second→2、
+        學年制→先 2 後 1），所以只需確認年度與學期別一致。
+
+        Returns:
+            含 trm_* 欄位的快照 dict，或 None（快照沒有對應學期資料）
+        """
+        if student_data.get("trm_studystatus") is None or student_data.get("trm_year") is None:
+            return None
+        if str(student_data["trm_year"]) != str(academic_year):
+            return None
+
+        expected_term = SEMESTER_TERM_CODES.get(semester)
+        if expected_term is not None and str(student_data.get("trm_term")) != expected_term:
+            return None
+
+        return student_data
 
     async def _get_period_data_for_app(
         self, student_id: str, academic_year: int, semester: Optional[str]

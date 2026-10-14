@@ -118,12 +118,16 @@ async def main():
             apps.append(app)
 
         # College ranking
+        # The admin global (college_code NULL) ranking this script creates; drafts
+        # may share the scope, but at most one ranking per scope is finalized.
         cr_result = await db.execute(
             select(CollegeRanking).where(
                 CollegeRanking.scholarship_type_id == phd.id,
                 CollegeRanking.academic_year == 114,
                 CollegeRanking.semester == "first",
                 CollegeRanking.sub_type_code == "nstc",
+                CollegeRanking.college_code.is_(None),
+                CollegeRanking.is_finalized.is_(True),
             )
         )
         ranking = cr_result.scalar_one_or_none()

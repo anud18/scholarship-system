@@ -24,7 +24,7 @@ the Development Login picker); the import creates their applications.
 Every student here is mirrored in `mock-student-api/main.py` (`_AY115_DEMO`)
 with term rows through 115-2, so SIS lookups and the eligibility rules resolve.
 
-Idempotent: users/profiles are created only when missing; applications,
+Idempotent: users are created only when missing; applications,
 rankings, rosters and schedules are skipped when they already exist.
 """
 
@@ -32,7 +32,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.application import Application, ApplicationStatus
@@ -51,7 +51,6 @@ from app.models.review import ApplicationReview, ApplicationReviewItem
 from app.models.roster_schedule import RosterSchedule, RosterScheduleStatus
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule, ScholarshipType, SubTypeSelectionMode
 from app.models.user import EmployeeStatus, User, UserRole, UserType
-from app.models.user_profile import UserProfile
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +81,7 @@ COLLEGE_NAMES = {"C": "資訊學院", "E": "電機學院"}
 # (stdcode, cname, ename, sex, academyno, academyname, depno, depname, enrollyear[, sub_type])
 # depno values are REAL departments.code rows so the 申請總表 join works:
 #   1550 資訊工程學系(C) · 155 資訊科學與工程研究所(C) · 3511 電機工程學系(E) · 183 電機學院博士班(E)
+#   · 4540 電機資訊國際博士學位學程(電資博學程, SIS academy Y -> E)
 StudentEntry = tuple
 
 # --- 續領生：113 新申請 → 114 續領（正在續領），115 為續領候選 ------------------
@@ -115,6 +115,9 @@ NEW_APPLICANTS_115 = [
     ("314551402", "新申請-郭芷瑄", "KUO,CHIH-HSUAN", 2, "C", "資訊學院", "155", "資訊科學與工程研究所", 114),
     ("315551403", "新申請-楊子萱", "YANG,TZU-HSUAN", 2, "E", "電機學院", "3511", "電機工程學系", 115),
     ("314551404", "新申請-許文傑", "HSU,WEN-CHIEH", 1, "E", "電機學院", "183", "電機學院博士班", 114),
+    # 電資博學程: SIS still files it under the retired 電資學院 (Y); the backend
+    # remaps Y -> E, so this applicant is reviewed and ranked by 電機學院.
+    ("314540405", "新申請-周以安", "CHOU,YI-AN", 1, "Y", "電資學院", "4540", "電機資訊國際博士學位學程", 114),
 ]
 
 # Advisor per college — both are seeded professor accounts (seed_test_users).
@@ -221,28 +224,14 @@ async def _get_or_create_student_user(session: AsyncSession, entry: StudentEntry
     return user
 
 
-async def _ensure_profile(session: AsyncSession, user: User, stdcode: str, advisor: Dict[str, str]) -> None:
-    """Profile carries the advisor trio so professor auto-assignment and
-    notifications work the same way they do for wizard-submitted students."""
-    existing = (await session.execute(select(UserProfile).where(UserProfile.user_id == user.id))).scalar_one_or_none()
-    if existing:
-        return
-    session.add(
-        UserProfile(
-            user_id=user.id,
-            account_number=_postal_account(stdcode),
-            advisor_name=advisor["name"],
-            advisor_email=advisor["email"],
-            advisor_nycu_id=advisor["nycu_id"],
-        )
-    )
-
-
 async def _ensure_account(session: AsyncSession, entry: StudentEntry) -> bool:
-    """User + profile for `entry`; True when the user was newly created."""
+    """User for `entry`; True when the user was newly created.
+
+    No UserProfile is seeded: the wizard prefills 郵局帳號 and 指導教授 from the
+    student's profile, and dev students should start with those blank like a real
+    first-time applicant. (Seeded applications still carry both in submitted_form_data.)"""
     before = await _find_user(session, entry[0])
-    user = await _get_or_create_student_user(session, entry)
-    await _ensure_profile(session, user, entry[0], ADVISOR_BY_COLLEGE[entry[4]])
+    await _get_or_create_student_user(session, entry)
     return before is None
 
 
@@ -332,20 +321,28 @@ async def _get_or_create_finalized_ranking(
 ) -> Optional[CollegeRanking]:
     """Finalized + distribution-executed college ranking for `year`, holding the
     college's 新申請 as allocated items — exactly what the matrix 造冊/preview
-    path joins on. Returns None when the ranking already existed."""
+    path joins on. Returns None when the period already has a finalized ranking
+    (seeded earlier, or locked by hand). Draft rankings made by hand on this dev DB
+    are deleted first, as 確認排名 would: a locked period keeps one ranking."""
     year = config.academic_year
     existing = (
         await session.execute(
-            select(CollegeRanking).where(
+            select(CollegeRanking.id, CollegeRanking.is_finalized).where(
                 CollegeRanking.scholarship_type_id == phd.id,
                 CollegeRanking.academic_year == year,
+                or_(CollegeRanking.semester.is_(None), CollegeRanking.semester == "yearly"),
                 CollegeRanking.college_code == college_code,
                 CollegeRanking.sub_type_code == RANKING_SUB_TYPE_CODE,
             )
         )
-    ).scalar_one_or_none()
-    if existing:
+    ).all()
+    if any(row.is_finalized for row in existing):
         return None
+    draft_ids = [row.id for row in existing]
+    if draft_ids:
+        await session.execute(delete(CollegeRankingItem).where(CollegeRankingItem.ranking_id.in_(draft_ids)))
+        await session.execute(delete(CollegeRanking).where(CollegeRanking.id.in_(draft_ids)))
+        logger.info("AY115 demo: deleted draft rankings %s of %s/%s before seeding", draft_ids, college_code, year)
 
     finalized_at = _submitted_at(year) + timedelta(days=30)
     ranking = CollegeRanking(

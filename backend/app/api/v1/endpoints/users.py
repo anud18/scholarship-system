@@ -16,6 +16,7 @@ from app.db.deps import get_db
 from app.models.user import EmployeeStatus, User, UserRole, UserType
 from app.schemas.user import BulkScholarshipAssignRequest, BulkScholarshipAssignResponse, UserCreate, UserUpdate
 from app.services.auth_service import AuthService
+from app.utils.college_code import normalize_college_code, require_known_college_code
 
 logger = logging.getLogger(__name__)
 
@@ -332,8 +333,10 @@ async def create_user(
     if existing_nycu_id:
         raise HTTPException(status_code=409, detail="NYCU ID already taken")
 
+    college_code = await require_known_college_code(db, user_data.college_code, actor_id=current_user.id)
+
     # Create user
-    user = await auth_service.register_user(user_data)
+    user = await auth_service.register_user(user_data.model_copy(update={"college_code": college_code}))
 
     return {
         "success": True,
@@ -371,6 +374,22 @@ async def update_user(
             raise HTTPException(status_code=403, detail="Cannot change your own role")
         if not current_user.is_super_admin():
             raise HTTPException(status_code=403, detail="Only super admin can change user roles")
+
+    # Validated after the authorization checks above. The admin edit form
+    # re-sends college_code on every save, so only a CHANGED value is checked:
+    # an account still holding a legacy code stays editable.
+    if "college_code" in update_dict:
+        # Normalize both sides: a legacy value stored as e.g. "old" must still
+        # match the form's re-sent "old" and keep the account editable.
+        if normalize_college_code(update_dict["college_code"]) == normalize_college_code(user.college_code):
+            update_dict = {k: v for k, v in update_dict.items() if k != "college_code"}
+        else:
+            update_dict = {
+                **update_dict,
+                "college_code": await require_known_college_code(
+                    db, update_dict["college_code"], actor_id=current_user.id
+                ),
+            }
 
     for field, value in update_dict.items():
         if field in allowed_fields and hasattr(user, field):
@@ -485,6 +504,7 @@ async def update_user_college(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    college_code = await require_known_college_code(db, college_code, actor_id=current_user.id)
     previous_college_code = user.college_code
     user.college_code = college_code
     await db.commit()

@@ -617,6 +617,12 @@ async def seed_development():
 
             await seed_ay115_demo(session)
 
+            # 9. 存摺封面 for the returning student accounts (uploaded to MinIO)
+            print("\n🏦 Initializing 存摺封面 for seeded students...")
+            from app.db.seed_passbooks import seed_passbooks
+
+            print(f"  ✓ 存摺封面 uploaded: +{await seed_passbooks(session)}")
+
             print("\n📋 Test User Accounts:")
             print("- Admin: admin@nycu.edu.tw")
             print("- Super Admin: super_admin@nycu.edu.tw")
@@ -634,6 +640,7 @@ async def seed_development():
                 "- 115 批次匯入 (帳號已建, 申請請用 Excel 匯入, 姓名前綴「匯入-」): 314551301 / 314551302 / 314551303 / 313551304"
             )
             print("- 115 新申請 (學生自行申請, 姓名前綴「新申請-」): 315551401 / 314551402 / 315551403 / 314551404")
+            print("- 115 新申請 電資博學程 (SIS 學院 Y → 歸電機學院 E 審核): 314540405")
 
             print("\n✅ Development seed completed successfully!")
 

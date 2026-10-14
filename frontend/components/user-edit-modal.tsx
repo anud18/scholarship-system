@@ -13,6 +13,10 @@ import {
   apiClient,
 } from "@/lib/api";
 import { logger } from "@/lib/utils/logger";
+import {
+  formatCollegeName,
+  sortByCollegeDisplayNumber,
+} from "@/lib/college-display-number";
 import { Badge } from "./ui/badge";
 
 interface Academy {
@@ -324,9 +328,9 @@ export function UserEditModal({
                   disabled={loadingAcademies}
                 >
                   <option value="">請選擇學院</option>
-                  {academies.map((academy) => (
+                  {sortByCollegeDisplayNumber(academies).map((academy) => (
                     <option key={academy.id} value={academy.code}>
-                      {academy.name} ({academy.code})
+                      {`${formatCollegeName(academy.code, academy.name)} (${academy.code})`}
                     </option>
                   ))}
                 </select>

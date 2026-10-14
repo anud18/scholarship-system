@@ -201,6 +201,8 @@ async def stage_rank(db, reviewers):
     svc = CollegeReviewService(db)
     out = {}
     for code, uid in reviewers.items():
+        # Every create inserts a new draft; it would 409 on a leftover locked
+        # ranking, but stage_seed already wiped every PhD/114 ranking.
         ranking = await svc.create_ranking(
             scholarship_type_id=PHD_TYPE,
             sub_type_code="default",
@@ -208,13 +210,17 @@ async def stage_rank(db, reviewers):
             semester=None,
             creator_id=uid,
             ranking_name=f"博士生獎學金 {YEAR} 全年",
-            force_new=True,
         )
         await db.commit()
-        await svc.finalize_ranking(ranking_id=ranking.id, finalizer_id=uid)
+        # Finalizing deletes the college's other drafts in the period — never
+        # another college's rankings (the #1034 cross-check below).
+        result = await svc.finalize_ranking(ranking_id=ranking.id, finalizer_id=uid)
         await db.commit()
         out[code] = ranking.id
-        say(f"   college {code}: ranking {ranking.id} finalized ({ranking.total_applications} apps)")
+        say(
+            f"   college {code}: ranking {ranking.id} finalized ({ranking.total_applications} apps,"
+            f" {len(result.deleted_rankings)} other draft(s) deleted)"
+        )
     # cross-check: all finalized simultaneously (issue #1034 regression)
     finalized = (
         await db.execute(

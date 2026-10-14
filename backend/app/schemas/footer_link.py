@@ -3,19 +3,14 @@
 
 from datetime import datetime
 from typing import List, Optional
-from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.core.url_safety import is_http_url
 from app.models.footer_link import FooterLinkSection, FooterLinkType
 
 MAX_TITLE_LENGTH = 200
 MAX_URL_LENGTH = 1000
-
-# Only these schemes may be stored. The footer renders each entry as an
-# <a href>, so permitting javascript:/data:/vbscript: would turn the admin
-# form into a stored-XSS vector for every visitor of the site.
-_ALLOWED_URL_SCHEMES = {"http", "https"}
 
 
 def _normalize_title(value: Optional[str]) -> Optional[str]:
@@ -34,11 +29,10 @@ def _validate_url(value: str) -> str:
     if len(stripped) > MAX_URL_LENGTH:
         raise ValueError(f"url must be <= {MAX_URL_LENGTH} chars")
 
-    parsed = urlparse(stripped)
-    if parsed.scheme.lower() not in _ALLOWED_URL_SCHEMES:
-        raise ValueError("url must start with http:// or https://")
-    if not parsed.netloc:
-        raise ValueError("url must include a host")
+    # The footer renders each entry as an <a href>, so permitting
+    # javascript:/data:/vbscript: would be stored XSS for every visitor.
+    if not is_http_url(stripped):
+        raise ValueError("url must be an http:// or https:// URL with a host")
     return stripped
 
 

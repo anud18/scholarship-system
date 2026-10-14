@@ -180,6 +180,20 @@ export function createApplicationFieldsApi() {
     },
 
     /**
+     * Persist a new display order for a scholarship type's documents (admin only)
+     * Type-safe: Request body validated against OpenAPI
+     */
+    reorderDocuments: async (
+      scholarshipType: string,
+      items: Array<{ id: number; display_order: number }>
+    ): Promise<ApiResponse<{ updated: number }>> => {
+      const response = await typedClient.raw.PATCH('/api/v1/application-fields/documents/reorder', {
+        body: { scholarship_type: scholarshipType, items },
+      });
+      return toApiResponse<{ updated: number }>(response);
+    },
+
+    /**
      * Delete a document requirement
      * Type-safe: Path parameter validated against OpenAPI
      */

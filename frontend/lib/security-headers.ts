@@ -124,8 +124,12 @@ export const CROSS_ORIGIN_RESOURCE_POLICY = "same-origin";
  * middleware.ts emits this header on every matched route — pages AND the
  * framed `/api/v1/preview*` / `/api/email/*` responses — and why the nginx
  * preview/email blocks re-declare it. Dropping it from a framed response
- * breaks every file preview with a silent blank iframe; blob: iframes are
- * fine (they inherit the creator document's policy container).
+ * breaks every file preview with a silent blank iframe. A blob: iframe is a
+ * different case: it inherits the creator document's policy container, COEP
+ * included, so it needs no header of its own — but it inherits
+ * `frame-ancestors` too, and Safari checks that against the creating page. That
+ * is why middleware.ts serves every page `frame-ancestors 'self'`, not 'none'
+ * (#1434): under 'none' a framed blob: PDF paints blank in Safari.
  */
 export const CROSS_ORIGIN_EMBEDDER_POLICY = "require-corp";
 
@@ -155,3 +159,27 @@ export const CROSS_ORIGIN_EMBEDDER_POLICY = "require-corp";
  */
 export const SONNER_EMPTY_STYLE_HASH = "'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='";
 export const SONNER_STYLE_HASH = "'sha256-Od9mHMH7x2G6QuoV3hsPkDCwIyqbg2DX3F5nLeCYQBc='";
+
+/**
+ * Content-Security-Policy for root-level `frontend/public/` files (icons,
+ * images, fonts). Sent by middleware.ts's static-asset branch and by the nginx
+ * public-asset block, which hides the upstream copy so exactly one policy is
+ * sent.
+ *
+ * WHY: ZAP filed /favicon.ico as "CSP Header Not Set" (Medium) — the 2026-10
+ * active scan through nginx, then the release baseline against `next start`.
+ * Asset-like URLs got no CSP at all — including Next's HTML 404 page for a
+ * missing asset, and any SVG opened directly as a document, whose scripts
+ * would run on this origin. Both layers send it because the baseline scan
+ * bypasses nginx.
+ * An `<img>` load ignores the image's own CSP, so normal rendering is
+ * unaffected; a 404 page for a missing asset URL now renders unstyled, which
+ * is intended.
+ *
+ * No `style-src 'unsafe-inline'`: none of the public SVGs use inline styles,
+ * and it would trade this finding for ZAP 10055 (issue #1273 removed it from
+ * the page policy). Kept off every worker script — `/_next/static/` JS and
+ * `/pdf.worker.min.mjs` — because a worker obeys its own response's CSP.
+ */
+export const STATIC_ASSET_CSP =
+  "default-src 'none'; img-src 'self' data:; frame-ancestors 'self'; base-uri 'none'; form-action 'none'";

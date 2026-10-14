@@ -5,7 +5,7 @@ Application field configuration schemas
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.application_field import FieldType
 
@@ -108,7 +108,6 @@ class ApplicationFieldResponse(ApplicationFieldBase):
     updated_by: Optional[int] = None
     # Fixed field properties
     is_fixed: Optional[bool] = Field(None, description="Is this a fixed field")
-    prefill_value: Optional[str] = Field(None, description="Prefilled value from user profile")
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -176,6 +175,34 @@ class ApplicationDocumentUpdate(BaseModel):
     validation_rules: Optional[Dict[str, Any]] = None
 
 
+PG_INT_MAX = 2**31 - 1
+MAX_REORDER_ITEMS = 500
+
+
+class ApplicationDocumentReorderItem(BaseModel):
+    # Bounded to the Integer columns so an out-of-range value is a 422, not a DB error.
+    id: int = Field(..., ge=1, le=PG_INT_MAX)
+    display_order: int = Field(..., ge=0, le=PG_INT_MAX)
+
+
+class ApplicationDocumentReorderRequest(BaseModel):
+    """New display order for one scholarship type's documents (審核管理 drag-sort)."""
+
+    scholarship_type: str = Field(..., max_length=50)
+    items: List[ApplicationDocumentReorderItem] = Field(..., min_length=1, max_length=MAX_REORDER_ITEMS)
+
+    @field_validator("items")
+    @classmethod
+    def _unique(cls, v: List[ApplicationDocumentReorderItem]) -> List[ApplicationDocumentReorderItem]:
+        orders = [i.display_order for i in v]
+        if len(orders) != len(set(orders)):
+            raise ValueError("display_order values must be unique within payload")
+        ids = [i.id for i in v]
+        if len(ids) != len(set(ids)):
+            raise ValueError("id values must be unique within payload")
+        return v
+
+
 class ApplicationDocumentResponse(ApplicationDocumentBase):
     """Schema for application document response"""
 
@@ -186,7 +213,6 @@ class ApplicationDocumentResponse(ApplicationDocumentBase):
     updated_by: Optional[int] = None
     # Fixed document properties
     is_fixed: Optional[bool] = Field(None, description="Is this a fixed document")
-    existing_file_url: Optional[str] = Field(None, description="URL of existing file from user profile")
 
     model_config = ConfigDict(from_attributes=True)
 

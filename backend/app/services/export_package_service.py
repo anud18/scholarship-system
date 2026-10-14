@@ -35,6 +35,7 @@ from sqlalchemy.orm import selectinload
 from app.core.config import settings
 from app.models.application import Application
 from app.models.scholarship import ScholarshipType
+from app.models.student import Academy
 from app.services.export_summary_tables import build_embedded_summary_tables
 from app.services.form_field_labels import (
     ACCOUNT_FIELD_SYNONYMS,
@@ -44,7 +45,11 @@ from app.services.form_field_labels import (
 from app.services.minio_service import MinIOService
 from app.services.pdf_fonts import CJK_FONT_NAME, ensure_cjk_font
 from app.services.pdf_merge import MergeItem, build_merged_pdf
+from app.services.professor_review_export import ProfessorReviewData, load_professor_review_data
+from app.services.professor_review_pdf import PROFESSOR_REVIEW_PDF_LABEL, build_professor_review_pdf
+from app.services.sub_type_label_map import sub_type_labels_of
 from app.services.zip_stream import COPY_CHUNK_SIZE, ZipStreamSink, write_stream_entry
+from app.utils.application_helpers import get_college_code_from_data
 from app.utils.export_download import sanitise_filename_part
 
 logger = logging.getLogger(__name__)
@@ -238,15 +243,42 @@ def _uploaded_file_name(af, student_prefix: str, label: str, count: int, total: 
     return f"{student_prefix}_{label}{suffix}{ext}"
 
 
-def _group_by_department(applications: List[Application]) -> Dict[str, List[Application]]:
-    """Folder key per application: `{depno}_{depname}` from the SIS term snapshot."""
+def _college_folder(app: Application, academy_names: Dict[str, str]) -> Tuple[str, str]:
+    """`({academyno}_{name}, name)` for the college folder of a whole-school export.
+
+    The code comes from the same snapshot field the college filter uses
+    (std_academyno); the display name is resolved academies-table first and
+    only falls back to the snapshot's trm_academyname.
+    """
+    student = app.student_data or {}
+    code = get_college_code_from_data(student) or "unknown"
+    name = academy_names.get(code) or student.get("trm_academyname") or "未知學院"
+    return f"{_sanitize_filename(code)}_{_sanitize_filename(name)}", name
+
+
+def _group_by_department(
+    applications: List[Application], academy_names: Optional[Dict[str, str]] = None
+) -> Tuple[Dict[str, List[Application]], Dict[str, str]]:
+    """Folder key per application: `{depno}_{depname}` from the SIS term snapshot.
+
+    With ``academy_names`` (whole-school export) every key is nested under a
+    college folder, `{academyno}_{academyname}/{depno}_{depname}`, so each
+    college gets its own directory. The second return value maps each college
+    folder to its display name (empty for a single-college export).
+    """
     dept_groups: Dict[str, List[Application]] = defaultdict(list)
+    college_labels: Dict[str, str] = {}
     for app in applications:
         student = app.student_data or {}
         dep_no = student.get("trm_depno", "unknown")
         dep_name = student.get("trm_depname", "未知系所")
-        dept_groups[f"{_sanitize_filename(dep_no)}_{_sanitize_filename(dep_name)}"].append(app)
-    return dept_groups
+        key = f"{_sanitize_filename(dep_no)}_{_sanitize_filename(dep_name)}"
+        if academy_names is not None:
+            college_folder, college_name = _college_folder(app, academy_names)
+            college_labels[college_folder] = college_name
+            key = f"{college_folder}/{key}"
+        dept_groups[key].append(app)
+    return dept_groups, college_labels
 
 
 def _first_college_name(applications: List[Application]) -> Optional[str]:
@@ -284,13 +316,31 @@ class ExportPlan:
     semester: Optional[str]
     college_name: Optional[str]
     dept_groups: Dict[str, List[Application]]
+    #: college folder → display name; only populated for whole-school exports
+    college_labels: Dict[str, str]
     field_labels: Dict[str, str]
     summary_tables: Dict[str, bytes]
     zip_filename: str
+    #: professor verdicts for the 合併檔's 指導教授評語 page (empty for a precheck)
+    professor_review: ProfessorReviewData
+    sub_type_labels: Dict[str, str]
 
     @property
     def application_count(self) -> int:
         return sum(len(apps) for apps in self.dept_groups.values())
+
+
+def _merged_subtitle_lines(app: Application, plan: ExportPlan) -> List[str]:
+    """Scholarship/term line + student line heading the 合併檔 and its pages."""
+    student = app.student_data or {}
+    semester_map = {"first": "第一學期", "second": "第二學期"}
+    semester_label = semester_map.get(plan.semester, "全學年") if plan.semester else "全學年"
+    return [
+        f"{plan.scholarship_name} {plan.academic_year}學年度 {semester_label}",
+        # Display surface: raw SIS values (sanitization is for ZIP paths),
+        # with the same fallbacks as folder naming.
+        f"{student.get('std_stdcode', 'unknown')} {student.get('std_cname', '未知')}",
+    ]
 
 
 class ExportPackageService:
@@ -312,6 +362,10 @@ class ExportPackageService:
         Raises ValueError for the user-facing rejections (mapped to 400 by the
         endpoint). All DB work — scholarship type, applications with their
         files, form-field labels, the embedded 申請總表 workbooks — happens here.
+
+        With ``college_code`` the archive is that college's department folders;
+        without it (whole-school export) every department folder sits inside
+        its college's folder.
         The dry-run precheck passes ``include_summary_tables=False``: it only
         needs the filename and count, and the workbooks are the expensive part.
         """
@@ -332,21 +386,44 @@ class ExportPackageService:
         field_labels = await load_form_field_labels(self.db, scholarship_type.code)
 
         college_name = _first_college_name(applications) if college_code else None
-        dept_groups = _group_by_department(applications)
+        academy_names = None if college_code else await self._load_academy_names()
+        dept_groups, college_labels = _group_by_department(applications, academy_names)
 
         # 3. Embedded 申請總表 workbooks from the SAME dept_groups. Best-effort:
         # a wholesale failure (e.g. an aux-data DB error before the per-table
         # try/except) must not lose the primary materials ZIP — degrade to an
         # error placeholder.
         summary_tables: Dict[str, bytes] = {}
+        professor_review = ProfessorReviewData()
         if include_summary_tables:
+            # Same applications as the ZIP; shared by the summary tables and the
+            # merged PDFs' 指導教授評語 pages. A precheck needs neither.
+            # Best-effort like the tables: a load failure must not lose the
+            # materials ZIP — it degrades to no review columns/pages plus a
+            # root error placeholder saying why.
+            review_error: Optional[str] = None
+            try:
+                professor_review = await load_professor_review_data(
+                    self.db, scholarship_type=scholarship_type, applications=applications
+                )
+            except Exception as e:
+                logger.exception("professor review data load failed")
+                review_error = f"指導教授審核資料載入失敗：{e}"
             try:
                 summary_tables = await build_embedded_summary_tables(
-                    self.db, scholarship_type, dept_groups, college_name, academic_year
+                    self.db,
+                    scholarship_type,
+                    dept_groups,
+                    college_name,
+                    academic_year,
+                    college_labels,
+                    professor_review=professor_review,
                 )
             except Exception as e:
                 logger.exception("embedded summary tables generation failed wholesale")
                 summary_tables = {"_錯誤_申請總表生成失敗.txt": f"申請總表生成失敗：{e}".encode("utf-8")}
+            if review_error:
+                summary_tables = {**summary_tables, "_錯誤_指導教授審核資料載入失敗.txt": review_error.encode("utf-8")}
 
         return ExportPlan(
             scholarship_name=scholarship_type.name,
@@ -354,9 +431,12 @@ class ExportPackageService:
             semester=semester,
             college_name=college_name,
             dept_groups=dept_groups,
+            college_labels=college_labels,
             field_labels=field_labels,
             summary_tables=summary_tables,
             zip_filename=_build_zip_filename(scholarship_type.name, academic_year, semester, college_name),
+            professor_review=professor_review,
+            sub_type_labels=sub_type_labels_of(scholarship_type),
         )
 
     async def iter_export_zip(self, plan: ExportPlan) -> AsyncIterator[bytes]:
@@ -401,6 +481,11 @@ class ExportPackageService:
             raise ValueError(f"找不到獎學金類型 ID={scholarship_type_id}")
         return scholarship
 
+    async def _load_academy_names(self) -> Dict[str, str]:
+        """academies.code → name, the authoritative source for college folder names."""
+        result = await self.db.execute(select(Academy.code, Academy.name))
+        return {code: name for code, name in result.all() if code}
+
     async def _query_applications(
         self,
         scholarship_type_id: int,
@@ -430,9 +515,7 @@ class ExportPackageService:
         # Filter by college_code using student_data
         if college_code:
             applications = [
-                app
-                for app in applications
-                if app.student_data and app.student_data.get("std_academyno") == college_code
+                app for app in applications if get_college_code_from_data(app.student_data or {}) == college_code
             ]
 
         return applications
@@ -456,12 +539,14 @@ class ExportPackageService:
         base_path = f"{dept_folder}/{student_prefix}"
 
         summary_item = self._add_summary_pdf(zf, base_path, student_prefix, app, plan)
+        review_items = self._professor_review_items(app, plan)
         dynamic_items = self._add_uploaded_files(zf, base_path, student_prefix, app)
-        # Extra per-student PDF stitching the summary and all dynamic documents
-        # together. Built for every student — summary_item is always present, so
-        # a student who uploaded no dynamic documents still gets one holding
-        # just their summary and reviewers work from the same file throughout.
-        self._add_merged_pdf(zf, base_path, student_prefix, app, plan, [summary_item] + dynamic_items)
+        # Extra per-student PDF stitching the summary, the professor's comments
+        # and all dynamic documents together. Built for every student —
+        # summary_item is always present, so a student who uploaded no dynamic
+        # documents still gets one holding just their summary and reviewers
+        # work from the same file throughout.
+        self._add_merged_pdf(zf, base_path, student_prefix, app, plan, [summary_item] + review_items + dynamic_items)
 
     def _add_summary_pdf(
         self, zf: zipfile.ZipFile, base_path: str, student_prefix: str, app: Application, plan: ExportPlan
@@ -497,6 +582,36 @@ class ExportPackageService:
                 content=None,
                 error=f"{SUMMARY_PDF_LABEL} PDF 生成失敗：{str(e)}",
             )
+
+    def _professor_review_items(self, app: Application, plan: ExportPlan) -> List[MergeItem]:
+        """The 合併檔-only 指導教授評語 page, as a merge item.
+
+        Present when the professor reviewed the application or its flow
+        requires a professor review (then it shows 未審核); omitted for flows
+        without a professor step. A render failure becomes a placeholder page.
+        """
+        review = plan.professor_review
+        if not review.entries(app) and not review.is_review_required(app):
+            return []
+        filename = f"{PROFESSOR_REVIEW_PDF_LABEL}.pdf"
+        try:
+            content = build_professor_review_pdf(
+                subtitle_lines=_merged_subtitle_lines(app, plan),
+                application=app,
+                review=review,
+                sub_type_labels=plan.sub_type_labels,
+            )
+            return [MergeItem(label=PROFESSOR_REVIEW_PDF_LABEL, filename=filename, content=content)]
+        except Exception as e:
+            logger.exception("Failed to generate professor review PDF for app %s", app.id)
+            return [
+                MergeItem(
+                    label=PROFESSOR_REVIEW_PDF_LABEL,
+                    filename=filename,
+                    content=None,
+                    error=f"{PROFESSOR_REVIEW_PDF_LABEL} PDF 生成失敗：{str(e)}",
+                )
+            ]
 
     def _add_uploaded_files(
         self, zf: zipfile.ZipFile, base_path: str, student_prefix: str, app: Application
@@ -550,20 +665,12 @@ class ExportPackageService:
         items: List[MergeItem],
     ) -> None:
         """Write the per-student 申請資料合併檔, or an error placeholder."""
-        student = app.student_data or {}
-        semester_map = {"first": "第一學期", "second": "第二學期"}
-        semester_label = semester_map.get(plan.semester, "全學年") if plan.semester else "全學年"
         try:
             # pypdf/Pillow/reportlab do seconds of pure CPU per student; this
             # already runs off the event loop (see iter_export_zip).
             merged_bytes = build_merged_pdf(
                 title=MERGED_PDF_LABEL,
-                subtitle_lines=[
-                    f"{plan.scholarship_name} {plan.academic_year}學年度 {semester_label}",
-                    # Display surface: raw SIS values (sanitization is for
-                    # ZIP paths), with the same fallbacks as folder naming.
-                    f"{student.get('std_stdcode', 'unknown')} {student.get('std_cname', '未知')}",
-                ],
+                subtitle_lines=_merged_subtitle_lines(app, plan),
                 items=items,
             )
             zf.writestr(_unique_zip_path(zf, f"{base_path}/{student_prefix}_{MERGED_PDF_LABEL}.pdf"), merged_bytes)

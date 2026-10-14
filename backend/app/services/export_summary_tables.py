@@ -3,7 +3,9 @@ Embedded Summary Tables (申請總表) for the export package.
 
 Builds the 學生資料彙整表 Excel workbooks embedded inside the /export-package
 ZIP: one college-level table at the ZIP root plus one per-department table
-inside each department folder.
+inside each department folder. A whole-school export (department folders
+nested under college folders) additionally gets one table per college folder,
+with the root table covering the whole school.
 
 Applications are NOT re-queried here — they are the exact same dept_groups
 ExportPackageService already assembled, so every table's rows match the
@@ -29,6 +31,7 @@ from app.services.college_ranking_export_service import (
     CollegeRankingExportService,
     ExportRow,
 )
+from app.services.professor_review_export import ProfessorReviewData
 
 logger = logging.getLogger(__name__)
 
@@ -55,12 +58,19 @@ async def build_embedded_summary_tables(
     dept_groups: Dict[str, List[Application]],
     college_name: Optional[str],
     academic_year: int,
+    college_labels: Optional[Dict[str, str]] = None,
+    *,
+    professor_review: ProfessorReviewData,
 ) -> Dict[str, bytes]:
     """Return { zip_inner_path : xlsx_bytes } for the college-level table
-    (ZIP root) plus one table per department folder.
+    (ZIP root) plus one table per department folder — and, when
+    ``college_labels`` (college folder → display name) is given, one table
+    inside each college folder.
 
     The same dept_groups assembled by ExportPackageService is used directly,
     guaranteeing each table's rows match the student folders next to it.
+    ``professor_review`` (load_professor_review_data over the same
+    applications) fills the 指導教授審核結果/評語 columns.
     """
     # Lazy import: keep this module's top level free of export_package_service
     # (which pulls in reportlab) so callers that only need _sort_key — e.g. the
@@ -106,6 +116,7 @@ async def build_embedded_summary_tables(
                 sub_type_labels=sub_type_labels,
                 title=f"{base_name} - {scope}",
                 sheet_name=sheet_name,
+                professor_review=professor_review,
             )
         except Exception as e:
             logger.exception("summary table build failed: %s", ok_key)
@@ -114,9 +125,12 @@ async def build_embedded_summary_tables(
     # Single pass: build each department's table and accumulate the college-level rows
     # (department-grouped, sorted within each group) so rows are sorted/built only once.
     college_rows: List[ExportRow] = []
+    rows_by_college_folder: Dict[str, List[ExportRow]] = {}
     for dept_folder, apps in sorted(dept_groups.items()):
         dept_rows = _rows(apps)
         college_rows.extend(dept_rows)
+        if college_labels and "/" in dept_folder:
+            rows_by_college_folder.setdefault(dept_folder.split("/", 1)[0], []).extend(dept_rows)
         dept_name = _dept_name_from_apps(apps)
         dept_fname = _sanitize_filename(f"{base_name}_{dept_name}.xlsx")
         await _emit(
@@ -125,6 +139,16 @@ async def build_embedded_summary_tables(
             f"{dept_folder}/{dept_fname}",
             f"{dept_folder}/_錯誤_總表生成失敗.txt",
             "系總表生成失敗",
+        )
+
+    for college_folder, folder_rows in sorted(rows_by_college_folder.items()):
+        label = (college_labels or {}).get(college_folder) or college_folder
+        await _emit(
+            folder_rows,
+            label,
+            f"{college_folder}/{_sanitize_filename(f'{base_name}_{label}.xlsx')}",
+            f"{college_folder}/_錯誤_學院總表生成失敗.txt",
+            "學院總表生成失敗",
         )
 
     college_label = college_name or "全校"

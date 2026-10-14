@@ -63,6 +63,13 @@ export function RankingCard({
   const isDistributed = Boolean(ranking.distribution_executed);
   const canBeUsedForRoster = isDistributed && isLocked;
   const isEditing = editingId === ranking.id;
+  const lockToggleLabel = isLocked
+    ? locale === "zh"
+      ? "解除鎖定"
+      : "Unlock ranking"
+    : locale === "zh"
+      ? "確認排名（鎖定）"
+      : "Confirm ranking (lock)";
 
   return (
     <Card
@@ -133,6 +140,8 @@ export function RankingCard({
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8"
+                  aria-label={lockToggleLabel}
+                  title={lockToggleLabel}
                   onClick={(e) => {
                     e.stopPropagation();
                     onToggleLock(ranking.id);

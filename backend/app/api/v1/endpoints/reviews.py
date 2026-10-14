@@ -31,14 +31,17 @@ from app.utils.college_scope import college_user_may_access
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# The college has no review-submission step: its recommendation IS the ranking.
+COLLEGE_REVIEW_FORBIDDEN_DETAIL = "學院僅能於排名中推薦或不推薦，無法提交審核"
+
 
 def _assert_college_scope(current_user: User, application: Optional[Application], *, detail: str) -> None:
     """Restrict a 學院 user to applications from their own college (#1223 A).
 
     Call this from EVERY endpoint in this module that resolves an application for
     a college user. Before #1223 the whole file grouped 學院 with admin, so a
-    College-A reviewer could read — and through POST /applications/{id}/review,
-    WRITE — any other college's review record.
+    College-A reviewer could read any other college's review record. (Review
+    WRITES are refused for every college user — see COLLEGE_REVIEW_FORBIDDEN_DETAIL.)
 
     A missing application raises the same 403 as a cross-college one so the
     response does not distinguish "not yours" from "does not exist".
@@ -63,9 +66,8 @@ def _assert_review_submission_allowed(current_user: User, application: Applicati
     - A professor full-reject is terminal for the professor (Review-Flow
       Policy): once the application is rejected, only college/admin may
       revert it (回發) — the professor cannot re-review here.
-    - A 學院 user may only review their own college's applicants (#1223 A).
-      Submitting a review on another college's application is strictly worse
-      than reading it, which is why this gate lives alongside the professor one.
+    - A 學院 user never submits a review: the college recommends (or not)
+      through its ranking alone (``CollegeRankingItem.college_rejected``).
     - admin/super_admin behavior is unchanged (sub-type filtering still applies
       downstream via get_reviewable_subtypes).
     """
@@ -73,7 +75,7 @@ def _assert_review_submission_allowed(current_user: User, application: Applicati
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="學生無權提交審查")
 
     if current_user.is_college():
-        _assert_college_scope(current_user, application, detail="您無權審查其他學院的申請")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=COLLEGE_REVIEW_FORBIDDEN_DETAIL)
 
     if current_user.is_professor():
         if application.professor_id != current_user.id:
@@ -502,42 +504,30 @@ async def submit_application_review(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Submit review for an application (professor, college, or admin)
+    Submit review for an application (professor or admin)
 
     Role-based permissions:
     - Professor: can review all sub-types
-    - College: can review sub-types not rejected by professor
+    - College: never (the college recommends through its ranking alone)
     - Admin: can review sub-types not rejected by professor or college
 
     Permission filtering handled by ReviewService.get_reviewable_subtypes()
     """
 
+    # The college's only verdict is its ranking (推薦 / N 不推薦).
+    if current_user.is_college():
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=COLLEGE_REVIEW_FORBIDDEN_DETAIL)
+
     # Multi-role authorization check
-    if not (
-        current_user.is_professor()
-        or current_user.is_college()
-        or current_user.is_admin()
-        or current_user.is_super_admin()
-    ):
+    if not (current_user.is_professor() or current_user.is_admin() or current_user.is_super_admin()):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Professor, college, or admin role required for application review",
+            detail="Professor or admin role required for application review",
         )
 
     # Validate application_id
     if application_id <= 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid application ID")
-
-    # SECURITY (#1223 A): a 學院 user may only review their own college's
-    # applicants. The role gate above accepts ANY college user, so without this a
-    # College-A reviewer could write an ApplicationReview against College-E's
-    # applicant — the write counterpart of the read hole fixed in this file.
-    if current_user.is_college():
-        _assert_college_scope(
-            current_user,
-            await db.get(Application, application_id),
-            detail="您無權審查其他學院的申請",
-        )
 
     # Authorization scoping (#1081): a professor may only review an application
     # where they are the assigned professor, and a professor full-reject is

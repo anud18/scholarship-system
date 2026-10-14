@@ -68,6 +68,7 @@ export async function GET(request: NextRequest) {
     const scholarshipTypeId = searchParams.get("scholarship_type_id");
     const academicYear = searchParams.get("academic_year");
     const semester = searchParams.get("semester");
+    const collegeCode = searchParams.get("college_code");
     const dryRun = searchParams.get("dry_run");
 
     if (!token) {
@@ -100,6 +101,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Admin-only college scope; the backend enforces who may pass it.
+    if (collegeCode !== null && !/^[A-Za-z0-9_-]{1,10}$/.test(collegeCode)) {
+      return NextResponse.json(
+        { error: "Invalid college_code value" },
+        { status: 400 }
+      );
+    }
+
     if (dryRun !== null && !["true", "false"].includes(dryRun)) {
       return NextResponse.json(
         { error: "Invalid dry_run value" },
@@ -122,6 +131,9 @@ export async function GET(request: NextRequest) {
     backendUrl.searchParams.set("academic_year", academicYear);
     if (semester) {
       backendUrl.searchParams.set("semester", semester);
+    }
+    if (collegeCode) {
+      backendUrl.searchParams.set("college_code", collegeCode);
     }
     if (dryRun === "true") {
       backendUrl.searchParams.set("dry_run", "true");

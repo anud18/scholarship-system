@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.core.url_safety import validate_action_url
 from app.models.notification import NotificationPriority, NotificationType
 
 
@@ -47,6 +48,11 @@ class NotificationCreate(BaseModel):
     expires_at: Optional[datetime] = Field(None, description="過期時間")
     metadata: Optional[Dict[str, Any]] = Field(None, description="額外資料")
 
+    @field_validator("action_url")
+    @classmethod
+    def _check_action_url(cls, v):
+        return validate_action_url(v)
+
     @field_validator("notification_type")
     @classmethod
     def validate_notification_type(cls, v):
@@ -77,6 +83,11 @@ class NotificationUpdate(BaseModel):
     expires_at: Optional[datetime] = Field(None)
     metadata: Optional[Dict[str, Any]] = Field(None)
     is_dismissed: Optional[bool] = Field(None, description="是否已關閉")
+
+    @field_validator("action_url")
+    @classmethod
+    def _check_action_url(cls, v):
+        return validate_action_url(v)
 
     @field_validator("notification_type")
     @classmethod

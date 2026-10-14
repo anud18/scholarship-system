@@ -1577,6 +1577,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/scholarships/{scholarship_identifier}/college-applicant-stats/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export College Applicant Stats
+         * @description Download 統計各學院學生申請人數 (.xlsx) for one scholarship and academic year.
+         */
+        get: operations["export_college_applicant_stats_api_v1_admin_scholarships__scholarship_identifier__college_applicant_stats_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/scholarship-permissions": {
         parameters: {
             query?: never;
@@ -3192,6 +3212,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/application-fields/documents/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Reorder Documents
+         * @description Persist a new display order for a scholarship type's documents. Admin only.
+         */
+        patch: operations["reorder_documents_api_v1_application_fields_documents_reorder_patch"];
+        trace?: never;
+    };
     "/api/v1/application-fields/documents/{document_id}": {
         parameters: {
             query?: never;
@@ -4601,7 +4641,12 @@ export interface paths {
         put?: never;
         /**
          * Create Ranking
-         * @description Create a new ranking for a scholarship sub-type
+         * @description Create a NEW draft ranking of the caller's college for a scholarship sub-type and period.
+         *
+         *     A college may keep several draft rankings per (scholarship type, sub-type,
+         *     academic year, semester) and compare them; 確認排名 (finalize) keeps one and
+         *     deletes the others. Returns HTTP 409 while the caller's scope holds a finalized
+         *     ranking (unlock it first) or a distributed one (sync it instead).
          */
         post: operations["create_ranking_api_v1_college_review_rankings_post"];
         delete?: never;
@@ -4630,10 +4675,11 @@ export interface paths {
         post?: never;
         /**
          * Delete Ranking
-         * @description Delete a ranking
+         * @description Delete a draft ranking
          *
-         *     Only the creator or admin can delete a ranking.
-         *     Cannot delete finalized rankings.
+         *     The owning college's reviewers or an admin can delete a ranking. Finalized
+         *     rankings must be unlocked first (409); rankings whose distribution was executed
+         *     or that a payment roster uses are never deleted (409).
          */
         delete: operations["delete_ranking_api_v1_college_review_rankings__ranking_id__delete"];
         options?: never;
@@ -4661,6 +4707,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/college-review/rankings/{ranking_id}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sync Ranking
+         * @description 同步申請名單: bring a non-finalized ranking in line with the current applications.
+         *
+         *     Eligible applications not yet in the ranking are added (renewals after the last
+         *     ranked renewal, others at the end but ahead of any trailing college-rejected 'N'
+         *     rows) and ranked ones that are no longer eligible are removed; positions are
+         *     renumbered 1..n. A ranking whose distribution was executed (unlocked for
+         *     補充匯入) is append-only: new rows go after the last position. 409 while finalized.
+         */
+        post: operations["sync_ranking_api_v1_college_review_rankings__ranking_id__sync_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/college-review/rankings/{ranking_id}/finalize": {
         parameters: {
             query?: never;
@@ -4672,7 +4744,12 @@ export interface paths {
         put?: never;
         /**
          * Finalize Ranking
-         * @description Finalize a ranking (makes it read-only)
+         * @description Finalize (lock) a ranking and delete the other rankings of its scope.
+         *
+         *     Only the finalized ranking survives; while it stays locked no new ranking can be
+         *     created. Returns 409 (nothing deleted) when another ranking of the scope is
+         *     already finalized, was distributed or is used by a payment roster, or is not in
+         *     `expected_sibling_ids` (created after the user's list was loaded).
          */
         post: operations["finalize_ranking_api_v1_college_review_rankings__ranking_id__finalize_post"];
         delete?: never;
@@ -5000,6 +5077,10 @@ export interface paths {
          *     the archive, so the UI can surface a 400/403 reason before handing the real
          *     download to the browser's download manager.
          *
+         *     A college reviewer is always scoped to their own college. An admin may
+         *     pick one college with ``college_code``; without it the archive covers the
+         *     whole school with one folder per college.
+         *
          *     SECURITY: Bulk PII export. Every call is audit-logged with the actor's
          *     user_id and role, scholarship/period filters and application count, and
          *     the end of the stream is logged with the bytes actually sent. 403
@@ -5150,11 +5231,11 @@ export interface paths {
         put?: never;
         /**
          * Submit Application Review
-         * @description Submit review for an application (professor, college, or admin)
+         * @description Submit review for an application (professor or admin)
          *
          *     Role-based permissions:
          *     - Professor: can review all sub-types
-         *     - College: can review sub-types not rejected by professor
+         *     - College: never (the college recommends through its ranking alone)
          *     - Admin: can review sub-types not rejected by professor or college
          *
          *     Permission filtering handled by ReviewService.get_reviewable_subtypes()
@@ -6692,6 +6773,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/payment-rosters/{roster_id}/college-award-stats/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Roster College Award Stats
+         * @description 匯出該份造冊的統計各學院學生獲獎人數 (.xlsx)
+         *     Export the per-college award count of the students included in this roster.
+         *
+         *     Counts the 納入造冊 items only (``is_included`` is the roster's sole
+         *     head-count criterion; manual removals are soft-excluded rows). Only a
+         *     finished (COMPLETED / LOCKED) roster has a final item set to count.
+         */
+        get: operations["export_roster_college_award_stats_api_v1_payment_rosters__roster_id__college_award_stats_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/payment-rosters/{roster_id}/audit-logs": {
         parameters: {
             query?: never;
@@ -7984,6 +8090,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/manual-distribution/distribution-summary/college-award-stats/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Distribution College Award Stats
+         * @description Export 統計各學院學生獲獎人數 (.xlsx) for the current 分發名單.
+         *
+         *     Counts exactly the students the 分發結果名單 panel lists (same
+         *     ``_load_allocated_groups`` loader), per college × funding agency of the
+         *     allocated sub-type. Renewals (續領生) never win a CollegeRankingItem, so —
+         *     like the panel — this sheet holds the distributed new awards only; the
+         *     per-造冊 sheet counts everyone actually paid. Aggregate counts only — no
+         *     per-student PII leaves.
+         */
+        get: operations["export_distribution_college_award_stats_api_v1_manual_distribution_distribution_summary_college_award_stats_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/distribution-summary/moe-department-award-stats/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Distribution Moe Department Award Stats
+         * @description Export 統計教育部博士生獎學金-各系所獲獎生人數 (.xlsx) for the current 分發名單.
+         *
+         *     Per 系所 (grouped by 教育部 學科標準分類 field): 申請人數 = students who
+         *     applied for a 教育部 sub-type, 通過甄選人數(正取) = students the 分發名單
+         *     (same ``_load_allocated_groups`` loader as the panel) allocated one. 加碼補助
+         *     is left blank. Aggregate counts only — no per-student PII leaves.
+         */
+        get: operations["export_distribution_moe_department_award_stats_api_v1_manual_distribution_distribution_summary_moe_department_award_stats_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/manual-distribution/generate-rosters-from-distribution": {
         parameters: {
             query?: never;
@@ -8360,6 +8518,23 @@ export interface components {
              * @description Built-in document this row overrides
              */
             fixed_key?: string | null;
+        };
+        /** ApplicationDocumentReorderItem */
+        ApplicationDocumentReorderItem: {
+            /** Id */
+            id: number;
+            /** Display Order */
+            display_order: number;
+        };
+        /**
+         * ApplicationDocumentReorderRequest
+         * @description New display order for one scholarship type's documents (審核管理 drag-sort).
+         */
+        ApplicationDocumentReorderRequest: {
+            /** Scholarship Type */
+            scholarship_type: string;
+            /** Items */
+            items: components["schemas"]["ApplicationDocumentReorderItem"][];
         };
         /**
          * ApplicationDocumentUpdate
@@ -9046,12 +9221,6 @@ export interface components {
              * @description Custom ranking name
              */
             ranking_name?: string | null;
-            /**
-             * Force New
-             * @description Create a new ranking even if an unfinished one already exists
-             * @default false
-             */
-            force_new: boolean;
         };
         /** Body_create_supplementary_doc_api_v1_system_settings_supplementary_docs_post */
         Body_create_supplementary_doc_api_v1_system_settings_supplementary_docs_post: {
@@ -9082,6 +9251,14 @@ export interface components {
         Body_extract_text_from_document_api_v1_user_profiles_document_ocr_post: {
             /** File */
             file: string;
+        };
+        /** Body_finalize_ranking_api_v1_college_review_rankings__ranking_id__finalize_post */
+        Body_finalize_ranking_api_v1_college_review_rankings__ranking_id__finalize_post: {
+            /**
+             * Expected Sibling Ids
+             * @description IDs of the other rankings in the scope the user confirmed deleting. When given, any other ranking in the scope refuses the lock with 409.
+             */
+            expected_sibling_ids?: number[] | null;
         };
         /** Body_import_whitelist_excel_api_v1_scholarship_configurations__id__whitelist_import_post */
         Body_import_whitelist_excel_api_v1_scholarship_configurations__id__whitelist_import_post: {
@@ -14181,6 +14358,42 @@ export interface operations {
             };
         };
     };
+    export_college_applicant_stats_api_v1_admin_scholarships__scholarship_identifier__college_applicant_stats_export_get: {
+        parameters: {
+            query: {
+                /** @description ROC academic year */
+                academic_year: number;
+                /** @description first / second / yearly; omit to include every semester of the year */
+                semester?: string | null;
+            };
+            header?: never;
+            path: {
+                scholarship_identifier: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_scholarship_permissions_api_v1_admin_scholarship_permissions_get: {
         parameters: {
             query?: {
@@ -16872,6 +17085,39 @@ export interface operations {
             };
         };
     };
+    reorder_documents_api_v1_application_fields_documents_reorder_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplicationDocumentReorderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     update_document_api_v1_application_fields_documents__document_id__put: {
         parameters: {
             query?: never;
@@ -19500,7 +19746,7 @@ export interface operations {
             };
         };
     };
-    finalize_ranking_api_v1_college_review_rankings__ranking_id__finalize_post: {
+    sync_ranking_api_v1_college_review_rankings__ranking_id__sync_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -19510,6 +19756,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    finalize_ranking_api_v1_college_review_rankings__ranking_id__finalize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ranking_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["Body_finalize_ranking_api_v1_college_review_rankings__ranking_id__finalize_post"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -19924,6 +20205,8 @@ export interface operations {
                 academic_year: number;
                 /** @description Semester (first/second/null for annual) */
                 semester?: string | null;
+                /** @description 管理員限定：只匯出此學院；省略時匯出全校（每個學院一個資料夾） */
+                college_code?: string | null;
                 /** @description 只檢查匯出條件（權限、資料筆數），不產生 ZIP */
                 dry_run?: boolean;
             };
@@ -22304,6 +22587,37 @@ export interface operations {
             };
         };
     };
+    export_roster_college_award_stats_api_v1_payment_rosters__roster_id__college_award_stats_export_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roster_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_roster_audit_logs_api_v1_payment_rosters__roster_id__audit_logs_get: {
         parameters: {
             query?: {
@@ -24348,6 +24662,72 @@ export interface operations {
                 semester: string;
                 /** @description Output format: xlsx (default) or pdf */
                 format?: "xlsx" | "pdf";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_distribution_college_award_stats_api_v1_manual_distribution_distribution_summary_college_award_stats_export_get: {
+        parameters: {
+            query: {
+                scholarship_type_id: number;
+                academic_year: number;
+                semester: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_distribution_moe_department_award_stats_api_v1_manual_distribution_distribution_summary_moe_department_award_stats_export_get: {
+        parameters: {
+            query: {
+                scholarship_type_id: number;
+                academic_year: number;
+                semester: string;
             };
             header?: never;
             path?: never;

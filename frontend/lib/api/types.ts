@@ -216,6 +216,9 @@ export interface Application {
     requires_professor_recommendation: boolean;
     requires_college_review: boolean;
     config_name: string;
+    /** 教授審查截止 for this application's track (renewal vs general).
+     *  Only populated by the professor queue endpoint. */
+    professor_review_end?: string | null;
   };
   academic_year?: number;
   semester?: string | null;
@@ -897,8 +900,6 @@ export interface ApplicationField {
   fixed_key?: string | null;
   // Fixed field properties
   is_fixed?: boolean;
-  prefill_value?: string;
-  existing_file_url?: string;
 }
 
 export interface ApplicationFieldCreate {
@@ -978,7 +979,6 @@ export interface ApplicationDocument {
   fixed_key?: string | null;
   // Fixed document properties
   is_fixed?: boolean;
-  existing_file_url?: string;
 }
 
 /**

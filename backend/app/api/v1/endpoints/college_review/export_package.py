@@ -81,11 +81,28 @@ async def _require_export_permissions(
         raise HTTPException(status_code=403, detail="無權限存取此學年度")
 
 
+def _resolve_college_scope(current_user: User, requested: Optional[str], log_extra: Dict[str, object]) -> Optional[str]:
+    """College reviewers export their own college only; admins pick one or take the whole school."""
+    if current_user.role != UserRole.college:
+        return requested or None
+    own = current_user.college_code
+    if requested and requested != own:
+        logger.warning("export-package denied: college scope mismatch", extra={**log_extra, "requested": requested})
+        raise HTTPException(status_code=403, detail="無權限匯出其他學院的申請資料")
+    return own
+
+
 @router.get("/export-package")
 async def export_application_package(
     scholarship_type_id: int = Query(..., description="Scholarship type ID"),
     academic_year: int = Query(..., description="Academic year"),
     semester: Optional[str] = Query(None, description="Semester (first/second/null for annual)"),
+    college_code: Optional[str] = Query(
+        None,
+        max_length=10,
+        pattern=r"^[A-Za-z0-9_-]+$",
+        description="管理員限定：只匯出此學院；省略時匯出全校（每個學院一個資料夾）",
+    ),
     dry_run: bool = Query(False, description="只檢查匯出條件（權限、資料筆數），不產生 ZIP"),
     current_user: User = Depends(require_roles(UserRole.college, UserRole.admin, UserRole.super_admin)),
     db: AsyncSession = Depends(get_db),
@@ -96,6 +113,10 @@ async def export_application_package(
     but answers with an ApiResponse (filename + application count) instead of
     the archive, so the UI can surface a 400/403 reason before handing the real
     download to the browser's download manager.
+
+    A college reviewer is always scoped to their own college. An admin may
+    pick one college with ``college_code``; without it the archive covers the
+    whole school with one folder per college.
 
     SECURITY: Bulk PII export. Every call is audit-logged with the actor's
     user_id and role, scholarship/period filters and application count, and
@@ -112,12 +133,13 @@ async def export_application_package(
         "scholarship_type_id": scholarship_type_id,
         "academic_year": academic_year,
         "semester": semester,
+        "requested_college_code": college_code,
     }
 
     await _require_export_permissions(current_user, scholarship_type_id, academic_year, db, log_extra)
 
     # Determine college_code for filtering
-    college_code = current_user.college_code if current_user.role == UserRole.college else None
+    college_code = _resolve_college_scope(current_user, college_code, log_extra)
 
     # Everything that can still turn into a 4xx/5xx happens here, before the
     # response starts; the streaming phase below does no DB work.
