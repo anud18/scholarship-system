@@ -238,7 +238,7 @@ class ScholarshipType(Base):
         """Get all active sub-type configurations ordered by display_order"""
         return sorted(
             [config for config in self.sub_type_configs if config.is_active],
-            key=lambda x: x.display_order,
+            key=lambda x: x.display_order or 0,
         )
 
     def get_sub_type_translations(self) -> Dict[str, Dict[str, str]]:
@@ -648,6 +648,12 @@ class ScholarshipConfiguration(Base):
         if is_renewal:
             return bool(self.renewal_requires_college_review)
         return bool(self.requires_college_review)
+
+    def professor_review_end_for(self, is_renewal: bool) -> Optional[datetime]:
+        """教授審查截止 for an application of the given kind."""
+        if is_renewal:
+            return self.renewal_professor_review_end
+        return self.professor_review_end
 
     @property
     def cycle(self) -> str:

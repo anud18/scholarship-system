@@ -19,6 +19,9 @@ export interface ReviewItemSummary {
   comments: string | null;
 }
 
+/** In professor_unreviewed_sub_types: EVERY sub-type awaits the professor (application without sub-types). Mirrors ALL_SUB_TYPES_UNREVIEWED in manual_distribution_service.py. */
+export const ALL_SUB_TYPES_UNREVIEWED = "*";
+
 export interface DistributionStudent {
   ranking_item_id: number;
   application_id: number;
@@ -27,10 +30,10 @@ export interface DistributionStudent {
   rejected_sub_types: string[];
   /** Per-sub-type professor verdicts (教授推薦 column). */
   professor_review_items: ReviewItemSummary[];
-  /** Per-sub-type college review verdicts supplementing the ranking verdict (學院推薦 column); admin reviews excluded. The college's PRIMARY verdict is the finalized ranking: college_rejected below. */
-  college_review_items: ReviewItemSummary[];
   /** Config requires a professor recommendation step (renewal-aware) — distinguishes 未推薦 chips (step required, no verdict yet) from "—" (no professor step). */
   requires_professor_recommendation: boolean;
+  /** Applied sub-types (normalized, like rejected_sub_types) still waiting on a required professor verdict (教授未推薦) — their 核配 cells are greyed out. Derived by the backend so the grid, 預設分發 and the allocate gate agree. */
+  professor_unreviewed_sub_types: string[];
   allocated_sub_type: string | null;
   /** Config whose quota this student's slot consumes. Seed the checked column from (allocated_sub_type, allocation_config_id). */
   allocation_config_id: number | null;
@@ -292,6 +295,7 @@ export type UnallocatedReason =
   | "college_rejected"
   | "not_applied"
   | "review_rejected"
+  | "professor_unreviewed"
   | "quota_full"
   | "no_college_quota";
 
@@ -300,6 +304,7 @@ export const UNALLOCATED_REASON_LABEL: Record<UnallocatedReason, string> = {
   college_rejected: "學院不予推薦",
   not_applied: "未申請可分配的子類型",
   review_rejected: "審核不同意",
+  professor_unreviewed: "教授未推薦",
   quota_full: "名額不足",
   no_college_quota: "該學院無此類別名額",
 };
@@ -308,7 +313,7 @@ export const UNALLOCATED_REASON_LABEL: Record<UnallocatedReason, string> = {
  * Label for a reason code, surviving one the backend added and this build has
  * not learnt yet. The union is a hand-kept mirror of the UNALLOCATED_*
  * constants and the response is untyped, so an unknown code reaches here with
- * no type error — showing the raw code beats 「未分配: undefined」.
+ * no type error — showing the raw code beats 「3 筆undefined」.
  */
 export function unallocatedReasonLabel(reason: UnallocatedReason): string {
   return UNALLOCATED_REASON_LABEL[reason] ?? reason;
@@ -872,5 +877,50 @@ export async function exportDistributionSummary(params: {
     search,
     `分發名單_${params.academicYear}.${format}`,
     "無法匯出分發名單"
+  );
+}
+
+/**
+ * Download 統計各學院學生獲獎人數 (.xlsx) for the current 分發名單.
+ *
+ * Endpoint: GET /api/v1/manual-distribution/distribution-summary/college-award-stats/export
+ */
+export async function exportDistributionCollegeAwardStats(params: {
+  scholarshipTypeId: number;
+  academicYear: number;
+  semester: string;
+}): Promise<{ blob: Blob; filename: string }> {
+  const search = new URLSearchParams();
+  search.set("scholarship_type_id", String(params.scholarshipTypeId));
+  search.set("academic_year", String(params.academicYear));
+  search.set("semester", params.semester);
+  return fetchBinaryExport(
+    "/api/v1/manual-distribution/distribution-summary/college-award-stats/export",
+    search,
+    `${params.academicYear}學年度_統計各學院學生獲獎人數.xlsx`,
+    "無法匯出統計各學院學生獲獎人數"
+  );
+}
+
+/**
+ * Download 統計教育部博士生獎學金-各系所獲獎生人數 (.xlsx): per 系所 (grouped by
+ * 教育部學科標準分類 field), 教育部 applicants and the 分發名單's 教育部 awardees.
+ *
+ * Endpoint: GET /api/v1/manual-distribution/distribution-summary/moe-department-award-stats/export
+ */
+export async function exportDistributionMoeDepartmentAwardStats(params: {
+  scholarshipTypeId: number;
+  academicYear: number;
+  semester: string;
+}): Promise<{ blob: Blob; filename: string }> {
+  const search = new URLSearchParams();
+  search.set("scholarship_type_id", String(params.scholarshipTypeId));
+  search.set("academic_year", String(params.academicYear));
+  search.set("semester", params.semester);
+  return fetchBinaryExport(
+    "/api/v1/manual-distribution/distribution-summary/moe-department-award-stats/export",
+    search,
+    `${params.academicYear}學年度_統計教育部各系所獲獎生人數.xlsx`,
+    "無法匯出統計教育部各系所獲獎生人數"
   );
 }

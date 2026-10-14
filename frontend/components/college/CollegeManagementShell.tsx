@@ -176,12 +176,9 @@ function CollegeManagementContent({ user }: { user: User }) {
         setSelectedSemester(selectedSemester);
         setSelectedCombination(combination);
 
-        // Fetch data for the auto-selected combination
-        fetchCollegeApplications(
-          currentYear,
-          selectedSemester,
-          firstScholarshipType
-        );
+        // Applications for the auto-selected combination are fetched by the
+        // review panel's effect once these selections land — fetching here too
+        // doubled the (slow) college applications request on every page load.
 
         // Fetch rankings for all tabs
         fetchRankings();
@@ -195,7 +192,6 @@ function CollegeManagementContent({ user }: { user: User }) {
     setSelectedAcademicYear,
     setSelectedSemester,
     setSelectedCombination,
-    fetchCollegeApplications,
   ]);
 
   if (scholarshipConfigError) {
@@ -303,12 +299,14 @@ function CollegeManagementContent({ user }: { user: User }) {
           // 重置排名選擇
           setSelectedRanking(null);
           setRankingData(null);
-          // 切換獎學金類型時重新載入資料
-          fetchCollegeApplications(
-            selectedAcademicYear,
-            selectedSemester,
-            scholarshipType
-          );
+          // 切換獎學金類型時重新載入資料（申請審核 tab 由面板的 effect 自動載入，避免重複請求）
+          if (activeTab !== "review") {
+            fetchCollegeApplications(
+              selectedAcademicYear,
+              selectedSemester,
+              scholarshipType
+            );
+          }
         }}
         className="w-full"
       >

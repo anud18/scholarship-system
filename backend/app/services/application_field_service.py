@@ -10,9 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.application_field import ApplicationDocument, ApplicationField
 from app.models.scholarship import ScholarshipConfiguration
-from app.models.user_profile import UserProfile
 from app.schemas.application_field import (
     ApplicationDocumentCreate,
+    ApplicationDocumentReorderItem,
     ApplicationDocumentResponse,
     ApplicationDocumentUpdate,
     ApplicationFieldCreate,
@@ -20,6 +20,11 @@ from app.schemas.application_field import (
     ApplicationFieldUpdate,
     ScholarshipFormConfigResponse,
 )
+
+# Columns a 儲存設定 (bulk save) entry may write. A document's example file is
+# managed only by the upload/delete-example endpoints, never by the bulk save.
+BULK_FIELD_COLUMNS = frozenset(ApplicationFieldCreate.model_fields) - {"scholarship_type"}
+BULK_DOCUMENT_COLUMNS = frozenset(ApplicationDocumentCreate.model_fields) - {"scholarship_type", "example_file_url"}
 
 # Default text of the built-in items, i.e. what the student sees in the
 # application wizard's 個人資料 section until an admin edits the item in
@@ -134,6 +139,17 @@ class ApplicationFieldService:
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
+    async def is_fixed_bank_document_required(self, scholarship_type: str) -> bool:
+        """Whether 存摺封面 must be on the profile before an application is submitted.
+
+        The built-in document is required; only the admin's materialised
+        `bank_statement` row (審核管理 → 系統預設) can relax that.
+        """
+        row = await self._get_fixed_row(ApplicationDocument, scholarship_type, FIXED_KEY_BANK_STATEMENT)
+        if row is None:
+            return True
+        return bool(row.is_active and row.is_required)
+
     async def _overwrite_row(self, row, values: Dict[str, Any], updated_by: int):
         """Replace an existing row's configurable columns and commit.
 
@@ -193,28 +209,61 @@ class ApplicationFieldService:
         self, scholarship_type: str, fields_data: List[Dict[str, Any]], updated_by: int
     ) -> List[ApplicationFieldResponse]:
         """Bulk update fields for a scholarship type"""
-        # First, delete existing fields for this scholarship type
-        await self.db.execute(delete(ApplicationField).where(ApplicationField.scholarship_type == scholarship_type))
+        fields = await self._sync_form_rows(
+            ApplicationField, "field_name", BULK_FIELD_COLUMNS, scholarship_type, fields_data, updated_by
+        )
+        return [ApplicationFieldResponse.model_validate(field) for field in fields]
 
-        # Create new fields
-        created_fields = []
-        for field_data in fields_data:
-            field = ApplicationField(
-                scholarship_type=scholarship_type,
-                **field_data,
-                created_by=updated_by,
-                updated_by=updated_by,
-            )
-            self.db.add(field)
-            created_fields.append(field)
+    @staticmethod
+    def _form_row_key(fixed_key: Optional[str], name: Optional[str]) -> tuple:
+        return ("fixed", fixed_key) if fixed_key else ("name", name)
+
+    async def _sync_form_rows(
+        self,
+        model,
+        name_column: str,
+        settable: frozenset,
+        scholarship_type: str,
+        rows_data: List[Dict[str, Any]],
+        updated_by: int,
+    ) -> list:
+        """Make one scholarship type's rows match `rows_data` (儲存設定), in place.
+
+        A payload entry updates the existing row with the same `fixed_key` or,
+        for admin-created items, the same name; only the keys it carries are
+        written. Columns the payload doesn't carry (a document's example file,
+        a field's 學院匯出 settings) and the row ids therefore survive the
+        save. Rows absent from the payload are deleted; new entries are added.
+        """
+        result = await self.db.execute(select(model).where(model.scholarship_type == scholarship_type))
+        existing = {self._form_row_key(row.fixed_key, getattr(row, name_column)): row for row in result.scalars()}
+
+        matched = []
+        for data in rows_data:
+            values = {key: value for key, value in data.items() if key in settable}
+            row = existing.pop(self._form_row_key(values.get("fixed_key"), values.get(name_column)), None)
+            matched.append((row, values))
+
+        # Delete before inserting so a re-added name can't hit the unique index.
+        for row in existing.values():
+            await self.db.delete(row)
+        await self.db.flush()
+
+        saved = []
+        for row, values in matched:
+            if row is None:
+                row = model(scholarship_type=scholarship_type, **values, created_by=updated_by)
+                self.db.add(row)
+            else:
+                for key, value in values.items():
+                    setattr(row, key, value)
+            row.updated_by = updated_by
+            saved.append(row)
 
         await self.db.commit()
-
-        # Refresh all fields
-        for field in created_fields:
-            await self.db.refresh(field)
-
-        return [ApplicationFieldResponse.model_validate(field) for field in created_fields]
+        for row in saved:
+            await self.db.refresh(row)
+        return saved
 
     # Application Document methods
     async def get_documents_by_scholarship_type(
@@ -306,6 +355,37 @@ class ApplicationFieldService:
 
         return result.rowcount > 0
 
+    async def reorder_documents(
+        self,
+        scholarship_type: str,
+        items: List[ApplicationDocumentReorderItem],
+        updated_by: int,
+    ) -> int:
+        """Persist a new display order for one scholarship type's documents.
+
+        Every id must belong to `scholarship_type`; otherwise nothing is
+        written and ValueError lists the offending ids.
+        """
+        requested_ids = [item.id for item in items]
+        result = await self.db.execute(
+            select(ApplicationDocument).where(
+                ApplicationDocument.id.in_(requested_ids),
+                ApplicationDocument.scholarship_type == scholarship_type,
+            )
+        )
+        documents = {doc.id: doc for doc in result.scalars().all()}
+
+        missing = [doc_id for doc_id in requested_ids if doc_id not in documents]
+        if missing:
+            raise ValueError(f"ids not found for {scholarship_type}: {missing}")
+
+        for item in items:
+            documents[item.id].display_order = item.display_order
+            documents[item.id].updated_by = updated_by
+
+        await self.db.commit()
+        return len(items)
+
     async def bulk_update_documents(
         self,
         scholarship_type: str,
@@ -313,56 +393,15 @@ class ApplicationFieldService:
         updated_by: int,
     ) -> List[ApplicationDocumentResponse]:
         """Bulk update documents for a scholarship type"""
-        # First, delete existing documents for this scholarship type
-        await self.db.execute(
-            delete(ApplicationDocument).where(ApplicationDocument.scholarship_type == scholarship_type)
+        documents = await self._sync_form_rows(
+            ApplicationDocument, "document_name", BULK_DOCUMENT_COLUMNS, scholarship_type, documents_data, updated_by
         )
-
-        # Create new documents
-        created_documents = []
-        for doc_data in documents_data:
-            document = ApplicationDocument(
-                scholarship_type=scholarship_type,
-                **doc_data,
-                created_by=updated_by,
-                updated_by=updated_by,
-            )
-            self.db.add(document)
-            created_documents.append(document)
-
-        await self.db.commit()
-
-        # Refresh all documents
-        for document in created_documents:
-            await self.db.refresh(document)
-
-        return [ApplicationDocumentResponse.model_validate(doc) for doc in created_documents]
+        return [ApplicationDocumentResponse.model_validate(doc) for doc in documents]
 
     # Fixed fields methods
-    async def get_user_profile_data(self, user_id: int) -> Optional[Dict[str, Any]]:
-        """Get user profile data for auto-filling fixed fields"""
-        try:
-            query = select(UserProfile).where(UserProfile.user_id == user_id)
-            result = await self.db.execute(query)
-            profile = result.scalar_one_or_none()
-
-            if profile:
-                return {
-                    "account_number": profile.account_number,
-                    "bank_document_photo_url": profile.bank_document_photo_url,
-                    "advisor_name": profile.advisor_name,
-                    "advisor_email": profile.advisor_email,
-                    "advisor_nycu_id": profile.advisor_nycu_id,
-                }
-            return None
-        except Exception:
-            self.logger.exception("Error fetching user profile data")
-            return None
-
     def _create_fixed_bank_account_field(
         self,
         display_order: int = 1,
-        prefill_data: Dict[str, Any] = None,
         scholarship_type: str = "fixed",
     ) -> Dict[str, Any]:
         """Create fixed bank account field definition"""
@@ -385,7 +424,6 @@ class ApplicationFieldService:
             "is_active": True,
             "help_text": "",
             "help_text_en": "",
-            "prefill_value": prefill_data.get("account_number", "") if prefill_data else "",
             "created_at": datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
             "created_by": 0,
@@ -395,7 +433,6 @@ class ApplicationFieldService:
     def _create_fixed_bank_statement_document(
         self,
         display_order: int = 1,
-        prefill_data: Dict[str, Any] = None,
         scholarship_type: str = "fixed",
     ) -> Dict[str, Any]:
         """Create fixed bank statement cover document definition"""
@@ -418,7 +455,6 @@ class ApplicationFieldService:
             "is_active": True,
             "upload_instructions": "",
             "upload_instructions_en": "",
-            "existing_file_url": prefill_data.get("bank_document_photo_url", "") if prefill_data else "",
             "created_at": datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
             "created_by": 0,
@@ -428,7 +464,6 @@ class ApplicationFieldService:
     def _create_fixed_advisor_fields(
         self,
         display_order_start: int = 1,
-        prefill_data: Dict[str, Any] = None,
         scholarship_type: str = "fixed",
     ) -> List[Dict[str, Any]]:
         """Create fixed advisor information fields"""
@@ -455,7 +490,6 @@ class ApplicationFieldService:
                 "is_active": True,
                 "help_text": ADVISOR_HELP_TEXT_ZH,
                 "help_text_en": ADVISOR_HELP_TEXT_EN,
-                "prefill_value": prefill_data.get("advisor_name", "") if prefill_data else "",
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
                 "created_by": 0,
@@ -482,7 +516,6 @@ class ApplicationFieldService:
                 "is_active": True,
                 "help_text": "",
                 "help_text_en": "",
-                "prefill_value": prefill_data.get("advisor_email", "") if prefill_data else "",
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
                 "created_by": 0,
@@ -509,7 +542,6 @@ class ApplicationFieldService:
                 "is_active": True,
                 "help_text": "",
                 "help_text_en": "",
-                "prefill_value": prefill_data.get("advisor_nycu_id", "") if prefill_data else "",
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
                 "created_by": 0,
@@ -549,15 +581,13 @@ class ApplicationFieldService:
         items: List[Dict[str, Any]],
         fixed_key: str,
         build_default,
-        prefill: Dict[str, Any],
     ) -> None:
         """Put one built-in item into `items`, admin-edited copy first.
 
         A row carrying `fixed_key` is the admin's edited copy of the built-in
         definition, so it wins over the code default. It still has to be
         flagged `is_fixed` (審核管理 renders it in the 系統預設 card, and the
-        student form treats it as a built-in) and to carry the per-user
-        prefill, which lives on the profile rather than on the row.
+        student form treats it as a built-in).
         """
         existing = next((item for item in items if item.get("fixed_key") == fixed_key), None)
 
@@ -566,25 +596,21 @@ class ApplicationFieldService:
             return
 
         existing["is_fixed"] = True
-        existing.update(prefill)
 
     async def inject_fixed_fields(
         self,
         scholarship_type: str,
         fields: List[Dict[str, Any]],
         documents: List[Dict[str, Any]],
-        user_id: Optional[int] = None,
     ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-        """Inject fixed fields and documents into the form configuration"""
+        """Inject fixed fields and documents into the form configuration.
+
+        The result is cached and shared by every user (see the form-config
+        endpoint), so it must stay user-agnostic: never put profile values
+        (郵局帳號, 指導教授, 存摺封面) in here. The wizard reads those from
+        `/user-profiles/me`.
+        """
         try:
-            # Get user profile data if user_id is provided
-            profile_data = None
-            if user_id:
-                profile_data = await self.get_user_profile_data(user_id)
-
-            def prefill(key: str) -> str:
-                return profile_data.get(key, "") if profile_data else ""
-
             # Calculate display orders
             max_field_order = max([f.get("display_order", 0) for f in fields], default=0)
             max_doc_order = max([d.get("display_order", 0) for d in documents], default=0)
@@ -595,10 +621,8 @@ class ApplicationFieldService:
                 FIXED_KEY_POSTAL_ACCOUNT,
                 lambda: self._create_fixed_bank_account_field(
                     display_order=max_field_order + 1,
-                    prefill_data=profile_data,
                     scholarship_type=scholarship_type,
                 ),
-                {"prefill_value": prefill("account_number")},
             )
 
             self._merge_fixed_item(
@@ -606,10 +630,8 @@ class ApplicationFieldService:
                 FIXED_KEY_BANK_STATEMENT,
                 lambda: self._create_fixed_bank_statement_document(
                     display_order=max_doc_order + 1,
-                    prefill_data=profile_data,
                     scholarship_type=scholarship_type,
                 ),
-                {"existing_file_url": prefill("bank_document_photo_url")},
             )
 
             # Inject advisor fields if required
@@ -619,7 +641,6 @@ class ApplicationFieldService:
                     field["fixed_key"]: field
                     for field in self._create_fixed_advisor_fields(
                         display_order_start=max_field_order + 2,
-                        prefill_data=profile_data,
                         scholarship_type=scholarship_type,
                     )
                 }
@@ -628,7 +649,6 @@ class ApplicationFieldService:
                         fields,
                         advisor_key,
                         lambda key=advisor_key: defaults[key],
-                        {"prefill_value": prefill(advisor_key)},
                     )
             else:
                 # A materialised advisor row outlives the setting that created
@@ -651,7 +671,6 @@ class ApplicationFieldService:
         self,
         scholarship_type: str,
         include_inactive: bool = False,
-        user_id: Optional[int] = None,
     ) -> ScholarshipFormConfigResponse:
         """Get complete form configuration for a scholarship type with fixed fields injection"""
         try:
@@ -677,7 +696,6 @@ class ApplicationFieldService:
                 scholarship_type=scholarship_type,
                 fields=fields_dict,
                 documents=documents_dict,
-                user_id=user_id,
             )
 
             if not include_inactive:

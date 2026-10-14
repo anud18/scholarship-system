@@ -10,7 +10,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import and_, or_, select, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ValidationError
@@ -59,11 +59,14 @@ def validate_sub_type_for_submission(scholarship, sub_scholarship_type: Optional
 def order_sub_type_preferences(sub_types: List[str]) -> List[str]:
     """Order a selected sub-type list the way the student wizard does:
     FORCED_FIRST_PREFERENCE (moe_1w) leads when present; the rest keep
-    their given order. Returns a new list.
+    their given order. Matched case/whitespace-insensitively (stored lists are
+    free-form strings) and the original spelling is kept. Returns a new list.
     """
-    if FORCED_FIRST_PREFERENCE in sub_types:
-        return [FORCED_FIRST_PREFERENCE] + [st for st in sub_types if st != FORCED_FIRST_PREFERENCE]
-    return list(sub_types)
+
+    def _is_forced(st: Optional[str]) -> bool:
+        return (st or "").lower().strip() == FORCED_FIRST_PREFERENCE
+
+    return [st for st in sub_types if _is_forced(st)] + [st for st in sub_types if not _is_forced(st)]
 
 
 def build_submitted_application_values(scholarship, config) -> Dict[str, Any]:
@@ -151,12 +154,20 @@ async def assign_professor_from_profile(
     if not profile or not profile.advisor_nycu_id:
         return None
 
-    professor_stmt = select(User).where(
-        User.nycu_id == profile.advisor_nycu_id,
-        User.role == UserRole.professor,
+    # 人事代號 is entered uppercased, but account nycu_ids may not be. users.nycu_id
+    # is unique only case-sensitively, so prefer an exact match and never let two
+    # case-variant accounts raise MultipleResultsFound mid-submit.
+    professor_stmt = (
+        select(User)
+        .where(
+            func.upper(User.nycu_id) == profile.advisor_nycu_id.upper(),
+            User.role == UserRole.professor,
+        )
+        .order_by((User.nycu_id == profile.advisor_nycu_id).desc(), User.id)
+        .limit(1)
     )
     professor_result = await db.execute(professor_stmt)
-    professor = professor_result.scalar_one_or_none()
+    professor = professor_result.scalars().first()
 
     if professor:
         application.professor_id = professor.id
@@ -229,7 +240,9 @@ async def backfill_professor_assignments(db: AsyncSession, professor: Optional[U
     if professor.role not in (UserRole.professor, UserRole.professor.value):
         return 0
 
-    advisee_user_ids = select(UserProfile.user_id).where(UserProfile.advisor_nycu_id == professor.nycu_id)
+    advisee_user_ids = select(UserProfile.user_id).where(
+        func.upper(UserProfile.advisor_nycu_id) == professor.nycu_id.upper()
+    )
 
     # Configurations on which an application of each kind is professor-actionable:
     # the workflow has a professor stage and its review window has not closed.

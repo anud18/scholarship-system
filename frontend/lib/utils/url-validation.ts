@@ -35,6 +35,46 @@ export function validateSameOriginUrl(path: string): string {
   return url.pathname + url.search;
 }
 
+export type SafeNavigation =
+  | { kind: "internal"; path: string }
+  | { kind: "external"; url: string };
+
+const NAVIGABLE_PROTOCOLS = new Set(["http:", "https:"]);
+
+/**
+ * Resolves a server-supplied link (e.g. a notification's action_url) into a
+ * navigation target that cannot execute script.
+ *
+ * Unlike validateSameOriginUrl this also accepts external http(s) links, which
+ * callers must open in a new tab. Same-origin results use the same
+ * URL-API origin comparison CodeQL recognizes as a sanitization barrier.
+ *
+ * @param raw - The stored link; may be relative or absolute
+ * @param origin - The current origin, or null during server rendering
+ * @returns The target, or null when the link is empty, unparsable or uses a
+ *          non-http(s) scheme (javascript:, data:, vbscript:, ...)
+ */
+export function resolveSafeNavigation(
+  raw: string | null | undefined,
+  origin: string | null
+): SafeNavigation | null {
+  if (!origin || !raw || !raw.trim()) return null;
+
+  let url: URL;
+  try {
+    url = new URL(raw.trim(), origin);
+  } catch {
+    return null;
+  }
+
+  if (!NAVIGABLE_PROTOCOLS.has(url.protocol)) return null;
+
+  if (url.origin === new URL(origin).origin) {
+    return { kind: "internal", path: url.pathname + url.search + url.hash };
+  }
+  return { kind: "external", url: url.href };
+}
+
 /**
  * Safely constructs API preview URLs with authentication token
  *

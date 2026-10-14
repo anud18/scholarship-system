@@ -52,6 +52,13 @@ class RenewalDistributionService:
         already cleared professor review, which is all the professor-only
         configuration demands.
 
+        ``college_reviewed`` is a LEGACY stage: it was written by the college's
+        review submission, which no longer exists (the college recommends
+        through its ranking alone). Renewals that need the college's say are
+        ranked and distributed through the manual-distribution matrix, so for
+        ``renewal_requires_college_review`` configs this path now only picks up
+        rows that reached the stage before the college review was removed.
+
         When no configuration row exists we conservatively default to
         college_reviewed: matches the dominant pattern in this codebase and
         avoids accidentally promoting renewals after only a professor review.

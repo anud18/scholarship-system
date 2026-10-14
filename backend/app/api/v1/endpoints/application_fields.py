@@ -22,6 +22,7 @@ from app.models.application_field import ApplicationDocument, ApplicationField, 
 from app.models.user import User
 from app.schemas.application_field import (
     ApplicationDocumentCreate,
+    ApplicationDocumentReorderRequest,
     ApplicationDocumentUpdate,
     ApplicationFieldCreate,
     ApplicationFieldUpdate,
@@ -166,6 +167,25 @@ async def create_document(
     return ApiResponse(success=True, message="Application document created successfully", data=document)
 
 
+@router.patch("/documents/reorder")
+async def reorder_documents(
+    payload: ApplicationDocumentReorderRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Persist a new display order for a scholarship type's documents. Admin only."""
+    service = ApplicationFieldService(db)
+    try:
+        updated = await service.reorder_documents(payload.scholarship_type, payload.items, current_user.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    await invalidate(f"documents:{payload.scholarship_type}")
+    await invalidate(f"formconfig:{payload.scholarship_type}")
+
+    return ApiResponse(success=True, message="已重新排序", data={"updated": updated})
+
+
 @router.put("/documents/{document_id}")
 async def update_document(
     document_id: int,
@@ -228,12 +248,10 @@ async def get_scholarship_form_config(
         should_include_inactive = include_inactive or is_admin
 
         # We key cache on the *resolved* should_include_inactive so admin and
-        # non-admin views never share an entry. user_id is intentionally NOT
-        # part of the key — the config is identical for everyone in the same
-        # admin/non-admin bucket; user_id is only forwarded for audit logging.
-        config = await _get_scholarship_form_config_cached(
-            scholarship_type, should_include_inactive, db, current_user.id
-        )
+        # non-admin views never share an entry. The entry is shared by every
+        # user in the bucket, so the config must not carry anything per-user
+        # (profile prefill once leaked one student's 郵局帳號/指導教授 to all).
+        config = await _get_scholarship_form_config_cached(scholarship_type, should_include_inactive, db)
 
         logger.info(f"API: Form config retrieved successfully for {scholarship_type}")
         return ApiResponse(success=True, message=f"Form configuration retrieved for {scholarship_type}", data=config)
@@ -246,17 +264,18 @@ async def get_scholarship_form_config(
         ) from e
 
 
+# `:v2`: entries cached before #1443 carry one student's profile prefill. A new
+# key makes a deploy stop serving them immediately instead of after the TTL.
+# The suffix keeps the `formconfig:{type}` invalidation prefixes matching.
 @cached(
     key_fn=lambda scholarship_type, should_include_inactive, *_, **__: (
-        f"formconfig:{scholarship_type}:{'all' if should_include_inactive else 'active'}"
+        f"formconfig:{scholarship_type}:{'all' if should_include_inactive else 'active'}:v2"
     ),
     ttl=21600,  # 6 h
 )
-async def _get_scholarship_form_config_cached(
-    scholarship_type: str, should_include_inactive: bool, db: AsyncSession, user_id: int
-):
+async def _get_scholarship_form_config_cached(scholarship_type: str, should_include_inactive: bool, db: AsyncSession):
     service = ApplicationFieldService(db)
-    return await service.get_scholarship_form_config(scholarship_type, should_include_inactive, user_id=user_id)
+    return await service.get_scholarship_form_config(scholarship_type, should_include_inactive)
 
 
 class FormConfigSaveRequest(BaseModel):

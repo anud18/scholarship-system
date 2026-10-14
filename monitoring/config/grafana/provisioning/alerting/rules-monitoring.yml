@@ -81,3 +81,35 @@ groups:
           summary: "Prometheus storage usage is high"
           description: "Prometheus is using more than 80% of its storage retention limit. Current value: {{ if eq $value 0.0 }}0%{{ else }}{{ $value | humanizePercentage }}{{ end }}"
         isPaused: false
+
+      # A failing compaction/checkpoint means the WAL is never truncated, so the
+      # Prometheus volume grows without bound (~0.8 GB/day on the prod AP VM).
+      # Prometheus only repairs a corrupt WAL at START-UP, so a torn record left
+      # by one ENOSPC keeps every later compaction failing until someone
+      # restarts it — the 2026-08-27 → 09-23 incident, which none of the size
+      # based rules above could see (PrometheusStorageLow needs
+      # --storage.tsdb.retention.size, which no stage sets).
+      - uid: alert-prometheus-compaction-failing
+        title: PrometheusCompactionFailing
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 10800
+              to: 0
+            datasourceUid: prometheus-uid
+            model:
+              # Compactions run every 2h; a 3h window always spans one attempt.
+              expr: increase(prometheus_tsdb_compactions_failed_total[3h]) > 0 or increase(prometheus_tsdb_checkpoint_creations_failed_total[3h]) > 0
+              refId: A
+              instant: true
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        labels:
+          severity: critical
+          category: monitoring
+        annotations:
+          summary: "Prometheus TSDB compaction is failing — its WAL will grow until the disk is full"
+          description: "Compaction or WAL checkpointing failed in the last 3h on {{ $labels.instance }}. Check `docker logs monitoring_prometheus | grep 'compaction failed'`. A 'corruption in segment' error needs Prometheus stopped and wal/ + chunks_head/ removed (persisted blocks are kept); a plain restart also repairs it but replays the whole WAL first."
+        isPaused: false

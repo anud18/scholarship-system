@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional
 
 import httpx
 
+from app.core.college_mappings import ORIGINAL_ACADEMY_CODES_KEY, normalize_student_academy
 from app.core.config import settings
 from app.core.exceptions import NotFoundError, ServiceUnavailableError
 
@@ -73,7 +74,8 @@ class StudentService:
                     # API returns code as string, need to check both string and int
                     code = result.get("code")
                     if (code == 200 or code == "200") and result.get("data"):
-                        return result["data"][0]  # Return first student record
+                        # Retired academy codes (電資學院 Y) are remapped at the SIS boundary
+                        return normalize_student_academy(result["data"][0])  # First student record
                     elif code == 404 or code == "404":
                         logger.info(f"Student {student_code} not found in API")
                         return None
@@ -144,7 +146,7 @@ class StudentService:
                     # API returns code as string, need to check both string and int
                     code = result.get("code")
                     if (code == 200 or code == "200") and result.get("data"):
-                        return result["data"][0]  # Return first term record
+                        return normalize_student_academy(result["data"][0])  # First term record
                     elif code == 403 or code == "403":
                         # 403 means no data for this term - return None to allow fallback logic
                         logger.info(f"Student term data not available for {student_code} (403 - 無資料)")
@@ -260,6 +262,14 @@ class StudentService:
         # Add API 2: Term-specific data (trm_* fields) if available
         if term_data:
             snapshot.update(term_data)
+
+        # Both records may carry the raw codes normalization replaced; keep the union
+        original_codes = {
+            **(student_data.get(ORIGINAL_ACADEMY_CODES_KEY) or {}),
+            **((term_data or {}).get(ORIGINAL_ACADEMY_CODES_KEY) or {}),
+        }
+        if original_codes:
+            snapshot[ORIGINAL_ACADEMY_CODES_KEY] = original_codes
 
         return snapshot
 

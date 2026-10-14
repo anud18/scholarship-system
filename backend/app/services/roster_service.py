@@ -41,6 +41,7 @@ from app.models.user import User
 from app.schemas.payment_roster import DistributionDiffEntry, RevokedSuspendedEntry
 from app.services.audit_service import audit_service
 from app.services.student_verification_service import StudentVerificationService
+from app.utils.bank_account_fields import BANK_ACCOUNT_FIELD_LOOKUP
 from app.utils.pii_masking import mask_id_number
 
 logger = logging.getLogger(__name__)
@@ -904,7 +905,7 @@ class RosterService:
 
         # Extract bank_account from various possible field names
         bank_account = ""
-        for field_name in ["postal_account", "bank_account", "account_number", "帳戶號碼", "帳號", "郵局帳號"]:
+        for field_name in BANK_ACCOUNT_FIELD_LOOKUP:
             # Check nested structure first (schema-compliant)
             if field_name in form_fields and form_fields[field_name].get("value"):
                 bank_account = str(form_fields[field_name]["value"])
@@ -957,7 +958,8 @@ class RosterService:
         # 此處僅 gate 在 is_allocated + academic_year（未含 is_finalized /
         # distribution_executed）。其正確性依賴 _get_eligible_applications 已先以
         # 「finalized + executed」篩選過申請：一個申請在同學年度只會有一筆有效正取
-        # （finalize 時會反鎖同 slot 的其他排名），故 .first() 取到的即為授權子類型。
+        # （同 scope 至多一份鎖定排名；finalize 時刪除同 scope 的其他草稿排名），
+        # 故 .first() 取到的即為授權子類型。
         if not allocated_sub_type:
             alloc_item = (
                 self.db.query(CollegeRankingItem)

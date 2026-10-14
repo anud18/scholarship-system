@@ -45,11 +45,31 @@ async function patchScholarshipConfigToggle<T>(
   return resp.json();
 }
 
+// POST always creates a NEW draft — a college may keep several drafts per
+// (scholarship, sub-type, year, semester). The backend answers 409 while a
+// locked (finalized) or already-distributed ranking exists in that scope, so
+// there is no force_new escape hatch.
 type CreateRankingRequest =
   SchemaComponents["schemas"]["Body_create_ranking_api_v1_college_review_rankings_post"];
-type CreateRankingInput = Omit<CreateRankingRequest, "force_new"> & {
-  force_new?: boolean;
-};
+
+/** Data of POST /rankings/{id}/sync — how the ranking changed to match the application list. */
+export interface SyncRankingResult {
+  id: number;
+  added_application_count: number;
+  removed_application_count: number;
+  total_applications: number;
+}
+
+/** Data of POST /rankings/{id}/finalize. */
+export interface FinalizeRankingResult {
+  id: number;
+  is_finalized: boolean;
+  finalized_at?: string | null;
+  ranking_status?: string;
+  /** The college's other rankings in the same scope, deleted by the lock. */
+  deleted_ranking_ids: number[];
+  deleted_ranking_count: number;
+}
 
 export interface DistributionStudent {
   student_number: string;
@@ -159,20 +179,16 @@ export function createCollegeApi() {
     },
 
     /**
-     * Create new ranking
+     * Create a new draft ranking (409 while a locked ranking exists in the scope)
      * Type-safe: Request body validated against OpenAPI
      */
     createRanking: async (
-      data: CreateRankingInput
+      data: CreateRankingRequest
     ): Promise<ApiResponse<unknown>> => {
-      const payload: CreateRankingRequest = {
-        ...data,
-        force_new: data.force_new ?? false,
-      };
       const response = await typedClient.raw.POST(
         "/api/v1/college-review/rankings",
         {
-          body: payload,
+          body: data,
         }
       );
       return toApiResponse<unknown>(response);
@@ -215,19 +231,41 @@ export function createCollegeApi() {
     },
 
     /**
-     * Finalize ranking (lock and approve)
-     * Type-safe: Path parameter validated against OpenAPI
+     * Finalize ranking (lock and approve). Deletes the college's other
+     * rankings in the same scope, so only the confirmed one remains.
+     * `expectedSiblingIds` are the rankings the user confirmed deleting; any
+     * other one in the scope (created since the list loaded) makes it 409.
+     * Type-safe: Path parameter and request body validated against OpenAPI
      */
     finalizeRanking: async (
-      rankingId: number
-    ): Promise<ApiResponse<unknown>> => {
+      rankingId: number,
+      expectedSiblingIds: number[]
+    ): Promise<ApiResponse<FinalizeRankingResult>> => {
       const response = await typedClient.raw.POST(
         "/api/v1/college-review/rankings/{ranking_id}/finalize",
         {
           params: { path: { ranking_id: rankingId } },
+          body: { expected_sibling_ids: expectedSiblingIds },
         }
       );
-      return toApiResponse<unknown>(response);
+      return toApiResponse<FinalizeRankingResult>(response);
+    },
+
+    /**
+     * Sync a draft ranking with the application list: adds newly eligible
+     * applications and removes ones no longer eligible (409 when locked)
+     * Type-safe: Path parameter validated against OpenAPI
+     */
+    syncRanking: async (
+      rankingId: number
+    ): Promise<ApiResponse<SyncRankingResult>> => {
+      const response = await typedClient.raw.POST(
+        "/api/v1/college-review/rankings/{ranking_id}/sync",
+        {
+          params: { path: { ranking_id: rankingId } },
+        }
+      );
+      return toApiResponse<SyncRankingResult>(response);
     },
 
     /**
@@ -429,37 +467,6 @@ export function createCollegeApi() {
     },
 
     /**
-     * Create or update college review for an application
-     * Type-safe: Path parameter and request body validated against OpenAPI
-     */
-    reviewApplication: async (
-      applicationId: number,
-      reviewData: {
-        recommendation: "approve" | "reject" | "conditional";
-        review_comments?: string;
-        academic_score?: number;
-        professor_review_score?: number;
-        college_criteria_score?: number;
-        special_circumstances_score?: number;
-        decision_reason?: string;
-        is_priority?: boolean;
-        needs_special_attention?: boolean;
-      }
-    ): Promise<ApiResponse<unknown>> => {
-      // Path is not in the generated OpenAPI schema (orphan/legacy route);
-      // the `as never` cast bypasses typed-route inference while keeping the
-      // call working at runtime. See issue #665.
-      const response = await typedClient.raw.POST(
-        "/api/v1/college-review/applications/{application_id}/review" as never,
-        {
-          params: { path: { application_id: applicationId } },
-          body: reviewData,
-        } as never
-      );
-      return toApiResponse<unknown>(response);
-    },
-
-    /**
      * Get sub-type translations from database
      * Type-safe: Response contains Chinese and English translations for sub-types
      */
@@ -518,61 +525,6 @@ export function createCollegeApi() {
             path: { student_id: studentId },
             query: { academic_year: academicYear },
           },
-        }
-      );
-      return toApiResponse<unknown>(response);
-    },
-
-    /**
-     * Get available sub-types for an application (unified review system)
-     * Uses multi-role review API endpoint
-     * Type-safe: Path parameter validated against OpenAPI
-     */
-    getSubTypes: async (applicationId: number): Promise<ApiResponse<string[]>> => {
-      const response = await typedClient.raw.GET(
-        "/api/v1/reviews/applications/{application_id}/sub-types",
-        {
-          params: { path: { application_id: applicationId } },
-        }
-      );
-      return toApiResponse<string[]>(response);
-    },
-
-    /**
-     * Get existing review for an application (unified review system)
-     * Uses multi-role review API endpoint
-     * Type-safe: Path parameter validated against OpenAPI
-     */
-    getReview: async (applicationId: number): Promise<ApiResponse<unknown>> => {
-      const response = await typedClient.raw.GET(
-        "/api/v1/reviews/applications/{application_id}/review",
-        {
-          params: { path: { application_id: applicationId } },
-        }
-      );
-      return toApiResponse<unknown>(response);
-    },
-
-    /**
-     * Submit review for an application (unified review system with sub-type items)
-     * Uses multi-role review API endpoint
-     * Type-safe: Path parameter and request body validated against OpenAPI
-     */
-    submitReview: async (
-      applicationId: number,
-      reviewData: {
-        items: Array<{
-          sub_type_code: string;
-          recommendation: "approve" | "reject";
-          comments?: string;
-        }>;
-      }
-    ): Promise<ApiResponse<unknown>> => {
-      const response = await typedClient.raw.POST(
-        "/api/v1/reviews/applications/{application_id}/review",
-        {
-          params: { path: { application_id: applicationId } },
-          body: reviewData,
         }
       );
       return toApiResponse<unknown>(response);
@@ -763,12 +715,15 @@ export function createCollegeApi() {
      * data present, under the cap) so a 400/403 reason still surfaces as a
      * thrown Error, then returns the same-origin URL the caller hands to the
      * browser's own download manager. The token rides in the query string so
-     * plain navigation works.
+     * plain navigation works. `college_code` (admin only) scopes the archive
+     * to one college; without it an admin gets the whole school with one
+     * folder per college.
      */
     exportPackage: async (params: {
       scholarship_type_id: number;
       academic_year: number;
       semester?: string;
+      college_code?: string;
       token: string;
     }): Promise<{
       downloadUrl: string;
@@ -783,6 +738,9 @@ export function createCollegeApi() {
       searchParams.set("academic_year", String(params.academic_year));
       if (params.semester) {
         searchParams.set("semester", params.semester);
+      }
+      if (params.college_code) {
+        searchParams.set("college_code", params.college_code);
       }
       searchParams.set("token", params.token);
       const downloadUrl = `/api/v1/export-package?${searchParams.toString()}`;

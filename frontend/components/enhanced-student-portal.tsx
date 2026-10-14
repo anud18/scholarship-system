@@ -30,9 +30,7 @@ import { ApplicationDetailDialog } from "@/components/application-detail-dialog"
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { StudentApplicationWizard } from "@/components/student-wizard/StudentApplicationWizard";
 import { DocumentRequestAlert } from "@/components/document-request-alert";
-import { RenewalApplicationCard } from "@/components/student/RenewalApplicationCard";
 import { TotalReceivedMonthsCard } from "@/components/student/TotalReceivedMonthsCard";
-import { ChallengeApplicationCard } from "@/components/student/ChallengeApplicationCard";
 import type { StudentDocumentRequest } from "@/lib/api/modules/document-requests";
 import {
   isApplyableScholarship,
@@ -84,6 +82,7 @@ import api, {
 import { ApplicationStatus } from "@/lib/enums";
 import { getApplicationTimeline } from "@/lib/utils/application-helpers";
 import { clsx } from "@/lib/utils";
+import { formatDeadline } from "@/lib/utils/format-deadline";
 import { User } from "@/types/user";
 
 // 使用API的Application類型
@@ -504,7 +503,10 @@ export function EnhancedStudentPortal({
         const { fields, documents } = response.data;
 
         // Calculate total required items
-        const requiredFields = fields.filter(f => f.is_active && f.is_required);
+        // Fixed fields (郵局帳號/指導教授) live on the profile, not in the form.
+        const requiredFields = fields.filter(
+          f => f.is_active && f.is_required && !f.is_fixed
+        );
         const requiredDocuments = documents.filter(isDocumentUploadRequired);
         let totalRequired = requiredFields.length + requiredDocuments.length;
 
@@ -532,16 +534,7 @@ export function EnhancedStudentPortal({
         // Check required fields completion
         requiredFields.forEach(field => {
           const fieldValue = dynamicFormData[field.field_name];
-          const isFixed = field.is_fixed === true;
-          const hasPrefillValue =
-            field.prefill_value !== undefined &&
-            field.prefill_value !== null &&
-            field.prefill_value !== "";
-
-          // Fixed fields with prefill values are auto-completed
-          if (isFixed && hasPrefillValue) {
-            completedItems++;
-          } else if (
+          if (
             fieldValue !== undefined &&
             fieldValue !== null &&
             fieldValue !== ""
@@ -553,14 +546,7 @@ export function EnhancedStudentPortal({
         // Check required documents completion
         requiredDocuments.forEach(doc => {
           const docFiles = dynamicFileData[doc.document_name];
-          // For fixed documents, check if they have existing_file_url or files
-          const isFixedDocument = doc.is_fixed === true;
-
-          if (isFixedDocument && doc.existing_file_url) {
-            // Fixed document with existing file URL is considered complete
-            completedItems++;
-          } else if (docFiles && docFiles.length > 0) {
-            // Regular document with uploaded files is complete
+          if (docFiles && docFiles.length > 0) {
             completedItems++;
           }
         });
@@ -1080,17 +1066,6 @@ export function EnhancedStudentPortal({
     </Card>
   );
 
-  // 已核可且為續領的申請 — 提供「挑戰其他 sub_type」入口
-  // 過濾條件：is_renewal && status === approved，且其 sub_scholarship_type 已知
-  const approvedRenewals = applications.filter(
-    app =>
-      app.is_renewal === true &&
-      app.status === ApplicationStatus.APPROVED &&
-      Boolean(
-        app.sub_scholarship_type || (app.scholarship_subtype_list ?? [])[0]
-      )
-  );
-
   return (
     <div className="space-y-6">
       {/* Document Request Alert - Show pending document requests */}
@@ -1101,48 +1076,6 @@ export function EnhancedStudentPortal({
           onFulfill={handleFulfillDocumentRequest}
         />
       )}
-
-      {/* 續領申請卡 — 永遠 mount；若無可續領紀錄，元件自身 return null */}
-      <RenewalApplicationCard
-        onStartEditing={onStartEditing}
-        locale={locale}
-      />
-
-      {/* 挑戰申請卡 — 每個核可續領申請各一張；無可挑戰 sub_type 時元件自身 return null */}
-      {approvedRenewals.map(renewal => {
-        const renewalSubType =
-          renewal.sub_scholarship_type ||
-          (renewal.scholarship_subtype_list ?? [])[0] ||
-          "";
-        // 從 eligibleScholarships 中找到對應的獎學金，取其 all_sub_type_list
-        // 作為可挑戰名單來源（已扣除續領 sub_type）
-        const scholarshipMeta = eligibleScholarships.find(
-          s => s.id === renewal.scholarship_type_id
-        );
-        const availableSubTypes = (
-          scholarshipMeta?.all_sub_type_list ?? []
-        ).filter(st => st && st !== "general");
-        if (!renewal.scholarship_type_id || availableSubTypes.length === 0) {
-          return null;
-        }
-        return (
-          <ChallengeApplicationCard
-            key={`challenge-${renewal.id}`}
-            approvedRenewalId={renewal.id}
-            approvedRenewalSubType={renewalSubType}
-            scholarshipTypeId={renewal.scholarship_type_id}
-            scholarshipTypeName={
-              scholarshipMeta
-                ? locale === "zh"
-                  ? scholarshipMeta.name
-                  : scholarshipMeta.name_en || scholarshipMeta.name
-                : undefined
-            }
-            availableSubTypes={availableSubTypes}
-            onStartEditing={onStartEditing}
-          />
-        );
-      })}
 
       {/* Conditional rendering based on activeTab */}
       {activeTab === "applications" && (
@@ -1761,13 +1694,13 @@ export function EnhancedStudentPortal({
                             </div>
                             <div className="p-3">
                               <p className="text-sm text-gray-600">
-                                {new Date(
+                                {formatDeadline(
                                   scholarship.application_start_date
-                                ).toLocaleDateString()}{" "}
+                                ) ?? "-"}{" "}
                                 -{" "}
-                                {new Date(
+                                {formatDeadline(
                                   scholarship.application_end_date
-                                ).toLocaleDateString()}
+                                ) ?? "-"}
                               </p>
                             </div>
                           </div>

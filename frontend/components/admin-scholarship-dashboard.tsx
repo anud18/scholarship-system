@@ -3,6 +3,7 @@
 import { AdminScholarshipManagementInterface } from "@/components/admin-scholarship-management-interface";
 import { ApplicationReviewDialog } from "@/components/common/ApplicationReviewDialog";
 import { ApplicationAuditTrail } from "@/components/application-audit-trail";
+import { CollegeApplicantStatsExportButton } from "@/components/admin/dashboard/CollegeApplicantStatsExportButton";
 import {
   BankVerificationReviewDialog,
   type BankVerificationData,
@@ -42,6 +43,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useScholarshipSpecificApplications } from "@/hooks/use-admin";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
+import { ProfessorRecommendation } from "@/components/college/review/application-summary-fields";
 import { logger } from "@/lib/utils/logger";
 import { Locale } from "@/lib/validators";
 import { getDisplayStatusInfo } from "@/lib/utils/application-helpers";
@@ -49,7 +51,15 @@ import {
   getStudentName,
   getStudentId,
   getStudentEmail,
+  getAcademyCode,
+  getDepartmentCode,
 } from "@/lib/utils/student-data-helpers";
+import {
+  useReferenceData,
+  getAcademyName,
+  getDepartmentName,
+} from "@/hooks/use-reference-data";
+import { splitSubTypeLabel } from "@/lib/utils/sub-type-label";
 import {
   AlertCircle,
   Calendar,
@@ -67,9 +77,6 @@ import {
   Minus,
   RefreshCw,
   Search,
-  Shield,
-  ShieldCheck,
-  ShieldX,
   Trash2,
   XCircle,
 } from "lucide-react";
@@ -119,6 +126,9 @@ interface AdminScholarshipDashboardProps {
   user: UserType;
 }
 
+// 仍可能在等待教授審核的申請狀態
+const PROFESSOR_PENDING_STATUSES = ["submitted", "under_review"];
+
 // Dashboard-specific Application interface for the data we actually receive
 interface DashboardApplication {
   id: number;
@@ -131,7 +141,11 @@ interface DashboardApplication {
   /** Server-computed: admin may hard-delete until the application enters 分發階段 */
   is_deletable?: boolean;
   submitted_at?: string;
-  days_waiting?: number;
+  professor_review_items?: Array<{
+    sub_type_code: string;
+    recommendation: string;
+    comments?: string;
+  }>;
   scholarship_subtype_list?: string[];
   user?: {
     email: string;
@@ -244,7 +258,7 @@ const transformApplicationData = (app: any): DashboardApplication => {
     review_stage: app.review_stage,
     is_deletable: app.is_deletable,
     submitted_at: app.submitted_at,
-    days_waiting: app.days_waiting,
+    professor_review_items: app.professor_review_items || [],
     created_at: app.created_at,
     updated_at: app.updated_at,
     form_data: app.submitted_form_data || app.form_data,
@@ -297,6 +311,8 @@ export function AdminScholarshipDashboard({
     refetch,
     updateApplicationStatus,
   } = useScholarshipSpecificApplications();
+  // 學院/系所名稱以 academies/departments 參考表為準（不用快照中的名稱）
+  const { academies, departments } = useReferenceData();
 
   // Get user's scholarship permissions for debugging
   const {
@@ -655,47 +671,6 @@ export function AdminScholarshipDashboard({
     }
   };
 
-  // 獲取郵局驗證狀態的顯示組件（簡化版：僅顯示 icon）
-  const getBankVerificationStatus = (app: DashboardApplication) => {
-    // 新版：檢查 bank_verification 物件中的分開狀態
-    const bankVerification = app.meta_data?.bank_verification as
-      | { account_number_status?: string; account_holder_status?: string }
-      | undefined;
-    const accountNumberStatus = bankVerification?.account_number_status;
-    const accountHolderStatus = bankVerification?.account_holder_status;
-
-    // 如果有分開狀態，判斷整體驗證狀態
-    if (accountNumberStatus || accountHolderStatus) {
-      const allVerified = accountNumberStatus === "verified" && accountHolderStatus === "verified";
-      const anyFailed = accountNumberStatus === "failed" || accountHolderStatus === "failed";
-
-      if (allVerified) {
-        return <ShieldCheck className="h-5 w-5 text-green-600" />;
-      } else if (anyFailed) {
-        return <ShieldX className="h-5 w-5 text-red-600" />;
-      } else {
-        return <Shield className="h-5 w-5 text-yellow-600" />;
-      }
-    }
-
-    // 舊版：向下相容舊的 bank_verification_status 欄位
-    const bankVerified = app.meta_data?.bank_verification_status === "verified";
-    const bankVerificationFailed =
-      app.meta_data?.bank_verification_status === "failed";
-    const bankVerificationPending =
-      app.meta_data?.bank_verification_status === "pending";
-
-    if (bankVerified) {
-      return <ShieldCheck className="h-5 w-5 text-green-600" />;
-    } else if (bankVerificationFailed) {
-      return <ShieldX className="h-5 w-5 text-red-600" />;
-    } else if (bankVerificationPending) {
-      return <Shield className="h-5 w-5 text-yellow-600" />;
-    } else {
-      return <Shield className="h-5 w-5 text-gray-400" />;
-    }
-  };
-
   // 處理學期選擇器變更
   const handleAcademicYearChange = (year: number) => {
     setSelectedAcademicYear(year);
@@ -931,12 +906,11 @@ export function AdminScholarshipDashboard({
                     />
                   </TableHead>
                   <TableHead>申請人</TableHead>
-                  <TableHead>郵局驗證</TableHead>
-                  {showSubTypes && <TableHead>子項目</TableHead>}
+                  {showSubTypes && <TableHead>學生申請獎學金類別</TableHead>}
                   <TableHead>指派教授</TableHead>
+                  <TableHead>教授審核結果</TableHead>
                   <TableHead>狀態</TableHead>
                   <TableHead>提交時間</TableHead>
-                  <TableHead>等待天數</TableHead>
                   <TableHead>操作</TableHead>
                 </TableRow>
               </TableHeader>
@@ -964,11 +938,17 @@ export function AdminScholarshipDashboard({
                       <div className="text-sm text-gray-500 whitespace-nowrap">
                         {app.student_email || app.user?.email || "N/A"}
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      {/* 僅顯示驗證狀態 icon，所有操作移至申請詳情的「管理」tab */}
-                      <div className="flex justify-center">
-                        {getBankVerificationStatus(app)}
+                      <div className="text-sm text-gray-500 whitespace-nowrap">
+                        {getAcademyName(
+                          getAcademyCode(app.student_data),
+                          academies
+                        )}
+                      </div>
+                      <div className="text-sm text-gray-500 whitespace-nowrap">
+                        {getDepartmentName(
+                          getDepartmentCode(app.student_data),
+                          departments
+                        )}
                       </div>
                     </TableCell>
                     {showSubTypes && (
@@ -977,15 +957,24 @@ export function AdminScholarshipDashboard({
                         app.scholarship_subtype_list.length > 0 ? (
                           <div className="flex flex-wrap gap-1 whitespace-nowrap">
                             {app.scholarship_subtype_list.map(
-                              (subType: string) => (
-                                <Badge
-                                  key={subType}
-                                  variant="outline"
-                                  className="text-xs"
-                                >
-                                  {getSubTypeDisplayName(subType)}
-                                </Badge>
-                              )
+                              (subType: string) => {
+                                // 括號內的說明換到第二行（僅顯示用）
+                                const [mainLabel, note] = splitSubTypeLabel(
+                                  getSubTypeDisplayName(subType)
+                                );
+                                return (
+                                  <Badge
+                                    key={subType}
+                                    variant="outline"
+                                    className={`text-xs flex-col items-start${
+                                      note ? " rounded-md" : ""
+                                    }`}
+                                  >
+                                    <span>{mainLabel}</span>
+                                    {note && <span>{note}</span>}
+                                  </Badge>
+                                );
+                              }
                             )}
                           </div>
                         ) : (
@@ -1151,6 +1140,23 @@ export function AdminScholarshipDashboard({
                         </div>
                       )}
                     </TableCell>
+                    <TableCell>
+                      <ProfessorRecommendation
+                        app={{
+                          professor_review_items: app.professor_review_items,
+                          // 「教授審核中」只在申請仍停留於審核流程時顯示，
+                          // 已核准/已拒絕等狀態不應顯示為等待教授
+                          requires_professor_recommendation:
+                            PROFESSOR_PENDING_STATUSES.includes(app.status) &&
+                            app.scholarship_configuration
+                              ?.requires_professor_recommendation,
+                        }}
+                        locale={locale}
+                        getSubTypeName={(code, lang) =>
+                          code ? getSubTypeDisplayName(code, lang) : "-"
+                        }
+                      />
+                    </TableCell>
                     <TableCell className="whitespace-nowrap">
                       <div className="flex gap-2">
                         {(() => {
@@ -1180,11 +1186,6 @@ export function AdminScholarshipDashboard({
                     <TableCell>
                       {app.submitted_at
                         ? new Date(app.submitted_at).toLocaleDateString("zh-TW")
-                        : "N/A"}
-                    </TableCell>
-                    <TableCell>
-                      {app.days_waiting !== undefined
-                        ? `${app.days_waiting}天`
                         : "N/A"}
                     </TableCell>
                     <TableCell>
@@ -1542,6 +1543,11 @@ export function AdminScholarshipDashboard({
           </p>
         </div>
         <div className="flex gap-2">
+          <CollegeApplicantStatsExportButton
+            scholarshipCode={activeTab}
+            academicYear={selectedAcademicYear}
+            semester={selectedSemester}
+          />
           <Button
             onClick={fetchAuditLogsForCurrentType}
             variant="outline"

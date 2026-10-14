@@ -39,7 +39,8 @@ from app.schemas.application import (
     ApplicationUpdate,
     StudentDataSchema,
 )
-from app.services.application_builder import backfill_professor_assignments
+from app.services.application_builder import backfill_professor_assignments, order_sub_type_preferences
+from app.services.application_field_service import FIXED_ADVISOR_KEYS, FIXED_KEY_POSTAL_ACCOUNT
 from app.services.eligibility_service import EligibilityService
 from app.services.email_automation_service import email_automation_service
 from app.services.email_service import EmailService
@@ -51,6 +52,7 @@ from app.utils.college_scope import (
     get_application_college_code,
     get_user_college_code,
 )
+from app.utils.professor_scope import professor_user_may_access
 from app.utils.phone_validation import (
     TAIWAN_MOBILE_MESSAGE,
     extract_contact_phone,
@@ -60,6 +62,20 @@ from app.utils.phone_validation import (
 func: Any = sa_func
 
 logger = logging.getLogger(__name__)
+
+# 郵局帳號與指導教授資訊屬於 UserProfile（由精靈的個人資料區塊寫入）。學生自己的
+# 建立/更新路徑若把它們存進 submitted_form_data，審核頁、造冊與帳號驗證就會讀到
+# 錯的值（#1443）。批次/續領匯入不走這兩個路徑，它們合法寫入的 postal_account 不受影響。
+PROFILE_OWNED_FORM_FIELDS = frozenset({FIXED_KEY_POSTAL_ACCOUNT, *FIXED_ADVISOR_KEYS})
+
+
+def strip_profile_owned_fields(form_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Return a copy of `form_data` without the UserProfile-owned fixed fields."""
+    fields = form_data.get("fields")
+    if not isinstance(fields, dict):
+        return form_data
+    kept = {field_id: value for field_id, value in fields.items() if field_id not in PROFILE_OWNED_FORM_FIELDS}
+    return {**form_data, "fields": kept}
 
 
 async def get_student_data_from_user(user: User) -> Optional[Dict[str, Any]]:
@@ -438,6 +454,24 @@ class ApplicationService:
 
         validate_sub_type_for_submission(scholarship, sub_scholarship_type)
 
+    async def _get_user_profile(self, user_id: int) -> Optional[UserProfile]:
+        result = await self.db.execute(select(UserProfile).where(UserProfile.user_id == user_id))
+        return result.scalar_one_or_none()
+
+    async def _require_bank_document(
+        self, scholarship: Optional[ScholarshipType], profile: Optional[UserProfile]
+    ) -> None:
+        """Reject a submission whose profile has no 存摺封面 while the fixed document is required."""
+        from app.services.application_field_service import ApplicationFieldService
+
+        if scholarship is not None:
+            field_service = ApplicationFieldService(self.db)
+            if not await field_service.is_fixed_bank_document_required(scholarship.code):
+                return
+
+        if profile is None or not profile.bank_document_photo_url:
+            raise ValidationError("尚未上傳存摺封面，請先於「個人資料」上傳存摺封面後再提交申請")
+
     async def _create_application_instance(
         self,
         user: User,
@@ -494,15 +528,22 @@ class ApplicationService:
             scholarship_subtype_list=scholarship_subtype_list,
             # Ordered sub-type preference list (志願序). The distribution service
             # reads this first; without it, allocation falls back to selection
-            # order. The frontend computes the order (MOE/moe_1w forced first).
-            sub_type_preferences=application_data.sub_type_preferences,
+            # order. MOE (moe_1w) is forced first here too — never trust the
+            # client's order alone.
+            sub_type_preferences=(
+                order_sub_type_preferences(application_data.sub_type_preferences)
+                if application_data.sub_type_preferences
+                else None
+            ),
             sub_type_selection_mode=sub_type_selection_mode,
             sub_scholarship_type=sub_scholarship_type,
             is_renewal=False,  # New applications are never renewals
             academic_year=academic_year,
             semester=semester,
             student_data=student_snapshot,
-            submitted_form_data=application_data.form_data.dict() if application_data.form_data else {},
+            submitted_form_data=(
+                strip_profile_owned_fields(application_data.form_data.dict()) if application_data.form_data else {}
+            ),
             agree_terms=application_data.agree_terms or False,
             status=status,
             status_name=status_name,
@@ -549,6 +590,11 @@ class ApplicationService:
         # 直接提交（非草稿）時驗證聯絡電話格式；草稿允許暫存未完成的號碼。
         if not is_draft and application_data.form_data:
             self._enforce_contact_phone_format(application_data.form_data.fields)
+
+        # A direct (non-draft) create lands in `submitted` without passing
+        # through submit_application, so it needs the same 存摺封面 gate.
+        if not is_draft:
+            await self._require_bank_document(scholarship, await self._get_user_profile(user.id))
 
         # Create application instance using helper method
         application = await self._create_application_instance(
@@ -893,7 +939,7 @@ class ApplicationService:
             if application.user_id != current_user.id:
                 return None
         elif current_user.role == UserRole.professor:
-            if application.professor_id != current_user.id:
+            if not professor_user_may_access(current_user, application):
                 return None
         elif current_user.role == UserRole.college:
             # SECURITY (#1223 A): 學院 staff are scoped to their own college's
@@ -1096,7 +1142,9 @@ class ApplicationService:
         # 更新表單資料
         if update_data.form_data:
             # Serialize form data to handle datetime objects properly
-            application.submitted_form_data = self._serialize_for_json(update_data.form_data.dict())
+            application.submitted_form_data = self._serialize_for_json(
+                strip_profile_owned_fields(update_data.form_data.dict())
+            )
 
         # NOTE: status is intentionally not updatable here — see ApplicationUpdate.
 
@@ -1116,7 +1164,7 @@ class ApplicationService:
         # 更新志願序（如果提供）— persist the ordered preference list so the
         # distribution service uses it instead of falling back to selection order.
         if update_data.sub_type_preferences is not None:
-            application.sub_type_preferences = update_data.sub_type_preferences
+            application.sub_type_preferences = order_sub_type_preferences(update_data.sub_type_preferences)
 
         await self.db.commit()
         await self.db.refresh(application)
@@ -1279,6 +1327,13 @@ class ApplicationService:
         # to no quota slot at distribution time).
         self._validate_sub_type_for_submission(application.scholarship, application.sub_scholarship_type)
 
+        # Load user profile once (reused for the 存摺封面 check, auto-assign professor and email notification)
+        advisor_profile = await self._get_user_profile(application.user_id)
+
+        # 存摺封面 lives on the profile, not in submitted_form_data, so the
+        # form validation above cannot see it.
+        await self._require_bank_document(application.scholarship, advisor_profile)
+
         # 處理銀行帳戶證明文件 clone（從個人資料複製到申請）
         await self._clone_user_profile_documents(application, user)
 
@@ -1297,11 +1352,6 @@ class ApplicationService:
         # System Overview dashboard panel for new submissions starts
         # reflecting real KPIs (issue #159).
         scholarship_applications_total.labels(status=ApplicationStatus.submitted.value).inc()
-
-        # Load user profile once (reused for auto-assign professor and email notification)
-        user_profile_stmt = select(UserProfile).where(UserProfile.user_id == application.user_id)
-        user_profile_result = await self.db.execute(user_profile_stmt)
-        advisor_profile = user_profile_result.scalar_one_or_none()
 
         # 自動分配指導教授：根據 UserProfile 的 advisor_nycu_id 查找教授帳號
         from app.services.application_builder import assign_professor_from_profile
@@ -2652,6 +2702,11 @@ class ApplicationService:
                                 "config_name": (
                                     app.scholarship_configuration.config_name if app.scholarship_configuration else None
                                 ),
+                                # 教授審查截止 for this application's track (renewal vs general),
+                                # so the professor queue can show the exact closing minute.
+                                "professor_review_end": app.scholarship_configuration.professor_review_end_for(
+                                    bool(app.is_renewal)
+                                ),
                             }
                             if app.scholarship_configuration
                             else None
@@ -2759,7 +2814,7 @@ class ApplicationService:
 
                 # Check renewal review period
                 renewal_start = config.renewal_professor_review_start
-                renewal_end = config.renewal_professor_review_end
+                renewal_end = config.professor_review_end_for(True)
 
                 if renewal_start and renewal_end:
                     if renewal_start.tzinfo is None:
@@ -2777,7 +2832,7 @@ class ApplicationService:
                 # Check regular review period - from application start to professor review end
                 # Professor can review from when student submits application until professor review deadline
                 review_start = config.application_start_date  # Changed from professor_review_start
-                review_end = config.professor_review_end
+                review_end = config.professor_review_end_for(False)
 
                 if review_start and review_end:
                     if review_start.tzinfo is None:

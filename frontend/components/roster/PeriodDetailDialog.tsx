@@ -28,6 +28,7 @@ import {
   CheckCircle2,
   Lock,
 } from "lucide-react"
+import { RosterCollegeAwardStatsButton } from "./RosterCollegeAwardStatsButton"
 import { apiClient } from "@/lib/api"
 import { toast } from "sonner"
 
@@ -242,6 +243,12 @@ export function PeriodDetailDialog({
                 <Button variant="outline" onClick={() => onOpenChange(false)}>
                   關閉
                 </Button>
+                {period.roster_id && (
+                  <RosterCollegeAwardStatsButton
+                    rosterId={period.roster_id}
+                    size="default"
+                  />
+                )}
                 <Button onClick={handleDownload} disabled={downloading}>
                   {downloading ? (
                     <>
