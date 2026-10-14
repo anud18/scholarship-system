@@ -18,6 +18,7 @@ from app.services.auth_service import AuthService
 from app.services.developer_profile_service import DeveloperProfile, DeveloperProfileManager, DeveloperProfileService
 from app.services.mock_sso_service import MockSSOService
 from app.services.portal_sso_service import PortalSSOService
+from app.utils.college_code import require_known_college_code
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -87,9 +88,10 @@ async def register(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient permissions to create users",
         )
+    college_code = await require_known_college_code(db, user_data.college_code, actor_id=current_user.id)
     try:
         auth_service = AuthService(db)
-        user = await auth_service.register_user(user_data)
+        user = await auth_service.register_user(user_data.model_copy(update={"college_code": college_code}))
     except Exception:
         # SECURITY audit: capture every failed registration with the
         # attempted nycu_id + client IP so brute-force / enumeration
