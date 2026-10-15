@@ -4,6 +4,7 @@ Application service for scholarship application management
 
 import asyncio
 import logging
+from copy import deepcopy
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
@@ -2366,22 +2367,6 @@ class ApplicationService:
                     logger.debug(f"No {doc_config['file_type']} found for user {user.id}")
                     continue
 
-                # Check if the document is already cloned to avoid duplication
-                existing_file_stmt = select(ApplicationFile).where(
-                    ApplicationFile.application_id == application.id,
-                    ApplicationFile.file_type == doc_config["file_type"],
-                )
-                existing_file_result = await self.db.execute(existing_file_stmt)
-                existing_file = existing_file_result.scalar_one_or_none()
-
-                if existing_file:
-                    logger.debug(
-                        f"{doc_config['document_name']} already cloned for application {application.app_id}, skipping"
-                    )
-                    continue
-
-                logger.info(f"Cloning {doc_config['document_name']} for application {application.app_id}")
-
                 # 使用儲存的 object_name，如果沒有則從 URL 提取
                 if hasattr(user_profile, doc_config["object_name_field"]):
                     source_object_name = getattr(user_profile, doc_config["object_name_field"], None)
@@ -2396,6 +2381,32 @@ class ApplicationService:
                     filename = doc_url.split("/")[-1].split("?")[0]
                     source_object_name = f"user-profiles/{user.id}/bank-documents/{filename}"
 
+                # Locked so overlapping saves cannot each copy the file and orphan one of the copies.
+                existing_file_stmt = (
+                    select(ApplicationFile)
+                    .where(
+                        ApplicationFile.application_id == application.id,
+                        ApplicationFile.file_type == doc_config["file_type"],
+                    )
+                    .order_by(ApplicationFile.id)
+                    .limit(1)
+                    .with_for_update()
+                )
+                existing_file_result = await self.db.execute(existing_file_stmt)
+                existing_file = existing_file_result.scalars().first()
+
+                # Skip only while the copy still matches the profile's current document.
+                # The student can replace the profile document after the first clone
+                # (draft autosave clones it early); without this comparison the
+                # application kept submitting the stale first copy.
+                if existing_file and existing_file.source_object_name == source_object_name:
+                    logger.debug(
+                        f"{doc_config['document_name']} already cloned for application {application.app_id}, skipping"
+                    )
+                    continue
+
+                logger.info(f"Cloning {doc_config['document_name']} for application {application.app_id}")
+
                 # 使用 MinIO 服務複製文件到申請路徑
                 new_object_name = minio_service.clone_file_to_application(
                     source_object_name=source_object_name,
@@ -2404,20 +2415,35 @@ class ApplicationService:
 
                 logger.debug(f"File cloned from {source_object_name} to {new_object_name}")
 
-                # 創建 ApplicationFile 記錄 - 與動態上傳文件相同處理
-                application_file = ApplicationFile(
-                    application_id=application.id,
-                    file_type=doc_config["file_type"],
-                    filename=filename,
-                    original_filename=filename,
-                    file_size=0,  # 大小會在實際使用時獲取
-                    content_type="application/octet-stream",  # 會在實際使用時更新
-                    object_name=new_object_name,
-                    is_verified=True,  # 固定文件預設已驗證
-                    uploaded_at=datetime.now(timezone.utc),
-                )
-
-                self.db.add(application_file)
+                replaced_object_name = None
+                if existing_file:
+                    # Re-point the existing row so file_id and the document list stay valid.
+                    replaced_object_name = existing_file.object_name
+                    existing_file.filename = filename
+                    existing_file.original_filename = filename
+                    existing_file.object_name = new_object_name
+                    existing_file.source_object_name = source_object_name
+                    # Size and type described the replaced object; they are filled in on use, as for a new row.
+                    existing_file.file_size = 0
+                    existing_file.content_type = "application/octet-stream"
+                    existing_file.mime_type = None
+                    existing_file.uploaded_at = datetime.now(timezone.utc)
+                    application_file = existing_file
+                else:
+                    # 創建 ApplicationFile 記錄 - 與動態上傳文件相同處理
+                    application_file = ApplicationFile(
+                        application_id=application.id,
+                        file_type=doc_config["file_type"],
+                        filename=filename,
+                        original_filename=filename,
+                        file_size=0,  # 大小會在實際使用時獲取
+                        content_type="application/octet-stream",  # 會在實際使用時更新
+                        object_name=new_object_name,
+                        source_object_name=source_object_name,
+                        is_verified=True,  # 固定文件預設已驗證
+                        uploaded_at=datetime.now(timezone.utc),
+                    )
+                    self.db.add(application_file)
                 await self.db.flush()  # 確保獲得 application_file.id
 
                 cloned_documents.append(
@@ -2426,12 +2452,14 @@ class ApplicationService:
                         "document_name": doc_config["document_name"],
                         "file_id": application_file.id,
                         "object_name": new_object_name,
+                        "replaced_object_name": replaced_object_name,
                     }
                 )
 
             # 批量更新申請的 form_data
             if cloned_documents:
-                form_data = application.submitted_form_data or {}
+                # Deep copy: assigning the same dict back would not mark the JSON column dirty.
+                form_data = deepcopy(application.submitted_form_data or {})
 
                 # 生成文件訪問 URL
                 from app.core.config import settings
@@ -2482,6 +2510,19 @@ class ApplicationService:
                 logger.info(
                     f"{len(cloned_documents)} documents successfully cloned and linked to application {application.app_id}"
                 )
+
+                # Drop the superseded copies only after the new ones are committed. Once the
+                # application has left draft, reviewers may still need the copy they saw.
+                is_draft = getattr(application.status, "value", application.status) == ApplicationStatus.draft.value
+                for cloned_doc in cloned_documents:
+                    replaced_object_name = cloned_doc["replaced_object_name"]
+                    if is_draft and replaced_object_name and not minio_service.delete_file(replaced_object_name):
+                        logger.warning(
+                            "Could not delete superseded %s %s for application %s",
+                            cloned_doc["file_type"],
+                            replaced_object_name,
+                            application.app_id,
+                        )
 
         except Exception:
             logger.exception(f"Failed to clone user profile documents for application {application.app_id}")

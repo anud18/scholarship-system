@@ -372,6 +372,8 @@ class ApplicationFile(Base):
     filename = Column(String(255), nullable=False)
     original_filename = Column(String(255))
     object_name = Column(String(500))  # MinIO object name
+    # Profile object a cloned fixed document (e.g. 存摺封面) was copied from; NULL for uploads.
+    source_object_name = Column(String(500))
     file_size = Column(Integer)
     mime_type = Column(String(100))
     content_type = Column(String(100))  # For MinIO
