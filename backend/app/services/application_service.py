@@ -2381,20 +2381,25 @@ class ApplicationService:
                     filename = doc_url.split("/")[-1].split("?")[0]
                     source_object_name = f"user-profiles/{user.id}/bank-documents/{filename}"
 
-                existing_file_stmt = select(ApplicationFile).where(
-                    ApplicationFile.application_id == application.id,
-                    ApplicationFile.file_type == doc_config["file_type"],
+                # Locked so overlapping saves cannot each copy the file and orphan one of the copies.
+                existing_file_stmt = (
+                    select(ApplicationFile)
+                    .where(
+                        ApplicationFile.application_id == application.id,
+                        ApplicationFile.file_type == doc_config["file_type"],
+                    )
+                    .order_by(ApplicationFile.id)
+                    .limit(1)
+                    .with_for_update()
                 )
                 existing_file_result = await self.db.execute(existing_file_stmt)
-                existing_file = existing_file_result.scalar_one_or_none()
+                existing_file = existing_file_result.scalars().first()
 
                 # Skip only while the copy still matches the profile's current document.
                 # The student can replace the profile document after the first clone
                 # (draft autosave clones it early); without this comparison the
                 # application kept submitting the stale first copy.
-                if existing_file and (
-                    self._get_cloned_source_object_name(application, doc_config["file_type"]) == source_object_name
-                ):
+                if existing_file and existing_file.source_object_name == source_object_name:
                     logger.debug(
                         f"{doc_config['document_name']} already cloned for application {application.app_id}, skipping"
                     )
@@ -2417,6 +2422,11 @@ class ApplicationService:
                     existing_file.filename = filename
                     existing_file.original_filename = filename
                     existing_file.object_name = new_object_name
+                    existing_file.source_object_name = source_object_name
+                    # Size and type described the replaced object; they are filled in on use, as for a new row.
+                    existing_file.file_size = 0
+                    existing_file.content_type = "application/octet-stream"
+                    existing_file.mime_type = None
                     existing_file.uploaded_at = datetime.now(timezone.utc)
                     application_file = existing_file
                 else:
@@ -2429,6 +2439,7 @@ class ApplicationService:
                         file_size=0,  # 大小會在實際使用時獲取
                         content_type="application/octet-stream",  # 會在實際使用時更新
                         object_name=new_object_name,
+                        source_object_name=source_object_name,
                         is_verified=True,  # 固定文件預設已驗證
                         uploaded_at=datetime.now(timezone.utc),
                     )
@@ -2441,7 +2452,6 @@ class ApplicationService:
                         "document_name": doc_config["document_name"],
                         "file_id": application_file.id,
                         "object_name": new_object_name,
-                        "source_object_name": source_object_name,
                         "replaced_object_name": replaced_object_name,
                     }
                 )
@@ -2475,7 +2485,6 @@ class ApplicationService:
                         "file_path": f"{base_url}/files/applications/{application.id}/files/{cloned_doc['file_id']}?token={access_token}",
                         "download_url": f"{base_url}/files/applications/{application.id}/files/{cloned_doc['file_id']}/download?token={access_token}",
                         "object_name": cloned_doc["object_name"],
-                        "source_object_name": cloned_doc["source_object_name"],
                         "is_verified": True,
                         "upload_time": datetime.now(timezone.utc).isoformat(),
                     }
@@ -2502,10 +2511,12 @@ class ApplicationService:
                     f"{len(cloned_documents)} documents successfully cloned and linked to application {application.app_id}"
                 )
 
-                # Drop the superseded copies only after the new ones are committed.
+                # Drop the superseded copies only after the new ones are committed. Once the
+                # application has left draft, reviewers may still need the copy they saw.
+                is_draft = getattr(application.status, "value", application.status) == ApplicationStatus.draft.value
                 for cloned_doc in cloned_documents:
                     replaced_object_name = cloned_doc["replaced_object_name"]
-                    if replaced_object_name and not minio_service.delete_file(replaced_object_name):
+                    if is_draft and replaced_object_name and not minio_service.delete_file(replaced_object_name):
                         logger.warning(
                             "Could not delete superseded %s %s for application %s",
                             cloned_doc["file_type"],
@@ -2519,16 +2530,6 @@ class ApplicationService:
             import traceback
 
             traceback.print_exc()
-
-    @staticmethod
-    def _get_cloned_source_object_name(application: Application, file_type: str) -> Optional[str]:
-        """The profile object a cloned fixed document was copied from, or None for copies
-        made before the source was recorded (those are refreshed once)."""
-        form_data = application.submitted_form_data or {}
-        for doc in form_data.get("documents") or []:
-            if doc.get("document_type") == file_type:
-                return doc.get("source_object_name")
-        return None
 
     def _get_document_display_name(self, file_type: str) -> str:
         """

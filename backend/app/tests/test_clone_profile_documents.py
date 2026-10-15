@@ -6,9 +6,11 @@ keeping the first copy.
 
 Covered here (`ApplicationService._clone_user_profile_documents`):
 - the first clone creates the file row and records which profile object it came from
-- an unchanged profile document is not copied again
+- an unchanged profile document is not copied again, including across real draft
+  saves (`update_application` rewrites `submitted_form_data` on every save)
 - a replaced profile document re-points the SAME file row, updates the document
   entry and deletes the superseded copy
+- the superseded copy is kept once the application has left draft
 - a copy made before the source was recorded is refreshed once
 """
 
@@ -20,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.application import Application, ApplicationFile, ApplicationStatus
+from app.schemas.application import ApplicationFormData, ApplicationUpdate
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User, UserRole, UserType
 from app.models.user_profile import UserProfile
@@ -126,12 +129,11 @@ async def test_first_clone_records_the_profile_source(db: AsyncSession, fake_min
 
     await ApplicationService(db)._clone_user_profile_documents(application, student)
 
-    files = await _files(db, application)
-    assert len(files) == 1
-    assert fake_minio.cloned == [(source, files[0].object_name)]
+    (file,) = await _files(db, application)
+    assert fake_minio.cloned == [(source, file.object_name)]
+    assert file.source_object_name == source
     (document,) = _bank_documents(application)
-    assert document["source_object_name"] == source
-    assert document["file_id"] == files[0].id
+    assert document["file_id"] == file.id
     assert fake_minio.deleted == []
 
 
@@ -143,6 +145,21 @@ async def test_unchanged_profile_document_is_not_cloned_again(db: AsyncSession, 
 
     await service._clone_user_profile_documents(application, student)
     await service._clone_user_profile_documents(application, student)
+
+    assert len(fake_minio.cloned) == 1
+    assert len(await _files(db, application)) == 1
+    assert fake_minio.deleted == []
+
+
+@pytest.mark.asyncio
+async def test_draft_saves_do_not_clone_an_unchanged_document_again(db: AsyncSession, fake_minio: FakeMinio):
+    student, application, profile = await _seed(db)
+    await _set_profile_document(db, profile, student.id, "first.pdf")
+    service = ApplicationService(db)
+    update = ApplicationUpdate(form_data=ApplicationFormData(fields={}, documents=[]))
+
+    await service.update_application(application.id, update, student)
+    await service.update_application(application.id, update, student)
 
     assert len(fake_minio.cloned) == 1
     assert len(await _files(db, application)) == 1
@@ -164,12 +181,45 @@ async def test_replaced_profile_document_refreshes_the_application_copy(db: Asyn
     (file,) = await _files(db, application)
     assert file.id == first_file.id
     assert file.object_name != first_copy
+    assert file.source_object_name == new_source
     assert fake_minio.cloned[-1] == (new_source, file.object_name)
     assert fake_minio.deleted == [first_copy]
     (document,) = _bank_documents(application)
-    assert document["source_object_name"] == new_source
     assert document["object_name"] == file.object_name
     assert document["file_id"] == file.id
+
+
+@pytest.mark.asyncio
+async def test_replaced_profile_document_through_draft_save(db: AsyncSession, fake_minio: FakeMinio):
+    student, application, profile = await _seed(db)
+    await _set_profile_document(db, profile, student.id, "first.pdf")
+    service = ApplicationService(db)
+    update = ApplicationUpdate(form_data=ApplicationFormData(fields={}, documents=[]))
+    await service.update_application(application.id, update, student)
+
+    new_source = await _set_profile_document(db, profile, student.id, "second.jpg")
+    await service.update_application(application.id, update, student)
+
+    (file,) = await _files(db, application)
+    assert file.source_object_name == new_source
+    assert [pair[0] for pair in fake_minio.cloned][-1] == new_source
+    assert len(fake_minio.cloned) == 2
+
+
+@pytest.mark.asyncio
+async def test_superseded_copy_is_kept_once_the_application_left_draft(db: AsyncSession, fake_minio: FakeMinio):
+    student, application, profile = await _seed(db)
+    await _set_profile_document(db, profile, student.id, "first.pdf")
+    service = ApplicationService(db)
+    await service._clone_user_profile_documents(application, student)
+
+    application.status = ApplicationStatus.returned.value
+    await db.commit()
+    await _set_profile_document(db, profile, student.id, "second.jpg")
+    await service._clone_user_profile_documents(application, student)
+
+    assert len(fake_minio.cloned) == 2
+    assert fake_minio.deleted == []
 
 
 @pytest.mark.asyncio
@@ -187,11 +237,6 @@ async def test_copy_made_before_the_source_was_recorded_is_refreshed_once(db: As
     )
     db.add(legacy_file)
     await db.commit()
-    application.submitted_form_data = {
-        "fields": {},
-        "documents": [{"document_type": FILE_TYPE, "file_id": legacy_file.id, "object_name": legacy_copy}],
-    }
-    await db.commit()
     service = ApplicationService(db)
 
     await service._clone_user_profile_documents(application, student)
@@ -199,5 +244,27 @@ async def test_copy_made_before_the_source_was_recorded_is_refreshed_once(db: As
 
     assert [pair[0] for pair in fake_minio.cloned] == [source]
     assert fake_minio.deleted == [legacy_copy]
-    (document,) = _bank_documents(application)
-    assert document["source_object_name"] == source
+    (file,) = await _files(db, application)
+    assert file.source_object_name == source
+
+
+@pytest.mark.asyncio
+async def test_duplicate_bank_rows_do_not_block_the_refresh(db: AsyncSession, fake_minio: FakeMinio):
+    student, application, profile = await _seed(db)
+    source = await _set_profile_document(db, profile, student.id, "current.pdf")
+    for index in range(2):
+        db.add(
+            ApplicationFile(
+                application_id=application.id,
+                file_type=FILE_TYPE,
+                filename=f"old{index}.pdf",
+                object_name=f"applications/APP-CPD-1/documents/old{index}.pdf",
+            )
+        )
+    await db.commit()
+
+    await ApplicationService(db)._clone_user_profile_documents(application, student)
+
+    assert [pair[0] for pair in fake_minio.cloned] == [source]
+    files = await _files(db, application)
+    assert sorted(f.source_object_name or "" for f in files) == ["", source]
