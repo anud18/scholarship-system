@@ -18,6 +18,7 @@ from app.models.user import EmployeeStatus, User, UserRole, UserType
 from app.services.application_builder import backfill_professor_assignments
 from app.services.auth_service import AuthService
 from app.services.student_service import StudentService
+from app.utils.portal_email import normalize_portal_email
 
 logger = logging.getLogger(__name__)
 
@@ -183,7 +184,7 @@ class PortalSSOService:
         # Extract user information
         nycu_id = portal_data.get("txtID") or portal_data.get("nycuID")
         name = portal_data.get("txtName")
-        email = portal_data.get("mail")
+        email = normalize_portal_email(portal_data.get("mail"))
         dept_name = portal_data.get("dept")
         dept_code = portal_data.get("deptCode")
         portal_user_type = portal_data.get("userType", "student")  # Portal's claimed user type
@@ -277,7 +278,7 @@ class PortalSSOService:
         self,
         nycu_id: str,
         name: str,
-        email: str,
+        email: Optional[str],
         dept_name: Optional[str] = None,
         dept_code: Optional[str] = None,
         user_type: UserType = UserType.student,
@@ -296,7 +297,10 @@ class PortalSSOService:
         if user:
             # Update existing user data
             user.name = name
-            user.email = email
+            # Portal is the source of truth, but when it sends no usable address keep the
+            # stored one (e.g. the pre-authorization placeholder) rather than blanking it.
+            # `or None` also turns an '' left by older logins into NULL.
+            user.email = email or user.email or None
 
             # Only update role if it's not a pre-authorized special role
             # Preserve: super_admin, admin, college
