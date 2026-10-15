@@ -193,25 +193,29 @@ export default function ScholarshipManagementSystem() {
     }
   }, []);
 
-  // Set initial active tab based on user role
+  // Set initial active tab based on user role.
+  // Keyed on the role, not the user object: the /auth/me refresh in use-auth
+  // swaps in a new user object shortly after load, and resetting the tab then
+  // would discard whatever tab the user already clicked.
+  const userRole = user?.role;
   useEffect(() => {
-    if (user) {
+    if (userRole) {
       // Set each role to their first available tab (index 0)
-      if (user.role === "student") {
+      if (userRole === "student") {
         setActiveTab("scholarship-list");
-      } else if (user.role === "professor") {
+      } else if (userRole === "professor") {
         setActiveTab("main");
-      } else if (user.role === "college") {
+      } else if (userRole === "college") {
         setActiveTab("main");
-      } else if (user.role === "admin") {
+      } else if (userRole === "admin") {
         setActiveTab("dashboard");
-      } else if (user.role === "super_admin") {
+      } else if (userRole === "super_admin") {
         setActiveTab("dashboard");
       }
     } else {
       logger.debug("No user found, cannot set active tab");
     }
-  }, [user]);
+  }, [userRole]);
 
   const t = (key: string) => getTranslation(locale, key);
 
