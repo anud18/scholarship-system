@@ -81,7 +81,7 @@ async def export_college_applicant_stats(
     columns = scholarship_stats_columns(
         scholarship, records, single_column_label=APPLICANT_COUNT_LABEL, combine_agencies=True
     )
-    rows = tally_college_counts(records, columns)
+    rows = tally_college_counts(records, columns, combine_agencies=True)
 
     period = stats_period_label(academic_year, normalize_semester_value(semester))
     scholarship_name = scholarship.name or scholarship.code

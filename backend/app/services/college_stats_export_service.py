@@ -14,21 +14,25 @@ name. A student is counted once per column even if they picked (or were
 allocated) several sub-types that map to it.
 
 The 申請人數 sheet also splits out students who applied to more than one agency
-(``combine_agencies``): such a student is counted only in a combination column
-such as 國科會+教育部, not in each agency's own column, so every applicant sits
-in exactly one column and a row adds up to the college's applicant count.
+(``combine_agencies``): a student's agencies are merged across all of their
+applications in that college row, and a student with several is counted only
+in the combination column (國科會+教育部), not in each agency's own column. So
+every applicant sits in exactly one column of their row, and the row adds up to
+the college's applicant count.
 """
 
 from __future__ import annotations
 
 import io
 from dataclasses import dataclass
+from itertools import combinations
 from typing import Dict, FrozenSet, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
 
 from app.core.college_mappings import COLLEGE_MAPPINGS, normalize_academy_code
+from app.models.enums import SubTypeSelectionMode
 from app.utils.academic_period import format_academic_period
 from app.services.export_table_chassis import apply_xlsx_borders
 from app.utils.excel_safety import sanitize_excel_cell
@@ -128,28 +132,52 @@ def _real_sub_types(codes: Iterable[str]) -> List[str]:
     return [c for c in (_normalize_code(x) for x in codes) if c not in _NON_SUB_TYPE_CODES]
 
 
-def _record_agency_keys(record: StatsRecord) -> Set[str]:
-    return {_column_key(c) for c in _real_sub_types(record.sub_type_codes)}
+def _record_agency_keys(record: StatsRecord) -> FrozenSet[str]:
+    return frozenset(_column_key(c) for c in _real_sub_types(record.sub_type_codes))
 
 
-def _combination_column(keys: Iterable[str], singles: Sequence[StatsColumn]) -> StatsColumn:
-    members = tuple(c.key for c in singles if c.key in set(keys))
-    labels = [c.label for c in singles if c.key in members]
-    return StatsColumn(key=COMBINATION_JOINER.join(members), label=COMBINATION_JOINER.join(labels), members=members)
+def _row_code(record: StatsRecord) -> str:
+    return normalize_academy_code((record.academy_code or "").strip())
+
+
+def _student_agency_keys(records: Sequence[StatsRecord]) -> Dict[Tuple[str, int], FrozenSet[str]]:
+    """Agency keys per (college code, student), merged across their applications."""
+    merged: Dict[Tuple[str, int], FrozenSet[str]] = {}
+    for record in records:
+        slot = (_row_code(record), record.user_id)
+        merged[slot] = merged.get(slot, frozenset()) | _record_agency_keys(record)
+    return merged
 
 
 def _combination_columns(
-    singles: Sequence[StatsColumn], configured_keys: Sequence[str], records: Sequence[StatsRecord]
+    singles: Sequence[StatsColumn],
+    configured_keys: Sequence[str],
+    records: Sequence[StatsRecord],
+    allows_multiple: bool,
 ) -> List[StatsColumn]:
-    """Combination columns: every configured agency together (always, so the
-    fixed form shows 國科會+教育部 even at zero), plus any other combination an
-    application actually picked."""
-    combos: Set[FrozenSet[str]] = {frozenset(keys) for r in records if len(keys := _record_agency_keys(r)) > 1}
-    if len(set(configured_keys)) > 1:
-        combos.add(frozenset(configured_keys))
+    """Combination columns, after the agency columns.
+
+    A multi-select scholarship always gets every combination of its configured
+    agencies, so the form keeps the same columns from one export to the next
+    (國科會+教育部 shows even at zero). Any other combination a student actually
+    has, e.g. with a deactivated sub-type, is added so nobody is dropped.
+    """
+    configured = list(dict.fromkeys(configured_keys))
+    combos: Set[FrozenSet[str]] = {keys for keys in _student_agency_keys(records).values() if len(keys) > 1}
+    if allows_multiple:
+        combos |= {frozenset(c) for size in range(2, len(configured) + 1) for c in combinations(configured, size)}
     position = {c.key: i for i, c in enumerate(singles)}
-    ordered = sorted(combos, key=lambda keys: (len(keys), sorted(position[k] for k in keys)))
-    return [_combination_column(keys, singles) for keys in ordered]
+    columns = []
+    for keys in sorted(combos, key=lambda ks: (len(ks), sorted(position[k] for k in ks))):
+        members = [c for c in singles if c.key in keys]
+        columns.append(
+            StatsColumn(
+                key=COMBINATION_JOINER.join(c.key for c in members),
+                label=COMBINATION_JOINER.join(c.label for c in members),
+                members=tuple(c.key for c in members),
+            )
+        )
+    return columns
 
 
 def build_stats_columns(
@@ -158,6 +186,7 @@ def build_stats_columns(
     known_names: Optional[Mapping[str, str]] = None,
     single_column_label: str = APPLICANT_COUNT_LABEL,
     combine_agencies: bool = False,
+    allows_multiple: bool = True,
 ) -> List[StatsColumn]:
     """Columns for the count matrix.
 
@@ -167,7 +196,8 @@ def build_stats_columns(
     silently dropped, labelled from ``known_names`` (every configured
     sub-type, active or not). A scholarship with no real sub-types gets a
     single ``single_column_label`` column. ``combine_agencies`` adds the
-    combination columns (see the module docstring) after the agency columns.
+    combination columns (see the module docstring); ``allows_multiple`` is
+    False for a single-select scholarship, whose form needs no fixed ones.
     """
     names = {_normalize_code(code): name for code, name in (known_names or {}).items()}
     names.update({_normalize_code(code): name for code, name in sub_type_configs})
@@ -187,22 +217,49 @@ def build_stats_columns(
         return [StatsColumn(key=SINGLE_COLUMN_KEY, label=single_column_label)]
     if combine_agencies:
         configured_keys = [_column_key(code) for code in ordered_codes]
-        columns += _combination_columns(columns, configured_keys, records)
-    if any(not _real_sub_types(r.sub_type_codes) for r in records):
+        columns += _combination_columns(columns, configured_keys, records, allows_multiple)
+    if combine_agencies:
+        # A student is unspecified only if none of their applications picked a sub-type.
+        lacks_sub_type = any(not keys for keys in _student_agency_keys(records).values())
+    else:
+        lacks_sub_type = any(not _real_sub_types(r.sub_type_codes) for r in records)
+    if lacks_sub_type:
         columns.append(StatsColumn(key=UNSPECIFIED_SUB_TYPE_COLUMN, label=UNSPECIFIED_SUB_TYPE_COLUMN))
     return columns
 
 
-def _record_column_keys(record: StatsRecord, columns: Sequence[StatsColumn]) -> Set[str]:
-    if any(c.key == SINGLE_COLUMN_KEY for c in columns):
-        return {SINGLE_COLUMN_KEY}
-    keys = _record_agency_keys(record)
+def _agency_column_key(keys: FrozenSet[str], key_by_members: Mapping[FrozenSet[str], str]) -> str:
     if not keys:
-        return {UNSPECIFIED_SUB_TYPE_COLUMN}
-    if len(keys) > 1 and any(c.members for c in columns):
-        singles = [c for c in columns if not c.members]
-        return {_combination_column(keys, singles).key}
-    return keys
+        return UNSPECIFIED_SUB_TYPE_COLUMN
+    try:
+        return key_by_members[keys]
+    except KeyError:
+        raise ValueError(f"no stats column for sub-type agencies {sorted(keys)}") from None
+
+
+def _cell_assignments(
+    records: Sequence[StatsRecord], columns: Sequence[StatsColumn], combine_agencies: bool
+) -> List[Tuple[str, int, str]]:
+    """``(college code, user_id, column key)`` for every count the sheet holds.
+
+    Without ``combine_agencies`` each application counts once in each of its
+    agencies' columns. With it, a student's agencies are first merged per
+    college row and the student goes to exactly one column.
+    """
+    if any(c.key == SINGLE_COLUMN_KEY for c in columns):
+        return [(_row_code(r), r.user_id, SINGLE_COLUMN_KEY) for r in records]
+    key_by_members = {frozenset(c.members or (c.key,)): c.key for c in columns if c.key != UNSPECIFIED_SUB_TYPE_COLUMN}
+    if combine_agencies:
+        return [
+            (code, user_id, _agency_column_key(keys, key_by_members))
+            for (code, user_id), keys in _student_agency_keys(records).items()
+        ]
+    assignments = []
+    for record in records:
+        keys = _record_agency_keys(record)
+        for group in [frozenset({key}) for key in keys] or [frozenset()]:
+            assignments.append((_row_code(record), record.user_id, _agency_column_key(group, key_by_members)))
+    return assignments
 
 
 def _row_label_for_extra_code(code: str) -> str:
@@ -211,27 +268,29 @@ def _row_label_for_extra_code(code: str) -> str:
     return COLLEGE_MAPPINGS.get(code) or f"{UNKNOWN_COLLEGE_LABEL}（{code}）"
 
 
-def tally_college_counts(records: Sequence[StatsRecord], columns: Sequence[StatsColumn]) -> List[StatsRow]:
+def tally_college_counts(
+    records: Sequence[StatsRecord], columns: Sequence[StatsColumn], *, combine_agencies: bool = False
+) -> List[StatsRow]:
     """One row per layout college, then any colleges outside the layout, then 合計.
 
     Every layout row is emitted even at zero (the sheet is a fixed form). Cell
     counts are distinct students, so a student with two applications in one
-    cell is counted once; 合計 is the column sum. When ``columns`` has
-    combination columns, a multi-agency application is counted only there.
+    cell is counted once; 合計 is the column sum. With ``combine_agencies``
+    (columns built the same way) a student is in exactly one column of their
+    row. Raises ValueError if a record needs a column ``columns`` lacks, rather
+    than silently leaving the student out.
     """
     column_keys = [c.key for c in columns]
     row_by_code = {code: label for label, codes in COLLEGE_STATS_LAYOUT for code in codes}
 
     users: Dict[Tuple[str, str], Set[int]] = {}
     extra_labels: Dict[str, str] = {}
-    for record in records:
-        code = normalize_academy_code((record.academy_code or "").strip())
+    for code, user_id, key in _cell_assignments(records, columns, combine_agencies):
         row_label = row_by_code.get(code)
         if row_label is None:
             row_label = _row_label_for_extra_code(code)
             extra_labels[code] = row_label
-        for key in _record_column_keys(record, columns):
-            users.setdefault((row_label, key), set()).add(record.user_id)
+        users.setdefault((row_label, key), set()).add(user_id)
 
     row_labels = [label for label, _ in COLLEGE_STATS_LAYOUT]
     row_labels += [extra_labels[code] for code in sorted(extra_labels, key=lambda c: (not c, c))]
@@ -303,4 +362,5 @@ def scholarship_stats_columns(
         known_names={c.sub_type_code: c.name for c in scholarship.sub_type_configs},
         single_column_label=single_column_label,
         combine_agencies=combine_agencies,
+        allows_multiple=scholarship.sub_type_selection_mode != SubTypeSelectionMode.single,
     )
