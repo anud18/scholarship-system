@@ -148,6 +148,54 @@ def test_deactivated_sub_type_column_keeps_its_configured_name():
     assert [c.label for c in columns] == ["國科會", "自訂獎助"]
 
 
+def test_combined_agencies_column_counts_multi_agency_applicants_only_there():
+    records = [
+        _rec(1, "C", "nstc", "moe_1w"),  # both agencies ⇒ only 國科會+教育部
+        _rec(2, "C", "moe_1w", "moe_2w"),  # two MOE sub-types ⇒ still just 教育部
+        _rec(3, "C", "nstc"),
+        _rec(4, "E", "moe_2w", "nstc"),
+    ]
+    columns = build_stats_columns(PHD_CONFIGS, records, combine_agencies=True)
+    assert [c.label for c in columns] == ["國科會", "教育部", "國科會+教育部"]
+    counts = _counts(tally_college_counts(records, columns))
+    assert counts["資訊學院"] == (1, 1, 1)
+    assert counts["電機學院"] == (0, 0, 1)
+    assert counts[TOTAL_ROW_LABEL] == (1, 1, 2)
+
+
+def test_combined_column_is_on_the_form_even_when_nobody_picked_both():
+    columns = build_stats_columns(PHD_CONFIGS, [_rec(1, "C", "nstc")], combine_agencies=True)
+    assert [c.label for c in columns] == ["國科會", "教育部", "國科會+教育部"]
+    assert _counts(tally_college_counts([], columns))[TOTAL_ROW_LABEL] == (0, 0, 0)
+
+
+def test_no_combined_column_for_a_single_agency_scholarship():
+    columns = build_stats_columns([("moe_1w", "a"), ("moe_2w", "b")], [_rec(1, "C", "moe_1w")], combine_agencies=True)
+    assert [c.label for c in columns] == ["教育部"]
+
+
+def test_combined_columns_cover_observed_combinations_before_unspecified():
+    configs = [("nstc", "x"), ("moe_1w", "y"), ("custom", "自訂獎助")]
+    records = [_rec(1, "C", "custom", "nstc"), _rec(2, "C")]
+    columns = build_stats_columns(configs, records, combine_agencies=True)
+    assert [c.label for c in columns] == [
+        "國科會",
+        "教育部",
+        "自訂獎助",
+        "國科會+自訂獎助",
+        "國科會+教育部+自訂獎助",
+        UNSPECIFIED_SUB_TYPE_COLUMN,
+    ]
+    assert _counts(tally_college_counts(records, columns))["資訊學院"] == (0, 0, 0, 1, 0, 1)
+
+
+def test_award_sheet_keeps_counting_each_agency_without_combinations():
+    records = [_rec(1, "C", "nstc", "moe_1w")]
+    columns = scholarship_stats_columns(_scholarship(PHD_CONFIGS), records, single_column_label=AWARD_COUNT_LABEL)
+    assert [c.label for c in columns] == ["國科會", "教育部"]
+    assert _counts(tally_college_counts(records, columns))["資訊學院"] == (1, 1)
+
+
 def _scholarship(configs, inactive=()):
     sub_type_configs = [
         SimpleNamespace(sub_type_code=code, name=name, is_active=True, display_order=i)

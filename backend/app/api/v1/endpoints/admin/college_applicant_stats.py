@@ -5,6 +5,8 @@ GET /admin/scholarships/{scholarship_identifier}/college-applicant-stats/export
 
 Counts the applications the 審核管理 page lists (everything except draft and
 deleted) for one scholarship and academic year, per college × funding agency.
+A student who applied to several agencies is counted in the combination column
+(國科會+教育部) instead of in each agency's column.
 """
 
 import logging
@@ -76,7 +78,9 @@ async def export_college_applicant_stats(
         )
         for row in applicants
     ]
-    columns = scholarship_stats_columns(scholarship, records, single_column_label=APPLICANT_COUNT_LABEL)
+    columns = scholarship_stats_columns(
+        scholarship, records, single_column_label=APPLICANT_COUNT_LABEL, combine_agencies=True
+    )
     rows = tally_college_counts(records, columns)
 
     period = stats_period_label(academic_year, normalize_semester_value(semester))

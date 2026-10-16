@@ -117,11 +117,12 @@ async def test_admin_exports_counts_per_college_and_agency(db, phd, as_user):
     assert unquote(resp.headers["content-disposition"]).endswith("115學年度博士生獎學金_統計各學院學生申請人數.xlsx")
     sheet = _sheet_counts(resp.content)
     assert sheet["title"] == "115學年度博士生獎學金 統計各學院學生申請人數"
-    assert sheet["headers"] == ["編號", "學院", "國科會", "教育部"]
-    assert sheet["counts"]["資訊學院"] == (2, 1)
-    assert sheet["counts"]["電機學院"] == (0, 1)
-    assert sheet["counts"]["工學院"] == (1, 0)
-    assert sheet["counts"]["合計"] == (3, 2)
+    assert sheet["headers"] == ["編號", "學院", "國科會", "教育部", "國科會+教育部"]
+    # s2 applied to both agencies ⇒ only in 國科會+教育部
+    assert sheet["counts"]["資訊學院"] == (1, 0, 1)
+    assert sheet["counts"]["電機學院"] == (0, 1, 0)
+    assert sheet["counts"]["工學院"] == (1, 0, 0)
+    assert sheet["counts"]["合計"] == (2, 1, 1)
 
 
 @pytest.mark.asyncio
@@ -134,8 +135,8 @@ async def test_semester_filter_limits_to_that_semester(db, phd, as_user):
     assert resp.status_code == 200, resp.text
     sheet = _sheet_counts(resp.content)
     assert sheet["title"].startswith("115學年度第一學期")
-    assert sheet["counts"]["合計"] == (1, 0)
-    assert sheet["counts"]["工學院"] == (1, 0)
+    assert sheet["counts"]["合計"] == (1, 0, 0)
+    assert sheet["counts"]["工學院"] == (1, 0, 0)
 
 
 @pytest.mark.asyncio
