@@ -89,40 +89,9 @@ import {
   type ExcelRankingImportRow,
 } from "@/lib/ranking/parse-ranking-sheet";
 import { ApplicationReviewDialog } from "@/components/common/ApplicationReviewDialog";
+import { StudentIdentityLabel } from "@/components/common/StudentIdentityLabel";
 import { Application as ApplicationType, User } from "@/lib/api";
 import { ApplicationStatus, getApplicationStatusLabel } from "@/lib/enums";
-
-// #68: identity-code -> Chinese label. Mapping derived from the SIS API
-// "std_identity" enum used in Taiwanese student record systems. Unknown
-// codes fall through to "身分別 N" / "Identity N" so reviewers still see
-// the raw value rather than a blank cell.
-const IDENTITY_LABEL_ZH: Record<number | string, string> = {
-  1: "本國生",
-  2: "僑生",
-  3: "外籍生",
-  4: "陸生",
-  5: "港澳生",
-  6: "外籍交換生",
-};
-
-const IDENTITY_LABEL_EN: Record<number | string, string> = {
-  1: "Local",
-  2: "Overseas Chinese",
-  3: "Foreign",
-  4: "Mainland",
-  5: "HK/Macau",
-  6: "Exchange",
-};
-
-function formatIdentityLabel(
-  code: number | string | undefined | null,
-  locale: "zh" | "en"
-): string {
-  if (code === undefined || code === null || code === "") return "-";
-  const map = locale === "zh" ? IDENTITY_LABEL_ZH : IDENTITY_LABEL_EN;
-  if (code in map) return map[code as keyof typeof map];
-  return locale === "zh" ? `身分別 ${code}` : `Identity ${code}`;
-}
 
 interface Application {
   id: number;
@@ -391,12 +360,10 @@ function SortableItem({
           <span className="text-sm">
             {application.student_data?.std_nation || "-"}
           </span>
-          <span className="text-xs text-muted-foreground">
-            {formatIdentityLabel(
-              application.student_data?.std_identity ?? null,
-              locale
-            )}
-          </span>
+          <StudentIdentityLabel
+            code={application.student_data?.std_identity}
+            className="text-xs text-muted-foreground"
+          />
         </div>
       </TableCell>
 

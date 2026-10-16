@@ -7,6 +7,7 @@
  * (SIS 身分別 decoding, 教授推薦 badges) live here to avoid drift.
  */
 
+import { StudentIdentityLabel } from "@/components/common/StudentIdentityLabel";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
@@ -18,16 +19,6 @@ import type { Application } from "@/lib/api/types";
 import { splitSubTypeLabel } from "@/lib/utils/sub-type-label";
 
 type Locale = "zh" | "en";
-
-/** SIS 身分別代碼 → 中文標籤 (student_data.std_identity) */
-const IDENTITY_LABELS: Record<string, string> = {
-  "1": "本國生",
-  "2": "僑生",
-  "3": "外籍生",
-  "4": "陸生",
-  "5": "港澳生",
-  "6": "外籍交換生",
-};
 
 interface StudentIdentitySnapshot {
   std_nation?: string | null;
@@ -41,18 +32,6 @@ export function getNationality(app: Application): string | null {
   return identitySnapshot(app).std_nation || null;
 }
 
-export function getIdentityLabel(
-  app: Application,
-  locale: Locale
-): string | null {
-  const code = identitySnapshot(app).std_identity;
-  if (code === null || code === undefined || code === "") return null;
-  return (
-    IDENTITY_LABELS[String(code)] ||
-    `${locale === "zh" ? "身分別" : "Identity"} ${code}`
-  );
-}
-
 export function formatAppliedDate(createdAt?: string): string {
   if (!createdAt) return "-";
   return new Date(createdAt).toLocaleDateString("zh-TW", {
@@ -63,19 +42,14 @@ export function formatAppliedDate(createdAt?: string): string {
 }
 
 /** 國籍 / 身分別 */
-export function NationalityIdentity({
-  app,
-  locale,
-}: {
-  app: Application;
-  locale: Locale;
-}) {
+export function NationalityIdentity({ app }: { app: Application }) {
   return (
     <div className="flex flex-col gap-0.5">
       <span className="text-sm">{getNationality(app) || "-"}</span>
-      <span className="text-xs text-muted-foreground">
-        {getIdentityLabel(app, locale) || "-"}
-      </span>
+      <StudentIdentityLabel
+        code={identitySnapshot(app).std_identity}
+        className="text-xs text-muted-foreground"
+      />
     </div>
   );
 }

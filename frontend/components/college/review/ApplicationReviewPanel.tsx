@@ -978,7 +978,7 @@ export function ApplicationReviewPanel({
 
                       {/* 3. 國籍/身分 — #68 */}
                       <TableCell>
-                        <NationalityIdentity app={app} locale={locale} />
+                        <NationalityIdentity app={app} />
                       </TableCell>
 
                       {/* 4. 在學學期數 */}
