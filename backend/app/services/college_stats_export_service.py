@@ -68,6 +68,10 @@ COLLEGE_STATS_LAYOUT: Tuple[Tuple[str, FrozenSet[str]], ...] = (
     ("產學創新研究學院", frozenset({"F"})),
 )
 
+# Codes sharing a layout row resolve to one code, so a student's applications
+# under A and 8 merge as one 人社院 student.
+_CANONICAL_ROW_CODE = {code: min(codes) for _, codes in COLLEGE_STATS_LAYOUT for code in codes}
+
 UNKNOWN_COLLEGE_LABEL = "未知學院"
 TOTAL_ROW_LABEL = "合計"
 APPLICANT_COUNT_LABEL = "申請人數"
@@ -137,7 +141,8 @@ def _record_agency_keys(record: StatsRecord) -> FrozenSet[str]:
 
 
 def _row_code(record: StatsRecord) -> str:
-    return normalize_academy_code((record.academy_code or "").strip())
+    code = normalize_academy_code((record.academy_code or "").strip())
+    return _CANONICAL_ROW_CODE.get(code, code)
 
 
 def _student_agency_keys(records: Sequence[StatsRecord]) -> Dict[Tuple[str, int], FrozenSet[str]]:
@@ -281,11 +286,14 @@ def tally_college_counts(
     than silently leaving the student out.
     """
     column_keys = [c.key for c in columns]
+    known_keys = set(column_keys)
     row_by_code = {code: label for label, codes in COLLEGE_STATS_LAYOUT for code in codes}
 
     users: Dict[Tuple[str, str], Set[int]] = {}
     extra_labels: Dict[str, str] = {}
     for code, user_id, key in _cell_assignments(records, columns, combine_agencies):
+        if key not in known_keys:
+            raise ValueError(f"no stats column {key!r} for user {user_id}")
         row_label = row_by_code.get(code)
         if row_label is None:
             row_label = _row_label_for_extra_code(code)

@@ -220,6 +220,21 @@ def test_agencies_from_separate_applications_merge_per_student():
     assert sum(counts["資訊學院"]) == 3  # row sum = head count
 
 
+def test_humanities_codes_a_and_8_merge_as_one_student():
+    records = [_rec(1, "A", "nstc"), _rec(1, "8", "moe_1w")]
+    columns = build_stats_columns(PHD_CONFIGS, records, combine_agencies=True)
+    counts = _counts(tally_college_counts(records, columns, combine_agencies=True))
+    assert counts["人文藝術與社會學院"] == (0, 0, 1)
+
+
+def test_tally_refuses_a_student_without_a_sub_type_when_the_column_is_missing():
+    columns = build_stats_columns(PHD_CONFIGS, [])
+    with pytest.raises(ValueError):
+        tally_college_counts([_rec(1, "C")], columns)
+    with pytest.raises(ValueError):
+        tally_college_counts([_rec(1, "C")], columns, combine_agencies=True)
+
+
 def test_single_select_scholarship_gets_no_fixed_combination_column():
     columns = build_stats_columns(PHD_CONFIGS, [_rec(1, "C", "nstc")], combine_agencies=True, allows_multiple=False)
     assert [c.label for c in columns] == ["國科會", "教育部"]
