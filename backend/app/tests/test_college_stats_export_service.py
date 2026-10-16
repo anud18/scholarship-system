@@ -3,7 +3,10 @@
 import io
 from types import SimpleNamespace
 
+import pytest
 from openpyxl import load_workbook
+
+from app.models.enums import SubTypeSelectionMode
 
 from app.services.college_stats_export_service import (
     APPLICANT_COUNT_LABEL,
@@ -148,13 +151,131 @@ def test_deactivated_sub_type_column_keeps_its_configured_name():
     assert [c.label for c in columns] == ["國科會", "自訂獎助"]
 
 
-def _scholarship(configs, inactive=()):
+def test_combined_agencies_column_counts_multi_agency_applicants_only_there():
+    records = [
+        _rec(1, "C", "nstc", "moe_1w"),  # both agencies ⇒ only 國科會+教育部
+        _rec(2, "C", "moe_1w", "moe_2w"),  # two MOE sub-types ⇒ still just 教育部
+        _rec(3, "C", "nstc"),
+        _rec(4, "E", "moe_2w", "nstc"),
+    ]
+    columns = build_stats_columns(PHD_CONFIGS, records, combine_agencies=True)
+    assert [c.label for c in columns] == ["國科會", "教育部", "國科會+教育部"]
+    counts = _counts(tally_college_counts(records, columns, combine_agencies=True))
+    assert counts["資訊學院"] == (1, 1, 1)
+    assert counts["電機學院"] == (0, 0, 1)
+    assert counts[TOTAL_ROW_LABEL] == (1, 1, 2)
+
+
+def test_combined_column_is_on_the_form_even_when_nobody_picked_both():
+    columns = build_stats_columns(PHD_CONFIGS, [_rec(1, "C", "nstc")], combine_agencies=True)
+    assert [c.label for c in columns] == ["國科會", "教育部", "國科會+教育部"]
+    assert _counts(tally_college_counts([], columns, combine_agencies=True))[TOTAL_ROW_LABEL] == (0, 0, 0)
+
+
+def test_no_combined_column_for_a_single_agency_scholarship():
+    columns = build_stats_columns([("moe_1w", "a"), ("moe_2w", "b")], [_rec(1, "C", "moe_1w")], combine_agencies=True)
+    assert [c.label for c in columns] == ["教育部"]
+
+
+def test_multi_select_form_lists_every_combination_in_a_stable_order():
+    configs = [("nstc", "x"), ("moe_1w", "y"), ("custom", "自訂獎助")]
+    records = [_rec(1, "C", "custom", "nstc"), _rec(2, "C")]
+    columns = build_stats_columns(configs, records, combine_agencies=True)
+    assert [c.label for c in columns] == [
+        "國科會",
+        "教育部",
+        "自訂獎助",
+        "國科會+教育部",
+        "國科會+自訂獎助",
+        "教育部+自訂獎助",
+        "國科會+教育部+自訂獎助",
+        UNSPECIFIED_SUB_TYPE_COLUMN,
+    ]
+    assert columns[:-1] == build_stats_columns(configs, [], combine_agencies=True)
+    assert _counts(tally_college_counts(records, columns, combine_agencies=True))["資訊學院"] == (
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        1,
+    )
+
+
+def test_agencies_from_separate_applications_merge_per_student():
+    records = [
+        _rec(1, "C", "nstc"),  # e.g. a 續領 application …
+        _rec(1, "C", "moe_1w"),  # … plus a new one ⇒ one student, 國科會+教育部
+        _rec(2, "C", "nstc", "moe_1w"),
+        _rec(2, "C", "nstc"),  # second application adds nothing new
+        _rec(3, "C", "general"),
+        _rec(3, "C", "moe_2w"),  # a real pick wins over a placeholder application
+    ]
+    columns = build_stats_columns(PHD_CONFIGS, records, combine_agencies=True)
+    counts = _counts(tally_college_counts(records, columns, combine_agencies=True))
+    assert [c.label for c in columns] == ["國科會", "教育部", "國科會+教育部"]
+    assert counts["資訊學院"] == (0, 1, 2)
+    assert sum(counts["資訊學院"]) == 3  # row sum = head count
+
+
+def test_humanities_codes_a_and_8_merge_as_one_student():
+    records = [_rec(1, "A", "nstc"), _rec(1, "8", "moe_1w")]
+    columns = build_stats_columns(PHD_CONFIGS, records, combine_agencies=True)
+    counts = _counts(tally_college_counts(records, columns, combine_agencies=True))
+    assert counts["人文藝術與社會學院"] == (0, 0, 1)
+
+
+def test_tally_refuses_a_student_without_a_sub_type_when_the_column_is_missing():
+    columns = build_stats_columns(PHD_CONFIGS, [])
+    with pytest.raises(ValueError):
+        tally_college_counts([_rec(1, "C")], columns)
+    with pytest.raises(ValueError):
+        tally_college_counts([_rec(1, "C")], columns, combine_agencies=True)
+
+
+def test_single_select_scholarship_gets_no_fixed_combination_column():
+    columns = build_stats_columns(PHD_CONFIGS, [_rec(1, "C", "nstc")], combine_agencies=True, allows_multiple=False)
+    assert [c.label for c in columns] == ["國科會", "教育部"]
+
+
+def test_tally_refuses_a_student_without_a_matching_column():
+    columns = build_stats_columns(PHD_CONFIGS, [], combine_agencies=True, allows_multiple=False)
+    with pytest.raises(ValueError):
+        tally_college_counts([_rec(1, "C", "nstc", "moe_1w")], columns, combine_agencies=True)
+
+
+def test_award_sheet_keeps_counting_each_agency_without_combinations():
+    records = [_rec(1, "C", "nstc", "moe_1w")]
+    columns = scholarship_stats_columns(_scholarship(PHD_CONFIGS), records, single_column_label=AWARD_COUNT_LABEL)
+    assert [c.label for c in columns] == ["國科會", "教育部"]
+    assert _counts(tally_college_counts(records, columns))["資訊學院"] == (1, 1)
+
+
+def test_scholarship_columns_follow_the_selection_mode():
+    records = [_rec(1, "C", "nstc")]
+    multi = scholarship_stats_columns(
+        _scholarship(PHD_CONFIGS), records, single_column_label=APPLICANT_COUNT_LABEL, combine_agencies=True
+    )
+    single = scholarship_stats_columns(
+        _scholarship(PHD_CONFIGS, mode=SubTypeSelectionMode.single),
+        records,
+        single_column_label=APPLICANT_COUNT_LABEL,
+        combine_agencies=True,
+    )
+    assert [c.label for c in multi] == ["國科會", "教育部", "國科會+教育部"]
+    assert [c.label for c in single] == ["國科會", "教育部"]
+
+
+def _scholarship(configs, inactive=(), mode=SubTypeSelectionMode.multiple):
     sub_type_configs = [
         SimpleNamespace(sub_type_code=code, name=name, is_active=True, display_order=i)
         for i, (code, name) in enumerate(configs, 1)
     ] + [SimpleNamespace(sub_type_code=code, name=name, is_active=False, display_order=99) for code, name in inactive]
     return SimpleNamespace(
         sub_type_configs=sub_type_configs,
+        sub_type_selection_mode=mode,
         get_active_sub_type_configs=lambda: [c for c in sub_type_configs if c.is_active],
     )
 
