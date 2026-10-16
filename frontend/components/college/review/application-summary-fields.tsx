@@ -4,7 +4,8 @@
  * Presentational fields shared by the college review 表格檢視 / 卡片檢視.
  *
  * Both views render the same application facts, so the non-trivial bits
- * (SIS 身分別 decoding, 教授推薦 badges) live here to avoid drift.
+ * (國籍/身分別 cell, 教授推薦 badges) live here to avoid drift. 身分別 codes
+ * are decoded by components/common/StudentIdentityLabel.
  */
 
 import { StudentIdentityLabel } from "@/components/common/StudentIdentityLabel";
@@ -42,12 +43,19 @@ export function formatAppliedDate(createdAt?: string): string {
 }
 
 /** 國籍 / 身分別 */
-export function NationalityIdentity({ app }: { app: Application }) {
+export function NationalityIdentity({
+  app,
+  locale,
+}: {
+  app: Application;
+  locale: Locale;
+}) {
   return (
     <div className="flex flex-col gap-0.5">
       <span className="text-sm">{getNationality(app) || "-"}</span>
       <StudentIdentityLabel
         code={identitySnapshot(app).std_identity}
+        locale={locale}
         className="text-xs text-muted-foreground"
       />
     </div>

@@ -525,6 +525,7 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                                   <div className="text-xs text-gray-500">
                                     <StudentIdentityLabel
                                       code={application.student_identity}
+                                      locale={locale}
                                     />
                                   </div>
                                 )}
@@ -874,6 +875,7 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                                   <div className="text-xs text-gray-500">
                                     <StudentIdentityLabel
                                       code={application.student_identity}
+                                      locale={locale}
                                     />
                                   </div>
                                 )}

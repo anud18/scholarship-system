@@ -362,6 +362,7 @@ function SortableItem({
           </span>
           <StudentIdentityLabel
             code={application.student_data?.std_identity}
+            locale={locale}
             className="text-xs text-muted-foreground"
           />
         </div>

@@ -127,7 +127,7 @@ export function ApplicationCardView({
 
             <div className="space-y-1.5 border-t pt-3">
               <FieldRow label={locale === "zh" ? "國籍 / 身分" : "Nationality"}>
-                <NationalityIdentity app={app} />
+                <NationalityIdentity app={app} locale={locale} />
               </FieldRow>
               <FieldRow label={locale === "zh" ? "在學學期數" : "Terms"}>
                 {app.student_termcount || "-"}
