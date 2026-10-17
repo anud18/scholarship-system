@@ -45,19 +45,35 @@ def needs_term_resync(student_data: Optional[Dict[str, Any]]) -> bool:
     return (student_data or {}).get(TERM_STATUS_KEY) != TERM_STATUS_SUCCESS
 
 
+def drop_term_fields(student_data: Dict[str, Any]) -> Dict[str, Any]:
+    """A copy of a snapshot without its ``trm_*`` fields and raw academy codes (for a full refresh)."""
+    return {
+        k: v for k, v in student_data.items() if not k.startswith(TERM_FIELD_PREFIX) and k != ORIGINAL_ACADEMY_CODES_KEY
+    }
+
+
 def merge_term_snapshot(current: Dict[str, Any], fresh: Dict[str, Any], resynced_at: str) -> Dict[str, Any]:
-    """Return a new snapshot: ``current`` plus the term fields and term metadata of ``fresh``."""
+    """Return a new snapshot: ``current`` with its term block replaced by the one of ``fresh``.
+
+    The old ``trm_*`` fields are dropped first, so a ``partial`` (other-term) snapshot
+    never mixes stale fields of one term with fresh fields of another.
+    """
     term_fields = {k: v for k, v in fresh.items() if k.startswith(TERM_FIELD_PREFIX)}
     merged = {
-        **current,
+        **drop_term_fields(current),
         **term_fields,
         TERM_STATUS_KEY: fresh.get(TERM_STATUS_KEY),
         TERM_ERROR_KEY: fresh.get(TERM_ERROR_KEY),
         TERM_RESYNCED_AT_KEY: resynced_at,
     }
+    # Raw codes normalization replaced, keyed by field: keep the basic ones, take the term ones fresh
     original_codes = {
-        **(current.get(ORIGINAL_ACADEMY_CODES_KEY) or {}),
-        **(fresh.get(ORIGINAL_ACADEMY_CODES_KEY) or {}),
+        **{
+            k: v
+            for k, v in (current.get(ORIGINAL_ACADEMY_CODES_KEY) or {}).items()
+            if not k.startswith(TERM_FIELD_PREFIX)
+        },
+        **{k: v for k, v in (fresh.get(ORIGINAL_ACADEMY_CODES_KEY) or {}).items() if k.startswith(TERM_FIELD_PREFIX)},
     }
     if original_codes:
         merged[ORIGINAL_ACADEMY_CODES_KEY] = original_codes

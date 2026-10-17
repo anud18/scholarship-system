@@ -99,13 +99,31 @@ def test_merge_takes_only_term_fields_and_keeps_basic_and_non_sis_data():
     assert "trm_depname" not in current
 
 
-def test_merge_unions_original_academy_codes():
-    current = {**BROKEN_SNAPSHOT, ORIGINAL_ACADEMY_CODES_KEY: {"std_academyno": "Y"}}
-    fresh = {**FRESH_SNAPSHOT, ORIGINAL_ACADEMY_CODES_KEY: {"trm_academyno": "Y"}}
+def test_merge_keeps_basic_original_codes_and_takes_term_ones_fresh():
+    current = {**BROKEN_SNAPSHOT, ORIGINAL_ACADEMY_CODES_KEY: {"std_academyno": "Y", "trm_academyno": "Y"}}
+    fresh = {**FRESH_SNAPSHOT, ORIGINAL_ACADEMY_CODES_KEY: {"std_academyno": "Z", "trm_academyno": "W"}}
 
     merged = resync.merge_term_snapshot(current, fresh, "t")
 
-    assert merged[ORIGINAL_ACADEMY_CODES_KEY] == {"std_academyno": "Y", "trm_academyno": "Y"}
+    assert merged[ORIGINAL_ACADEMY_CODES_KEY] == {"std_academyno": "Y", "trm_academyno": "W"}
+
+
+def test_merge_drops_stale_term_original_codes_when_fresh_has_none():
+    current = {**BROKEN_SNAPSHOT, ORIGINAL_ACADEMY_CODES_KEY: {"trm_academyno": "Y"}}
+
+    merged = resync.merge_term_snapshot(current, FRESH_SNAPSHOT, "t")
+
+    assert ORIGINAL_ACADEMY_CODES_KEY not in merged
+
+
+def test_merge_drops_stale_term_fields_of_a_partial_snapshot():
+    current = {**BROKEN_SNAPSHOT, "_term_data_status": "partial", "trm_term": "1", "trm_ascore_gpa": 3.9}
+    fresh = {**FRESH_SNAPSHOT, "trm_term": "2"}
+
+    merged = resync.merge_term_snapshot(current, fresh, "t")
+
+    assert merged["trm_term"] == "2"
+    assert "trm_ascore_gpa" not in merged
 
 
 def test_application_student_code_requires_snapshot_code():
@@ -268,7 +286,8 @@ async def test_admin_endpoint_reports_still_missing_without_writing(db: AsyncSes
 async def test_update_student_data_refresh_uses_the_applications_student_not_the_caller(db: AsyncSession, monkeypatch):
     student = await _seed_user(db, role=UserRole.student, nycu_id=STUDENT_CODE)
     admin = await _seed_user(db, role=UserRole.admin, nycu_id="admin01")
-    app = await _seed_app(db, student=student, status="draft", student_data=dict(BROKEN_SNAPSHOT))
+    stale = {**BROKEN_SNAPSHOT, "_term_data_status": "partial", "trm_ascore_gpa": 3.9}
+    app = await _seed_app(db, student=student, status="draft", student_data=stale)
     service = ApplicationService(db)
     service.student_service = _student_service(snapshot=dict(FRESH_SNAPSHOT))
 
@@ -283,4 +302,5 @@ async def test_update_student_data_refresh_uses_the_applications_student_not_the
         STUDENT_CODE, academic_year="115", semester="yearly", fresh=True
     )
     assert updated.student_data["trm_depname"] == "電機工程學系"
+    assert "trm_ascore_gpa" not in updated.student_data  # stale term field of the old snapshot
     assert updated.student_data["financial_info"] == {"bank_code": "700"}

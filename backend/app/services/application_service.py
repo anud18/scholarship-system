@@ -48,7 +48,7 @@ from app.services.email_automation_service import email_automation_service
 from app.services.email_service import EmailService
 from app.services.minio_service import minio_service
 from app.services.student_service import StudentService
-from app.services.student_snapshot_resync import fetch_application_snapshot
+from app.services.student_snapshot_resync import drop_term_fields, fetch_application_snapshot
 from app.utils.college_scope import (
     college_scope_for_user,
     college_user_may_access,
@@ -1244,8 +1244,9 @@ class ApplicationService:
         # year/semester, so the term data (trm_*) is fetched too.
         if refresh_from_api:
             fresh_api_data = await fetch_application_snapshot(self.student_service, application)
-            # 合併API資料，但保留用戶輸入的資料
-            current_student_data = {**current_student_data, **fresh_api_data}
+            # 合併API資料，但保留用戶輸入的資料 — old term fields / raw codes go, so a
+            # fresh snapshot of another term never mixes with stale ones
+            current_student_data = {**drop_term_fields(current_student_data), **fresh_api_data}
 
         # 合併用戶更新的資料
         update_dict = student_data_update.model_dump(exclude_none=True)
