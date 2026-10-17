@@ -1331,8 +1331,9 @@ export interface paths {
          *     snapshot was stored without it (SIS timed out / failed when the draft was created).
          *
          *     Only the term part of the snapshot changes; 申請當時的 std_* basic data is kept.
-         *     SIS failures surface as 503; a SIS answer that still has no term data leaves the
-         *     snapshot untouched and returns ``updated: false``.
+         *     A basic-data (API 1) SIS failure surfaces as 503. When the term lookup failed or
+         *     SIS has no term record for the year, or another request completed the snapshot
+         *     meanwhile, nothing is written and the response is ``updated: false`` with the reason.
          */
         post: operations["resync_sis_term_data_api_v1_admin_applications__id__resync_sis_term_data_post"];
         delete?: never;
