@@ -24,10 +24,11 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.exceptions import AuthorizationError, NotFoundError
+from app.core.exceptions import AuthorizationError, NotFoundError, ValidationError
 from app.core.security import require_admin
 from app.db.deps import get_db
 from app.models.application import Application, ApplicationStatus
+from app.models.audit_log import AuditAction
 from app.models.college_review import CollegeRankingItem
 from app.models.enums import Semester
 from app.models.payment_roster import PaymentRosterItem
@@ -45,6 +46,7 @@ from app.services.application_audit_service import ApplicationAuditService
 from app.services.application_deletion_policy import DELETE_BLOCKED_MESSAGE, is_application_deletable
 from app.services.application_service import ApplicationService
 from app.services.bulk_approval_service import BulkApprovalService
+from app.services.student_snapshot_resync import needs_term_resync, resync_application_term_data
 from app.utils.excel_safety import sanitize_excel_cell
 
 logger = logging.getLogger(__name__)
@@ -600,6 +602,61 @@ async def admin_update_application_status(
         "success": True,
         "message": "Application status updated successfully",
         "data": result,
+    }
+
+
+@router.post("/applications/{id}/resync-sis-term-data")
+async def resync_sis_term_data(
+    id: int,
+    request: Request = None,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Re-fetch the SIS term data (系所、年級等 trm_* 欄位) of an application whose
+    snapshot was stored without it (SIS timed out / failed when the draft was created).
+
+    Only the term part of the snapshot changes; 申請當時的 std_* basic data is kept.
+    A basic-data (API 1) SIS failure surfaces as 503. When the term lookup failed or
+    SIS has no term record for the year, or another request completed the snapshot
+    meanwhile, nothing is written and the response is ``updated: false`` with the reason.
+    """
+    app = (await db.execute(select(Application).where(Application.id == id))).scalar_one_or_none()
+    if not app:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+    if not needs_term_resync(app.student_data):
+        raise ValidationError("此申請的學籍學期資料已完整，無需重新同步")
+
+    result = await resync_application_term_data(db, id)
+    # Commit even when nothing changed: it releases the row lock taken for the merge.
+    # (A rollback would expire `current_user`, breaking the audit write below.)
+    await db.commit()
+
+    # Use only `id` / `result` below — `app` may be stale after the locked re-read
+    await ApplicationAuditService(db).log_application_operation(
+        application_id=id,
+        action=AuditAction.update,
+        user=current_user,
+        request=request,
+        description=f"重新同步學籍學期資料 {result.app_id}",
+        old_values={"_term_data_status": result.previous_status},
+        new_values={"_term_data_status": result.new_status, "updated": result.updated},
+        status="success" if result.updated else "failed",
+        error_message=result.error_message,
+        meta_data={"app_id": result.app_id, "update_type": "sis_term_resync"},
+    )
+
+    message = "已重新同步學籍學期資料" if result.updated else f"未變更：{result.error_message}"
+    return {
+        "success": True,
+        "message": message,
+        "data": {
+            "id": id,
+            "app_id": result.app_id,
+            "previous_status": result.previous_status,
+            "new_status": result.new_status,
+            "updated": result.updated,
+        },
     }
 
 

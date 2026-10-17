@@ -900,11 +900,7 @@ export interface paths {
          * @description 取得申請的學生相關資料
          */
         get: operations["get_student_data_api_v1_applications__id__student_data_get"];
-        /**
-         * Update Student Data
-         * @description 更新申請的學生相關資料 (銀行帳號、指導教授資訊等)
-         */
-        put: operations["update_student_data_api_v1_applications__id__student_data_put"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -1318,6 +1314,32 @@ export interface paths {
          *     This is a wrapper around the applications endpoint for admin-specific access.
          */
         patch: operations["admin_update_application_status_api_v1_admin_applications__id__status_patch"];
+        trace?: never;
+    };
+    "/api/v1/admin/applications/{id}/resync-sis-term-data": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resync Sis Term Data
+         * @description Re-fetch the SIS term data (系所、年級等 trm_* 欄位) of an application whose
+         *     snapshot was stored without it (SIS timed out / failed when the draft was created).
+         *
+         *     Only the term part of the snapshot changes; 申請當時的 std_* basic data is kept.
+         *     A basic-data (API 1) SIS failure surfaces as 503. When the term lookup failed or
+         *     SIS has no term record for the year, or another request completed the snapshot
+         *     meanwhile, nothing is written and the response is ``updated: false`` with the reason.
+         */
+        post: operations["resync_sis_term_data_api_v1_admin_applications__id__resync_sis_term_data_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/admin/applications/{id}": {
@@ -11132,97 +11154,6 @@ export interface components {
             body: string;
         };
         /**
-         * StudentDataSchema
-         * @description Comprehensive student data schema for applications
-         */
-        StudentDataSchema: {
-            /**
-             * Student Id
-             * @description 學號
-             */
-            student_id?: string | null;
-            /**
-             * Name
-             * @description 姓名
-             */
-            name?: string | null;
-            /**
-             * Email
-             * @description Email
-             */
-            email?: string | null;
-            /**
-             * Department
-             * @description 系所
-             */
-            department?: string | null;
-            /**
-             * Degree
-             * @description 學位
-             */
-            degree?: string | null;
-            /** @description 金融帳戶資訊 */
-            financial_info?: components["schemas"]["StudentFinancialInfo"] | null;
-            /** @description 指導教授資訊 */
-            supervisor_info?: components["schemas"]["SupervisorInfo"] | null;
-            /**
-             * Contact Phone
-             * @description 聯絡電話
-             */
-            contact_phone?: string | null;
-            /**
-             * Contact Address
-             * @description 聯絡地址
-             */
-            contact_address?: string | null;
-            /**
-             * Gpa
-             * @description GPA
-             */
-            gpa?: number | null;
-            /**
-             * Class Ranking
-             * @description 班級排名
-             */
-            class_ranking?: number | null;
-            /**
-             * Class Total
-             * @description 班級總人數
-             */
-            class_total?: number | null;
-            /**
-             * Dept Ranking
-             * @description 系所排名
-             */
-            dept_ranking?: number | null;
-            /**
-             * Dept Total
-             * @description 系所總人數
-             */
-            dept_total?: number | null;
-        };
-        /**
-         * StudentFinancialInfo
-         * @description Student financial information schema
-         */
-        StudentFinancialInfo: {
-            /**
-             * Bank Postal Account
-             * @description 郵局帳號
-             */
-            bank_postal_account?: string | null;
-            /**
-             * Bank Book Photo Url
-             * @description 郵局帳簿封面照片URL
-             */
-            bank_book_photo_url?: string | null;
-            /**
-             * Account Holder Name
-             * @description 帳戶戶名
-             */
-            account_holder_name?: string | null;
-        };
-        /**
          * StudentHistoryVisibilityUpdate
          * @description Admin toggle body for PUT /student-history/visibility.
          *
@@ -11291,32 +11222,6 @@ export interface components {
             message?: string | null;
             /** Tag */
             tag?: string | null;
-        };
-        /**
-         * SupervisorInfo
-         * @description Supervisor information schema
-         */
-        SupervisorInfo: {
-            /**
-             * Supervisor Employee Id
-             * @description 指導教授工號
-             */
-            supervisor_employee_id?: string | null;
-            /**
-             * Supervisor Email
-             * @description 指導教授email
-             */
-            supervisor_email?: string | null;
-            /**
-             * Supervisor Name
-             * @description 指導教授姓名
-             */
-            supervisor_name?: string | null;
-            /**
-             * Supervisor Department
-             * @description 指導教授所屬系所
-             */
-            supervisor_department?: string | null;
         };
         /** SupplementaryDocUpdate */
         SupplementaryDocUpdate: {
@@ -13156,44 +13061,6 @@ export interface operations {
             };
         };
     };
-    update_student_data_api_v1_applications__id__student_data_put: {
-        parameters: {
-            query?: {
-                /** @description 是否重新從外部API獲取基本學生資料 */
-                refresh_from_api?: boolean;
-            };
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["StudentDataSchema"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_application_audit_trail_api_v1_applications__id__audit_trail_get: {
         parameters: {
             query?: {
@@ -13837,6 +13704,37 @@ export interface operations {
                 "application/json": components["schemas"]["ApplicationStatusUpdate"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resync_sis_term_data_api_v1_admin_applications__id__resync_sis_term_data_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

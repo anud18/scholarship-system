@@ -39,7 +39,6 @@ from app.schemas.application import (
     ApplicationResponse,
     ApplicationStatusUpdate,
     ApplicationUpdate,
-    StudentDataSchema,
 )
 from app.services.application_builder import backfill_professor_assignments, order_sub_type_preferences
 from app.services.application_field_service import FIXED_ADVISOR_KEYS, FIXED_KEY_POSTAL_ACCOUNT
@@ -947,7 +946,7 @@ class ApplicationService:
             # SECURITY (#1223 A): 學院 staff are scoped to their own college's
             # applicants. This branch previously fell through to an unconditional
             # `pass` alongside admin, so College-A staff could read — and through
-            # update_application / update_student_data, WRITE — any other college's
+            # update_application, WRITE — any other college's
             # application by walking ids. Same rule PR #1222 applied to the file
             # proxy (endpoints/files.py).
             if not college_user_may_access(current_user, application):
@@ -1198,85 +1197,6 @@ class ApplicationService:
                     application.app_id,
                     exc_info=True,
                 )
-
-        return application
-
-    async def update_student_data(
-        self,
-        application_id: int,
-        student_data_update: StudentDataSchema,
-        current_user: User,
-        refresh_from_api: bool = False,
-    ) -> Application:
-        """更新申請中的學生資料
-
-        Args:
-            application_id: 申請ID
-            student_data_update: 要更新的學生資料
-            current_user: 當前用戶
-            refresh_from_api: 是否重新從外部API獲取基本學生資料
-        """
-
-        # 取得申請 (use internal method to get the model for modification)
-        application = await self._get_application_model(application_id, current_user)
-        if not application:
-            raise NotFoundError(f"Application {application_id} not found")
-
-        # 檢查權限
-        if current_user.role not in [
-            UserRole.admin,
-            UserRole.super_admin,
-            UserRole.college,
-        ]:
-            if application.user_id != current_user.id:
-                raise AuthorizationError("You can only update your own application data")
-
-        # 檢查是否可以編輯
-        if application.status not in [
-            ApplicationStatus.draft.value,
-            ApplicationStatus.returned.value,
-        ]:
-            raise ValidationError("Cannot update student data for submitted applications")
-
-        # 獲取當前學生資料
-        current_student_data = application.student_data or {}
-
-        # 如果需要，重新從外部API獲取基本學生資料
-        if refresh_from_api:
-            if not current_user.nycu_id or not current_user.nycu_id.strip():
-                raise ValidationError("Student NYCU ID is required to refresh data from API")
-
-            fresh_api_data = await self.student_service.get_student_snapshot(current_user.nycu_id)
-            if fresh_api_data:
-                # 合併API資料，但保留用戶輸入的資料
-                current_student_data.update(fresh_api_data)
-
-        # 合併用戶更新的資料
-        update_dict = student_data_update.model_dump(exclude_none=True)
-        for field, value in update_dict.items():
-            if field in ["financial_info", "supervisor_info"]:
-                # 對於嵌套對象，進行深度合併
-                if value:
-                    if field not in current_student_data:
-                        current_student_data[field] = {}
-                    current_student_data[field].update(value)
-            else:
-                # 對於普通欄位，直接更新
-                current_student_data[field] = value
-
-        # 更新到資料庫。current_student_data may be the SAME dict reference
-        # as application.student_data (line 1165's `or {}` only branches when
-        # student_data is falsy), so plain `=` assignment doesn't change the
-        # column's object identity. SQLAlchemy's default JSON change detection
-        # compares identity, not contents, so without flag_modified() the
-        # in-place mutations above would be silently dropped on commit.
-        from sqlalchemy.orm.attributes import flag_modified
-
-        application.student_data = current_student_data
-        flag_modified(application, "student_data")
-
-        await self.db.commit()
-        await self.db.refresh(application)
 
         return application
 

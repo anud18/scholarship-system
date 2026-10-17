@@ -381,23 +381,5 @@ export function createApplicationsApi() {
       );
       return toApiResponse(response);
     },
-
-    /**
-     * 更新申請的學生相關資料 (銀行帳號、指導教授資訊等)
-     * PUT /api/v1/applications/{id}/student-data
-     */
-    updateStudentData: async (
-      id: number,
-      data: Record<string, unknown>
-    ): Promise<ApiResponse<unknown>> => {
-      const response = await typedClient.raw.PUT(
-        '/api/v1/applications/{id}/student-data',
-        {
-          params: { path: { id } },
-          body: data as never,
-        }
-      );
-      return toApiResponse(response);
-    },
   };
 }

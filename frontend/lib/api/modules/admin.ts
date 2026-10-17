@@ -21,6 +21,15 @@ import { toApiResponse } from '../compat';
 import type { ApiResponse, DashboardStats, HistoricalApplicationFilters } from '../types';
 import type { components } from '../generated/schema';
 
+/** Result of POST /admin/applications/{id}/resync-sis-term-data */
+export interface SisTermResyncResult {
+  id: number;
+  app_id: string;
+  previous_status: string | null;
+  new_status: string | null;
+  updated: boolean;
+}
+
 export function createAdminApi() {
   return {
     // ========== Dashboard and Statistics ==========
@@ -1083,6 +1092,20 @@ export function createAdminApi() {
         body: { reason },
       });
       return toApiResponse(response) as ApiResponse<{ id: number; app_id: string; reason: string }>;
+    },
+
+    /**
+     * Re-fetch the SIS term data (系所、年級 …) of an application whose snapshot
+     * was stored without it (SIS failed when the draft was created).
+     * POST /api/v1/admin/applications/{id}/resync-sis-term-data
+     */
+    resyncSisTermData: async (
+      id: number
+    ): Promise<ApiResponse<SisTermResyncResult>> => {
+      const response = await typedClient.raw.POST('/api/v1/admin/applications/{id}/resync-sis-term-data', {
+        params: { path: { id } },
+      });
+      return toApiResponse(response) as ApiResponse<SisTermResyncResult>;
     },
 
     /**

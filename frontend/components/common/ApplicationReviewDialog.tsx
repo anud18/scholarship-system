@@ -25,6 +25,7 @@ import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { ApplicationFormDataDisplay } from "@/components/application-form-data-display";
 import { ApplicationAuditTrail } from "@/components/application-audit-trail";
 import { ProfessorAssignmentDropdown } from "@/components/professor-assignment-dropdown";
+import { SisTermResyncCard } from "@/components/admin/SisTermResyncCard";
 import {
   FileText,
   Eye,
@@ -660,6 +661,9 @@ export function ApplicationReviewDialog({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [detailedApplication, setDetailedApplication] = useState<Application | null>(null);
+  // Controlled so a reload after an in-dialog action (重新同步, 郵局驗證) keeps the
+  // admin on the tab they were on — the reload spinner unmounts <Tabs>.
+  const [activeTab, setActiveTab] = useState("basic");
 
   // Sub-type review state (for unified review system)
   const [subTypes, setSubTypes] = useState<SubTypeOption[]>([]);
@@ -1003,6 +1007,7 @@ export function ApplicationReviewDialog({
   // Load form configuration and files when dialog opens
   useEffect(() => {
     if (open && application) {
+      setActiveTab("basic");
       loadApplicationDetails(application.id);
       // Reset admin comments when opening a new application
       setAdminComments("");
@@ -1467,7 +1472,7 @@ export function ApplicationReviewDialog({
               </Alert>
             </div>
           ) : detailedApplication ? (
-            <Tabs defaultValue="basic" className="flex-1 overflow-hidden flex flex-col">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 overflow-hidden flex flex-col">
               <TabsList className={`grid w-full ${tabGridClass}`}>
                 <TabsTrigger value="basic">
                   <Info className="h-4 w-4 mr-1" />
@@ -2168,6 +2173,15 @@ export function ApplicationReviewDialog({
                 {/* Management Tab (Admin and Super Admin) */}
                 {isAdminRole && (
                   <TabsContent value="management" className="space-y-4 mt-4">
+                    {detailedApplication && (
+                      <SisTermResyncCard
+                        applicationId={detailedApplication.id}
+                        studentData={detailedApplication.student_data}
+                        locale={locale}
+                        onResynced={() => loadApplicationDetails(detailedApplication.id)}
+                      />
+                    )}
+
                     {/* Post Office Verification Section */}
                     <Card>
                       <CardHeader>
