@@ -510,13 +510,26 @@ describe("createAdminApi", () => {
     expect(fetchMock.mock.calls[1][0]).toContain("academic_year=115&semester=first");
   });
 
+  // ─── SIS term resync ──────────────────────────────────────────────
+
+  it("resyncSisTermData POSTs the admin resync endpoint with no body", async () => {
+    // Pin: admin-only path (require_admin); the 學號 is taken server-side
+    // from the application's own snapshot, so the client sends only the id.
+    mockedRaw.POST.mockResolvedValue({});
+    const api = createAdminApi();
+    await api.resyncSisTermData(182);
+    expect(mockedRaw.POST).toHaveBeenCalledWith("/api/v1/admin/applications/{id}/resync-sis-term-data", {
+      params: { path: { id: 182 } },
+    });
+  });
+
   // ─── Method count invariant ───────────────────────────────────────
 
-  it("module exposes exactly 80 methods", async () => {
-    // Pin: 80 methods is the current admin surface. Pin so
+  it("module exposes exactly 81 methods", async () => {
+    // Pin: 81 methods is the current admin surface (80 + resyncSisTermData). Pin so
     // refactor adding/removing methods requires explicit review.
     // SECURITY-critical surface — every change should be deliberate.
     const api = createAdminApi();
-    expect(Object.keys(api).length).toBe(80);
+    expect(Object.keys(api).length).toBe(81);
   });
 });
