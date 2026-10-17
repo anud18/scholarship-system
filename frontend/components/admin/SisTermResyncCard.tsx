@@ -92,8 +92,8 @@ export function SisTermResyncCard({
             <p className="text-sm text-muted-foreground mt-1">
               {isComplete
                 ? isZh
-                  ? "申請時已取得學期資料（系所、年級等）。"
-                  : "Term data (department, grade …) was captured at application time."
+                  ? "已取得學期資料（系所、年級等）。"
+                  : "Term data (department, grade …) is available."
                 : isZh
                   ? "申請時未能取得學期資料，系所、年級等欄位在匯出時會是空白。可向學籍系統重新取得。"
                   : "Term data was not captured at application time, so department / grade export blank. Fetch it again from SIS."}
