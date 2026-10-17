@@ -48,6 +48,7 @@ from app.services.email_automation_service import email_automation_service
 from app.services.email_service import EmailService
 from app.services.minio_service import minio_service
 from app.services.student_service import StudentService
+from app.services.student_snapshot_resync import fetch_application_snapshot
 from app.utils.college_scope import (
     college_scope_for_user,
     college_user_may_access,
@@ -1231,25 +1232,20 @@ class ApplicationService:
             if application.user_id != current_user.id:
                 raise AuthorizationError("You can only update your own application data")
 
-        # 檢查是否可以編輯
-        if application.status not in [
-            ApplicationStatus.draft.value,
-            ApplicationStatus.returned.value,
-        ]:
+        # 檢查是否可以編輯 (status loads as the enum member — compare members, not .value)
+        if application.status not in [ApplicationStatus.draft, ApplicationStatus.returned]:
             raise ValidationError("Cannot update student data for submitted applications")
 
         # 獲取當前學生資料
         current_student_data = application.student_data or {}
 
-        # 如果需要，重新從外部API獲取基本學生資料
+        # 如果需要，重新從外部API獲取學生資料 — always the application's OWN student
+        # (an admin/college caller must not merge their own record) and its academic
+        # year/semester, so the term data (trm_*) is fetched too.
         if refresh_from_api:
-            if not current_user.nycu_id or not current_user.nycu_id.strip():
-                raise ValidationError("Student NYCU ID is required to refresh data from API")
-
-            fresh_api_data = await self.student_service.get_student_snapshot(current_user.nycu_id)
-            if fresh_api_data:
-                # 合併API資料，但保留用戶輸入的資料
-                current_student_data.update(fresh_api_data)
+            fresh_api_data = await fetch_application_snapshot(self.student_service, application)
+            # 合併API資料，但保留用戶輸入的資料
+            current_student_data = {**current_student_data, **fresh_api_data}
 
         # 合併用戶更新的資料
         update_dict = student_data_update.model_dump(exclude_none=True)

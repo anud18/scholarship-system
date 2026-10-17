@@ -770,7 +770,7 @@ async def update_student_data(
         app_id = app.app_id if hasattr(app, "app_id") else f"APP-{id}"
 
         await service.update_student_data(
-            id=id,
+            application_id=id,
             student_data_update=student_data,
             current_user=current_user,
             refresh_from_api=refresh_from_api,

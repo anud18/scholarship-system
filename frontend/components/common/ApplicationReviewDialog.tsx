@@ -25,6 +25,7 @@ import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { ApplicationFormDataDisplay } from "@/components/application-form-data-display";
 import { ApplicationAuditTrail } from "@/components/application-audit-trail";
 import { ProfessorAssignmentDropdown } from "@/components/professor-assignment-dropdown";
+import { SisTermResyncCard } from "@/components/admin/SisTermResyncCard";
 import {
   FileText,
   Eye,
@@ -2168,6 +2169,15 @@ export function ApplicationReviewDialog({
                 {/* Management Tab (Admin and Super Admin) */}
                 {isAdminRole && (
                   <TabsContent value="management" className="space-y-4 mt-4">
+                    {detailedApplication && (
+                      <SisTermResyncCard
+                        applicationId={detailedApplication.id}
+                        studentData={detailedApplication.student_data}
+                        locale={locale}
+                        onResynced={() => loadApplicationDetails(detailedApplication.id)}
+                      />
+                    )}
+
                     {/* Post Office Verification Section */}
                     <Card>
                       <CardHeader>

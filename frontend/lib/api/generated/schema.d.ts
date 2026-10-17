@@ -1320,6 +1320,31 @@ export interface paths {
         patch: operations["admin_update_application_status_api_v1_admin_applications__id__status_patch"];
         trace?: never;
     };
+    "/api/v1/admin/applications/{id}/resync-sis-term-data": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resync Sis Term Data
+         * @description Re-fetch the SIS term data (系所、年級等 trm_* 欄位) of an application whose
+         *     snapshot was stored without it (SIS timed out / failed when the draft was created).
+         *
+         *     Only the term part of the snapshot changes; 申請當時的 std_* basic data is kept.
+         *     SIS failures surface as 503; a SIS answer that still has no term data leaves the
+         *     snapshot untouched and returns ``updated: false``.
+         */
+        post: operations["resync_sis_term_data_api_v1_admin_applications__id__resync_sis_term_data_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/applications/{id}": {
         parameters: {
             query?: never;
@@ -13837,6 +13862,37 @@ export interface operations {
                 "application/json": components["schemas"]["ApplicationStatusUpdate"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resync_sis_term_data_api_v1_admin_applications__id__resync_sis_term_data_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
