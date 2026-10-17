@@ -59,8 +59,14 @@ export function SisTermResyncCard({
       if (response.data?.updated) {
         toast.success(isZh ? "已重新同步學籍學期資料" : "SIS term data resynced");
         onResynced();
+      } else if (response.data?.new_status === TERM_STATUS_SUCCESS) {
+        // Another request completed it meanwhile — reload to show it
+        toast.info(isZh ? "學期資料已完整" : "Term data already complete", {
+          description: response.message,
+        });
+        onResynced();
       } else {
-        toast.warning(isZh ? "學籍系統仍無資料" : "SIS still has no term data", {
+        toast.warning(isZh ? "未取得學期資料，未變更" : "No term data received; nothing changed", {
           description: response.message,
         });
       }

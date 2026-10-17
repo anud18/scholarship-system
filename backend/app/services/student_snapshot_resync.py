@@ -16,8 +16,11 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.college_mappings import ORIGINAL_ACADEMY_CODES_KEY
-from app.core.exceptions import ValidationError
+from app.core.exceptions import NotFoundError, ValidationError
 from app.models.application import Application
 from app.services.student_service import StudentService
 
@@ -29,6 +32,7 @@ TERM_RESYNCED_AT_KEY = "_term_resynced_at"
 TERM_STATUS_SUCCESS = "success"
 TERM_STATUS_ERROR = "error"
 TERM_FIELD_PREFIX = "trm_"
+ALREADY_COMPLETE_MESSAGE = "學期資料已由其他操作補齊"
 
 
 @dataclass(frozen=True)
@@ -101,34 +105,51 @@ async def fetch_application_snapshot(student_service: StudentService, applicatio
     )
 
 
+async def _lock_application(db: AsyncSession, application_id: int) -> Application:
+    """Re-read the row under ``FOR UPDATE``, overwriting any stale copy in the session."""
+    stmt = (
+        select(Application)
+        .where(Application.id == application_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return (await db.execute(stmt)).scalar_one()
+
+
 async def resync_application_term_data(
-    application: Application, student_service: Optional[StudentService] = None
+    db: AsyncSession, application_id: int, student_service: Optional[StudentService] = None
 ) -> TermResyncResult:
     """Re-fetch the term data of one application and merge it into its snapshot (caller commits).
 
-    The snapshot is left untouched when SIS still has no term data for the
-    application's year — a resync must never replace a snapshot with a worse one.
+    SIS is asked without holding a lock; the row is then locked and re-read, so the
+    merge builds on the LATEST snapshot (a concurrent write is never overwritten by
+    a stale copy) and a snapshot completed meanwhile is left alone. The snapshot is
+    also left untouched when SIS returned no term data — a resync never degrades it.
+    Raises NotFoundError for an unknown id; SIS basic-data failures propagate.
     """
-    current = application.student_data or {}
-    previous_status = current.get(TERM_STATUS_KEY)
+    application = await db.get(Application, application_id)
+    if application is None:
+        raise NotFoundError(f"Application {application_id} not found")
+    app_id = application.app_id
+    previous_status = (application.student_data or {}).get(TERM_STATUS_KEY)
+
     fresh = await fetch_application_snapshot(student_service or StudentService(), application)
     new_status = fresh.get(TERM_STATUS_KEY)
-
     if new_status == TERM_STATUS_ERROR:
-        logger.warning(f"SIS term resync for {application.app_id} still has no term data: {fresh.get(TERM_ERROR_KEY)}")
+        # Term lookup failed or SIS has no record for the year — the reason says which
+        logger.warning(f"SIS term resync for {app_id} got no term data: {fresh.get(TERM_ERROR_KEY)}")
         return TermResyncResult(
-            app_id=application.app_id,
-            previous_status=previous_status,
-            new_status=new_status,
-            updated=False,
-            error_message=fresh.get(TERM_ERROR_KEY),
+            app_id, previous_status, new_status, updated=False, error_message=fresh.get(TERM_ERROR_KEY)
         )
 
-    application.student_data = merge_term_snapshot(current, fresh, datetime.now(timezone.utc).isoformat())
-    logger.info(f"SIS term resync for {application.app_id}: {previous_status} -> {new_status}")
-    return TermResyncResult(
-        app_id=application.app_id,
-        previous_status=previous_status,
-        new_status=new_status,
-        updated=True,
-    )
+    locked = await _lock_application(db, application_id)
+    latest = locked.student_data or {}
+    if not needs_term_resync(latest):
+        logger.info(f"SIS term resync for {app_id} skipped: completed concurrently")
+        return TermResyncResult(
+            app_id, previous_status, latest.get(TERM_STATUS_KEY), updated=False, error_message=ALREADY_COMPLETE_MESSAGE
+        )
+
+    locked.student_data = merge_term_snapshot(latest, fresh, datetime.now(timezone.utc).isoformat())
+    logger.info(f"SIS term resync for {app_id}: {previous_status} -> {new_status}")
+    return TermResyncResult(app_id, previous_status, new_status, updated=True)

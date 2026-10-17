@@ -26,6 +26,9 @@ Safety properties
   untouched and reported as ``still_missing``.
 * **Idempotent.** A re-synced row has ``success`` / ``partial`` status; ``success``
   rows are skipped on the next run.
+* **Safe alongside the admin 重新同步 button.** Each row is re-read under a row lock
+  after its SIS answer arrives, so a concurrent write is merged into, never
+  overwritten, and a row completed meanwhile is left alone.
 * **Gentle on SIS.** Applications are processed one at a time with ``--delay``
   seconds between SIS lookups; each applied row is committed on its own.
 
@@ -51,6 +54,7 @@ from app.models.application import Application
 from app.models.enums import ApplicationStatus
 from app.services.student_service import StudentService
 from app.services.student_snapshot_resync import (
+    ALREADY_COMPLETE_MESSAGE,
     TERM_STATUS_ERROR,
     TERM_STATUS_KEY,
     needs_term_resync,
@@ -67,42 +71,62 @@ class Stats:
     candidates: int = 0
     resynced: List[str] = field(default_factory=list)
     still_missing: List[str] = field(default_factory=list)
+    already_complete: List[str] = field(default_factory=list)
     failed: List[str] = field(default_factory=list)
 
 
-async def _load_candidates(session, academic_year: Optional[int], app_ids: List[str]) -> List[Application]:
-    stmt = select(Application).where(Application.status != ApplicationStatus.draft.value)
+@dataclass(frozen=True)
+class Candidate:
+    id: int
+    app_id: str
+    term_status: Optional[str]
+
+
+async def _load_candidates(session, academic_year: Optional[int], app_ids: List[str]) -> List[Candidate]:
+    """Plain values, not ORM rows: each one is re-read (and locked) when it is processed."""
+    stmt = select(Application.id, Application.app_id, Application.student_data).where(
+        Application.status != ApplicationStatus.draft.value
+    )
     if academic_year is not None:
         stmt = stmt.where(Application.academic_year == academic_year)
     if app_ids:
         stmt = stmt.where(Application.app_id.in_(app_ids))
-    apps = (await session.execute(stmt.order_by(Application.id))).scalars().all()
+    rows = (await session.execute(stmt.order_by(Application.id))).all()
     # JSON status filtered in Python: portable across Postgres / SQLite
-    return [app for app in apps if needs_term_resync(app.student_data)]
+    return [
+        Candidate(row.id, row.app_id, (row.student_data or {}).get(TERM_STATUS_KEY))
+        for row in rows
+        if needs_term_resync(row.student_data)
+    ]
 
 
-async def _process(session, app: Application, student_service: StudentService, apply: bool, stats: Stats) -> None:
-    previous_status = (app.student_data or {}).get(TERM_STATUS_KEY)
+async def _process(session, candidate: Candidate, student_service: StudentService, apply: bool, stats: Stats) -> None:
+    app_id = candidate.app_id
     try:
-        result = await resync_application_term_data(app, student_service)
+        result = await resync_application_term_data(session, candidate.id, student_service)
     except ScholarshipException:
         await session.rollback()
-        logger.warning(f"{app.app_id}: SIS lookup failed (was {previous_status})", exc_info=True)
-        stats.failed.append(app.app_id)
+        logger.warning(f"{app_id}: SIS lookup failed (was {candidate.term_status})", exc_info=True)
+        stats.failed.append(app_id)
         return
 
     if not result.updated:
-        logger.info(f"{result.app_id}: SIS still has no term data ({result.error_message}) — left untouched")
-        stats.still_missing.append(result.app_id)
+        await session.rollback()  # releases the row lock of a concurrently completed row
+        if result.error_message == ALREADY_COMPLETE_MESSAGE:
+            logger.info(f"{app_id}: completed meanwhile — left untouched")
+            stats.already_complete.append(app_id)
+        else:
+            logger.info(f"{app_id}: SIS returned no term data ({result.error_message}) — left untouched")
+            stats.still_missing.append(app_id)
         return
 
     if apply:
         await session.commit()
-        logger.info(f"{result.app_id}: re-synced ({result.previous_status} -> {result.new_status})")
+        logger.info(f"{app_id}: re-synced ({result.previous_status} -> {result.new_status})")
     else:
         await session.rollback()
-        logger.info(f"{result.app_id}: WOULD re-sync ({result.previous_status} -> {result.new_status})")
-    stats.resynced.append(result.app_id)
+        logger.info(f"{app_id}: WOULD re-sync ({result.previous_status} -> {result.new_status})")
+    stats.resynced.append(app_id)
 
 
 async def run(academic_year: Optional[int], app_ids: List[str], apply: bool, delay: float) -> Stats:
@@ -112,12 +136,9 @@ async def run(academic_year: Optional[int], app_ids: List[str], apply: bool, del
         candidates = await _load_candidates(session, academic_year, app_ids)
         stats.candidates = len(candidates)
         logger.info(f"{stats.candidates} application(s) with incomplete SIS term data")
-        # Capture ids first: a rollback/commit expires the loaded rows
-        candidate_ids = [app.id for app in candidates]
-        for index, app_pk in enumerate(candidate_ids):
-            app = await session.get(Application, app_pk)
-            await _process(session, app, student_service, apply, stats)
-            if delay and index < len(candidate_ids) - 1:
+        for index, candidate in enumerate(candidates):
+            await _process(session, candidate, student_service, apply, stats)
+            if delay and index < len(candidates) - 1:
                 await asyncio.sleep(delay)
     return stats
 
@@ -127,6 +148,7 @@ def _report(stats: Stats, apply: bool) -> None:
     print(f"\ncandidates      : {stats.candidates}")
     print(f"{verb:<16}: {len(stats.resynced)}")
     print(f"still missing   : {len(stats.still_missing)}  (SIS {TERM_STATUS_ERROR}; left untouched)")
+    print(f"already complete: {len(stats.already_complete)}  (completed meanwhile; left untouched)")
     print(f"SIS failures    : {len(stats.failed)}  (re-run later)")
     for label, ids in (("still missing", stats.still_missing), ("SIS failures", stats.failed)):
         if ids:

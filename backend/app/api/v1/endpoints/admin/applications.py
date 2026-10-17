@@ -617,8 +617,9 @@ async def resync_sis_term_data(
     snapshot was stored without it (SIS timed out / failed when the draft was created).
 
     Only the term part of the snapshot changes; 申請當時的 std_* basic data is kept.
-    SIS failures surface as 503; a SIS answer that still has no term data leaves the
-    snapshot untouched and returns ``updated: false``.
+    A basic-data (API 1) SIS failure surfaces as 503. When the term lookup failed or
+    SIS has no term record for the year, or another request completed the snapshot
+    meanwhile, nothing is written and the response is ``updated: false`` with the reason.
     """
     app = (await db.execute(select(Application).where(Application.id == id))).scalar_one_or_none()
     if not app:
@@ -626,11 +627,12 @@ async def resync_sis_term_data(
     if not needs_term_resync(app.student_data):
         raise ValidationError("此申請的學籍學期資料已完整，無需重新同步")
 
-    result = await resync_application_term_data(app)
-    if result.updated:
-        await db.commit()
+    result = await resync_application_term_data(db, id)
+    # Commit even when nothing changed: it releases the row lock taken for the merge.
+    # (A rollback would expire `current_user`, breaking the audit write below.)
+    await db.commit()
 
-    # The commit expires `app`; use only `id` / `result` below (no async lazy-load)
+    # Use only `id` / `result` below — `app` may be stale after the locked re-read
     await ApplicationAuditService(db).log_application_operation(
         application_id=id,
         action=AuditAction.update,
@@ -644,11 +646,7 @@ async def resync_sis_term_data(
         meta_data={"app_id": result.app_id, "update_type": "sis_term_resync"},
     )
 
-    message = (
-        "已重新同步學籍學期資料"
-        if result.updated
-        else f"學籍系統仍查無此申請學年度的學期資料，未變更（{result.error_message}）"
-    )
+    message = "已重新同步學籍學期資料" if result.updated else f"未變更：{result.error_message}"
     return {
         "success": True,
         "message": message,
