@@ -227,6 +227,39 @@ class TestStudentPreviewScoping:
         finally:
             patcher.stop()
 
+    async def test_preview_history_span_is_capped(self, client, login, scope_users, eng_application):
+        """academic_year is a free query param: a huge value must not schedule one lookup per year."""
+        from app.api.v1.endpoints.college_review.application_review import MAX_PREVIEW_HISTORY_YEARS
+
+        patcher, mock_cls = _mock_student_service()
+        try:
+            login(scope_users["admin"])
+            response = await client.get(PREVIEW_URL.format(student_id="S881001"), params={"academic_year": 100000})
+            assert response.status_code == 200
+            periods = mock_cls.return_value.get_term_history.await_args.args[1]
+            assert len(periods) == 2 * MAX_PREVIEW_HISTORY_YEARS
+            assert periods[0] == ("100000", "2")
+        finally:
+            patcher.stop()
+
+    async def test_malformed_term_record_skips_only_that_term(self, client, login, scope_users, eng_application):
+        patcher, mock_cls = _mock_student_service()
+        mock_cls.return_value.get_term_history = AsyncMock(
+            return_value=[
+                ("114", "2", {"trm_ascore_gpa": ""}),  # not a float
+                ("114", "1", {"trm_ascore_gpa": 3.9, "trm_depname": "電機系"}),
+                ("113", "2", RuntimeError("SIS timed out")),
+            ]
+        )
+        try:
+            login(scope_users["admin"])
+            response = await client.get(PREVIEW_URL.format(student_id="S881001"), params={"academic_year": 114})
+            assert response.status_code == 200
+            terms = response.json()["data"]["recent_terms"]
+            assert [(t["academic_year"], t["term"], t["gpa"]) for t in terms] == [("114", "1", 3.9)]
+        finally:
+            patcher.stop()
+
     async def test_admin_bypasses_college_scope_200(self, client, login, scope_users, eng_application):
         patcher, _ = _mock_student_service()
         try:
