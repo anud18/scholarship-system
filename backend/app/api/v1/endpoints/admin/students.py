@@ -377,24 +377,22 @@ async def get_student_sis_data(
             # Get academic years to query (current + 3 years back)
             academic_years = get_academic_year_range(years_back=3, include_current=True)
 
-            for year in academic_years:
-                for term in ["1", "2"]:
-                    try:
-                        term_data = await student_service.get_student_term_info(student_code, str(year), term)
-                        if term_data:
-                            semesters.append({"academic_year": str(year), "term": term, **term_data})
-                    except Exception as term_exc:
-                        # Some semesters legitimately don't exist (gap years, before-enrollment
-                        # terms). Log at debug + count failures so a real SIS outage is visible
-                        # in the audit row without spamming on legitimate gaps.
-                        term_fetch_failures += 1
-                        logger.debug(
-                            "SIS term fetch failed: student=%s year=%s term=%s: %s",
-                            student_code,
-                            year,
-                            term,
-                            term_exc,
-                        )
+            periods = [(str(year), term) for year in academic_years for term in ("1", "2")]
+            for year, term, term_data in await student_service.get_term_history(student_code, periods):
+                if isinstance(term_data, Exception):
+                    # Some semesters legitimately don't exist (gap years, before-enrollment
+                    # terms). Log at debug + count failures so a real SIS outage is visible
+                    # in the audit row without spamming on legitimate gaps.
+                    term_fetch_failures += 1
+                    logger.debug(
+                        "SIS term fetch failed: student=%s year=%s term=%s: %s",
+                        student_code,
+                        year,
+                        term,
+                        term_data,
+                    )
+                elif term_data:
+                    semesters.append({"academic_year": year, "term": term, **term_data})
 
         logger.info(
             "admin SIS-data lookup: target_user_id=%s nycu_id=%s semesters=%d term_failures=%d by user_id=%s",

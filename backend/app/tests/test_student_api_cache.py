@@ -329,6 +329,100 @@ async def test_retry_empty_false_asks_sis_once(fake_redis, service, monkeypatch)
 
     assert result is None
     assert fake.count("ScholarshipStudent") == 1
+    # An unretried empty answer is not trusted enough to hide the record from other callers
+    assert fake_redis._store == {}
+
+
+@pytest.mark.asyncio
+async def test_basic_403_no_data_is_cached_as_empty(fake_redis, service):
+    fake, patcher = sis({("ScholarshipStudent", None, None): [NO_DATA]})
+    with patcher:
+        assert await service.get_student_basic_info("E1234") is None
+        assert await service.get_student_basic_info("E1234") is None
+
+    assert fake.count("ScholarshipStudent") == 3  # 1 + 2 retries, second lookup from cache
+
+
+@pytest.mark.asyncio
+async def test_unexpected_sis_code_returns_none_without_caching_or_retrying(fake_redis, service):
+    system_error = {"code": "500", "msg": "系統錯誤", "data": None}
+    fake, patcher = sis({("ScholarshipStudent", None, None): [system_error, found(BASIC)]})
+    with patcher:
+        during_outage = await service.get_student_basic_info("314540001")
+        after_recovery = await service.get_student_basic_info("314540001")
+
+    assert during_outage is None
+    assert after_recovery["std_cname"] == "王小明"
+    assert fake.count("ScholarshipStudent") == 2
+
+
+@pytest.mark.asyncio
+async def test_snapshot_reads_sis_live_by_default(fake_redis, service):
+    stale = {**BASIC, "std_studingstatus": "1"}
+    current = {**BASIC, "std_studingstatus": "2"}
+    fake, patcher = sis({("ScholarshipStudent", None, None): [found(stale), found(current)]})
+    with patcher:
+        await service.get_student_basic_info("314540001")  # caches the stale record
+        snapshot = await service.get_student_snapshot("314540001")
+
+    assert snapshot["std_studingstatus"] == "2"
+    assert fake.count("ScholarshipStudent") == 2
+
+
+# ─── get_term_history ────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_term_history_keeps_order_and_returns_failures_in_place(service):
+    _, patcher = sis(
+        {
+            ("ScholarshipStudentTerm", "114", "2"): [NO_DATA],
+            ("ScholarshipStudentTerm", "114", "1"): [found(TERM_1)],
+            ("ScholarshipStudentTerm", "113", "2"): [500],
+        }
+    )
+    with patcher:
+        history = await service.get_term_history("314540001", [("114", "2"), ("114", "1"), ("113", "2")])
+
+    assert [(year, term) for year, term, _ in history] == [("114", "2"), ("114", "1"), ("113", "2")]
+    assert history[0][2] is None
+    assert history[1][2] == TERM_1
+    assert isinstance(history[2][2], ServiceUnavailableError)
+
+
+@pytest.mark.asyncio
+async def test_term_history_bounds_concurrency(service, monkeypatch):
+    import asyncio
+
+    from app.services import student_service as student_service_module
+
+    monkeypatch.setattr(student_service_module, "TERM_LOOKUP_CONCURRENCY", 2)
+    in_flight = peak = 0
+
+    async def slow_term(student_code, academic_year, term):
+        nonlocal in_flight, peak
+        in_flight += 1
+        peak = max(peak, in_flight)
+        await asyncio.sleep(0.01)
+        in_flight -= 1
+        return None
+
+    monkeypatch.setattr(service, "get_student_term_info", slow_term)
+    await service.get_term_history("314540001", [(str(year), "1") for year in range(100, 110)])
+
+    assert peak == 2
+
+
+@pytest.mark.asyncio
+async def test_term_history_propagates_cancellation(service, monkeypatch):
+    import asyncio
+
+    async def cancelled(*_):
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr(service, "get_student_term_info", cancelled)
+    with pytest.raises(asyncio.CancelledError):
+        await service.get_term_history("314540001", [("114", "1")])
 
 
 @pytest.mark.asyncio

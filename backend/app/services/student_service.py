@@ -4,13 +4,14 @@ Supports both mock API (development) and production student information system.
 
 SIS records are cached in Redis (``app.services.student_api_cache``); pass
 ``fresh=True`` to skip the cache read when the caller must see live SIS data.
+Stored snapshots (``get_student_snapshot``) are always live by default.
 """
 
 import asyncio
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Dict, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import httpx
 
@@ -20,6 +21,13 @@ from app.core.exceptions import NotFoundError, ServiceUnavailableError
 from app.services.student_api_cache import basic_key, get_cached_record, set_cached_record, term_key
 
 logger = logging.getLogger(__name__)
+
+# Concurrent connections to SIS; callers beyond this wait in the pool
+SIS_MAX_CONNECTIONS = 20
+# Seconds a call may wait for a free pooled connection (separate from the SIS response timeout)
+SIS_POOL_TIMEOUT = 30.0
+# Concurrent term lookups per get_term_history call
+TERM_LOOKUP_CONCURRENCY = 6
 
 # One pooled client per event loop instead of a new connection per SIS call.
 # The loop check matters for scripts / tests that each run their own loop.
@@ -31,9 +39,13 @@ def _get_http_client() -> httpx.AsyncClient:
     global _http_client, _http_client_loop
     loop = asyncio.get_running_loop()
     if _http_client is None or _http_client.is_closed or _http_client_loop is not loop:
-        _http_client = httpx.AsyncClient()
+        _http_client = httpx.AsyncClient(limits=httpx.Limits(max_connections=SIS_MAX_CONNECTIONS))
         _http_client_loop = loop
     return _http_client
+
+
+class _UnexpectedSISAnswer(Exception):
+    """SIS answered with an unknown code: report "no record" but never cache it."""
 
 
 async def close_http_client() -> None:
@@ -84,12 +96,15 @@ class StudentService:
             logger.warning("Student API is not enabled. Returning None.")
             return None
 
-        record = await self._cached_fetch(
-            basic_key(student_code),
-            lambda: self._fetch_basic_info(student_code),
-            fresh=fresh,
-            retry_empty=retry_empty,
-        )
+        try:
+            record = await self._cached_fetch(
+                basic_key(student_code),
+                lambda: self._fetch_basic_info(student_code),
+                fresh=fresh,
+                retry_empty=retry_empty,
+            )
+        except _UnexpectedSISAnswer:
+            return None
         # Retired academy codes (電資學院 Y) are remapped at the SIS boundary
         return normalize_student_academy(record)
 
@@ -128,7 +143,9 @@ class StudentService:
     ) -> Optional[Dict[str, Any]]:
         """Serve ``key`` from Redis, else fetch (re-asking empty answers) and cache the result.
 
-        Exceptions from ``fetch`` propagate and are never cached.
+        Exceptions from ``fetch`` propagate and are never cached. An empty answer is
+        cached only after the retries confirmed it; with ``retry_empty=False`` it is
+        returned but not cached, so one flaky 無資料 cannot hide a record from other callers.
         """
         if not fresh:
             hit, record = await get_cached_record(key)
@@ -144,8 +161,29 @@ class StudentService:
             await asyncio.sleep(settings.student_api_empty_retry_delay * attempt)
             record = await fetch()
 
-        await set_cached_record(key, record)
+        if record is not None or retry_empty:
+            await set_cached_record(key, record)
         return record
+
+    async def get_term_history(
+        self, student_code: str, periods: Sequence[Tuple[str, str]]
+    ) -> List[Tuple[str, str, Union[Optional[Dict[str, Any]], Exception]]]:
+        """Fetch several ``(academic_year, term)`` records concurrently (bounded), in ``periods`` order.
+
+        A term that fails yields its exception in place of the record, so callers keep
+        their per-term skip / count logic. Cancellation still propagates.
+        """
+        semaphore = asyncio.Semaphore(TERM_LOOKUP_CONCURRENCY)
+
+        async def fetch_one(academic_year: str, term: str) -> Optional[Dict[str, Any]]:
+            async with semaphore:
+                return await self.get_student_term_info(student_code, academic_year, term)
+
+        results = await asyncio.gather(*(fetch_one(year, term) for year, term in periods), return_exceptions=True)
+        for result in results:
+            if isinstance(result, BaseException) and not isinstance(result, Exception):
+                raise result
+        return [(year, term, result) for (year, term), result in zip(periods, results)]
 
     async def _post(self, endpoint: str, request_data: Dict[str, Any]) -> httpx.Response:
         headers = {
@@ -159,11 +197,14 @@ class StudentService:
             f"{self.api_base_url}/{endpoint}",
             headers=headers,
             content=json.dumps(request_data, separators=(",", ":")),
-            timeout=self.api_timeout,
+            timeout=httpx.Timeout(self.api_timeout, pool=SIS_POOL_TIMEOUT),
         )
 
     async def _fetch_basic_info(self, student_code: str) -> Optional[Dict[str, Any]]:
-        """One live ScholarshipStudent call; returns the raw record or None."""
+        """One live ScholarshipStudent call; returns the raw record, or None for 403 無資料 / 404.
+
+        Any other SIS code raises ``_UnexpectedSISAnswer`` so it is not cached as "no record".
+        """
         try:
             response = await self._post(
                 "ScholarshipStudent",
@@ -178,8 +219,9 @@ class StudentService:
             code = result.get("code")
             if _is_code(code, 200) and result.get("data"):
                 return result["data"][0]  # First student record
-            if _is_code(code, 404):
-                logger.info(f"Student {student_code} not found in API")
+            if _is_code(code, 403) or _is_code(code, 404):
+                # 403 無資料 is what SIS answers for staff / unknown codes
+                logger.info(f"Student {student_code} not found in API (code {code})")
                 return None
 
             logger.warning(
@@ -187,9 +229,9 @@ class StudentService:
                 f"code: {result.get('code')} (type: {type(code).__name__}), "
                 f"msg: {result.get('msg')}, student_code: {student_code}"
             )
-            return None
+            raise _UnexpectedSISAnswer(f"code {code}")
 
-        except ServiceUnavailableError:
+        except (ServiceUnavailableError, _UnexpectedSISAnswer):
             raise
         except httpx.TimeoutException as exc:
             logger.error(f"Student API request timed out for {student_code}")
@@ -287,7 +329,7 @@ class StudentService:
         student_code: str,
         academic_year: Optional[str] = None,
         semester: Optional[str] = None,
-        fresh: bool = False,
+        fresh: bool = True,
     ) -> Dict[str, Any]:
         """
         Get student data snapshot for application storage
@@ -298,7 +340,8 @@ class StudentService:
             student_code: Student ID code
             academic_year: Academic year (e.g., '114') for term data query
             semester: Semester ('first', 'second', or None for yearly scholarships)
-            fresh: Skip the cache read for both API calls
+            fresh: Ask SIS live (default) — the snapshot is stored with the application
+                and stamped ``_api_fetched_at``, so it must not be a cached copy
 
         Returns:
             Student data snapshot dictionary with both std_* and trm_* fields

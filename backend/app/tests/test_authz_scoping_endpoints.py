@@ -166,6 +166,7 @@ def _mock_student_service():
     mock_cls = patcher.start()
     mock_cls.return_value.get_student_basic_info = AsyncMock(return_value=dict(_STUDENT_BASIC))
     mock_cls.return_value.get_student_term_info = AsyncMock(return_value=None)
+    mock_cls.return_value.get_term_history = AsyncMock(return_value=[])
     return patcher, mock_cls
 
 

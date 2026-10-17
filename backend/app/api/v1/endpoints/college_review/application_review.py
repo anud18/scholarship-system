@@ -7,7 +7,6 @@ Handles:
 - Student preview functionality
 """
 
-import asyncio
 import logging
 from typing import Optional
 
@@ -229,11 +228,7 @@ async def get_student_preview(
 
             # Current academic year down to enrollment year, second semester first
             periods = [(str(year), term) for year in range(academic_year, enroll_year - 1, -1) for term in ("2", "1")]
-            results = await asyncio.gather(
-                *(student_service.get_student_term_info(student_id, year, term) for year, term in periods),
-                return_exceptions=True,
-            )
-            for (year, term), term_data in zip(periods, results):
+            for year, term, term_data in await student_service.get_term_history(student_id, periods):
                 if isinstance(term_data, Exception):
                     logger.debug(f"Could not fetch term data for {student_id} {year}-{term}: {str(term_data)}")
                 elif term_data:

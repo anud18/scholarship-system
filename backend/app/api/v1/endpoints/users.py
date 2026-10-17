@@ -78,20 +78,18 @@ async def get_student_info(current_user: User = Depends(get_current_user), db: A
         # Get academic years to query (current + 3 years back)
         academic_years = get_academic_year_range(years_back=3, include_current=True)
 
-        for year in academic_years:
-            for term in ["1", "2"]:
-                try:
-                    term_data = await student_service.get_student_term_info(student_code, str(year), term)
-                    if term_data:
-                        semesters.append({"academic_year": str(year), "term": term, **term_data})
-                except Exception as term_exc:
-                    logger.debug(
-                        "SIS term fetch skipped: student=%s year=%s term=%s: %s",
-                        student_code,
-                        year,
-                        term,
-                        term_exc,
-                    )
+        periods = [(str(year), term) for year in academic_years for term in ("1", "2")]
+        for year, term, term_data in await student_service.get_term_history(student_code, periods):
+            if isinstance(term_data, Exception):
+                logger.debug(
+                    "SIS term fetch skipped: student=%s year=%s term=%s: %s",
+                    student_code,
+                    year,
+                    term,
+                    term_data,
+                )
+            elif term_data:
+                semesters.append({"academic_year": year, "term": term, **term_data})
 
     # Return student information with new structure
     return {

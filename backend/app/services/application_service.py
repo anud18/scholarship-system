@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.cache import invalidate as cache_invalidate
+from app.core.college_mappings import ORIGINAL_ACADEMY_CODES_KEY
 from app.core.exceptions import AuthorizationError, BusinessLogicError, NotFoundError, ValidationError
 from app.core.metrics import scholarship_applications_total
 from app.core.schema_validation import serialize_value
@@ -1315,8 +1316,14 @@ class ApplicationService:
             )
             return
 
-        # Keep non-SIS keys (financial_info …) from the draft; SIS fields take the fresh values
-        application.student_data = {**current, **refreshed}
+        # Keep non-SIS keys (financial_info …) from the draft. Drop its term fields first: a
+        # partial draft holds the fallback term, whose extra trm_* keys must not survive.
+        kept = {
+            key: value
+            for key, value in current.items()
+            if not key.startswith("trm_") and key != ORIGINAL_ACADEMY_CODES_KEY
+        }
+        application.student_data = {**kept, **refreshed}
         logger.info(
             f"Refreshed SIS snapshot for {application.app_id} at submit "
             f"({current.get('_term_data_status')} -> {refreshed.get('_term_data_status')})"

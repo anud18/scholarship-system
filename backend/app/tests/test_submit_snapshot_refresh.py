@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from app.core.college_mappings import ORIGINAL_ACADEMY_CODES_KEY
 from app.core.exceptions import ServiceUnavailableError
 from app.models.application import Application
 from app.models.enums import Semester
@@ -78,6 +79,27 @@ async def test_partial_snapshot_is_also_refetched():
     await svc._refresh_incomplete_student_snapshot(app)
 
     assert app.student_data["trm_term"] == "2"
+
+
+@pytest.mark.asyncio
+async def test_refresh_drops_term_fields_of_the_fallback_term():
+    """Term-1 keys that the refreshed term-2 record lacks must not survive into a 'success' snapshot."""
+    svc = _service(snapshot={"std_stdcode": "411651009", "trm_term": "2", "_term_data_status": "success"})
+    partial = {
+        **DRAFT,
+        "_term_data_status": "partial",
+        "trm_term": "1",
+        "trm_placings": "3",
+        ORIGINAL_ACADEMY_CODES_KEY: {"trm_academyno": "Y"},
+    }
+    app = _application(partial)
+
+    await svc._refresh_incomplete_student_snapshot(app)
+
+    assert app.student_data["trm_term"] == "2"
+    assert "trm_placings" not in app.student_data
+    assert ORIGINAL_ACADEMY_CODES_KEY not in app.student_data
+    assert app.student_data["financial_info"] == {"bank_code": "700"}
 
 
 @pytest.mark.asyncio
