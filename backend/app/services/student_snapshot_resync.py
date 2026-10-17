@@ -106,14 +106,20 @@ async def fetch_application_snapshot(student_service: StudentService, applicatio
 
 
 async def _lock_application(db: AsyncSession, application_id: int) -> Application:
-    """Re-read the row under ``FOR UPDATE``, overwriting any stale copy in the session."""
+    """Re-read the row under ``FOR UPDATE``, overwriting any stale copy in the session.
+
+    Raises NotFoundError when the application was deleted during the SIS call.
+    """
     stmt = (
         select(Application)
         .where(Application.id == application_id)
         .with_for_update()
         .execution_options(populate_existing=True)
     )
-    return (await db.execute(stmt)).scalar_one()
+    application = (await db.execute(stmt)).scalar_one_or_none()
+    if application is None:
+        raise NotFoundError(f"Application {application_id} was deleted during the SIS term resync")
+    return application
 
 
 async def resync_application_term_data(

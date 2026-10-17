@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.endpoints.admin import applications as admin_apps
@@ -284,6 +284,21 @@ async def test_resync_merges_into_the_latest_snapshot_not_the_pre_sis_copy(db: A
     stored = await _stored(db, app_pk)
     assert stored["financial_info"] == {"bank_code": "812"}
     assert stored["trm_depname"] == "電機工程學系"
+
+
+@pytest.mark.asyncio
+async def test_resync_of_an_application_deleted_during_the_sis_call_is_not_found(db: AsyncSession):
+    app_pk = await _broken_app(db)
+
+    async def slow_sis(*args, **kwargs):
+        await db.execute(delete(Application).where(Application.id == app_pk))
+        return dict(FRESH_SNAPSHOT)
+
+    svc = MagicMock()
+    svc.get_student_snapshot = AsyncMock(side_effect=slow_sis)
+
+    with pytest.raises(NotFoundError):
+        await resync.resync_application_term_data(db, app_pk, svc)
 
 
 @pytest.mark.asyncio
