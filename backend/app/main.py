@@ -33,6 +33,7 @@ from app.middleware.security_headers_middleware import SecurityHeadersMiddleware
 
 # Import scheduler
 from app.services.roster_scheduler_service import init_scheduler, shutdown_scheduler
+from app.services.student_service import close_http_client as close_student_api_client
 
 # Configure logging
 logging.basicConfig(
@@ -128,6 +129,10 @@ async def lifespan(_app: FastAPI):
                 LOGGER.info("Roster scheduler shut down")
             except Exception as exc:  # pylint: disable=broad-exception-caught
                 LOGGER.exception("Error during scheduler shutdown: %s", exc)
+        try:
+            await close_student_api_client()
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            LOGGER.exception("Error closing the student API client: %s", exc)
 
 
 # Interactive API docs and the OpenAPI schema enumerate every route, parameter

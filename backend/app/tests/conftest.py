@@ -112,6 +112,16 @@ def event_loop():
     loop.close()
 
 
+@pytest.fixture(autouse=True)
+def _no_student_api_cache(monkeypatch):
+    """Keep SIS records out of Redis between tests (the dev container has a live Redis).
+
+    test_student_api_cache.py re-enables the cache against a FakeRedis.
+    """
+    monkeypatch.setattr(settings, "student_api_cache_enabled", False)
+    monkeypatch.setattr(settings, "student_api_empty_retry_delay", 0.0)
+
+
 @pytest_asyncio.fixture(scope="function")
 async def db() -> AsyncGenerator[AsyncSession, None]:
     """Create a new database session for a test."""

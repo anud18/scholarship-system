@@ -7,6 +7,7 @@ Handles:
 - Student preview functionality
 """
 
+import asyncio
 import logging
 from typing import Optional
 
@@ -34,6 +35,32 @@ from ._helpers import _check_academic_year_permission, _check_scholarship_permis
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _to_student_term_data(year: str, term: str, term_data: dict) -> StudentTermData:
+    """Extract ALL available term information from external API"""
+    return StudentTermData(
+        # Basic term info
+        academic_year=year,
+        term=term,
+        term_count=term_data.get("trm_termcount"),
+        # Academic performance
+        gpa=term_data.get("trm_ascore_gpa"),  # API only provides ascore_gpa
+        ascore_gpa=term_data.get("trm_ascore_gpa"),
+        # Rankings
+        placings=term_data.get("trm_placings"),
+        placings_rate=term_data.get("trm_placingsrate"),
+        dept_placing=term_data.get("trm_depplacing"),
+        dept_placing_rate=term_data.get("trm_depplacingrate"),
+        # Student status
+        studying_status=term_data.get("trm_studystatus"),
+        degree=term_data.get("trm_degree"),
+        # Academic organization
+        academy_no=term_data.get("trm_academyno"),
+        academy_name=term_data.get("trm_academyname"),
+        dept_no=term_data.get("trm_depno"),
+        dept_name=term_data.get("trm_depname"),
+    )
 
 
 @router.get("/applications")
@@ -200,41 +227,17 @@ async def get_student_preview(
                 student_data.get("std_enrollyear", academic_year)
             )  # Get enrollment year, fallback to current academic_year
 
-            # Loop from current academic year down to enrollment year
-            for year in range(academic_year, enroll_year - 1, -1):
-                for term in ["2", "1"]:  # Second semester first, then first semester
-                    try:
-                        term_data = await student_service.get_student_term_info(student_id, str(year), term)
-
-                        if term_data:
-                            # Extract ALL available term information from external API
-                            recent_terms.append(
-                                StudentTermData(
-                                    # Basic term info
-                                    academic_year=str(year),
-                                    term=term,
-                                    term_count=term_data.get("trm_termcount"),
-                                    # Academic performance
-                                    gpa=term_data.get("trm_ascore_gpa"),  # API only provides ascore_gpa
-                                    ascore_gpa=term_data.get("trm_ascore_gpa"),
-                                    # Rankings
-                                    placings=term_data.get("trm_placings"),
-                                    placings_rate=term_data.get("trm_placingsrate"),
-                                    dept_placing=term_data.get("trm_depplacing"),
-                                    dept_placing_rate=term_data.get("trm_depplacingrate"),
-                                    # Student status
-                                    studying_status=term_data.get("trm_studystatus"),
-                                    degree=term_data.get("trm_degree"),
-                                    # Academic organization
-                                    academy_no=term_data.get("trm_academyno"),
-                                    academy_name=term_data.get("trm_academyname"),
-                                    dept_no=term_data.get("trm_depno"),
-                                    dept_name=term_data.get("trm_depname"),
-                                )
-                            )
-                    except Exception as term_err:
-                        logger.debug(f"Could not fetch term data for {student_id} {year}-{term}: {str(term_err)}")
-                        continue
+            # Current academic year down to enrollment year, second semester first
+            periods = [(str(year), term) for year in range(academic_year, enroll_year - 1, -1) for term in ("2", "1")]
+            results = await asyncio.gather(
+                *(student_service.get_student_term_info(student_id, year, term) for year, term in periods),
+                return_exceptions=True,
+            )
+            for (year, term), term_data in zip(periods, results):
+                if isinstance(term_data, Exception):
+                    logger.debug(f"Could not fetch term data for {student_id} {year}-{term}: {str(term_data)}")
+                elif term_data:
+                    recent_terms.append(_to_student_term_data(year, term, term_data))
 
         # Mask 身分證字號 at the response boundary — the preview is display
         # only, so the full national ID never leaves the server.

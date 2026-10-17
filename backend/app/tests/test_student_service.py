@@ -126,10 +126,9 @@ async def test_get_student_basic_info_happy_path(api_service):
         "code": 200,
         "data": [{"std_stdcode": "114550001", "std_cname": "王小明"}],
     }
-    with patch("httpx.AsyncClient") as mock_cls:
-        mock_client = AsyncMock()
-        mock_client.post.return_value = mock_resp
-        mock_cls.return_value.__aenter__.return_value = mock_client
+    mock_client = AsyncMock()
+    mock_client.post.return_value = mock_resp
+    with patch("app.services.student_service._get_http_client", return_value=mock_client):
 
         result = await api_service.get_student_basic_info("114550001")
 
@@ -142,10 +141,9 @@ async def test_get_student_basic_info_not_found_returns_none(api_service):
     mock_resp = MagicMock()
     mock_resp.status_code = 200
     mock_resp.json.return_value = {"code": 404, "data": None}
-    with patch("httpx.AsyncClient") as mock_cls:
-        mock_client = AsyncMock()
-        mock_client.post.return_value = mock_resp
-        mock_cls.return_value.__aenter__.return_value = mock_client
+    mock_client = AsyncMock()
+    mock_client.post.return_value = mock_resp
+    with patch("app.services.student_service._get_http_client", return_value=mock_client):
 
         result = await api_service.get_student_basic_info("999999")
 
@@ -157,10 +155,9 @@ async def test_get_student_basic_info_raises_on_5xx(api_service):
     """HTTP 500 from SIS API → ServiceUnavailableError."""
     mock_resp = MagicMock()
     mock_resp.status_code = 500
-    with patch("httpx.AsyncClient") as mock_cls:
-        mock_client = AsyncMock()
-        mock_client.post.return_value = mock_resp
-        mock_cls.return_value.__aenter__.return_value = mock_client
+    mock_client = AsyncMock()
+    mock_client.post.return_value = mock_resp
+    with patch("app.services.student_service._get_http_client", return_value=mock_client):
 
         with pytest.raises(ServiceUnavailableError):
             await api_service.get_student_basic_info("114550001")

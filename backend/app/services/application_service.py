@@ -1279,6 +1279,49 @@ class ApplicationService:
 
         return application
 
+    async def _refresh_incomplete_student_snapshot(self, application: Application) -> None:
+        """Re-fetch the SIS snapshot live when the draft's term data is not ``success``.
+
+        A failed refresh never blocks submission: the draft snapshot is kept, and
+        so is a refresh that still came back ``error``.
+        """
+        current = application.student_data or {}
+        if current.get("_term_data_status") == "success":
+            return
+
+        student_code = current.get("std_stdcode")
+        if not student_code:
+            logger.warning(f"Application {application.app_id} snapshot has no std_stdcode; cannot refresh term data")
+            return
+
+        try:
+            refreshed = await self.student_service.get_student_snapshot(
+                student_code,
+                academic_year=str(application.academic_year),
+                semester=getattr(application.semester, "value", application.semester),
+                fresh=True,
+            )
+        except Exception:
+            logger.warning(
+                f"Refreshing SIS snapshot for {application.app_id} failed; keeping the draft snapshot",
+                exc_info=True,
+            )
+            return
+
+        if refreshed.get("_term_data_status") == "error":
+            logger.warning(
+                f"Refreshed SIS snapshot for {application.app_id} still has no term data: "
+                f"{refreshed.get('_term_error_message')}"
+            )
+            return
+
+        # Keep non-SIS keys (financial_info …) from the draft; SIS fields take the fresh values
+        application.student_data = {**current, **refreshed}
+        logger.info(
+            f"Refreshed SIS snapshot for {application.app_id} at submit "
+            f"({current.get('_term_data_status')} -> {refreshed.get('_term_data_status')})"
+        )
+
     def _enforce_contact_phone_format(self, form_fields: Optional[Dict[str, Any]]) -> None:
         """Reject a submission whose contact_phone is present but not a TW mobile.
 
@@ -1337,6 +1380,9 @@ class ApplicationService:
 
         # 處理銀行帳戶證明文件 clone（從個人資料複製到申請）
         await self._clone_user_profile_documents(application, user)
+
+        # 草稿建立時學期資料沒抓到（SIS 逾時等），送出前再抓一次
+        await self._refresh_incomplete_student_snapshot(application)
 
         # 更新狀態為已提交
         from app.utils.i18n import ScholarshipI18n
