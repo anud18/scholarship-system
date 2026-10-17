@@ -138,8 +138,9 @@ class PortalSSOService:
                 logger.warning("Student API is disabled, cannot verify student status")
                 return False, None
 
-            # Try to get student data from the API
-            student_data = await self.student_service.get_student_basic_info(nycu_id)
+            # Login decides the role, so ask SIS live: a cached "not found" would keep a
+            # just-enrolled student out of the student role until the entry expires
+            student_data = await self.student_service.get_student_basic_info(nycu_id, fresh=True, retry_empty=False)
 
             if student_data:
                 logger.info(f"User {nycu_id} verified as student via Student API")

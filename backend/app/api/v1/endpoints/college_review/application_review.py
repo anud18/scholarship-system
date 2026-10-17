@@ -35,6 +35,35 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# Longest term history the student preview reads (a PhD's study limit plus slack)
+MAX_PREVIEW_HISTORY_YEARS = 12
+
+
+def _to_student_term_data(year: str, term: str, term_data: dict) -> StudentTermData:
+    """Extract ALL available term information from external API"""
+    return StudentTermData(
+        # Basic term info
+        academic_year=year,
+        term=term,
+        term_count=term_data.get("trm_termcount"),
+        # Academic performance
+        gpa=term_data.get("trm_ascore_gpa"),  # API only provides ascore_gpa
+        ascore_gpa=term_data.get("trm_ascore_gpa"),
+        # Rankings
+        placings=term_data.get("trm_placings"),
+        placings_rate=term_data.get("trm_placingsrate"),
+        dept_placing=term_data.get("trm_depplacing"),
+        dept_placing_rate=term_data.get("trm_depplacingrate"),
+        # Student status
+        studying_status=term_data.get("trm_studystatus"),
+        degree=term_data.get("trm_degree"),
+        # Academic organization
+        academy_no=term_data.get("trm_academyno"),
+        academy_name=term_data.get("trm_academyname"),
+        dept_no=term_data.get("trm_depno"),
+        dept_name=term_data.get("trm_depname"),
+    )
+
 
 @router.get("/applications")
 async def get_applications_for_review(
@@ -200,41 +229,20 @@ async def get_student_preview(
                 student_data.get("std_enrollyear", academic_year)
             )  # Get enrollment year, fallback to current academic_year
 
-            # Loop from current academic year down to enrollment year
-            for year in range(academic_year, enroll_year - 1, -1):
-                for term in ["2", "1"]:  # Second semester first, then first semester
-                    try:
-                        term_data = await student_service.get_student_term_info(student_id, str(year), term)
-
-                        if term_data:
-                            # Extract ALL available term information from external API
-                            recent_terms.append(
-                                StudentTermData(
-                                    # Basic term info
-                                    academic_year=str(year),
-                                    term=term,
-                                    term_count=term_data.get("trm_termcount"),
-                                    # Academic performance
-                                    gpa=term_data.get("trm_ascore_gpa"),  # API only provides ascore_gpa
-                                    ascore_gpa=term_data.get("trm_ascore_gpa"),
-                                    # Rankings
-                                    placings=term_data.get("trm_placings"),
-                                    placings_rate=term_data.get("trm_placingsrate"),
-                                    dept_placing=term_data.get("trm_depplacing"),
-                                    dept_placing_rate=term_data.get("trm_depplacingrate"),
-                                    # Student status
-                                    studying_status=term_data.get("trm_studystatus"),
-                                    degree=term_data.get("trm_degree"),
-                                    # Academic organization
-                                    academy_no=term_data.get("trm_academyno"),
-                                    academy_name=term_data.get("trm_academyname"),
-                                    dept_no=term_data.get("trm_depno"),
-                                    dept_name=term_data.get("trm_depname"),
-                                )
-                            )
-                    except Exception as term_err:
-                        logger.debug(f"Could not fetch term data for {student_id} {year}-{term}: {str(term_err)}")
-                        continue
+            # Current academic year down to enrollment year, second semester first;
+            # academic_year is a free query param, so the span is capped
+            oldest_year = max(enroll_year, academic_year - MAX_PREVIEW_HISTORY_YEARS + 1)
+            periods = [(str(year), term) for year in range(academic_year, oldest_year - 1, -1) for term in ("2", "1")]
+            for year, term, term_data in await student_service.get_term_history(student_id, periods):
+                if isinstance(term_data, Exception):
+                    logger.debug(f"Could not fetch term data for {student_id} {year}-{term}: {str(term_data)}")
+                    continue
+                if not term_data:
+                    continue
+                try:
+                    recent_terms.append(_to_student_term_data(year, term, term_data))
+                except ValueError as exc:  # a malformed SIS record (e.g. GPA "") skips that term only
+                    logger.debug(f"Skipping malformed term data for {student_id} {year}-{term}: {exc}")
 
         # Mask 身分證字號 at the response boundary — the preview is display
         # only, so the full national ID never leaves the server.

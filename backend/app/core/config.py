@@ -136,6 +136,13 @@ class Settings(BaseSettings):
     student_api_base_url: str = "http://localhost:8080"  # Mock API in development
     student_api_timeout: float = 10.0
     student_api_encode_type: Optional[str] = "UTF-8"
+    # Redis cache for SIS records (app/services/student_api_cache.py)
+    student_api_cache_enabled: bool = True
+    student_api_cache_ttl: int = 8 * 3600  # seconds, for a returned record
+    student_api_negative_cache_ttl: int = 3600  # seconds, for 403 無資料 / 404
+    # An empty answer is re-asked this many times before it is cached as empty
+    student_api_empty_retries: int = 2
+    student_api_empty_retry_delay: float = 0.3  # seconds, multiplied by the attempt number
 
     # Payment Roster Configuration
     roster_template_dir: str = "./app/templates"

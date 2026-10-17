@@ -103,9 +103,8 @@ def _mock_sis(record):
     mock_resp.json.return_value = {"code": "200", "data": [record]}
     mock_client = AsyncMock()
     mock_client.post.return_value = mock_resp
-    patcher = patch("httpx.AsyncClient")
-    mock_cls = patcher.start()
-    mock_cls.return_value.__aenter__.return_value = mock_client
+    patcher = patch("app.services.student_service._get_http_client", return_value=mock_client)
+    patcher.start()
     return patcher
 
 
