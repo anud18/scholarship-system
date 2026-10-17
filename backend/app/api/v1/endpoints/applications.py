@@ -752,62 +752,6 @@ async def get_college_applications_for_review(
     }
 
 
-@router.put("/{id}/student-data")
-async def update_student_data(
-    id: int,
-    student_data: StudentDataSchema,
-    refresh_from_api: bool = Query(False, description="是否重新從外部API獲取基本學生資料"),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    request: Request = None,
-):
-    """更新申請的學生相關資料 (銀行帳號、指導教授資訊等)"""
-    service = ApplicationService(db)
-
-    try:
-        # Get app_id before update
-        app = await service.get_application_by_id(id, current_user)
-        app_id = app.app_id if hasattr(app, "app_id") else f"APP-{id}"
-
-        await service.update_student_data(
-            application_id=id,
-            student_data_update=student_data,
-            current_user=current_user,
-            refresh_from_api=refresh_from_api,
-        )
-
-        # Log audit trail for student data update
-        audit_service = ApplicationAuditService(db)
-        updated_fields = []
-        if hasattr(student_data, "model_dump"):
-            updated_fields = [k for k, v in student_data.model_dump(exclude_unset=True).items() if v is not None]
-        elif hasattr(student_data, "dict"):
-            updated_fields = [k for k, v in student_data.dict(exclude_unset=True).items() if v is not None]
-
-        await audit_service.log_student_data_update(
-            application_id=id,
-            app_id=app_id,
-            user=current_user,
-            updated_fields=updated_fields,
-            request=request,
-        )
-
-        return {
-            "success": True,
-            "message": "學生資料更新成功",
-            "data": {"id": id},
-        }
-    except (NotFoundError, ValidationError, AuthorizationError) as e:
-        raise HTTPException(
-            status_code=(
-                status.HTTP_400_BAD_REQUEST
-                if isinstance(e, ValidationError)
-                else status.HTTP_404_NOT_FOUND if isinstance(e, NotFoundError) else status.HTTP_403_FORBIDDEN
-            ),
-            detail=str(e),
-        ) from e
-
-
 @router.get("/{id}/student-data")
 async def get_student_data(
     id: int,

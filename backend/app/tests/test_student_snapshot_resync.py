@@ -1,7 +1,6 @@
 """
 SIS term-data resync of an application snapshot (app.services.student_snapshot_resync),
-the admin POST /admin/applications/{id}/resync-sis-term-data endpoint, and the
-refresh_from_api path of ApplicationService.update_student_data.
+and the admin POST /admin/applications/{id}/resync-sis-term-data endpoint.
 
 Prod case: the draft's term-2 SIS lookup timed out, the snapshot was stored with
 _term_data_status='error' and no trm_* fields, so 系所 / 年級 exported blank.
@@ -24,9 +23,7 @@ from app.models.audit_log import AuditLog
 from app.models.enums import Semester
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User, UserRole, UserType
-from app.schemas.application import StudentDataSchema
 from app.services import student_snapshot_resync as resync
-from app.services.application_service import ApplicationService
 
 STUDENT_CODE = "411651009"
 
@@ -174,7 +171,7 @@ async def test_resync_propagates_sis_failure():
     assert app.student_data == BROKEN_SNAPSHOT
 
 
-# ---------------------------------------------------------------- DB-backed: endpoint + update_student_data
+# ---------------------------------------------------------------- DB-backed: admin endpoint
 
 
 async def _seed_user(db: AsyncSession, *, role: UserRole, nycu_id: str) -> User:
@@ -280,27 +277,3 @@ async def test_admin_endpoint_reports_still_missing_without_writing(db: AsyncSes
     db.expire_all()
     stored = (await db.execute(select(Application).where(Application.id == app_pk))).scalar_one()
     assert stored.student_data == BROKEN_SNAPSHOT
-
-
-@pytest.mark.asyncio
-async def test_update_student_data_refresh_uses_the_applications_student_not_the_caller(db: AsyncSession, monkeypatch):
-    student = await _seed_user(db, role=UserRole.student, nycu_id=STUDENT_CODE)
-    admin = await _seed_user(db, role=UserRole.admin, nycu_id="admin01")
-    stale = {**BROKEN_SNAPSHOT, "_term_data_status": "partial", "trm_ascore_gpa": 3.9}
-    app = await _seed_app(db, student=student, status="draft", student_data=stale)
-    service = ApplicationService(db)
-    service.student_service = _student_service(snapshot=dict(FRESH_SNAPSHOT))
-
-    updated = await service.update_student_data(
-        application_id=app.id,
-        student_data_update=StudentDataSchema(),
-        current_user=admin,
-        refresh_from_api=True,
-    )
-
-    service.student_service.get_student_snapshot.assert_awaited_once_with(
-        STUDENT_CODE, academic_year="115", semester="yearly", fresh=True
-    )
-    assert updated.student_data["trm_depname"] == "電機工程學系"
-    assert "trm_ascore_gpa" not in updated.student_data  # stale term field of the old snapshot
-    assert updated.student_data["financial_info"] == {"bank_code": "700"}

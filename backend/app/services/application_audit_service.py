@@ -454,29 +454,6 @@ class ApplicationAuditService:
             meta_data={"app_id": app_id},
         )
 
-    async def log_student_data_update(
-        self,
-        application_id: int,
-        app_id: str,
-        user: User,
-        updated_fields: Optional[List[str]] = None,
-        request: Optional[Request] = None,
-    ) -> Optional[AuditLog]:
-        """記錄學生資料更新 (銀行帳號、指導教授資訊等)"""
-        description = f"更新學生資料 {app_id}"
-        if updated_fields:
-            description += f"，變更欄位: {', '.join(updated_fields)}"
-
-        return await self.log_application_operation(
-            application_id=application_id,
-            action=AuditAction.update,
-            user=user,
-            request=request,
-            description=description,
-            new_values={"updated_fields": updated_fields},
-            meta_data={"app_id": app_id, "update_type": "student_data"},
-        )
-
     async def log_bank_verification(
         self,
         application_id: int,
