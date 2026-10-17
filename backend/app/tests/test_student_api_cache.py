@@ -299,3 +299,47 @@ async def test_yearly_snapshot_uses_term_1_when_term_2_is_empty(service):
 
     assert snapshot["_term_data_status"] == "success"
     assert snapshot["_term_error_message"] is None
+
+
+# ─── login: a cached "not found" must not lock out a just-enrolled student ──
+
+
+@pytest.mark.asyncio
+async def test_login_lookup_ignores_cached_not_found_and_refreshes_it(fake_redis, service):
+    not_found = {"code": "404", "data": None}
+    fake, patcher = sis({("ScholarshipStudent", None, None): [not_found, not_found, not_found, found(BASIC)]})
+    with patcher:
+        # Some page looked the student up before SIS had their record → empty answer cached
+        assert await service.get_student_basic_info("314540001") is None
+        # SIS now has the record; login asks live and repairs the cache entry
+        at_login = await service.get_student_basic_info("314540001", fresh=True, retry_empty=False)
+        afterwards = await service.get_student_basic_info("314540001")
+
+    assert at_login["std_cname"] == "王小明"
+    assert afterwards["std_cname"] == "王小明"
+    assert fake.count("ScholarshipStudent") == 4  # 3 (with retries) + 1 at login, then cache
+
+
+@pytest.mark.asyncio
+async def test_retry_empty_false_asks_sis_once(fake_redis, service, monkeypatch):
+    monkeypatch.setattr(settings, "student_api_empty_retries", 2)
+    fake, patcher = sis({("ScholarshipStudent", None, None): [{"code": "404", "data": None}]})
+    with patcher:
+        result = await service.get_student_basic_info("E1234", fresh=True, retry_empty=False)
+
+    assert result is None
+    assert fake.count("ScholarshipStudent") == 1
+
+
+@pytest.mark.asyncio
+async def test_portal_login_verifies_student_status_live():
+    from app.services.portal_sso_service import PortalSSOService
+
+    sso = PortalSSOService(db=None)  # type: ignore[arg-type]
+    sso.student_service = MagicMock(api_enabled=True)
+    sso.student_service.get_student_basic_info = AsyncMock(return_value={"std_stdcode": "314540001"})
+
+    is_student, _ = await sso._verify_student_status("314540001")
+
+    assert is_student is True
+    sso.student_service.get_student_basic_info.assert_awaited_once_with("314540001", fresh=True, retry_empty=False)

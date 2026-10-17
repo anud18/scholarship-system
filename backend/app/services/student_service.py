@@ -65,13 +65,17 @@ class StudentService:
             logger.warning("Student API is enabled but STUDENT_API_BASE_URL is not set.")
             self.api_enabled = False
 
-    async def get_student_basic_info(self, student_code: str, fresh: bool = False) -> Optional[Dict[str, Any]]:
+    async def get_student_basic_info(
+        self, student_code: str, fresh: bool = False, retry_empty: bool = True
+    ) -> Optional[Dict[str, Any]]:
         """
         Get student basic information from external API
 
         Args:
             student_code: Student ID code (e.g., 'stu_under', 'stu_phd')
             fresh: Skip the cache read (the live answer still refreshes the cache)
+            retry_empty: Re-ask an empty answer before accepting it. Login turns this
+                off: staff are always empty, so retries would only slow their login.
 
         Returns:
             Student data dictionary or None if not found
@@ -81,7 +85,10 @@ class StudentService:
             return None
 
         record = await self._cached_fetch(
-            basic_key(student_code), lambda: self._fetch_basic_info(student_code), fresh=fresh
+            basic_key(student_code),
+            lambda: self._fetch_basic_info(student_code),
+            fresh=fresh,
+            retry_empty=retry_empty,
         )
         # Retired academy codes (電資學院 Y) are remapped at the SIS boundary
         return normalize_student_academy(record)
@@ -117,6 +124,7 @@ class StudentService:
         key: str,
         fetch: Callable[[], Awaitable[Optional[Dict[str, Any]]]],
         fresh: bool,
+        retry_empty: bool = True,
     ) -> Optional[Dict[str, Any]]:
         """Serve ``key`` from Redis, else fetch (re-asking empty answers) and cache the result.
 
@@ -129,7 +137,8 @@ class StudentService:
 
         record = await fetch()
         # SIS sometimes answers 無資料 for data it does have; re-ask before caching the empty answer
-        for attempt in range(1, settings.student_api_empty_retries + 1):
+        retries = settings.student_api_empty_retries if retry_empty else 0
+        for attempt in range(1, retries + 1):
             if record is not None:
                 break
             await asyncio.sleep(settings.student_api_empty_retry_delay * attempt)
