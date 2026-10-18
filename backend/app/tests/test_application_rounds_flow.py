@@ -19,7 +19,7 @@ from app.models.application import Application, ApplicationStatus
 from app.models.application_round import ScholarshipApplicationRound
 from app.models.college_review import CollegeRankingItem
 from app.models.scholarship import ScholarshipConfiguration
-from app.models.user import UserRole
+from app.models.user import User, UserRole
 from app.services.college_review_service import CollegeReviewService, InvalidRankingDataError
 from app.services.review_phase_filter import apply_renewal_phase_filter
 from app.tests.ranking_scope_helpers import (
@@ -417,3 +417,118 @@ async def test_round_rows_cascade_with_configuration(db, scholarship):
     await db.delete(loaded)
     await db.commit()
     assert (await db.execute(select(ScholarshipApplicationRound))).scalars().all() == []
+
+
+class TestReviewFixes:
+    """Fixes from the PR #1489 code / security review."""
+
+    @pytest_asyncio.fixture
+    async def admin(self, db):
+        return await make_user(db, "mr_super2", role=UserRole.super_admin)
+
+    @pytest_asyncio.fixture
+    async def config(self, db, scholarship):
+        config = await make_config(db, scholarship.id, code="mr_fixes")
+        config.application_start_date, config.application_end_date = CLOSED
+        config.requires_college_review = True
+        config.college_review_start, config.college_review_end = CLOSED
+        await db.commit()
+        return config
+
+    @staticmethod
+    def _round(**extra):
+        return {
+            "round_number": 2,
+            "application_start_date": OPEN[0].isoformat(),
+            "application_end_date": OPEN[1].isoformat(),
+            "open_sub_types": ["nstc"],
+            **extra,
+        }
+
+    async def test_round_without_own_review_window_is_refused(self, client, login, admin, config):
+        login(admin)
+        url = ROUNDS_URL.format(id=config.id)
+        response = await client.put(url, json={"rounds": [self._round()]})
+        assert response.status_code == 400
+        assert "學院審查期間" in response.text
+
+        own_window = self._round(college_review_start=OPEN[0].isoformat(), college_review_end=LATER[1].isoformat())
+        response = await client.put(url, json={"rounds": [own_window]})
+        assert response.status_code == 200, response.text
+
+    async def test_config_edit_that_breaks_rounds_is_refused(self, client, db, login, admin, config):
+        await _add_round(db, config.id, college_review_start=OPEN[0], college_review_end=LATER[1])
+        login(admin)
+        url = f"/api/v1/scholarship-configurations/configurations/{config.id}"
+        # Round 1 would now run past round 2's start
+        response = await client.put(url, json={"application_end_date": LATER[1].isoformat()})
+        assert response.status_code == 400
+        assert "多梯次申請" in response.text
+        # An unrelated edit still works (the refusal rolled back, expiring the test's shared rows)
+        await db.refresh(admin)
+        response = await client.put(url, json={"config_name": "renamed"})
+        assert response.status_code == 200, response.text
+
+    async def test_professor_claims_round_two_application_in_its_window(self, db, scholarship, config):
+        from app.models.user_profile import UserProfile
+        from app.services.application_builder import backfill_professor_assignments
+
+        config.requires_professor_recommendation = True
+        config.professor_review_end = CLOSED[1]
+        await db.commit()
+        await _add_round(
+            db,
+            config.id,
+            professor_review_start=OPEN[0],
+            professor_review_end=LATER[1],
+            college_review_start=OPEN[0],
+            college_review_end=LATER[1],
+        )
+        professor = await make_user(db, "MRPROF1", role=UserRole.professor)
+        first = await _pending(db, scholarship.id, "bf1", config.id)
+        second = await _pending(db, scholarship.id, "bf2", config.id, application_round=2)
+        for application in (first, second):
+            db.add(UserProfile(user_id=application.user_id, advisor_nycu_id="MRPROF1"))
+        await db.commit()
+
+        assert await backfill_professor_assignments(db, professor) == 1
+        rows = await db.execute(
+            select(Application.id, Application.professor_id).where(Application.id.in_([first.id, second.id]))
+        )
+        assert dict(rows.all()) == {first.id: None, second.id: professor.id}
+
+    async def test_returned_round_one_application_keeps_round_one_sub_types(self, db, scholarship, config):
+        from app.services.scholarship_service import ScholarshipService
+
+        await _add_round(db, config.id, college_review_start=OPEN[0], college_review_end=LATER[1])
+        returned = await add_application(
+            db, scholarship.id, "rt1", configuration_id=config.id, status=ApplicationStatus.returned
+        )
+        service = ScholarshipService(db)
+        round_number = await service._returned_application_round(returned.user_id, config.id)
+        assert round_number == 1
+        loaded = (
+            await db.execute(
+                select(ScholarshipConfiguration)
+                .where(ScholarshipConfiguration.id == config.id)
+                .execution_options(populate_existing=True)
+            )
+        ).scalar_one()
+        fields = service._application_round_fields(loaded, round_number)
+        assert fields["current_application_round"] == 2
+        assert fields["open_sub_types"] is None  # every sub-type, as in round 1
+
+    async def test_update_application_refuses_closed_sub_type(self, db, scholarship, config):
+        from app.core.exceptions import ValidationError
+        from app.schemas.application import ApplicationUpdate
+        from app.services.application_service import ApplicationService
+
+        await _add_round(db, config.id, college_review_start=OPEN[0], college_review_end=LATER[1])
+        draft = await add_application(
+            db, scholarship.id, "ud1", configuration_id=config.id, status=ApplicationStatus.draft
+        )
+        student = await db.get(User, draft.user_id)
+        with pytest.raises(ValidationError, match="第二梯次"):
+            await ApplicationService(db).update_application(
+                draft.id, ApplicationUpdate(scholarship_subtype_list=["moe_1w"]), student
+            )

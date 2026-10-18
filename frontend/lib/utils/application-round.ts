@@ -42,6 +42,21 @@ export function rankingGroup(row: RankedRow): number {
 }
 
 /**
+ * Pairs of non-rejected rows in the wrong group order (a later group ranked above
+ * an earlier one). 0 means the order is valid; a drag may only lower it.
+ */
+export function countGroupOrderInversions(rows: RankedRow[]): number {
+  const groups = rows.filter(row => !row.college_rejected).map(rankingGroup);
+  let inversions = 0;
+  groups.forEach((group, i) => {
+    for (let j = i + 1; j < groups.length; j += 1) {
+      if (groups[j] < group) inversions += 1;
+    }
+  });
+  return inversions;
+}
+
+/**
  * The first group-order violation of rows in rank order, or null when valid.
  * College-rejected rows ('N', parked at the end) are exempt.
  */

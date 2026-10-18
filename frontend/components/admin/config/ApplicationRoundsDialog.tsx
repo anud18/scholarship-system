@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -72,15 +72,26 @@ export function ApplicationRoundsDialog({
     end: null,
   });
 
+  // Configuration whose rounds the form holds; Save is only allowed for it, so a
+  // failed or superseded load can never PUT another configuration's rounds.
+  const [loadedId, setLoadedId] = useState<number | null>(null);
+  const latestRequestRef = useRef<number | null>(null);
+
   const configurationId = configuration?.id;
 
   const load = useCallback(async (id: number) => {
+    latestRequestRef.current = id;
     setLoading(true);
+    setLoadedId(null);
+    setDrafts([]);
+    setAvailableSubTypes([]);
+    setFirstRound({ start: null, end: null });
     try {
       const [roundsResponse, translationsResponse] = await Promise.all([
         apiClient.admin.getApplicationRounds(id),
         apiClient.admin.getSubTypeTranslations(),
       ]);
+      if (latestRequestRef.current !== id) return;
       if (!roundsResponse.success || !roundsResponse.data) {
         throw new Error(roundsResponse.message || "無法載入申請梯次");
       }
@@ -92,13 +103,16 @@ export function ApplicationRoundsDialog({
         end: payload.first_round.application_end_date,
       });
       setSubTypeNames(translationsResponse.success ? translationsResponse.data?.zh ?? {} : {});
+      setLoadedId(id);
     } catch (error) {
       logger.error("Failed to load application rounds", { error });
       toast.error(error instanceof Error ? error.message : "無法載入申請梯次");
     } finally {
-      setLoading(false);
+      if (latestRequestRef.current === id) setLoading(false);
     }
   }, []);
+
+  const isLoaded = configurationId !== undefined && loadedId === configurationId;
 
   useEffect(() => {
     if (open && configurationId) void load(configurationId);
@@ -114,7 +128,7 @@ export function ApplicationRoundsDialog({
   const handleRemoveLastRound = () => setDrafts(current => current.slice(0, -1));
 
   const handleSave = async () => {
-    if (!configurationId) return;
+    if (!configurationId || !isLoaded) return;
     const problem = validateRoundDrafts(drafts);
     if (problem) {
       toast.error(problem);
@@ -280,7 +294,7 @@ export function ApplicationRoundsDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             取消
           </Button>
-          <Button onClick={handleSave} disabled={loading || saving}>
+          <Button onClick={handleSave} disabled={loading || saving || !isLoaded}>
             {saving && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
             儲存
           </Button>

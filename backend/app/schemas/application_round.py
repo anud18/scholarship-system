@@ -1,17 +1,15 @@
 """Schemas for 多梯次申請 (additional application rounds) administration."""
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.models.application_round import as_utc
+
 # The configuration's own application window is round 1; extra rounds start at 2.
 FIRST_EXTRA_ROUND = 2
 MAX_EXTRA_ROUNDS = 10
-
-
-def _utc(value: datetime) -> datetime:
-    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
 class ApplicationRoundInput(BaseModel):
@@ -36,7 +34,7 @@ class ApplicationRoundInput(BaseModel):
 
     @model_validator(mode="after")
     def check_windows(self) -> "ApplicationRoundInput":
-        if _utc(self.application_end_date) <= _utc(self.application_start_date):
+        if as_utc(self.application_end_date) <= as_utc(self.application_start_date):
             raise ValueError(f"第 {self.round_number} 梯次的申請截止時間必須晚於開始時間")
         for label, start, end in (
             ("教授審查", self.professor_review_start, self.professor_review_end),
@@ -44,7 +42,7 @@ class ApplicationRoundInput(BaseModel):
         ):
             if (start is None) != (end is None):
                 raise ValueError(f"第 {self.round_number} 梯次的{label}期間需同時設定開始與結束時間")
-            if start is not None and _utc(end) <= _utc(start):
+            if start is not None and as_utc(end) <= as_utc(start):
                 raise ValueError(f"第 {self.round_number} 梯次的{label}結束時間必須晚於開始時間")
         return self
 
@@ -61,6 +59,6 @@ class ApplicationRoundsUpdate(BaseModel):
         if [r.round_number for r in ordered] != expected:
             raise ValueError("梯次編號需從 2 開始連續編號")
         for previous, current in zip(ordered, ordered[1:]):
-            if _utc(current.application_start_date) < _utc(previous.application_end_date):
+            if as_utc(current.application_start_date) < as_utc(previous.application_end_date):
                 raise ValueError(f"第 {current.round_number} 梯次的申請期間不可早於第 {previous.round_number} 梯次結束")
         return self

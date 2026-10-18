@@ -20,6 +20,10 @@ export interface RoundDraft {
 }
 
 const DEFAULT_ROUND_DAYS = 14;
+// A new round gets its own review windows from its application start, so it never
+// falls back to the configuration's general windows (usually closed with round 1).
+const DEFAULT_PROFESSOR_REVIEW_DAYS_AFTER_END = 14;
+const DEFAULT_COLLEGE_REVIEW_DAYS_AFTER_END = 30;
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const FIRST_EXTRA_ROUND = 2;
 
@@ -53,15 +57,18 @@ export function nextRoundDraft(
     : formatDateTimeLocal(firstRoundEnd);
   const start = previousEnd ? new Date(previousEnd) : new Date();
   const end = new Date(start.getTime() + DEFAULT_ROUND_DAYS * DAY_MS);
+  const daysAfterEnd = (days: number) =>
+    formatDateTimeLocal(new Date(end.getTime() + days * DAY_MS).toISOString());
+  const startLocal = formatDateTimeLocal(start.toISOString());
   return {
     round_number: previous ? previous.round_number + 1 : FIRST_EXTRA_ROUND,
-    application_start_date: formatDateTimeLocal(start.toISOString()),
+    application_start_date: startLocal,
     application_end_date: formatDateTimeLocal(end.toISOString()),
     open_sub_types: [...availableSubTypes],
-    professor_review_start: "",
-    professor_review_end: "",
-    college_review_start: "",
-    college_review_end: "",
+    professor_review_start: startLocal,
+    professor_review_end: daysAfterEnd(DEFAULT_PROFESSOR_REVIEW_DAYS_AFTER_END),
+    college_review_start: startLocal,
+    college_review_end: daysAfterEnd(DEFAULT_COLLEGE_REVIEW_DAYS_AFTER_END),
   };
 }
 

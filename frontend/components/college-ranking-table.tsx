@@ -94,6 +94,7 @@ import { Application as ApplicationType, User } from "@/lib/api";
 import { ApplicationStatus, getApplicationStatusLabel } from "@/lib/enums";
 import {
   applicationRoundOf,
+  countGroupOrderInversions,
   findGroupOrderViolation,
   isLaterRound,
   roundLabel,
@@ -520,10 +521,15 @@ export function CollegeRankingTable({
 
     const newItems = arrayMove(localApplications, oldIndex, newIndex);
 
-    // 續領 → 第一梯次 → 第二梯次 …: refuse a move that breaks the group order
-    // (the backend rejects it too). An order that was already off stays movable.
+    // 續領 → 第一梯次 → 第二梯次 …: the backend only saves a valid order. A move
+    // that leaves a violation is refused unless it repairs part of an order that
+    // was already off (fewer inversions), so such a ranking can still be fixed.
     const violation = findGroupOrderViolation(newItems);
-    if (violation && !findGroupOrderViolation(localApplications)) {
+    if (
+      violation &&
+      countGroupOrderInversions(newItems) >=
+        countGroupOrderInversions(localApplications)
+    ) {
       toast.error(violation);
       return;
     }

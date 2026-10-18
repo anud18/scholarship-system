@@ -11,10 +11,13 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.core.exceptions import ValidationError
 from app.models.application import Application
+from app.models.application_round import FIRST_APPLICATION_ROUND, ScholarshipApplicationRound
 from app.models.application_sequence import ApplicationSequence
 from app.models.enums import PROFESSOR_ACTIONABLE_APPLICATION_STATUSES, ApplicationStatus, ReviewStage
 from app.models.scholarship import ScholarshipConfiguration
@@ -87,6 +90,14 @@ def order_sub_type_preferences(sub_types: List[str]) -> List[str]:
     return [st for st in sub_types if _is_forced(st)] + [st for st in sub_types if not _is_forced(st)]
 
 
+async def ensure_application_rounds_loaded(db: AsyncSession, config) -> None:
+    """Load ``config.application_rounds`` when it is not loaded yet (e.g. a configuration
+    created in this session), so build_submitted_application_values never lazy-loads."""
+    state = sa_inspect(config, raiseerr=False)
+    if state is not None and "application_rounds" in state.unloaded:
+        await db.refresh(config, attribute_names=["application_rounds"])
+
+
 def build_submitted_application_values(scholarship, config) -> Dict[str, Any]:
     """Field values every application must carry the moment it is submitted,
     regardless of which path created it.
@@ -98,6 +109,9 @@ def build_submitted_application_values(scholarship, config) -> Dict[str, Any]:
         "submitted_at": datetime.now(timezone.utc),
         "amount": config.amount,
         "scholarship_name": config.config_name or scholarship.name,
+        # 多梯次申請: the round open now; round 1 outside every window (e.g. an import
+        # after the last round) so the application ranks with the general applicants.
+        "application_round": getattr(config, "current_application_round", None) or FIRST_APPLICATION_ROUND,
     }
 
 
@@ -268,13 +282,31 @@ async def backfill_professor_assignments(db: AsyncSession, professor: Optional[U
     # (ApplicationService.get_professor_applications_paginated) plus the time
     # gate of ApplicationService.can_professor_submit_review.
     now = datetime.now(timezone.utc)
-    initial_actionable_configs = select(ScholarshipConfiguration.id).where(
-        ScholarshipConfiguration.requires_professor_recommendation.is_(True),
-        or_(
-            ScholarshipConfiguration.application_start_date.is_(None),
-            ScholarshipConfiguration.professor_review_end.is_(None),
-            ScholarshipConfiguration.professor_review_end >= now,
-        ),
+    # 多梯次申請: a later-round application uses its round's professor window,
+    # falling back to the general one (ScholarshipConfiguration.review_window_for).
+    application_round = aliased(ScholarshipApplicationRound)
+    initial_review_end = func.coalesce(
+        application_round.professor_review_end, ScholarshipConfiguration.professor_review_end
+    )
+    initial_actionable = (
+        select(ScholarshipConfiguration.id)
+        .outerjoin(
+            application_round,
+            and_(
+                application_round.configuration_id == ScholarshipConfiguration.id,
+                application_round.round_number == Application.application_round,
+            ),
+        )
+        .where(
+            ScholarshipConfiguration.id == Application.scholarship_configuration_id,
+            ScholarshipConfiguration.requires_professor_recommendation.is_(True),
+            or_(
+                ScholarshipConfiguration.application_start_date.is_(None),
+                initial_review_end.is_(None),
+                initial_review_end >= now,
+            ),
+        )
+        .exists()
     )
     renewal_actionable_configs = select(ScholarshipConfiguration.id).where(
         ScholarshipConfiguration.renewal_requires_professor_review.is_(True),
@@ -296,10 +328,7 @@ async def backfill_professor_assignments(db: AsyncSession, professor: Optional[U
             Application.status.in_(PROFESSOR_ACTIONABLE_APPLICATION_STATUSES),
             Application.user_id.in_(advisee_user_ids),
             or_(
-                and_(
-                    Application.is_renewal.is_(False),
-                    Application.scholarship_configuration_id.in_(initial_actionable_configs),
-                ),
+                and_(Application.is_renewal.is_(False), initial_actionable),
                 and_(
                     Application.is_renewal.is_(True),
                     Application.scholarship_configuration_id.in_(renewal_actionable_configs),

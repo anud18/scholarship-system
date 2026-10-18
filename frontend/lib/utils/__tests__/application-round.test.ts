@@ -1,5 +1,6 @@
 import {
   applicationRoundOf,
+  countGroupOrderInversions,
   findGroupOrderViolation,
   isLaterRound,
   rankingGroup,
@@ -48,6 +49,27 @@ describe("application-round helpers", () => {
     expect(findGroupOrderViolation([{ application_round: 1 }, { is_renewal: true }])).toBe(
       "續領學生的排名必須在所有新申請學生之前"
     );
+  });
+
+  it("counts inversions so a drag may only repair a broken order", () => {
+    expect(countGroupOrderInversions([{ application_round: 1 }, { application_round: 2 }])).toBe(0);
+    expect(
+      countGroupOrderInversions([
+        { application_round: 2 },
+        { application_round: 2 },
+        { application_round: 1 },
+      ])
+    ).toBe(2);
+    expect(
+      countGroupOrderInversions([
+        { application_round: 2 },
+        { application_round: 1 },
+        { application_round: 2 },
+      ])
+    ).toBe(1);
+    expect(
+      countGroupOrderInversions([{ application_round: 2 }, { application_round: 1, college_rejected: true }])
+    ).toBe(0);
   });
 
   it("ignores college-rejected rows parked at the end", () => {

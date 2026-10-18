@@ -52,6 +52,17 @@ describe("application-rounds-form", () => {
     expect(second.application_start_date).toBe(first.application_end_date);
   });
 
+  it("pre-fills the round's own review windows so it never falls back to round 1's", () => {
+    const draft = nextRoundDraft([], "2026-10-31T16:00:00Z", ["nstc"]);
+    const end = new Date(draft.application_end_date).getTime();
+    expect(draft.professor_review_start).toBe(draft.application_start_date);
+    expect(draft.college_review_start).toBe(draft.application_start_date);
+    expect(new Date(draft.professor_review_end).getTime()).toBeGreaterThan(end);
+    expect(new Date(draft.college_review_end).getTime()).toBeGreaterThan(
+      new Date(draft.professor_review_end).getTime()
+    );
+  });
+
   it("toggles sub-types without mutating the draft", () => {
     const original = draft();
     const added = toggleSubType(original, "moe_1w");

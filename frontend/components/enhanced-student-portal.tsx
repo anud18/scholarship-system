@@ -1593,9 +1593,15 @@ export function EnhancedStudentPortal({
                                       {subTypeLabel}
                                       {!isSubEligible && (
                                         <span className="ml-2 text-xs text-gray-400">
-                                          {t(
-                                            "applications.not_eligible_parenthetical"
-                                          )}
+                                          {scholarship.subtype_eligibility?.[
+                                            subType
+                                          ]?.closed_in_round
+                                            ? locale === "zh"
+                                              ? `（${roundLabel(scholarship.current_application_round ?? 1)}未開放）`
+                                              : "(not open in this round)"
+                                            : t(
+                                                "applications.not_eligible_parenthetical"
+                                              )}
                                         </span>
                                       )}
                                     </p>

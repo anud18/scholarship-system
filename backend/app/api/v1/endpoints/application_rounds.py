@@ -19,12 +19,13 @@ from app.core.cache import invalidate
 from app.core.security import require_admin
 from app.db.deps import get_db
 from app.models.application import Application
-from app.models.application_round import ScholarshipApplicationRound, as_utc
+from app.models.application_round import ScholarshipApplicationRound
 from app.models.audit_log import AuditAction, AuditLog
 from app.models.scholarship import ScholarshipConfiguration
 from app.models.user import User
 from app.schemas.application_round import ApplicationRoundInput, ApplicationRoundsUpdate
 from app.schemas.response import ApiResponse
+from app.services.application_round_rules import ApplicationRoundRuleError, validate_rounds_against_config
 from app.services.ranking_groups import round_label
 
 logger = logging.getLogger(__name__)
@@ -84,28 +85,11 @@ def _rounds_payload(config: ScholarshipConfiguration) -> Dict[str, Any]:
 
 
 def _validate_against_config(config: ScholarshipConfiguration, rounds: List[ApplicationRoundInput]) -> None:
-    """Rounds need a first round to follow and may only open the scholarship's own sub-types."""
-    if not rounds:
-        return
-    if not config.application_start_date or not config.application_end_date:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="請先設定一般申請期間（第一梯次）再新增其他梯次"
-        )
-    first_extra = min(rounds, key=lambda r: r.round_number)
-    if as_utc(first_extra.application_start_date) < as_utc(config.application_end_date):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"{round_label(first_extra.round_number)}的申請期間不可早於第一梯次（一般申請）結束",
-        )
-
-    allowed = {code.lower().strip() for code in (config.scholarship_type.sub_type_list or []) if code}
-    for application_round in rounds:
-        unknown = [code for code in application_round.open_sub_types if code not in allowed]
-        if unknown:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"{round_label(application_round.round_number)}包含此獎學金沒有的子類別：{'、'.join(unknown)}",
-            )
+    """Rounds follow round 1, open only the scholarship's sub-types and stay reviewable."""
+    try:
+        validate_rounds_against_config(config, rounds)
+    except ApplicationRoundRuleError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=exc.message) from exc
 
 
 async def _assert_removed_rounds_unused(db: AsyncSession, config_id: int, removed_numbers: List[int]) -> None:

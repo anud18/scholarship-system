@@ -29,6 +29,7 @@ from app.schemas.batch_import import ApplicationDataRow, BatchImportValidationEr
 from app.services.application_builder import (
     assign_professor_from_profile,
     build_submitted_application_values,
+    ensure_application_rounds_loaded,
     derive_sub_scholarship_type,
     generate_app_id,
     order_sub_type_preferences,
@@ -1139,6 +1140,7 @@ class BatchImportService:
 
             # Submitted-state values are loop-invariant (one shared
             # submitted_at timestamp for the whole batch is intended).
+            await ensure_application_rounds_loaded(self.db, scholarship_config)
             submitted_values = build_submitted_application_values(scholarship, scholarship_config)
 
             # Concurrent SIS snapshot prefetch — the sequential per-row fetch
@@ -1200,6 +1202,7 @@ class BatchImportService:
                     semester=semester,
                     is_renewal=row_data.get("is_renewal", False),
                     renewal_year=row_data.get("renewal_year"),
+                    application_round=submitted_values["application_round"],
                     status=submitted_values["status"],
                     status_name=submitted_values["status_name"],
                     review_stage=submitted_values["review_stage"],

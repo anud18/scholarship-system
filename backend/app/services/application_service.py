@@ -1179,6 +1179,12 @@ class ApplicationService:
 
         # 更新子項目列表（如果提供）
         if update_data.scholarship_subtype_list is not None:
+            # 多梯次申請: a later round only accepts the sub-types it opens.
+            if application.scholarship_configuration_id:
+                config = await self.db.get(
+                    ScholarshipConfiguration, application.scholarship_configuration_id, populate_existing=True
+                )
+                self._check_sub_types_against_round(application, config, update_data.scholarship_subtype_list)
             application.scholarship_subtype_list = update_data.scholarship_subtype_list
             # Keep the denormalized scalar in sync with the list, otherwise an
             # edit that picks a real sub-type (e.g. nstc) leaves a stale "general"
@@ -1287,19 +1293,35 @@ class ApplicationService:
             raise ValidationError(TAIWAN_MOBILE_MESSAGE)
 
     @staticmethod
-    def _assign_application_round_on_first_submit(application: Application) -> None:
-        """Set a draft's 申請梯次 to the round open now and check its sub-types against it."""
+    def _is_draft(application: Application) -> bool:
+        return getattr(application.status, "value", application.status) == ApplicationStatus.draft.value
+
+    @classmethod
+    def _round_for_sub_type_check(cls, application: Application, config) -> Optional[int]:
+        """The 申請梯次 an application's sub-types must fit: a draft joins the round open
+        now (its stored round outside every window); a returned application keeps its own."""
+        if cls._is_draft(application):
+            return config.current_application_round or application.application_round
+        return application.application_round
+
+    @classmethod
+    def _check_sub_types_against_round(cls, application: Application, config, sub_types: List[str]) -> None:
         from app.services.application_builder import validate_sub_types_open_in_round
 
-        config = application.scholarship_configuration
-        is_draft = getattr(application.status, "value", application.status) == ApplicationStatus.draft.value
-        if config is None or application.is_renewal or not is_draft:
+        if config is None or application.is_renewal:
             return
-        current_round = config.current_application_round
-        if current_round is not None:
-            application.application_round = current_round
+        validate_sub_types_open_in_round(config, cls._round_for_sub_type_check(application, config), sub_types)
+
+    @classmethod
+    def _assign_application_round_on_first_submit(cls, application: Application) -> None:
+        """Set a draft's 申請梯次 to the round open now, then check the sub-types against
+        the application's round (a returned application keeps its round but is re-checked)."""
+        config = application.scholarship_configuration
+        if config is None or application.is_renewal:
+            return
+        application.application_round = cls._round_for_sub_type_check(application, config)
         sub_types = list(application.scholarship_subtype_list or []) or [application.sub_scholarship_type]
-        validate_sub_types_open_in_round(config, application.application_round, sub_types)
+        cls._check_sub_types_against_round(application, config, sub_types)
 
     async def submit_application(self, application_id: int, user: User) -> ApplicationResponse:
         """提交申請"""

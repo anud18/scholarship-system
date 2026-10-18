@@ -254,6 +254,7 @@ class SupplementaryImportService:
             assign_professor_from_profile,
             build_submitted_application_values,
             derive_sub_scholarship_type,
+            ensure_application_rounds_loaded,
             generate_app_id,
             validate_sub_type_for_submission,
         )
@@ -283,6 +284,7 @@ class SupplementaryImportService:
         # Shared submitted-application invariants (status/status_name/review_stage/
         # submitted_at/amount/scholarship_name) — same source as the student and
         # batch-import paths; one shared timestamp for the whole import is intended.
+        await ensure_application_rounds_loaded(self.db, cfg)
         submitted_values = build_submitted_application_values(scholarship, cfg)
 
         # Custom-field definitions are identical for the whole import — fetch once
@@ -331,6 +333,7 @@ class SupplementaryImportService:
                 amount=submitted_values["amount"],
                 academic_year=cfg.academic_year,
                 semester=semester_value,
+                application_round=submitted_values["application_round"],
                 status=submitted_values["status"],
                 status_name=submitted_values["status_name"],
                 review_stage=submitted_values["review_stage"],

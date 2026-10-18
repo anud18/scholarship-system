@@ -23,7 +23,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.base_class import Base
-from app.models.application_round import FIRST_APPLICATION_ROUND, ScholarshipApplicationRound, window_contains
+from app.models.application_round import FIRST_APPLICATION_ROUND, ScholarshipApplicationRound, as_utc, window_contains
 from app.models.enums import ApplicationCycle, QuotaManagementMode, Semester, SubTypeSelectionMode
 
 if TYPE_CHECKING:
@@ -934,7 +934,7 @@ class ScholarshipConfiguration(Base):
     def effective_college_review_end(self) -> Optional[datetime]:
         """Latest general college-review end over every round (the ranking deadline)."""
         ends = [self.college_review_end] + [r.college_review_end for r in self.extra_application_rounds]
-        aware = [end if end.tzinfo else end.replace(tzinfo=timezone.utc) for end in ends if end is not None]
+        aware = [as_utc(end) for end in ends if end is not None]
         return max(aware) if aware else None
 
     @property

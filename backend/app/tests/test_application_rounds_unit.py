@@ -16,7 +16,8 @@ from app.models.application_round import ScholarshipApplicationRound
 from app.models.enums import ApplicationStatus
 from app.models.scholarship import ScholarshipConfiguration
 from app.schemas.application_round import ApplicationRoundsUpdate
-from app.services.application_builder import validate_sub_types_open_in_round
+from app.services.application_builder import build_submitted_application_values, validate_sub_types_open_in_round
+from app.services.application_round_rules import ApplicationRoundRuleError, validate_rounds_against_config
 from app.services.application_service import ApplicationService
 from app.services.ranking_groups import (
     RENEWAL_ORDER_ERROR,
@@ -250,6 +251,21 @@ class TestFirstSubmitRoundAssignment:
         with pytest.raises(ValidationError):
             ApplicationService._assign_application_round_on_first_submit(self._draft(config, sub_types=("moe_1w",)))
 
+    def test_returned_later_round_application_is_rechecked(self):
+        # Security review: a returned 第二梯次 application must not switch to a closed sub-type
+        config = _config(rounds=[_round(2, OPEN, ("nstc",))])
+        application = self._draft(config, status=ApplicationStatus.returned, sub_types=("moe_1w",), round_number=2)
+        with pytest.raises(ValidationError):
+            ApplicationService._assign_application_round_on_first_submit(application)
+        assert application.application_round == 2
+
+    def test_draft_edit_checks_the_round_it_would_join(self):
+        config = _config(rounds=[_round(2, OPEN, ("nstc",))])
+        draft = self._draft(config)
+        with pytest.raises(ValidationError):
+            ApplicationService._check_sub_types_against_round(draft, config, ["moe_1w"])
+        ApplicationService._check_sub_types_against_round(draft, config, ["nstc"])
+
     def test_returned_application_keeps_its_round(self):
         config = _config(rounds=[_round(2, OPEN, ("nstc",))])
         application = self._draft(config, status=ApplicationStatus.returned, sub_types=("moe_1w",))
@@ -306,3 +322,50 @@ class TestStudentSubTypeRestriction:
         assert fields["current_application_round"] is None
         assert fields["current_round_application_end_date"] is None
         assert fields["open_sub_types"] is None
+
+
+class TestRoundRules:
+    """application_round_rules: shared by the rounds endpoint and the config update."""
+
+    SUB_TYPES = ["nstc", "moe_1w"]
+
+    @staticmethod
+    def _cfg(**fields):
+        return _config(first_window=PAST, **fields)
+
+    def test_valid_round(self):
+        validate_rounds_against_config(self._cfg(), [_round(2, OPEN)], self.SUB_TYPES)
+
+    def test_needs_first_round(self):
+        with pytest.raises(ApplicationRoundRuleError, match="一般申請期間"):
+            validate_rounds_against_config(_config(first_window=None), [_round(2, OPEN)], [])
+
+    def test_round_before_first_round_ends(self):
+        with pytest.raises(ApplicationRoundRuleError, match="不可早於第一梯次"):
+            validate_rounds_against_config(_config(first_window=OPEN), [_round(2, OPEN)], ["nstc"])
+
+    def test_unknown_sub_type(self):
+        with pytest.raises(ApplicationRoundRuleError, match="xyz"):
+            validate_rounds_against_config(self._cfg(), [_round(2, OPEN, ("xyz",))], self.SUB_TYPES)
+
+    def test_fallback_review_window_closed_before_round_ends(self):
+        # Code review: a round without its own window falls back to round 1's, long closed
+        config = self._cfg(requires_college_review=True, college_review_end=PAST[1])
+        with pytest.raises(ApplicationRoundRuleError, match="學院審查期間"):
+            validate_rounds_against_config(config, [_round(2, OPEN)], self.SUB_TYPES)
+
+    def test_own_review_window_fixes_it(self):
+        config = self._cfg(requires_college_review=True, college_review_end=PAST[1])
+        validate_rounds_against_config(
+            config, [_round(2, OPEN, college_review_start=OPEN[0], college_review_end=FUTURE[1])], self.SUB_TYPES
+        )
+
+    def test_review_not_required_is_not_checked(self):
+        config = self._cfg(requires_professor_recommendation=False, professor_review_end=PAST[1])
+        validate_rounds_against_config(config, [_round(2, OPEN)], self.SUB_TYPES)
+
+    def test_submitted_values_carry_the_open_round(self):
+        config = _config(rounds=[_round(2, OPEN, ("nstc",))])
+        values = build_submitted_application_values(SimpleNamespace(name="phd"), config)
+        assert values["application_round"] == 2
+        assert build_submitted_application_values(SimpleNamespace(name="phd"), _config())["application_round"] == 1

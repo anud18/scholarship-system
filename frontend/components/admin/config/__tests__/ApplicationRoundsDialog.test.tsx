@@ -65,10 +65,49 @@ describe("ApplicationRoundsDialog", () => {
     const [configId, rounds] = update.mock.calls[0];
     expect(configId).toBe(7);
     expect(rounds).toHaveLength(1);
-    expect(rounds[0]).toMatchObject({ round_number: 2, open_sub_types: ["nstc"], college_review_start: null });
+    expect(rounds[0]).toMatchObject({ round_number: 2, open_sub_types: ["nstc"] });
     expect(new Date(rounds[0].application_start_date).toISOString()).toBe("2026-09-30T15:59:00.000Z");
+    // Review windows are pre-filled from the round's own window
+    expect(rounds[0].college_review_start).toBe(rounds[0].application_start_date);
+    expect(rounds[0].college_review_end).not.toBeNull();
     expect(onSaved).toHaveBeenCalledTimes(1);
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("never saves another configuration's rounds after a failed load", async () => {
+    const getRounds = jest
+      .spyOn(apiClient.admin, "getApplicationRounds")
+      .mockResolvedValueOnce(
+        roundsPayload([
+          {
+            id: 1,
+            round_number: 2,
+            application_start_date: "2026-10-05T00:00:00Z",
+            application_end_date: "2026-10-20T00:00:00Z",
+            open_sub_types: ["nstc"],
+          },
+        ]) as any
+      )
+      .mockResolvedValueOnce({ success: false, message: "配置不存在或您沒有存取權限", data: undefined } as any);
+    const update = jest.spyOn(apiClient.admin, "updateApplicationRounds");
+
+    const { rerender } = render(
+      <ApplicationRoundsDialog open configuration={CONFIG} onOpenChange={jest.fn()} />
+    );
+    expect(await screen.findByText("第二梯次")).toBeInTheDocument();
+
+    rerender(
+      <ApplicationRoundsDialog
+        open
+        configuration={{ ...CONFIG, id: 8 } as ScholarshipConfiguration}
+        onOpenChange={jest.fn()}
+      />
+    );
+    await waitFor(() => expect(getRounds).toHaveBeenCalledWith(8));
+    await waitFor(() => expect(screen.queryByText("第二梯次")).not.toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "儲存" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "儲存" }));
+    expect(update).not.toHaveBeenCalled();
   });
 
   it("keeps the dialog open when the backend refuses", async () => {
