@@ -9,11 +9,12 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.core.cache import invalidate
+from app.core.cache import KEY_PREFIX, invalidate
 from app.core.exceptions import ServiceUnavailableError
 from app.models.enums import Semester
 from app.models.student import Academy, Department
-from app.services.department_names import load_department_names
+from app.tests.test_cache import fake_redis  # noqa: F401  (fixture)
+from app.services.department_names import DEPARTMENT_NAMES_CACHE_KEY, load_department_names
 from app.services.student_service import StudentService
 from app.utils.application_helpers import (
     get_academy_code_from_data,
@@ -200,3 +201,20 @@ async def test_yearly_scholarship_marks_term_1_partial_when_term_2_failed():
     assert data == {"trm_term": 1}
     assert status == "partial"
     assert "timed out" in message
+
+
+@pytest.mark.asyncio
+async def test_department_names_are_cached_but_an_empty_table_is_not(db, fake_redis):
+    """An empty mapping (read before seeding / after a rebuild) must not stay in Redis for an hour."""
+    key = (KEY_PREFIX + DEPARTMENT_NAMES_CACHE_KEY).encode()
+
+    assert await load_department_names(db) == {}
+    assert await fake_redis.get(key) is None
+
+    db.add(Academy(code="E", name="電機學院"))
+    await db.flush()
+    db.add(Department(code="1511", name="電機工程學系", academy_code="E"))
+    await db.flush()
+
+    assert await load_department_names(db) == {"1511": "電機工程學系"}
+    assert await fake_redis.get(key) is not None
