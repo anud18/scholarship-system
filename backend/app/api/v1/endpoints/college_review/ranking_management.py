@@ -43,6 +43,7 @@ from app.services.college_review_service import (
     RankingNotFoundError,
     RankingScopeConflictError,
 )
+from app.services.department_names import load_department_names
 from app.services.email_automation_service import email_automation_service
 from app.services.review_service import ReviewService
 from app.services.professor_review_export import load_professor_review_data
@@ -1548,6 +1549,7 @@ async def export_ranking_excel(
     # fill-in import template leaves it out.
     service = CollegeRankingExportService()
     include_college_seal = not template
+    department_names = await load_department_names(db)
     if format == "pdf":
         payload = service.build_pdf(
             rows=export_rows,
@@ -1556,6 +1558,7 @@ async def export_ranking_excel(
             title=title,
             include_college_seal=include_college_seal,
             professor_review=professor_review,
+            department_names=department_names,
         )
         media_type = "application/pdf"
     else:
@@ -1567,6 +1570,7 @@ async def export_ranking_excel(
             sheet_name=sheet_name,
             include_college_seal=include_college_seal,
             professor_review=professor_review,
+            department_names=department_names,
         )
         media_type = XLSX_MEDIA_TYPE
 

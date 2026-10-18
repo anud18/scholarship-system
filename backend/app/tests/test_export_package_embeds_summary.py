@@ -14,14 +14,21 @@ placeholder page inside the merge rather than being embedded.
 import io
 import zipfile
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from openpyxl import load_workbook
 
 from app.models.application import Application
+from app.services.college_ranking_export_service import STATIC_HEADERS
 from app.services.export_package_service import ExportPackageService
 from app.services.professor_review_export import ProfessorReviewData
-from app.tests.export_package_fakes import collect_zip
+from app.tests.export_package_fakes import collect_zip, stub_department_names
+
+
+@pytest.fixture(autouse=True)
+def _no_department_table(monkeypatch):
+    stub_department_names(monkeypatch)
 
 
 def _mk_app(app_id, user_id, dep_no, dep_name, std_code, cname, academy="某學院", academy_no="A"):
@@ -85,8 +92,9 @@ async def test_export_zip_contains_summary_tables_matching_folders(monkeypatch):
 
     names = zipfile.ZipFile(buf).namelist()
 
-    # College-level table at ZIP root
-    assert "114學年度某獎學金學生資料彙整表_某學院.xlsx" in names
+    # College-level table at ZIP root, named from the API 1 academy code (A = 人社院),
+    # not the term row's trm_academyname
+    assert "114學年度某獎學金學生資料彙整表_人社院.xlsx" in names
     # Per-department tables inside each dept folder
     assert "1000_A系/114學年度某獎學金學生資料彙整表_A系.xlsx" in names
     assert "2000_B系/114學年度某獎學金學生資料彙整表_B系.xlsx" in names
@@ -199,3 +207,102 @@ async def test_whole_school_export_nests_department_folders_under_each_college(m
     assert "E_資訊學院/114學年度某獎學金學生資料彙整表_資訊學院.xlsx" in names
     assert "W_工學院/114學年度某獎學金學生資料彙整表_工學院.xlsx" in names
     assert "114學年度某獎學金學生資料彙整表_全校.xlsx" in names
+
+
+def _mk_snapshot_app(app_id, student_data):
+    a = Application(user_id=app_id + 10, scholarship_type_id=1, academic_year=114, student_data=student_data)
+    a.id = app_id
+    a.files = []
+    return a
+
+
+@pytest.mark.asyncio
+async def test_folders_tables_and_pdfs_follow_the_api1_department(monkeypatch):
+    """Department folders, the embedded tables and the summary PDFs name 系所 from
+    the student's API 1 code (std_depno) via the departments table:
+
+    - a snapshot whose term lookup failed (std_* only) still gets a named
+      folder and non-blank 系所/年級 cells;
+    - a transferred student (std_depno != trm_depno) is filed and labelled
+      under the std_depno department;
+    - a code the departments table does not know falls back to trm_depname;
+    - the departments table is loaded once for the whole export.
+    """
+    monkeypatch.setattr("app.services.export_package_service.ensure_cjk_font", lambda: None)
+
+    async def _fake_aux(db, *, scholarship_type, applications):
+        return ([], {}, {}, {})
+
+    monkeypatch.setattr("app.services.export_summary_tables.load_export_aux_data", _fake_aux)
+    monkeypatch.setattr("app.services.export_package_service.load_form_field_labels", _coro_returning({}))
+    monkeypatch.setattr(
+        "app.services.export_package_service.load_professor_review_data", _coro_returning(ProfessorReviewData())
+    )
+    loader = stub_department_names(monkeypatch, {"1000": "A系", "3000": "C系"})
+    # The tables reuse the mapping prepare_export loaded — never a second load.
+    monkeypatch.setattr(
+        "app.services.export_summary_tables.load_department_names",
+        AsyncMock(side_effect=AssertionError("summary tables reloaded the departments table")),
+    )
+
+    base = {"std_academyno": "A"}
+    apps = [
+        # term lookup failed: API 1 only
+        _mk_snapshot_app(1, {**base, "std_depno": "1000", "std_termcount": 3, "std_stdcode": "001", "std_cname": "甲"}),
+        # transferred from 1000/A系 to 3000/C系
+        _mk_snapshot_app(
+            2,
+            {
+                **base,
+                "std_depno": "3000",
+                "trm_depno": "1000",
+                "trm_depname": "A系",
+                "trm_termcount": 4,
+                "std_stdcode": "002",
+                "std_cname": "乙",
+            },
+        ),
+        # code missing from the departments table
+        _mk_snapshot_app(
+            3, {**base, "std_depno": "9999", "trm_depname": "舊系名", "std_stdcode": "003", "std_cname": "丙"}
+        ),
+    ]
+    stype = SimpleNamespace(name="某獎學金", code="phd", sub_type_configs=[])
+    pdf_department_names = []
+
+    def _record_pdf(*args, department_names=None, **kwargs):
+        pdf_department_names.append(department_names)
+        return b"%PDF-1.4 fake"
+
+    svc = ExportPackageService(db=None, minio_service=None)
+    monkeypatch.setattr(svc, "_get_scholarship_type", _coro_returning(stype))
+    monkeypatch.setattr(svc, "_query_applications", _coro_returning(apps))
+    monkeypatch.setattr(svc, "_generate_summary_pdf", _record_pdf)
+
+    plan = await svc.prepare_export(scholarship_type_id=1, academic_year=114, semester="first", college_code="A")
+    zf = zipfile.ZipFile(await collect_zip(svc, plan))
+    names = zf.namelist()
+
+    assert set(plan.dept_groups) == {"1000_A系", "3000_C系", "9999_舊系名"}
+    assert any(n.startswith("1000_A系/001_甲/") for n in names)
+    assert any(n.startswith("3000_C系/002_乙/") for n in names)
+    assert any(n.startswith("9999_舊系名/003_丙/") for n in names)
+    assert loader.await_count == 1
+    # Every summary PDF got the same mapping to name its 系所 row
+    assert pdf_department_names == [{"1000": "A系", "3000": "C系"}] * 3
+
+    dept_col = STATIC_HEADERS.index("系所") + 1
+    grade_col = STATIC_HEADERS.index("年級") + 1
+
+    def _cells(path, col):
+        ws = load_workbook(io.BytesIO(zf.read(path))).active
+        return [ws.cell(row=r, column=col).value for r in range(3, ws.max_row + 1)]
+
+    a_table = "1000_A系/114學年度某獎學金學生資料彙整表_A系.xlsx"
+    c_table = "3000_C系/114學年度某獎學金學生資料彙整表_C系.xlsx"
+    unknown_table = "9999_舊系名/114學年度某獎學金學生資料彙整表_舊系名.xlsx"
+    assert _cells(a_table, dept_col) == ["A系"]
+    assert _cells(a_table, grade_col) == [2]  # ceil(std_termcount 3 / 2)
+    assert _cells(c_table, dept_col) == ["C系"]
+    assert _cells(c_table, grade_col) == [2]  # term-only 年級 still reads trm_termcount 4
+    assert _cells(unknown_table, dept_col) == ["舊系名"]

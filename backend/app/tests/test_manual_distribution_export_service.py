@@ -255,6 +255,36 @@ class TestBuildRecipientRow:
         row = build_recipient_row(1, _application(_student_data(trm_academyname="")))
         assert row.college == "工學院"
 
+    def test_term_lookup_failed_snapshot_still_names_college_and_department(self):
+        """SIS timed out on the term lookup: only std_* exists, 學院/系所 must not be blank."""
+        sd = {"std_stdcode": "312345611", "std_cname": "王小美", "std_academyno": "E", "std_depno": "1511"}
+        row = build_recipient_row(1, _application(sd), {"1511": "電機工程學系"})
+        assert row.college == "電機學院"
+        assert row.department == "電機工程學系"
+
+    def test_transferred_student_is_labelled_with_the_api_1_unit(self):
+        sd = _student_data(
+            std_academyno="E",
+            std_depno="1511",
+            trm_academyno="C",
+            trm_academyname="資訊學院",
+            trm_depno="1550",
+            trm_depname="資訊工程學系",
+        )
+        row = build_recipient_row(1, _application(sd), {"1511": "電機工程學系", "1550": "資訊工程學系"})
+        assert row.college == "電機學院"
+        assert row.department == "電機工程學系"
+
+    def test_unknown_codes_fall_back_to_the_term_names(self):
+        sd = _student_data(std_academyno="ZZ", std_depno="9999", trm_academyname="舊學院", trm_depname="舊系")
+        row = build_recipient_row(1, _application(sd), {"1511": "電機工程學系"})
+        assert row.college == "舊學院"
+        assert row.department == "舊系"
+
+    def test_unknown_academy_code_without_any_name_shows_the_bare_code(self):
+        row = build_recipient_row(1, _application({"std_academyno": "ZZ"}))
+        assert row.college == "ZZ"
+
     def test_gender_code_one_is_male(self):
         assert build_recipient_row(1, _application(_student_data(std_sex=1))).gender == "男"
 

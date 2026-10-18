@@ -666,3 +666,75 @@ class TestDepartmentSummaryExportBulkEndpoint:
         body = response.json()
         msg = body.get("message", body.get("detail", ""))
         assert "未設定學院" in msg
+
+    # ------------------------------------------------------------------
+    # 6. 系所/年級 cells and grouping follow the API 1 department code
+    # ------------------------------------------------------------------
+
+    def _seed_app(self, app_pk: int, student_data: dict):
+        async def _impl():
+            async with _AsyncSession() as session:
+                session.add(
+                    Application(
+                        id=app_pk,
+                        app_id=f"APP-114-1-{app_pk:05d}",
+                        user_id=app_pk,
+                        scholarship_type_id=1,
+                        academic_year=114,
+                        semester="first",
+                        status="submitted",
+                        sub_type_selection_mode=SubTypeSelectionMode.single,
+                        student_data=student_data,
+                    )
+                )
+                await session.commit()
+
+        _run_async(_impl())
+
+    def test_bulk_rows_named_and_grouped_by_the_api1_department(self):
+        """A transferred student (term row still on CE4460) lands in the CE4461
+        workbook with 環境工程學系 in its 系所 cell; a student whose term lookup
+        failed (std_* only) still gets 系所 and 年級."""
+        import io as _io
+        import zipfile as _zf
+
+        from openpyxl import load_workbook
+
+        from app.services.college_ranking_export_service import STATIC_HEADERS
+
+        self._seed_base()
+        self._seed_app(
+            3001,
+            {
+                "std_depno": "CE4461",
+                "std_stdcode": "S101",
+                "trm_depno": "CE4460",
+                "trm_depname": "土木工程學系",
+                "trm_termcount": 4,
+            },
+        )
+        self._seed_app(3002, {"std_depno": "CE4461", "std_stdcode": "S102", "std_termcount": 5})
+
+        client = self._client_with_user(_make_admin_user())
+        response = client.get(
+            "/api/v1/college-review/applications/department-summary-export-bulk",
+            params={"scholarship_type_id": 1, "academic_year": 114, "semester": "first", "scope": "all"},
+        )
+        assert response.status_code == 200, response.text
+
+        with _zf.ZipFile(_io.BytesIO(response.content)) as z:
+            names = z.namelist()
+            assert len(names) == 1 and names[0].endswith("_環境工程學系_CE4461.xlsx")
+            ws = load_workbook(_io.BytesIO(z.read(names[0]))).active
+
+        code_col = STATIC_HEADERS.index("學號") + 1
+        dept_col = STATIC_HEADERS.index("系所") + 1
+        grade_col = STATIC_HEADERS.index("年級") + 1
+        rows = {
+            ws.cell(row=r, column=code_col).value: (
+                ws.cell(row=r, column=dept_col).value,
+                ws.cell(row=r, column=grade_col).value,
+            )
+            for r in range(3, ws.max_row + 1)
+        }
+        assert rows == {"S101": ("環境工程學系", 2), "S102": ("環境工程學系", 3)}

@@ -830,6 +830,113 @@ async def test_list_filters_by_scholarship_type_id(client_admin: AsyncClient, ro
 
 
 # ===========================================================================
+# GET /{id}/items — 學院/系所 follow API 1 (std_*); the term row fills a gap
+# ===========================================================================
+
+
+async def _roster_item_for_snapshot(db, roster: PaymentRoster, suffix: str, student_data: dict) -> None:
+    from app.models.application import Application, ApplicationStatus
+    from app.models.enums import SubTypeSelectionMode
+
+    student = User(
+        nycu_id=f"pr_items_{suffix}",
+        email=f"pr_items_{suffix}@nycu.edu.tw",
+        name=f"PR Items {suffix}",
+        role=UserRole.student,
+        user_type=UserType.student,
+    )
+    db.add(student)
+    await db.commit()
+    await db.refresh(student)
+    application = Application(
+        app_id=f"APP-114-1-8{suffix}",
+        user_id=student.id,
+        scholarship_type_id=roster._test_type_id,
+        scholarship_configuration_id=roster._test_config_id,
+        academic_year=114,
+        semester="first",
+        status=ApplicationStatus.approved,
+        sub_type_selection_mode=SubTypeSelectionMode.single,
+        agree_terms=True,
+        student_data=student_data,
+    )
+    db.add(application)
+    await db.commit()
+    await db.refresh(application)
+    db.add(
+        PaymentRosterItem(
+            roster_id=roster.id,
+            application_id=application.id,
+            student_id_number=f"A1{suffix}",
+            student_name=f"PR Items {suffix}",
+            scholarship_name="PR Cfg",
+            scholarship_amount=Decimal("50000"),
+            is_included=True,
+        )
+    )
+    await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_roster_items_name_college_and_department_from_api_1(
+    client_admin: AsyncClient, roster_with_real_config, db
+):
+    from app.core.cache import invalidate
+    from app.models.student import Department
+
+    await invalidate("refdata:department-names")
+    db.add(Department(code="1511", name="電機工程學系"))
+    await db.commit()
+    # Term lookup failed at submission: std_* only.
+    await _roster_item_for_snapshot(
+        db, roster_with_real_config, "01", {"std_stdcode": "3111", "std_academyno": "E", "std_depno": "1511"}
+    )
+    # Transferred: the term row still describes the old unit.
+    await _roster_item_for_snapshot(
+        db,
+        roster_with_real_config,
+        "02",
+        {
+            "std_stdcode": "3112",
+            "std_academyno": "E",
+            "std_depno": "1511",
+            "trm_academyno": "C",
+            "trm_academyname": "資訊學院",
+            "trm_depno": "1550",
+            "trm_depname": "資訊工程學系",
+        },
+    )
+    # Codes nothing knows: the term row's names fill the gap.
+    await _roster_item_for_snapshot(
+        db,
+        roster_with_real_config,
+        "03",
+        {
+            "std_stdcode": "3113",
+            "std_academyno": "ZZ",
+            "std_depno": "9999",
+            "trm_academyname": "舊學院",
+            "trm_depname": "舊系",
+        },
+    )
+
+    try:
+        resp = await client_admin.get(f"/api/v1/payment-rosters/{roster_with_real_config.id}/items")
+    finally:
+        await invalidate("refdata:department-names")
+
+    assert resp.status_code == 200, resp.text
+    by_student = {
+        it["student_id"]: (it["college_code"], it["college_name"], it["department_name"]) for it in resp.json()["data"]
+    }
+    assert by_student == {
+        "3111": ("E", "電機學院", "電機工程學系"),
+        "3112": ("E", "電機學院", "電機工程學系"),
+        "3113": ("ZZ", "舊學院", "舊系"),
+    }
+
+
+# ===========================================================================
 # super_admin parity with admin
 #
 # lock / unlock / exclude / DELETE used to gate on `[UserRole.admin]` alone

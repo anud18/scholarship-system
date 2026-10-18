@@ -19,9 +19,9 @@ import tempfile
 from xml.sax.saxutils import escape as xml_escape  # nosec B406
 import zipfile
 from collections import Counter, defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import AsyncIterator, Dict, List, Optional, Tuple
+from typing import AsyncIterator, Dict, List, Mapping, Optional, Tuple
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -36,6 +36,7 @@ from app.core.config import settings
 from app.models.application import Application
 from app.models.scholarship import ScholarshipType
 from app.models.student import Academy
+from app.services.department_names import load_department_names
 from app.services.export_summary_tables import build_embedded_summary_tables
 from app.services.form_field_labels import (
     ACCOUNT_FIELD_SYNONYMS,
@@ -49,7 +50,13 @@ from app.services.professor_review_export import ProfessorReviewData, load_profe
 from app.services.professor_review_pdf import PROFESSOR_REVIEW_PDF_LABEL, build_professor_review_pdf
 from app.services.sub_type_label_map import sub_type_labels_of
 from app.services.zip_stream import COPY_CHUNK_SIZE, ZipStreamSink, write_stream_entry
-from app.utils.application_helpers import get_college_code_from_data
+from app.utils.application_helpers import (
+    get_academy_name_from_data,
+    get_college_code_from_data,
+    get_department_code_from_data,
+    get_department_name_from_data,
+    get_term_count_from_data,
+)
 from app.utils.export_download import sanitise_filename_part
 
 logger = logging.getLogger(__name__)
@@ -247,32 +254,42 @@ def _college_folder(app: Application, academy_names: Dict[str, str]) -> Tuple[st
     """`({academyno}_{name}, name)` for the college folder of a whole-school export.
 
     The code comes from the same snapshot field the college filter uses
-    (std_academyno); the display name is resolved academies-table first and
-    only falls back to the snapshot's trm_academyname.
+    (std_academyno); the display name is resolved academies-table first, then
+    get_academy_name_from_data (static academy table by the same code, else the
+    snapshot's trm_academyname).
     """
     student = app.student_data or {}
     code = get_college_code_from_data(student) or "unknown"
-    name = academy_names.get(code) or student.get("trm_academyname") or "未知學院"
+    name = academy_names.get(code) or get_academy_name_from_data(student) or "未知學院"
     return f"{_sanitize_filename(code)}_{_sanitize_filename(name)}", name
 
 
+def _department_folder(student: Mapping, department_names: Optional[Mapping[str, str]]) -> str:
+    """`{depno}_{depname}`: the API 1 department code (term code only fills a gap)
+    and the name resolved from that code, so a transferred student is filed
+    under the department they belong to now."""
+    dep_no = str(get_department_code_from_data(student) or "unknown")
+    dep_name = str(get_department_name_from_data(student, department_names) or "未知系所")
+    return f"{_sanitize_filename(dep_no)}_{_sanitize_filename(dep_name)}"
+
+
 def _group_by_department(
-    applications: List[Application], academy_names: Optional[Dict[str, str]] = None
+    applications: List[Application],
+    academy_names: Optional[Dict[str, str]] = None,
+    department_names: Optional[Mapping[str, str]] = None,
 ) -> Tuple[Dict[str, List[Application]], Dict[str, str]]:
-    """Folder key per application: `{depno}_{depname}` from the SIS term snapshot.
+    """Folder key per application: `{depno}_{depname}` (see _department_folder).
 
     With ``academy_names`` (whole-school export) every key is nested under a
     college folder, `{academyno}_{academyname}/{depno}_{depname}`, so each
     college gets its own directory. The second return value maps each college
     folder to its display name (empty for a single-college export).
+    ``department_names`` is the 系所代碼 → 名稱 mapping (load_department_names).
     """
     dept_groups: Dict[str, List[Application]] = defaultdict(list)
     college_labels: Dict[str, str] = {}
     for app in applications:
-        student = app.student_data or {}
-        dep_no = student.get("trm_depno", "unknown")
-        dep_name = student.get("trm_depname", "未知系所")
-        key = f"{_sanitize_filename(dep_no)}_{_sanitize_filename(dep_name)}"
+        key = _department_folder(app.student_data or {}, department_names)
         if academy_names is not None:
             college_folder, college_name = _college_folder(app, academy_names)
             college_labels[college_folder] = college_name
@@ -282,10 +299,12 @@ def _group_by_department(
 
 
 def _first_college_name(applications: List[Application]) -> Optional[str]:
-    """College display name from the first application whose snapshot carries one."""
+    """College display name of the first application that resolves one (API 1
+    academy code via get_academy_name_from_data, else the term row's name)."""
     for app in applications:
-        if app.student_data and app.student_data.get("trm_academyname"):
-            return app.student_data["trm_academyname"]
+        name = get_academy_name_from_data(app.student_data or {})
+        if name:
+            return name
     return None
 
 
@@ -324,6 +343,8 @@ class ExportPlan:
     #: professor verdicts for the 合併檔's 指導教授評語 page (empty for a precheck)
     professor_review: ProfessorReviewData
     sub_type_labels: Dict[str, str]
+    #: 系所代碼 → 名稱 (load_department_names) for the per-student summary PDFs
+    department_names: Mapping[str, str] = field(default_factory=dict)
 
     @property
     def application_count(self) -> int:
@@ -387,7 +408,10 @@ class ExportPackageService:
 
         college_name = _first_college_name(applications) if college_code else None
         academy_names = None if college_code else await self._load_academy_names()
-        dept_groups, college_labels = _group_by_department(applications, academy_names)
+        # Loaded once for the whole export: folder names, the embedded tables
+        # and every per-student summary PDF resolve 系所 names from it.
+        department_names = await load_department_names(self.db)
+        dept_groups, college_labels = _group_by_department(applications, academy_names, department_names)
 
         # 3. Embedded 申請總表 workbooks from the SAME dept_groups. Best-effort:
         # a wholesale failure (e.g. an aux-data DB error before the per-table
@@ -418,6 +442,7 @@ class ExportPackageService:
                     academic_year,
                     college_labels,
                     professor_review=professor_review,
+                    department_names=department_names,
                 )
             except Exception as e:
                 logger.exception("embedded summary tables generation failed wholesale")
@@ -437,6 +462,7 @@ class ExportPackageService:
             zip_filename=_build_zip_filename(scholarship_type.name, academic_year, semester, college_name),
             professor_review=professor_review,
             sub_type_labels=sub_type_labels_of(scholarship_type),
+            department_names=department_names,
         )
 
     async def iter_export_zip(self, plan: ExportPlan) -> AsyncIterator[bytes]:
@@ -561,7 +587,12 @@ class ExportPackageService:
         """
         try:
             pdf_bytes = self._generate_summary_pdf(
-                app, plan.scholarship_name, plan.academic_year, plan.semester, plan.field_labels
+                app,
+                plan.scholarship_name,
+                plan.academic_year,
+                plan.semester,
+                plan.field_labels,
+                department_names=plan.department_names,
             )
             # _unique_zip_path here too: two applications can share one
             # base_path (same student code + name in one department, e.g. a
@@ -688,12 +719,21 @@ class ExportPackageService:
         academic_year: int,
         semester: Optional[str],
         field_labels: Dict[str, str],
+        *,
+        department_names: Optional[Mapping[str, str]] = None,
     ) -> bytes:
-        """Generate a student summary PDF using reportlab."""
+        """Generate a student summary PDF using reportlab.
+
+        學院/系所 follow the student's own record (API 1 codes, names resolved
+        from them via ``department_names``); term-only values (學位, 修業學期數)
+        read the term row and fall back to the API 1 value when the term lookup
+        failed, so neither cell goes blank for a std-only snapshot.
+        """
         student = app.student_data or {}
         submitted = app.submitted_form_data or {}
 
-        degree_raw = str(student.get("trm_degree", ""))
+        degree_value = student.get("trm_degree") or student.get("std_degree")
+        degree_raw = "" if degree_value is None else str(degree_value)
         degree_label = DEGREE_LABELS.get(degree_raw, degree_raw or "—")
         semester_map = {"first": "第一學期", "second": "第二學期"}
         semester_label = semester_map.get(semester, "全學年") if semester else "全學年"
@@ -750,8 +790,8 @@ class ExportPackageService:
             ("學號", student.get("std_stdcode", "—")),
             ("姓名", student.get("std_cname", "—")),
             ("英文姓名", student.get("std_ename", "—")),
-            ("學院", student.get("trm_academyname", "—")),
-            ("系所", student.get("trm_depname", "—")),
+            ("學院", get_academy_name_from_data(student) or "—"),
+            ("系所", get_department_name_from_data(student, department_names) or "—"),
             ("學位", degree_label),
             ("入學年度", str(student.get("std_enrollyear", "—"))),
             ("Email", student.get("com_email", "—")),
@@ -774,7 +814,7 @@ class ExportPackageService:
             ("GPA", str(student.get("trm_ascore_gpa", "—"))),
             ("班排名", placings),
             ("系排名", dep_placing),
-            ("修業學期數", str(student.get("trm_termcount", "—"))),
+            ("修業學期數", str(get_term_count_from_data(student) or "—")),
         ]
         elements.append(self._build_table(academic_rows, s_normal, table_style))
         elements.append(Spacer(1, 4 * mm))

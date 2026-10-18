@@ -53,11 +53,18 @@ from app.schemas.roster import (
     RosterStatisticsResponse,
 )
 from app.services.college_award_stats_service import award_record, build_award_stats_export
+from app.services.department_names import load_department_names
 from app.services.excel_export_service import ExcelExportService
 from app.services.roster_regeneration_service import RosterRegenerationService
 from app.services.roster_service import RosterService
 from app.services.student_verification_service import StudentVerificationService
 from app.utils.academic_period import get_roster_period_dates
+from app.utils.application_helpers import (
+    get_academy_code_from_data,
+    get_academy_name_from_data,
+    get_department_name_from_data,
+    get_term_count_from_data,
+)
 from app.utils.bank_account_fields import BANK_ACCOUNT_FIELD_LOOKUP
 from app.utils.export_download import xlsx_attachment_response
 from app.utils.pii_masking import mask_id_number
@@ -740,7 +747,7 @@ async def preview_roster_students(
                 "email": student_data.get("com_email", ""),
                 "college": college,
                 "department": student_data.get("std_depno", ""),
-                "term_count": student_data.get("trm_termcount", ""),
+                "term_count": get_term_count_from_data(student_data) or "",
                 "sub_type": application.sub_scholarship_type,
                 "amount": float(application.amount or config.amount or 0),
                 "rank_position": None,
@@ -1394,17 +1401,19 @@ async def get_roster_items(
         result = await db.execute(stmt)
         items = result.scalars().all()
 
+        department_names = await load_department_names(db)
         items_data = []
         for item in items:
             item_dict = _roster_item_dict_with_display_year(item, roster)
             # 從 application.student_data 補充學號/學院/系所資訊
             # (PaymentRosterItem 只存 student_id_number=身分證，學號需從快照取得)
+            # 學院/系所以 API 1 (std_*) 為準，學期資料只補缺
             if item.application and item.application.student_data:
                 sd = item.application.student_data
                 item_dict["student_id"] = sd.get("std_stdcode")
-                item_dict["college_code"] = sd.get("std_academyno") or sd.get("trm_academyno")
-                item_dict["college_name"] = sd.get("trm_academyname")
-                item_dict["department_name"] = sd.get("trm_depname")
+                item_dict["college_code"] = get_academy_code_from_data(sd)
+                item_dict["college_name"] = get_academy_name_from_data(sd)
+                item_dict["department_name"] = get_department_name_from_data(sd, department_names)
             items_data.append(item_dict)
 
         return ApiResponse(

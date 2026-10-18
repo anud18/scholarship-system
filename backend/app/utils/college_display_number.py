@@ -12,7 +12,7 @@ Comments carry the 對照表's full names; the system shows the short SIS names.
 
 from typing import Any, Mapping, Optional
 
-from app.core.college_mappings import COLLEGE_MAPPINGS
+from app.core.college_mappings import COLLEGE_MAPPINGS, normalize_academy_code
 
 COLLEGE_DISPLAY_NUMBERS: dict[str, int] = {
     "A": 1,  # 人文藝術與社會學院
@@ -52,16 +52,23 @@ def format_college_name(code: Optional[str], name: Optional[str]) -> str:
     return f"{number}. {name}"
 
 
+def _academy_table_name(code: Optional[str]) -> Optional[str]:
+    return COLLEGE_MAPPINGS.get(str(code).strip()) if code else None
+
+
 def format_student_college(student_data: Mapping[str, Any]) -> str:
     """Numbered 學院 label for an application's SIS snapshot (``student_data``).
 
-    The number and the name must describe the same college, so the code is paired
-    with the name it came with: the term row (trm_academyno + trm_academyname)
-    first, else the base row's std_academyno with its COLLEGE_MAPPINGS name.
-    std_academyno only fills in for a term row that carries a name but no code.
+    API 1 is the student's own current record, so its academy code (std_academyno)
+    decides the college: number and name both come from that code (name via
+    COLLEGE_MAPPINGS). Only when API 1 has no code — or a code the academy table
+    does not know — does the term row speak, again as a pair (trm_academyno +
+    trm_academyname, the name resolved from trm_academyno when the row has none),
+    so the number and the name always describe the SAME college.
     """
-    term_name = student_data.get("trm_academyname")
-    if term_name:
-        return format_college_name(student_data.get("trm_academyno") or student_data.get("std_academyno"), term_name)
-    code = student_data.get("std_academyno") or student_data.get("trm_academyno")
-    return format_college_name(code, COLLEGE_MAPPINGS.get(str(code).strip()) if code else None)
+    base_code = normalize_academy_code(student_data.get("std_academyno"))
+    base_name = _academy_table_name(base_code)
+    if base_name:
+        return format_college_name(base_code, base_name)
+    term_code = normalize_academy_code(student_data.get("trm_academyno"))
+    return format_college_name(term_code, student_data.get("trm_academyname") or _academy_table_name(term_code))

@@ -135,19 +135,18 @@ def test_email_from_data_two_aliases():
     assert get_email_from_data({}) is None
 
 
-def test_department_code_from_data_term_then_std():
-    """trm_depno (term data) preferred over std_depno (basic data) —
-    term data is fresher (refreshed every term, vs std_* which is the
-    initial enrollment record)."""
-    assert get_department_code_from_data({"trm_depno": "4460", "std_depno": "9999"}) == "4460"
-    assert get_department_code_from_data({"std_depno": "9999"}) == "9999"
+def test_department_code_from_data_std_then_term():
+    """std_depno (API 1, the student's own record) preferred over trm_depno (API 2) —
+    the term row can predate a transfer; it only fills a gap."""
+    assert get_department_code_from_data({"trm_depno": "4460", "std_depno": "9999"}) == "9999"
+    assert get_department_code_from_data({"trm_depno": "4460"}) == "4460"
     assert get_department_code_from_data({}) is None
 
 
-def test_academy_code_from_data_term_then_std():
-    """Same precedence: trm_academyno > std_academyno."""
-    assert get_academy_code_from_data({"trm_academyno": "A", "std_academyno": "B"}) == "A"
-    assert get_academy_code_from_data({"std_academyno": "B"}) == "B"
+def test_academy_code_from_data_std_then_term():
+    """Same precedence: std_academyno > trm_academyno."""
+    assert get_academy_code_from_data({"trm_academyno": "A", "std_academyno": "B"}) == "B"
+    assert get_academy_code_from_data({"trm_academyno": "A"}) == "A"
     assert get_academy_code_from_data({}) is None
 
 

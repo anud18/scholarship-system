@@ -492,3 +492,58 @@ async def test_json_summary_endpoint_still_serves_the_same_students(admin_client
     assert first["is_renewal"] is False
     assert first["renewal_year"] is None
     assert [s["student_name"] for s in students] == ["王小美", "李陸生"]
+
+
+@pytest.mark.asyncio
+async def test_std_only_snapshot_names_college_and_department_in_summary_and_export(admin_client, scholarship, db):
+    """SIS term lookup timed out at submission: the snapshot has std_* only.
+
+    學院/系所 come from API 1's codes (std_academyno → academy table, std_depno →
+    departments table), so neither the panel nor the 名冊 shows a blank.
+    """
+    from app.core.cache import invalidate
+    from app.models.student import Department
+
+    await invalidate("refdata:department-names")
+    db.add(Department(code="1511", name="電機工程學系"))
+    await db.commit()
+
+    ranking = await _make_ranking(db, scholarship=scholarship)
+    item = await _make_allocated_student(
+        db,
+        scholarship=scholarship,
+        ranking=ranking,
+        suffix="07",
+        name="張逾時",
+        rank_position=1,
+        allocation_config_id=None,
+    )
+    application = await db.get(Application, item.application_id)
+    application.student_data = {
+        "std_stdcode": "312345607",
+        "std_cname": "張逾時",
+        "std_academyno": "E",
+        "std_depno": "1511",
+        "std_studingstatus": 1,
+    }
+    await db.commit()
+
+    try:
+        summary = await admin_client.get(
+            "/api/v1/manual-distribution/distribution-summary", params=_params(scholarship)
+        )
+        export = await admin_client.get(EXPORT_PATH, params=_params(scholarship))
+    finally:
+        await invalidate("refdata:department-names")
+
+    assert summary.status_code == 200
+    (student,) = summary.json()["data"]["groups"][0]["students"]
+    assert (student["college_code"], student["college_name"], student["department_name"]) == (
+        "E",
+        "電機學院",
+        "電機工程學系",
+    )
+
+    assert export.status_code == 200
+    ws = load_workbook(io.BytesIO(export.content)).active
+    assert [ws.cell(row=4, column=c).value for c in (2, 3, 4)] == ["電機學院", "電機工程學系", "張逾時"]

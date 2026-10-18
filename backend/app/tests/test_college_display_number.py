@@ -46,14 +46,40 @@ def test_format_college_name(code, name, expected):
     assert format_college_name(code, name) == expected
 
 
-def test_format_student_college_pairs_number_with_term_name():
-    # Changed college: base row says C, term row says E/電機學院 → number follows the name.
+def test_format_student_college_transferred_student_is_labelled_with_the_api_1_college():
+    # Changed college: API 1 (current record) says C, the term row still says E/電機學院.
+    # API 1 decides, and the number and the name both describe C.
     sd = {"std_academyno": "C", "trm_academyno": "E", "trm_academyname": "電機學院"}
-    assert format_student_college(sd) == "7. 電機學院"
+    assert format_student_college(sd) == "6. 資訊學院"
 
 
 def test_format_student_college_without_term_name_resolves_from_code():
     assert format_student_college({"std_academyno": "C"}) == "6. 資訊學院"
+
+
+def test_format_student_college_term_lookup_failed_uses_api_1_only():
+    # SIS timed out on the term lookup: only std_* is in the snapshot.
+    assert format_student_college({"std_academyno": "E", "std_depno": "1511"}) == "7. 電機學院"
+
+
+def test_format_student_college_unknown_api_1_code_falls_back_to_the_term_pair():
+    # API 1's code is not in the academy table → the term row speaks, as a pair.
+    sd = {"std_academyno": "ZZ", "trm_academyno": "E", "trm_academyname": "電機學院"}
+    assert format_student_college(sd) == "7. 電機學院"
+
+
+def test_format_student_college_unknown_codes_fall_back_to_the_term_name_unnumbered():
+    sd = {"std_academyno": "ZZ", "trm_academyname": "舊學院"}
+    assert format_student_college(sd) == "舊學院"
+
+
+def test_format_student_college_term_row_without_name_resolves_from_its_code():
+    assert format_student_college({"trm_academyno": "C"}) == "6. 資訊學院"
+
+
+def test_format_student_college_retired_code_is_normalised():
+    # Y (電資學院) was merged into E; an old snapshot still gets E's number and name.
+    assert format_student_college({"std_academyno": "Y"}) == format_student_college({"std_academyno": "E"})
 
 
 def test_format_student_college_legacy_code_8():

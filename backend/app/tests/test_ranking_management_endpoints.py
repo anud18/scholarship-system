@@ -648,6 +648,33 @@ class TestRankingFlowAndEnvelope:
         assert response.status_code == 200
         assert response.headers["content-type"].startswith(XLSX_MIME)
 
+    async def test_export_excel_hands_the_departments_table_to_the_workbook(
+        self, client, login, rank_users, ranking_sci, monkeypatch
+    ):
+        """系所 names resolve from the API 1 code, so the workbook needs the departments table."""
+        from unittest.mock import AsyncMock
+
+        from app.api.v1.endpoints.college_review import ranking_management
+        from app.services.college_ranking_export_service import CollegeRankingExportService
+
+        seen = {}
+        real_build = CollegeRankingExportService.build_workbook
+
+        def spy(self, **kwargs):
+            seen.update(kwargs)
+            return real_build(self, **kwargs)
+
+        monkeypatch.setattr(CollegeRankingExportService, "build_workbook", spy)
+        loader = AsyncMock(return_value={"1511": "電機工程學系"})
+        monkeypatch.setattr(ranking_management, "load_department_names", loader)
+
+        login(rank_users["admin"])
+        response = await client.get(f"{RANKINGS_URL}/{ranking_sci.id}/export-excel")
+
+        assert response.status_code == 200
+        assert seen["department_names"] == {"1511": "電機工程學系"}
+        loader.assert_awaited_once()
+
 
 @pytest.mark.api
 class TestDistributionEndpointScoping:

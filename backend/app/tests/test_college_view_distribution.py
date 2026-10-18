@@ -1,5 +1,7 @@
 """Tests for the admin toggle + college view of distribution results."""
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
@@ -352,8 +354,8 @@ async def test_distribution_results_empty_when_not_executed(college_client_facto
 
 @pytest.mark.asyncio
 async def test_distribution_results_include_department(college_client_factory, config, sch_type, db):
-    """系所 comes from the student_data snapshot (trm_depname) and appears on
-    admitted, backup AND rejected rows alike."""
+    """系所 comes from the student_data snapshot (here no std_depno, so the term row's
+    trm_depname) and appears on admitted, backup AND rejected rows alike."""
     config.allow_college_view_distribution = True
     await db.commit()
     await _seed_distribution(db, sch_type, executed=True)
@@ -368,6 +370,28 @@ async def test_distribution_results_include_department(college_client_factory, c
     assert nstc["admitted"][0]["department"] == "電子研"
     assert nstc["backup"][0]["department"] == "電子研"
     assert nstc["rejected"][0]["department"] == "電子研"
+
+
+@pytest.mark.asyncio
+async def test_distribution_results_load_department_names_once_per_request(
+    college_client_factory, config, sch_type, db
+):
+    """The 系所 code → name table is loaded once for the whole result, not per student row."""
+    config.allow_college_view_distribution = True
+    await db.commit()
+    await _seed_distribution(db, sch_type, executed=True)
+
+    loader = AsyncMock(return_value={})
+    cclient = await college_client_factory("A")
+    with patch("app.api.v1.endpoints.college_review._helpers.load_department_names", loader):
+        resp = await cclient.get(
+            DIST_URL, params={"scholarship_type_id": sch_type.id, "academic_year": 114, "semester": "first"}
+        )
+
+    assert resp.status_code == 200
+    nstc = next(g for g in resp.json()["data"]["sub_types"] if g["code"] == "nstc")
+    assert len(nstc["admitted"]) + len(nstc["backup"]) + len(nstc["rejected"]) == 3
+    assert loader.await_count == 1
 
 
 @pytest.mark.asyncio

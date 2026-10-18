@@ -50,7 +50,7 @@ async def test_snapshot_from_other_year_falls_back_to_sis(service):
 
     period_map = await service._fetch_scholarship_period_data(apps)
 
-    service.student_service.get_student_term_info.assert_awaited_once_with("S1", "114", "2")
+    service.student_service.get_student_term_info.assert_awaited_once_with("S1", "114", "2", fresh=False)
     assert period_map[1]["trm_studystatus"] == 9
 
 
@@ -60,7 +60,7 @@ async def test_semester_app_requires_matching_term(service):
 
     period_map = await service._fetch_scholarship_period_data([matching, wrong_term])
 
-    service.student_service.get_student_term_info.assert_awaited_once_with("S2", "114", "2")
+    service.student_service.get_student_term_info.assert_awaited_once_with("S2", "114", "2", fresh=False)
     assert period_map[1]["trm_studystatus"] == 1
     assert period_map[2]["trm_studystatus"] == 9
 
@@ -68,7 +68,7 @@ async def test_semester_app_requires_matching_term(service):
 async def test_snapshot_without_term_data_falls_back_to_sis(service):
     period_map = await service._fetch_scholarship_period_data([_app(1, semester="first")])
 
-    service.student_service.get_student_term_info.assert_awaited_once_with("S1", "114", "1")
+    service.student_service.get_student_term_info.assert_awaited_once_with("S1", "114", "1", fresh=False)
     assert period_map[1]["trm_studystatus"] == 9
 
 
@@ -77,7 +77,7 @@ async def test_live_fallback_concurrency_is_bounded(service, monkeypatch):
     in_flight = 0
     peak = 0
 
-    async def slow_lookup(*_args):
+    async def slow_lookup(*_args, **_kwargs):
         nonlocal in_flight, peak
         in_flight += 1
         peak = max(peak, in_flight)

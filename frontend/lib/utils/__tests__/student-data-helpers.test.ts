@@ -2,7 +2,8 @@
  * Tests for `lib/utils/student-data-helpers.ts`.
  *
  * Frontend mirror of the backend `application_helpers.py` extractors.
- * The same OR-chains (trm_* > std_* > legacy) must hold on both sides
+ * The same OR-chains (學院/系所: std_* > trm_*; term-only data: trm_* > std_*;
+ * then legacy) must hold on both sides
  * — if they drift, students see one name in the form and a different
  * one in the admin preview, eroding trust.
  *
@@ -23,6 +24,8 @@ import {
   getAcademyName,
   getDepartmentCode,
   getDepartmentName,
+  getApplicationAcademyName,
+  getApplicationDepartmentName,
   getTermCount,
   getGPA,
   getDegreeCode,
@@ -78,11 +81,11 @@ describe("contact info extractors", () => {
 });
 
 describe("academy/department extractors", () => {
-  it("getAcademyCode: trm > std > generic", () => {
-    /** Pin the 3-level chain: term data is freshest, then basic, then
-     * legacy alias. */
-    expect(getAcademyCode({ trm_academyno: "A", std_academyno: "B", academy_code: "C" })).toBe("A");
-    expect(getAcademyCode({ std_academyno: "B" })).toBe("B");
+  it("getAcademyCode: std > trm > generic", () => {
+    /** Pin the 3-level chain: API 1 (the student's own current record)
+     * first, the term row only fills a gap, then the legacy alias. */
+    expect(getAcademyCode({ trm_academyno: "A", std_academyno: "B", academy_code: "C" })).toBe("B");
+    expect(getAcademyCode({ trm_academyno: "A" })).toBe("A");
     expect(getAcademyCode({ academy_code: "C" })).toBe("C");
   });
 
@@ -91,9 +94,54 @@ describe("academy/department extractors", () => {
     expect(getAcademyName({ academy_name: "fallback" })).toBe("fallback");
   });
 
-  it("getDepartmentCode and getDepartmentName: trm > std fallback", () => {
+  it("getDepartmentCode: std > trm > generic (transferred student keeps the API 1 code)", () => {
+    expect(getDepartmentCode({ std_depno: "1511", trm_depno: "1550" })).toBe("1511");
     expect(getDepartmentCode({ trm_depno: "4460" })).toBe("4460");
+    expect(getDepartmentCode({ department_code: "9999" })).toBe("9999");
+  });
+
+  it("getDepartmentName: trm > department_name", () => {
     expect(getDepartmentName({ trm_depname: "教育博" })).toBe("教育博");
+  });
+});
+
+describe("application-level 學院/系所 names", () => {
+  // Moved 資工 → 電機 after the term row was written; the backend resolved names from std_*
+  const transferred = {
+    academy_name: "電機學院",
+    department_name: "電機工程學系",
+    student_data: {
+      std_academyno: "E",
+      std_depno: "1511",
+      trm_academyname: "資訊學院",
+      trm_depname: "資工系",
+    },
+  };
+
+  it("prefers the server-resolved names over the term row", () => {
+    expect(getApplicationAcademyName(transferred)).toBe("電機學院");
+    expect(getApplicationDepartmentName(transferred)).toBe("電機工程學系");
+  });
+
+  it("shows the server-resolved names when the term lookup failed (no trm_*)", () => {
+    const termLookupFailed = {
+      academy_name: "電機學院",
+      department_name: "電機工程學系",
+      student_data: { std_academyno: "E", std_depno: "1511" },
+    };
+    expect(getApplicationAcademyName(termLookupFailed)).toBe("電機學院");
+    expect(getApplicationDepartmentName(termLookupFailed)).toBe("電機工程學系");
+  });
+
+  it("falls back to the raw term-row names when the response has none", () => {
+    const listRow = { student_data: transferred.student_data };
+    expect(getApplicationAcademyName(listRow)).toBe("資訊學院");
+    expect(getApplicationDepartmentName({ ...listRow, department_name: null })).toBe("資工系");
+  });
+
+  it("returns null when nothing knows the name", () => {
+    expect(getApplicationAcademyName(null)).toBeNull();
+    expect(getApplicationDepartmentName({ student_data: { std_depno: "1511" } })).toBeNull();
   });
 });
 

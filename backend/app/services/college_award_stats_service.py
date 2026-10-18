@@ -25,6 +25,7 @@ from app.services.college_stats_export_service import (
     scholarship_stats_columns,
     tally_college_counts,
 )
+from app.utils.application_helpers import get_academy_code_from_data
 from app.utils.export_download import sanitise_filename_part
 
 
@@ -38,14 +39,13 @@ class AwardStatsExport:
 def award_record(user_id: int, student_data: Optional[Mapping[str, Any]], sub_type: Optional[str]) -> StatsRecord:
     """One awarded slot: the student, their college, and the sub-type they were awarded.
 
-    College is ``std_academyno`` first — the same precedence the 分發結果名單
-    panel and the 造冊明細 use — so a student sits in the same college row here
-    as in the list the admin is looking at.
+    College is API 1's ``std_academyno`` first (``get_academy_code_from_data``) —
+    the same precedence the 分發結果名單 panel and the 造冊明細 use — so a student
+    sits in the same college row here as in the list the admin is looking at.
     """
-    data = student_data or {}
     return StatsRecord(
         user_id=user_id,
-        academy_code=data.get("std_academyno") or data.get("trm_academyno"),
+        academy_code=get_academy_code_from_data(student_data or {}),
         sub_type_codes=(sub_type,) if sub_type else (),
     )
 

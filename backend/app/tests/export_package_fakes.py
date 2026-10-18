@@ -10,7 +10,8 @@ the finished archive.
 
 import io
 from types import SimpleNamespace
-from typing import Dict, FrozenSet, Iterator, List
+from typing import Dict, FrozenSet, Iterator, List, Optional
+from unittest.mock import AsyncMock
 
 from app.models.application import Application
 from app.services.export_package_service import ExportPackageService, ExportPlan
@@ -93,6 +94,14 @@ def make_application(
     # mapped ApplicationFile rows.
     application.__dict__["files"] = list(files)
     return application
+
+
+def stub_department_names(monkeypatch, names: Optional[Dict[str, str]] = None) -> AsyncMock:
+    """Replace prepare_export's departments-table load (db is None in these
+    tests) with an AsyncMock returning ``names``; the mock counts the loads."""
+    loader = AsyncMock(return_value=dict(names or {}))
+    monkeypatch.setattr("app.services.export_package_service.load_department_names", loader)
+    return loader
 
 
 async def collect_zip(service: ExportPackageService, plan: ExportPlan) -> io.BytesIO:

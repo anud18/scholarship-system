@@ -10,6 +10,7 @@ from app.services.moe_department_award_stats_service import (
     UNKNOWN_DEPARTMENT_LABEL,
     UNMAPPED_FIELD_LABEL,
     build_workbook,
+    department_code_from_data,
     department_record,
     tally_department_counts,
 )
@@ -103,6 +104,25 @@ def test_department_name_prefers_departments_table_then_matching_term_snapshot()
     assert from_term.department_name == "資訊科學與工程研究所"
     assert mismatched_term.department_name is None
     assert mismatched_term.department_code == "7777"
+
+
+def test_department_code_is_api_1_first_and_stripped():
+    assert department_code_from_data({"std_depno": " 4460 ", "trm_depno": "4551"}) == "4460"
+    assert department_code_from_data({"trm_depno": "4551"}) == "4551"  # term lookup only
+    assert department_code_from_data({}) is None
+    assert department_code_from_data(None) is None
+
+
+def test_grouping_is_unchanged_when_std_and_trm_agree():
+    agreeing = {"std_depno": "4460", "trm_depno": "4460", "trm_depname": "教育研究所"}
+    std_only = {"std_depno": "4460"}
+    term_only = {"trm_depno": "4460", "trm_depname": "教育研究所"}
+
+    records = [department_record(i, data, ["moe_1w"], NAMES) for i, data in enumerate([agreeing, std_only, term_only])]
+    row = _by_department(tally_department_counts(records, []))["教育研究所"]
+
+    assert {r.department_code for r in records} == {"4460"}
+    assert row.applicants == 3
 
 
 def test_workbook_merges_field_cells_and_leaves_bonus_column_blank():
