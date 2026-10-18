@@ -109,7 +109,7 @@ _ROW_BY_NAME: Dict[str, Tuple[str, str]] = {
 def department_code_from_data(student_data: Optional[Mapping[str, Any]]) -> Optional[str]:
     """API 1's ``std_depno`` first (``get_department_code_from_data``) — the same
     std-first precedence the 獲獎人數 sheets use."""
-    code = get_department_code_from_data(dict(student_data or {}))
+    code = get_department_code_from_data(student_data or {})
     return str(code).strip() if code else None
 
 

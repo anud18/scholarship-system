@@ -45,7 +45,7 @@ def award_record(user_id: int, student_data: Optional[Mapping[str, Any]], sub_ty
     """
     return StatsRecord(
         user_id=user_id,
-        academy_code=get_academy_code_from_data(dict(student_data or {})),
+        academy_code=get_academy_code_from_data(student_data or {}),
         sub_type_codes=(sub_type,) if sub_type else (),
     )
 

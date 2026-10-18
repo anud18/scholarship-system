@@ -194,7 +194,7 @@ def get_department_code_from_data(student_data: Dict[str, Any]) -> Optional[str]
     Returns:
         部門代碼，無資料時返回 None
     """
-    if not student_data or not isinstance(student_data, dict):
+    if not student_data or not isinstance(student_data, Mapping):
         return None
 
     # API 1 (std_*) is the student's own record; the term row only fills a gap
@@ -211,41 +211,57 @@ def get_academy_code_from_data(student_data: Dict[str, Any]) -> Optional[str]:
     Returns:
         學院代碼，無資料時返回 None
     """
-    if not student_data or not isinstance(student_data, dict):
+    if not student_data or not isinstance(student_data, Mapping):
         return None
 
     # API 1 (std_*) first — the same field get_college_code_from_data scopes colleges by
     return student_data.get("std_academyno") or student_data.get("trm_academyno")
 
 
-def get_academy_name_from_data(student_data: Dict[str, Any]) -> Optional[str]:
-    """
-    學院名稱：以 API 1 的學院代碼（std_academyno）對應學院表；查不到才用學期資料的名稱
+def _term_row_describes(student_data: Mapping[str, Any], term_code_key: str, code: Any, normalize=str) -> bool:
+    """The term row may lend its NAME only if it is about the same unit as ``code``
+    (or names no unit of its own) — otherwise a transferred student would get the new
+    code next to the old unit's name."""
+    term_code = student_data.get(term_code_key)
+    return not term_code or normalize(str(term_code).strip()) == normalize(str(code).strip())
 
+
+def get_academy_name_from_data(student_data: Mapping[str, Any]) -> Optional[str]:
+    """
+    學院名稱：以 API 1 的學院代碼（std_academyno）對應學院表
+
+    查不到時才用學期資料的名稱，而且只在學期資料指的是同一個學院時 ——
     代碼與名稱因此永遠描述同一個學院（學期資料的學院可能是轉院前的）。
     """
-    if not student_data or not isinstance(student_data, dict):
+    if not student_data or not isinstance(student_data, Mapping):
         return None
 
     code = normalize_academy_code(get_academy_code_from_data(student_data))
-    table_name = COLLEGE_MAPPINGS.get(str(code).strip()) if code else None
-    return table_name or student_data.get("trm_academyname") or None
+    if code and COLLEGE_MAPPINGS.get(str(code).strip()):
+        return COLLEGE_MAPPINGS[str(code).strip()]
+    if not code or _term_row_describes(student_data, "trm_academyno", code, normalize_academy_code):
+        return student_data.get("trm_academyname") or None
+    return None
 
 
 def get_department_name_from_data(
-    student_data: Dict[str, Any], department_names: Optional[Mapping[str, str]] = None
+    student_data: Mapping[str, Any], department_names: Optional[Mapping[str, str]] = None
 ) -> Optional[str]:
     """
     系所名稱：以 API 1 的系所代碼（std_depno）查系所表（``department_names``：代碼 → 名稱，
-    見 app.services.department_names.load_department_names）；查不到才用學期資料的名稱
+    見 app.services.department_names.load_department_names）
+
+    查不到時才用學期資料的名稱，而且只在學期資料指的是同一個系所時（同 get_academy_name_from_data）。
     """
-    if not student_data or not isinstance(student_data, dict):
+    if not student_data or not isinstance(student_data, Mapping):
         return None
 
     code = get_department_code_from_data(student_data)
-    if code and department_names and department_names.get(str(code)):
-        return department_names[str(code)]
-    return student_data.get("trm_depname") or None
+    if code and department_names and department_names.get(str(code).strip()):
+        return department_names[str(code).strip()]
+    if not code or _term_row_describes(student_data, "trm_depno", code):
+        return student_data.get("trm_depname") or None
+    return None
 
 
 def get_term_count_from_data(student_data: Dict[str, Any]) -> Optional[str]:

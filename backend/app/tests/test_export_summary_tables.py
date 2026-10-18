@@ -66,10 +66,15 @@ class TestDeptNameFromApps:
         app = Application(user_id=11, scholarship_type_id=1, academic_year=114, student_data={"std_depno": "1000"})
         assert _dept_name_from_apps([app], {"1000": "A系"}) == "A系"
 
-    def test_unknown_code_falls_back_to_trm_depname(self):
+    def test_unknown_code_falls_back_to_the_term_row_of_the_same_department(self):
+        app = _mk_app(1, 11, "1000", "舊系名", "001")
+        app.student_data = {**app.student_data, "std_depno": "1000"}
+        assert _dept_name_from_apps([app], {"9999": "別系"}) == "舊系名"
+
+    def test_term_row_of_another_department_never_names_the_api_1_code(self):
         app = _mk_app(1, 11, "1000", "舊系名", "001")
         app.student_data = {**app.student_data, "std_depno": "9999"}
-        assert _dept_name_from_apps([app], {"1000": "A系"}) == "舊系名"
+        assert _dept_name_from_apps([app], {"1000": "A系"}) == "未知系所"
 
 
 @pytest.fixture

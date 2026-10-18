@@ -61,6 +61,29 @@ def test_name_falls_back_to_the_term_row_when_the_code_is_unknown():
     assert get_department_name_from_data(unknown) == "舊系"  # no table passed
 
 
+def test_the_term_row_lends_its_name_only_when_it_is_about_the_same_unit():
+    """An unknown API 1 code must not end up next to the OLD unit's name."""
+    transferred = {
+        "std_academyno": "ZZ",
+        "std_depno": "9999",
+        "trm_academyno": "C",
+        "trm_academyname": "資訊學院",
+        "trm_depno": "1550",
+        "trm_depname": "資工系",
+    }
+    same_unit = {**transferred, "trm_academyno": "ZZ", "trm_depno": "9999"}
+
+    assert get_academy_name_from_data(transferred) is None
+    assert get_department_name_from_data(transferred, DEPARTMENT_NAMES) is None
+    assert get_academy_name_from_data(same_unit) == "資訊學院"
+    assert get_department_name_from_data(same_unit, DEPARTMENT_NAMES) == "資工系"
+
+
+def test_a_code_with_stray_whitespace_still_finds_its_name():
+    assert get_department_name_from_data({"std_depno": "1511 "}, DEPARTMENT_NAMES) == "電機工程學系"
+    assert get_academy_name_from_data({"std_academyno": " E"}) == "電機學院"
+
+
 def test_name_is_none_when_nothing_knows_it():
     assert get_academy_name_from_data({"std_academyno": "ZZ"}) is None
     assert get_department_name_from_data({"std_depno": "9999"}, DEPARTMENT_NAMES) is None
@@ -157,6 +180,15 @@ async def test_yearly_scholarship_uses_term_1_when_term_2_is_empty():
     assert data == {"trm_term": 1}
     assert status == "success"
     assert _terms_asked(service) == ["2", "1"]
+
+
+@pytest.mark.asyncio
+async def test_yearly_scholarship_raises_when_term_2_failed_and_term_1_is_empty():
+    """A SIS outage must not read as 'this student has no term data'."""
+    service = _service({"1": None, "2": ServiceUnavailableError("timed out")})
+
+    with pytest.raises(ServiceUnavailableError, match="timed out"):
+        await service.get_scholarship_term_info("411651009", "114", None)
 
 
 @pytest.mark.asyncio
