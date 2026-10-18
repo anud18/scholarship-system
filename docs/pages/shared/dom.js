@@ -1,4 +1,4 @@
-/* 續領名單比對 — tiny DOM helpers shared by the page modules. */
+/* Tiny DOM helpers shared by the docs/pages tools (續領名單比對, 申請人數統計). */
 (function () {
   "use strict";
 
@@ -48,5 +48,17 @@
     });
   }
 
-  window.RenewalDom = { $, el, bindDropZone };
+  /** Hand a generated file to the browser's download (no network involved). */
+  function saveBlob(blob, fileName) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+
+  window.RenewalDom = { $, el, bindDropZone, saveBlob };
 })();

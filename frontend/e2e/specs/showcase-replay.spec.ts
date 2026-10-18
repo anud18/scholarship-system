@@ -2,7 +2,7 @@
  * E2E "showcase" flow — the always-recorded walkthrough.
  *
  * Why this file exists:
- *   The published nightly report (https://anud18.github.io/scholarship-system)
+ *   The published nightly report (https://anud18.github.io/scholarship-system/e2e/)
  *   keeps video + trace only `retain-on-failure` (see playwright.config.ts) to
  *   stay small. But the nightly suite almost always passes, so a green report
  *   has NO watchable recording at all. This one spec opts INTO video + trace on

@@ -37,17 +37,6 @@
     return `${applicant.fileName.replace(/\.[^.]+$/, "")}_續領比對.xlsx`;
   }
 
-  function saveBlob(blob, fileName) {
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = fileName;
-    document.body.append(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 0);
-  }
-
   // ---- formatted export (ExcelJS, .xlsx only) -----------------------------
 
   function copyStyle(style) {
@@ -127,7 +116,7 @@
     });
 
     const buffer = await workbook.xlsx.writeBuffer();
-    saveBlob(new Blob([buffer], { type: XLSX_MIME }), exportFileName(applicant));
+    window.RenewalDom.saveBlob(new Blob([buffer], { type: XLSX_MIME }), exportFileName(applicant));
   }
 
   // ---- plain fallback (SheetJS, values only) ------------------------------

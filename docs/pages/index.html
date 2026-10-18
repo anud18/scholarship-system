@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>獎學金系統工具</title>
+  <link rel="stylesheet" href="portal.css">
+</head>
+<body>
+  <main class="page">
+    <header>
+      <h1>獎學金系統工具</h1>
+      <p class="lead">管理員輔助工具與每日測試報告。</p>
+    </header>
+
+    <ul class="tiles">
+      <li>
+        <a class="tile primary" href="renewal-compare/">
+          <span class="tile-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M9 11l2 2 4-4M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/></svg>
+          </span>
+          <span class="tile-body">
+            <span class="tile-title">續領名單比對</span>
+            <span class="tile-desc">上傳申請資料彙整表與過往獎勵名冊，標記哪些申請學生已在續領名單內，並匯出標記後的彙整表。資料只在瀏覽器中處理，不會上傳。</span>
+          </span>
+          <span class="tile-go" aria-hidden="true">開啟 →</span>
+        </a>
+      </li>
+      <li>
+        <a class="tile primary" href="applicant-stats/">
+          <span class="tile-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M4 20h16M7 16V10m5 6V5m5 11v-4"/></svg>
+          </span>
+          <span class="tile-body">
+            <span class="tile-title">申請人數統計</span>
+            <span class="tile-desc">上傳申請資料彙整表，統計各學院各年級申請人數、各學院外籍生國科會申請人數，並下載統計表。資料只在瀏覽器中處理，不會上傳。</span>
+          </span>
+          <span class="tile-go" aria-hidden="true">開啟 →</span>
+        </a>
+      </li>
+      <li>
+        <a class="tile" href="e2e/">
+          <span class="tile-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M4 19V5m0 14h16M8 15l3-4 3 2 5-6"/></svg>
+          </span>
+          <span class="tile-body">
+            <span class="tile-title">每日 E2E 測試報告</span>
+            <span class="tile-desc">Nightly Playwright 端對端測試結果，失敗時附截圖、影片與 trace。</span>
+          </span>
+          <span class="tile-go" aria-hidden="true">查看 →</span>
+        </a>
+      </li>
+    </ul>
+  </main>
+</body>
+</html>
