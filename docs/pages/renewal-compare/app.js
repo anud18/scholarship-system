@@ -21,11 +21,11 @@
     { key: STATUS.NONE, label: "不在名單" },
   ]);
 
-  const $ = (id) => document.getElementById(id);
+  const { $, el, bindDropZone } = window.RenewalDom;
 
   let state = {
     applicant: null, // { fileName, data, sheetName, rows, origin, columnCount, header, records }
-    renewals: [], // [{ fileName, sheetName, records }]
+    renewals: [], // included 名冊 sheets: [{ fileName, sheetName, records }]
     results: [],
     filter: "all",
     query: "",
@@ -33,17 +33,6 @@
 
   function setState(patch) {
     state = { ...state, ...patch };
-  }
-
-  function el(tag, props, children) {
-    const node = document.createElement(tag);
-    Object.entries(props || {}).forEach(([key, value]) => {
-      if (key === "text") node.textContent = value;
-      else if (key === "className") node.className = value;
-      else node.setAttribute(key, value);
-    });
-    (children || []).forEach((child) => node.append(child));
-    return node;
   }
 
   async function readWorkbook(file) {
@@ -89,43 +78,6 @@
       status.textContent = `無法讀取：${error.message}`;
     }
     render();
-  }
-
-  async function parseRenewalFile(file) {
-    try {
-      const { workbook } = await readWorkbook(file);
-      const sheets = workbook.SheetNames.map((sheetName) => ({
-        fileName: file.name,
-        sheetName,
-        ...RC.parseSheet(sheetRows(workbook, sheetName)),
-      }));
-      return { fileName: file.name, sheets, error: null };
-    } catch (error) {
-      console.error("renewal file", file.name, error);
-      return { fileName: file.name, sheets: [], error: error.message };
-    }
-  }
-
-  async function loadRenewalFiles(files) {
-    const list = $("renewal-status");
-    list.replaceChildren(el("li", { text: "讀取中…" }));
-    const parsedFiles = await Promise.all(files.map(parseRenewalFile));
-    list.replaceChildren(...parsedFiles.flatMap(renderRenewalStatus));
-    const renewals = parsedFiles.flatMap((f) => f.sheets).filter((s) => s.records.length > 0);
-    setState({ renewals });
-    render();
-  }
-
-  function renderRenewalStatus(parsedFile) {
-    if (parsedFile.error) {
-      return [el("li", { className: "error", text: `${parsedFile.fileName}：無法讀取（${parsedFile.error}）` })];
-    }
-    return parsedFile.sheets.map((sheet) => {
-      const label = `${parsedFile.fileName}／${sheet.sheetName}`;
-      if (!sheet.header) return el("li", { className: "skipped", text: `${label}：未找到「學號」欄，已略過` });
-      if (sheet.records.length === 0) return el("li", { className: "skipped", text: `${label}：沒有學號資料，已略過` });
-      return el("li", { text: `${label}：${sheet.records.length} 筆` });
-    });
   }
 
   // ---- rendering ----------------------------------------------------------
@@ -239,14 +191,18 @@
 
   // ---- wiring -------------------------------------------------------------
 
-  $("applicant-file").addEventListener("change", (event) => {
-    const [file] = event.target.files;
-    if (file) loadApplicantFile(file);
+  const renewalFiles = window.RenewalFiles.mount({
+    list: $("renewal-list"),
+    summary: $("renewal-summary"),
+    readWorkbook,
+    sheetRows,
+    onChange: (renewals) => {
+      setState({ renewals });
+      render();
+    },
   });
-  $("renewal-files").addEventListener("change", (event) => {
-    const files = [...event.target.files];
-    if (files.length > 0) loadRenewalFiles(files);
-  });
+  bindDropZone($("applicant-drop"), $("applicant-file"), ([file]) => loadApplicantFile(file));
+  bindDropZone($("renewal-drop"), $("renewal-files"), (files) => renewalFiles.addFiles(files));
   $("search").addEventListener("input", (event) => {
     setState({ query: event.target.value });
     renderRows();

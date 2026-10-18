@@ -26,15 +26,26 @@
     <section class="card">
       <h2><span class="step">1</span>申請資料彙整表</h2>
       <p class="hint">例如「115學年度博士生獎學金學生資料彙整表_全校.xlsx」。需含「學號」欄，建議含「學生中文姓名」。</p>
-      <input id="applicant-file" type="file" accept=".xlsx,.xls,.csv">
+      <label id="applicant-drop" class="dropzone">
+        <input id="applicant-file" class="visually-hidden" type="file" accept=".xlsx,.xls,.csv">
+        <svg class="drop-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4.5 4.5M12 4l4.5 4.5M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+        <span class="drop-title">拖曳檔案到這裡，或<span class="drop-link">選擇檔案</span></span>
+        <span class="drop-hint">.xlsx / .xls / .csv，一次一個檔案；重新選擇會取代</span>
+      </label>
       <p id="applicant-status" class="status" role="status"></p>
     </section>
 
     <section class="card">
-      <h2><span class="step">2</span>過往續領名冊（可多選）</h2>
-      <p class="hint">例如國科會、教育部獎勵名冊。每個工作表會自動找出「學號」、「姓名」、「備註」欄；找不到「學號」的工作表會略過。</p>
-      <input id="renewal-files" type="file" accept=".xlsx,.xls,.csv" multiple>
-      <ul id="renewal-status" class="sheet-list"></ul>
+      <h2><span class="step">2</span>過往續領名冊</h2>
+      <p class="hint">例如國科會、教育部獎勵名冊。系統會在每個工作表自動找出「學號」、「姓名」、「備註」欄；可在「工作表明細」取消勾選不想比對的年度。</p>
+      <label id="renewal-drop" class="dropzone">
+        <input id="renewal-files" class="visually-hidden" type="file" accept=".xlsx,.xls,.csv" multiple>
+        <svg class="drop-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4.5 4.5M12 4l4.5 4.5M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+        <span class="drop-title">拖曳檔案到這裡，或<span class="drop-link">選擇檔案</span></span>
+        <span class="drop-hint">可一次加入多個檔案，也可以分批加入；同名檔案會取代舊的</span>
+      </label>
+      <div id="renewal-summary" class="renewal-summary" role="status" hidden></div>
+      <ul id="renewal-list" class="file-list"></ul>
     </section>
 
     <section id="results" class="card" hidden>
@@ -69,6 +80,8 @@
           integrity="sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz"
           crossorigin="anonymous"></script>
   <script src="compare.js"></script>
+  <script src="dom.js"></script>
+  <script src="renewal-files.js"></script>
   <script src="export.js"></script>
   <script src="app.js"></script>
 </body>
