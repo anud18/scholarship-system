@@ -1,0 +1,66 @@
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --text: #1c2430;
+  --muted: #5d6878;
+  --border: #dde2e9;
+  --accent: #1f5fa8;
+  --accent-soft: #eaf1fa;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12161c;
+    --surface: #1b2129;
+    --text: #e6eaf0;
+    --muted: #9aa5b4;
+    --border: #2d3540;
+    --accent: #6aa5ec;
+    --accent-soft: #1d2a3a;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.6 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+}
+
+.page { max-width: 880px; margin: 0 auto; padding: 40px 16px 64px; }
+h1 { margin: 0 0 4px; font-size: 1.7rem; }
+.lead { margin: 0 0 24px; color: var(--muted); }
+
+.tiles { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+
+.tile {
+  display: flex; align-items: center; gap: 16px;
+  padding: 18px 20px; border-radius: 12px;
+  background: var(--surface); border: 1px solid var(--border);
+  color: inherit; text-decoration: none;
+  transition: border-color .15s, box-shadow .15s, transform .15s;
+}
+.tile:hover { border-color: var(--accent); box-shadow: 0 4px 14px rgb(0 0 0 / .08); transform: translateY(-1px); }
+.tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tile.primary { border-color: var(--accent); background: linear-gradient(var(--accent-soft), var(--surface)); }
+
+.tile-icon {
+  flex: none; display: grid; place-items: center;
+  width: 48px; height: 48px; border-radius: 10px; background: var(--accent-soft);
+}
+.tile-icon svg {
+  width: 26px; height: 26px; fill: none; stroke: var(--accent);
+  stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+}
+.tile-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.tile-title { font-size: 1.1rem; font-weight: 700; }
+.tile-desc { color: var(--muted); font-size: .9rem; }
+.tile-go { flex: none; color: var(--accent); font-weight: 600; white-space: nowrap; }
+
+@media (max-width: 520px) {
+  .tile { flex-wrap: wrap; }
+  .tile-go { width: 100%; text-align: right; }
+}

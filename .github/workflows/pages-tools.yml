@@ -1,10 +1,12 @@
-# Static admin tools served from GitHub Pages (docs/pages/** → site root),
-# e.g. https://anud18.github.io/scholarship-system/renewal-compare/ .
+# GitHub Pages portal + static admin tools (docs/pages/** → site root):
+#   https://anud18.github.io/scholarship-system/                 portal
+#   https://anud18.github.io/scholarship-system/renewal-compare/ 續領名單比對
+#   https://anud18.github.io/scholarship-system/e2e/             nightly report
 #
-# The Pages site root is the nightly Playwright report (nightly.yml
-# publish-e2e-report), and every deploy replaces the whole site. So when a
-# tool changes on main, this re-publishes the latest nightly report together
-# with the updated tools instead of wiping the report.
+# nightly.yml publish-e2e-report deploys the same layout every night, and
+# every deploy replaces the whole site. So when docs/pages changes on main,
+# this re-publishes the latest nightly report (at /e2e/) together with the
+# updated pages instead of wiping the report.
 name: Pages tools
 
 on:
@@ -61,16 +63,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p site
+          mkdir -p site/e2e
           run_id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow nightly.yml --status completed \
             --limit 1 --json databaseId --jq '.[0].databaseId')
           if [ -n "$run_id" ] && gh run download "$run_id" --repo "$GITHUB_REPOSITORY" \
                --name playwright-report-nightly --dir report \
              && [ -f report/playwright-report/index.html ]; then
-            cp -r report/playwright-report/. site/
+            cp -r report/playwright-report/. site/e2e/
           else
             echo "::warning::No nightly Playwright report artifact available — publishing a placeholder index."
-            printf '%s' '<!doctype html><meta charset="utf-8"><title>E2E report</title><h1>No e2e report available</h1><p>The next nightly run will publish it. Tools: <a href="renewal-compare/">續領名單比對</a></p>' > site/index.html
+            printf '%s' '<!doctype html><meta charset="utf-8"><title>E2E report</title><h1>No e2e report available</h1><p>The next nightly run will publish it. <a href="../">Back to the portal</a></p>' > site/e2e/index.html
           fi
 
       - name: Add the static tools to the site
