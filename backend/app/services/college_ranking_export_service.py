@@ -14,7 +14,7 @@ from __future__ import annotations
 import io
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 # `escape` is a pure string-escaping helper (`<` → `&lt;` …) used to sanitise
 # cell values before they go into reportlab Paragraph markup. It does not parse
@@ -32,6 +32,7 @@ from reportlab.platypus import KeepInFrame, Paragraph, SimpleDocTemplate, Spacer
 
 from app.services.pdf_fonts import CJK_FONT_NAME, ensure_cjk_font
 from app.services.professor_review_export import ProfessorReviewData
+from app.utils.application_helpers import get_department_name_from_data, get_term_count_from_data
 from app.utils.college_display_number import format_student_college
 from app.utils.excel_safety import sanitize_excel_cell
 
@@ -123,11 +124,15 @@ class CollegeRankingExportService:
         sheet_name: str,
         include_college_seal: bool = False,
         professor_review: Optional[ProfessorReviewData] = None,
+        department_names: Optional[Mapping[str, str]] = None,
     ) -> bytes:
         """Render the 學生資料彙整表 workbook.
 
         ``professor_review`` (load_professor_review_data over the same
         applications) adds the 指導教授審核結果 and 評語 columns per sub-type.
+        ``department_names`` (系所代碼 → 名稱, load_department_names, loaded once by
+        the async caller) names the 系所 column from the student's API 1 code;
+        without it the column falls back to the term row's trm_depname.
         """
         wb = Workbook()
         ws = wb.active
@@ -157,7 +162,15 @@ class CollegeRankingExportService:
         # Data rows — written from the same _row_cells used by the PDF export
         for idx, row in enumerate(rows, start=1):
             excel_row = idx + 2  # +2 because rows 1-2 are title/header
-            cells = self._row_cells(row, idx, sub_type_labels, sorted_dynamic, professor_review, include_college_seal)
+            cells = self._row_cells(
+                row,
+                idx,
+                sub_type_labels,
+                sorted_dynamic,
+                professor_review,
+                include_college_seal,
+                department_names=department_names,
+            )
             for col_idx, (column, value) in enumerate(zip(columns, cells), start=1):
                 # SECURITY (#1081 G): neutralize spreadsheet formula injection from
                 # student-supplied free-text values before writing the cell.
@@ -183,6 +196,7 @@ class CollegeRankingExportService:
         title: str,
         include_college_seal: bool = False,
         professor_review: Optional[ProfessorReviewData] = None,
+        department_names: Optional[Mapping[str, str]] = None,
     ) -> bytes:
         """Render the same 學生資料彙整表 as an A4-landscape PDF.
 
@@ -231,7 +245,15 @@ class CollegeRankingExportService:
 
         data: List[list] = [[Paragraph(xml_escape(h), header_style) for h in headers]]
         for idx, row in enumerate(rows, start=1):
-            values = self._row_cells(row, idx, sub_type_labels, sorted_dynamic, professor_review, include_college_seal)
+            values = self._row_cells(
+                row,
+                idx,
+                sub_type_labels,
+                sorted_dynamic,
+                professor_review,
+                include_college_seal,
+                department_names=department_names,
+            )
             data.append(
                 [
                     KeepInFrame(
@@ -338,6 +360,8 @@ class CollegeRankingExportService:
         sorted_dynamic: List[DynamicFieldSpec],
         professor_review: Optional[ProfessorReviewData] = None,
         include_college_seal: bool = False,
+        *,
+        department_names: Optional[Mapping[str, str]] = None,
     ) -> List[Any]:
         """Ordered cell values for one row: static, professor review, dynamic,
         then the blank seal column.
@@ -349,7 +373,7 @@ class CollegeRankingExportService:
         seal = [""] if include_college_seal else []
         review = professor_review.cells(row.application) if professor_review is not None else []
         return (
-            self._static_values(row, row_index, sub_type_labels)
+            self._static_values(row, row_index, sub_type_labels, department_names=department_names)
             + review
             + self._dynamic_values(row, sorted_dynamic)
             + seal
@@ -360,15 +384,20 @@ class CollegeRankingExportService:
         row: ExportRow,
         row_index: int,
         sub_type_labels: Dict[str, str],
+        *,
+        department_names: Optional[Mapping[str, str]] = None,
     ) -> List[Any]:
+        """學院/系所 follow the student's own record (API 1 codes, names resolved
+        from those codes); the term row only fills a gap. 年級 reads the term's
+        semester count, falling back to std_termcount when the term lookup failed."""
         sd = getattr(row.application, "student_data", None) or {}
         return [
             row_index,
             row.rank_position if row.rank_position is not None else "",
             self._render_scholarship_type(row.application, sub_type_labels),
             format_student_college(sd),
-            self._safe_str(sd.get("trm_depname")),
-            self._compute_grade(sd.get("trm_termcount")),
+            self._safe_str(get_department_name_from_data(sd, department_names)),
+            self._compute_grade(get_term_count_from_data(sd)),
             self._render_direct_phd(sd.get("std_enrolltype")),
             self._safe_str(sd.get("std_cname")),
             self._safe_str(sd.get("std_ename")),
@@ -402,9 +431,9 @@ class CollegeRankingExportService:
             return ""
         return "是" if code in DIRECT_PHD_ENROLLTYPE_CODES else "否"
 
-    def _compute_grade(self, trm_termcount: Any):
+    def _compute_grade(self, term_count: Any):
         try:
-            tc = int(trm_termcount)
+            tc = int(term_count)
         except (TypeError, ValueError):
             return ""
         if tc <= 0:

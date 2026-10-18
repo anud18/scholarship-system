@@ -19,10 +19,21 @@ from pypdf import PdfReader, PdfWriter
 from app.services.export_package_service import MAX_EXPORT_APPLICATIONS, ExportPackageService
 from app.services.professor_review_export import ProfessorReviewData
 from app.services.zip_stream import STREAM_BLOCK_SIZE
-from app.tests.export_package_fakes import FakeMinio, collect_zip, make_application, make_file
+from app.tests.export_package_fakes import (
+    FakeMinio,
+    collect_zip,
+    make_application,
+    make_file,
+    stub_department_names,
+)
 
 _MIB = 1024 * 1024
 _DATA_DESCRIPTOR_FLAG = 0x08
+
+
+@pytest.fixture(autouse=True)
+def _no_department_table(monkeypatch):
+    stub_department_names(monkeypatch)
 
 
 def _blank_pdf() -> bytes:

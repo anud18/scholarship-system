@@ -32,11 +32,29 @@ from app.models.payment_roster import (
 )
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipSubTypeConfig, ScholarshipType
 from app.models.user import User, UserRole, UserType
+from app.services.college_award_stats_service import award_record
 from app.services.college_stats_export_service import AWARD_REPORT_NAME, TOTAL_ROW_LABEL
 
 ACADEMIC_YEAR = 114
 DISTRIBUTION_URL = "/api/v1/manual-distribution/distribution-summary/college-award-stats/export"
 ROSTER_URL = "/api/v1/payment-rosters/{roster_id}/college-award-stats/export"
+
+
+@pytest.mark.parametrize(
+    "student_data, expected_code",
+    [
+        ({"std_academyno": "C", "trm_academyno": "C"}, "C"),  # std and trm agree → unchanged
+        ({"std_academyno": "C"}, "C"),  # term lookup failed
+        ({"trm_academyno": "C"}, "C"),  # no API 1 code → the term row fills the gap
+        ({"std_academyno": "E", "trm_academyno": "C"}, "E"),  # transferred → API 1's college
+        ({}, None),
+        (None, None),
+    ],
+)
+def test_award_record_college_is_api_1_first(student_data, expected_code):
+    record = award_record(7, student_data, "nstc")
+    assert record.academy_code == expected_code
+    assert record.sub_type_codes == ("nstc",)
 
 
 async def _user(db: AsyncSession, nycu_id: str, role: UserRole) -> User:

@@ -21,6 +21,7 @@ from app.models.scholarship import (
     ScholarshipType,
     SubTypeSelectionMode,
 )
+from app.models.student import Department
 from app.models.user import User, UserRole, UserType
 from app.services.roster_service import RosterService
 
@@ -224,6 +225,55 @@ def test_distribution_diff_lists_missing_and_orphan(db_sync, diff_scenario):
     assert entry.department_name == "教育博"
     assert entry.allocated_sub_type == "nstc"
     assert entry.allocation_year == 114
+
+
+def test_distribution_diff_names_units_from_api_1(db_sync, diff_scenario):
+    """學院/系所 follow API 1 (std_*): a std-only snapshot (term lookup failed) is
+    not blank, and a transferred student shows the std_* unit, not the term row's."""
+    db_sync.add(Department(code="1511", name="電機工程學系"))
+    db_sync.get(Application, diff_scenario["app_b"]).student_data = {
+        "std_stdcode": "111B",
+        "std_cname": "學生111B",
+        "std_academyno": "E",
+        "std_depno": "1511",
+    }
+    db_sync.get(Application, diff_scenario["app_c"]).student_data = {
+        "std_stdcode": "111C",
+        "std_cname": "學生111C",
+        "std_academyno": "E",
+        "std_depno": "1511",
+        "trm_academyno": "A",
+        "trm_academyname": "人社院",
+        "trm_depno": "4460",
+        "trm_depname": "教育博",
+    }
+    db_sync.commit()
+
+    diff = RosterService(db_sync).get_distribution_diff_for_roster(diff_scenario["roster"].id)
+
+    (added,) = diff["to_add"]
+    (removed,) = diff["to_remove"]
+    assert (added.college_name, added.department_name) == ("電機學院", "電機工程學系")
+    assert (removed.college_name, removed.department_name) == ("電機學院", "電機工程學系")
+
+
+def test_distribution_diff_unknown_codes_fall_back_to_term_names(db_sync, diff_scenario):
+    db_sync.get(Application, diff_scenario["app_b"]).student_data = {
+        "std_stdcode": "111B",
+        "std_cname": "學生111B",
+        "std_academyno": "ZZ",
+        "std_depno": "9999",
+        "trm_academyname": "舊學院",
+        "trm_depname": "舊系",
+    }
+    db_sync.commit()
+
+    diff = RosterService(db_sync).get_distribution_diff_for_roster(
+        diff_scenario["roster"].id, department_names={"1511": "電機工程學系"}
+    )
+
+    (added,) = diff["to_add"]
+    assert (added.college_name, added.department_name) == ("舊學院", "舊系")
 
 
 def test_reconcile_adds_missing_and_removes_orphan(db_sync, diff_scenario):

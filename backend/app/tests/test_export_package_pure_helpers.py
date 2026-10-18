@@ -20,6 +20,8 @@ on reportlab Paragraph + CJK font registration that runs at
 class instantiation (not a pure-helper test).
 """
 
+from types import SimpleNamespace
+
 import pytest
 
 from app.services.export_package_service import (
@@ -28,10 +30,63 @@ from app.services.export_package_service import (
     _is_dynamic_document_type,
     _unique_zip_path,
     _copy_object_into_zip,
+    _first_college_name,
+    _group_by_department,
     FILE_TYPE_LABELS,
     DEGREE_LABELS,
 )
 from app.services.zip_stream import COPY_CHUNK_SIZE
+
+
+class TestGroupByDepartment:
+    """Department folders `{code}_{name}` follow the API 1 department code; the
+    name is resolved from that code, the term row only filling a gap."""
+
+    @staticmethod
+    def _keys(student_datas, department_names=None, academy_names=None):
+        apps = [SimpleNamespace(student_data=sd) for sd in student_datas]
+        groups, _ = _group_by_department(apps, academy_names, department_names)
+        return set(groups)
+
+    def test_std_only_snapshot_gets_a_named_folder(self):
+        assert self._keys([{"std_depno": "1000"}], {"1000": "A系"}) == {"1000_A系"}
+
+    def test_transferred_student_is_filed_under_std_depno(self):
+        sd = {"std_depno": "3000", "trm_depno": "1000", "trm_depname": "A系"}
+        assert self._keys([sd], {"1000": "A系", "3000": "C系"}) == {"3000_C系"}
+
+    def test_unknown_code_falls_back_to_trm_depname(self):
+        assert self._keys([{"std_depno": "9999", "trm_depname": "舊系名"}], {"1000": "A系"}) == {"9999_舊系名"}
+
+    def test_term_code_fills_a_missing_std_depno(self):
+        assert self._keys([{"trm_depno": "1000", "trm_depname": "A系"}]) == {"1000_A系"}
+
+    def test_no_department_data_keeps_the_unknown_fallbacks(self):
+        assert self._keys([{}]) == {"unknown_未知系所"}
+
+    def test_folder_parts_are_sanitized(self):
+        assert self._keys([{"std_depno": "10/00"}], {"10/00": "A:系"}) == {"10_00_A_系"}
+
+    def test_whole_school_export_nests_under_the_college_folder(self):
+        sd = {"std_academyno": "C", "std_depno": "1000"}
+        apps = [SimpleNamespace(student_data=sd)]
+        groups, labels = _group_by_department(apps, {}, {"1000": "A系"})
+        # academies table empty → static academy table by the same API 1 code
+        assert set(groups) == {"C_資訊學院/1000_A系"}
+        assert labels == {"C_資訊學院": "資訊學院"}
+
+
+class TestFirstCollegeName:
+    def test_api1_academy_code_wins_over_the_term_name(self):
+        apps = [SimpleNamespace(student_data={"std_academyno": "C", "trm_academyname": "電機學院"})]
+        assert _first_college_name(apps) == "資訊學院"
+
+    def test_term_name_fills_a_gap(self):
+        apps = [SimpleNamespace(student_data={}), SimpleNamespace(student_data={"trm_academyname": "某學院"})]
+        assert _first_college_name(apps) == "某學院"
+
+    def test_none_when_no_snapshot_names_a_college(self):
+        assert _first_college_name([SimpleNamespace(student_data=None)]) is None
 
 
 class TestSanitizeFilename:

@@ -7,7 +7,8 @@ Covers the admin UI enhancement features:
 - _sub_type_to_chinese: Sub-type code -> display name mapping
 """
 
-from unittest.mock import Mock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, Mock
 
 from app.models.application import Application
 from app.services.manual_distribution_service import ManualDistributionService
@@ -45,6 +46,15 @@ class TestComputeTermCount:
         service = ManualDistributionService(db=Mock())
         result = service._compute_term_count({"trm_termcount": None})
         assert result is None
+
+    def test_falls_back_to_std_termcount_when_term_lookup_failed(self):
+        """A snapshot with only std_* (SIS term lookup timed out) still shows 年級."""
+        service = ManualDistributionService(db=Mock())
+        assert service._compute_term_count({"std_termcount": 4}) == 4
+
+    def test_term_row_count_wins_over_std_termcount(self):
+        service = ManualDistributionService(db=Mock())
+        assert service._compute_term_count({"trm_termcount": 5, "std_termcount": 4}) == 5
 
 
 class TestSubTypeToChinese:
@@ -106,3 +116,95 @@ class TestGetRenewalSubType:
         app.is_renewal = True
         app.sub_scholarship_type = ""
         assert service._get_renewal_sub_type(app) is None
+
+
+# ─── 學院/系所/學期數 on the distribution grid: API 1 (std_*) first ───
+
+
+def _grid_app(app_id, student_data):
+    return SimpleNamespace(
+        id=app_id,
+        deleted_at=None,
+        student_data=student_data,
+        scholarship_subtype_list=["nstc"],
+        quota_allocation_status=None,
+        cancelled_from_status=None,
+        cancelled_from_quota_status=None,
+        revoke_reason=None,
+        suspend_reason=None,
+        is_renewal=False,
+        renewal_year=None,
+        previous_application_id=None,
+        academic_year=114,
+        sub_scholarship_type="nstc",
+        scholarship_configuration=None,
+    )
+
+
+async def _grid_rows(monkeypatch, apps, department_names):
+    items = [
+        SimpleNamespace(
+            id=10 + i,
+            rank_position=i + 1,
+            allocated_sub_type=None,
+            allocation_config_id=None,
+            is_allocated=False,
+            status="ranked",
+            college_rejected=False,
+            is_supplementary=False,
+            application=app,
+        )
+        for i, app in enumerate(apps)
+    ]
+    calls = []
+
+    def _execute(stmt, *a, **k):
+        calls.append(stmt)
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = [SimpleNamespace(id=1)] if len(calls) == 1 else items
+        return result
+
+    db = MagicMock()
+    db.execute = AsyncMock(side_effect=_execute)
+    names_loader = AsyncMock(return_value=department_names)
+    monkeypatch.setattr("app.services.manual_distribution_service.load_department_names", names_loader)
+    svc = ManualDistributionService(db)
+    svc._batch_load_rejected_map = AsyncMock(return_value={})
+    svc._batch_load_review_items = AsyncMock(return_value={})
+    svc._bulk_system_received_months = AsyncMock(return_value={})
+    svc._bulk_imported_received_months = AsyncMock(return_value={})
+    rows = await svc.get_students_for_distribution(2, 114, "yearly")
+    names_loader.assert_awaited_once()  # once per request, never per row
+    return {row["application_id"]: row for row in rows}
+
+
+async def test_grid_term_lookup_failed_snapshot_is_not_blank(monkeypatch):
+    """Only std_* in the snapshot (SIS term lookup timed out) → 學院/系所/學期數 still filled."""
+    std_only = {"std_cname": "王某", "std_academyno": "E", "std_depno": "1511", "std_termcount": 4}
+    rows = await _grid_rows(monkeypatch, [_grid_app(1, std_only)], {"1511": "電機工程學系"})
+
+    assert rows[1]["college_code"] == "E"
+    assert rows[1]["college_name"] == "電機學院"
+    assert rows[1]["department_name"] == "電機工程學系"
+    assert rows[1]["term_count"] == 4
+
+
+async def test_grid_transferred_student_shows_api_1_unit_and_unknown_code_falls_back(monkeypatch):
+    transferred = {
+        "std_academyno": "E",
+        "std_depno": "1511",
+        "trm_academyno": "C",
+        "trm_academyname": "資訊學院",
+        "trm_depno": "1550",
+        "trm_depname": "資訊工程學系",
+        "trm_termcount": 3,
+    }
+    unknown = {"std_academyno": "ZZ", "std_depno": "9999", "trm_academyname": "舊學院", "trm_depname": "舊系"}
+    rows = await _grid_rows(
+        monkeypatch,
+        [_grid_app(1, transferred), _grid_app(2, unknown)],
+        {"1511": "電機工程學系", "1550": "資訊工程學系"},
+    )
+
+    assert (rows[1]["college_name"], rows[1]["department_name"]) == ("電機學院", "電機工程學系")
+    assert (rows[2]["college_name"], rows[2]["department_name"]) == ("舊學院", "舊系")

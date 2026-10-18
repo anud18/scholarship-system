@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List, Mapping, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,7 +31,9 @@ from app.services.college_ranking_export_service import (
     CollegeRankingExportService,
     ExportRow,
 )
+from app.services.department_names import load_department_names
 from app.services.professor_review_export import ProfessorReviewData
+from app.utils.application_helpers import get_department_name_from_data
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +45,14 @@ def _sort_key(a: Application):
     return (renewal_group, not code, code, a.id)
 
 
-def _dept_name_from_apps(apps: List[Application]) -> str:
-    """Department display name taken from the first application's student_data."""
+def _dept_name_from_apps(apps: List[Application], department_names: Optional[Mapping[str, str]] = None) -> str:
+    """Department display name of the first application that has one.
+
+    Resolved like every 系所 cell: the API 1 department code looked up in
+    ``department_names`` (系所代碼 → 名稱), else the term row's trm_depname.
+    """
     for a in apps:
-        name = (a.student_data or {}).get("trm_depname")
+        name = get_department_name_from_data(a.student_data or {}, department_names)
         if name:
             return str(name)
     return "未知系所"
@@ -61,6 +67,7 @@ async def build_embedded_summary_tables(
     college_labels: Optional[Dict[str, str]] = None,
     *,
     professor_review: ProfessorReviewData,
+    department_names: Optional[Mapping[str, str]] = None,
 ) -> Dict[str, bytes]:
     """Return { zip_inner_path : xlsx_bytes } for the college-level table
     (ZIP root) plus one table per department folder — and, when
@@ -71,6 +78,9 @@ async def build_embedded_summary_tables(
     guaranteeing each table's rows match the student folders next to it.
     ``professor_review`` (load_professor_review_data over the same
     applications) fills the 指導教授審核結果/評語 columns.
+    ``department_names`` (系所代碼 → 名稱) names the 系所 column and the
+    per-department tables; pass the mapping the caller already loaded for the
+    same export, otherwise it is loaded here — once for every table.
     """
     # Lazy import: keep this module's top level free of export_package_service
     # (which pulls in reportlab) so callers that only need _sort_key — e.g. the
@@ -84,6 +94,8 @@ async def build_embedded_summary_tables(
         scholarship_type=scholarship_type,
         applications=all_apps,
     )
+    if department_names is None:
+        department_names = await load_department_names(db)
 
     scholarship_name = scholarship_type.name or "獎學金"
     service = CollegeRankingExportService()
@@ -117,6 +129,7 @@ async def build_embedded_summary_tables(
                 title=f"{base_name} - {scope}",
                 sheet_name=sheet_name,
                 professor_review=professor_review,
+                department_names=department_names,
             )
         except Exception as e:
             logger.exception("summary table build failed: %s", ok_key)
@@ -131,7 +144,7 @@ async def build_embedded_summary_tables(
         college_rows.extend(dept_rows)
         if college_labels and "/" in dept_folder:
             rows_by_college_folder.setdefault(dept_folder.split("/", 1)[0], []).extend(dept_rows)
-        dept_name = _dept_name_from_apps(apps)
+        dept_name = _dept_name_from_apps(apps, department_names)
         dept_fname = _sanitize_filename(f"{base_name}_{dept_name}.xlsx")
         await _emit(
             dept_rows,

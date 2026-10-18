@@ -38,6 +38,7 @@ from app.services.college_ranking_export_service import (
 # module; the single definition now lives in the service layer.
 from app.services.export_summary_tables import _sort_key
 from app.services.professor_review_export import load_professor_review_data
+from app.utils.application_helpers import get_department_code_from_data
 
 # Re-exported for the sibling college_review export endpoints that import these
 # from here; the single definition lives in the shared util.
@@ -57,6 +58,12 @@ from ._helpers import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _department_code(app: Application) -> str:
+    """The application's department code — API 1 (std_depno) first, the term
+    row only filling a gap — that every filter and group in this module uses."""
+    return str(get_department_code_from_data(app.student_data or {}) or "").strip()
 
 
 @router.get("/applications/department-summary-export")
@@ -138,8 +145,9 @@ async def export_department_summary_single(
         )
 
     # Load applications. student_data is plain JSON (not JSONB) so filter by
-    # std_depno in Python rather than via SQL JSON-path. Typical N is < 1k per
-    # (scholarship_type, year, semester) so this is fine.
+    # the API 1 department code (std_depno) in Python rather than via SQL
+    # JSON-path. Typical N is < 1k per (scholarship_type, year, semester) so
+    # this is fine.
     stmt = select(Application).where(
         Application.scholarship_type_id == scholarship_type_id,
         Application.academic_year == academic_year,
@@ -152,7 +160,7 @@ async def export_department_summary_single(
         stmt = stmt.where(Application.semester == normalised_semester)
 
     raw_apps = list((await db.execute(stmt)).scalars().all())
-    apps = [a for a in raw_apps if ((a.student_data or {}).get("std_depno") or "").strip() in found_codes]
+    apps = [a for a in raw_apps if _department_code(a) in found_codes]
     apps.sort(key=_sort_key)
 
     # Aux data
@@ -192,6 +200,9 @@ async def export_department_summary_single(
         title=title,
         sheet_name=sheet_name,
         professor_review=professor_review,
+        # Every row's department code is one of the looked-up codes, so this
+        # names each row's 系所 cell from the departments table too.
+        department_names=name_by_code,
     )
 
     logger.info(
@@ -331,7 +342,7 @@ async def export_department_summary_bulk(
     raw_apps = list((await db.execute(stmt)).scalars().all())
     if target_dept_codes is not None:
         allowed = set(target_dept_codes)
-        apps = [a for a in raw_apps if ((a.student_data or {}).get("std_depno") or "").strip() in allowed]
+        apps = [a for a in raw_apps if _department_code(a) in allowed]
     else:
         apps = raw_apps
 
@@ -343,13 +354,12 @@ async def export_department_summary_bulk(
 
     apps.sort(key=_sort_key)
 
-    # Group by std_depno
+    # Group by the API 1 department code (std_depno)
     groups: dict[str, list[Application]] = {}
     for app in apps:
-        dept_code = ((app.student_data or {}).get("std_depno") or "").strip() or "未知"
-        groups.setdefault(dept_code, []).append(app)
+        groups.setdefault(_department_code(app) or "未知", []).append(app)
 
-    # Department name lookup
+    # Department name lookup — also names each row's 系所 cell (passed to the builder)
     dept_codes = list(groups.keys())
     dept_name_rows = (await db.execute(select(Department).where(Department.code.in_(dept_codes)))).scalars().all()
     name_by_code = {d.code: d.name for d in dept_name_rows}
@@ -387,6 +397,7 @@ async def export_department_summary_bulk(
                 title=title,
                 sheet_name=sheet_name,
                 professor_review=professor_review,
+                department_names=name_by_code,
             )
             inner_name = (
                 f"{academic_year}學年度{scholarship_name}學生資料彙整表"

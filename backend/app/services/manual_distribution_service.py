@@ -24,10 +24,16 @@ from app.models.payment_roster import PaymentRoster, PaymentRosterItem, RosterSt
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipSubTypeConfig
 from app.models.student import Academy
 from app.services.application_builder import order_sub_type_preferences
+from app.services.department_names import load_department_names
 from app.services.professor_review_export import load_professor_reviews, normalize_sub_type
 from app.services.received_months_service import (
     calculate_received_months_bulk_async,
     get_imported_months_bulk_async,
+)
+from app.utils.application_helpers import (
+    get_academy_name_from_data,
+    get_department_name_from_data,
+    get_term_count_from_data,
 )
 from app.utils.student_snapshot_fields import format_enrollment_date_roc
 from app.utils.sub_type_agency import sub_type_agency_label
@@ -765,6 +771,7 @@ class ManualDistributionService:
         # not overridden; see docs/received-months-calculation.md.
         system_months = await self._bulk_system_received_months(items, scholarship_type_id, academic_year, semester)
         imported_months = await self._bulk_imported_received_months(items, scholarship_type_id)
+        department_names = await load_department_names(self.db)
 
         students = []
         index_by_app: dict[int, int] = {}
@@ -867,8 +874,9 @@ class ManualDistributionService:
                 "college_rejected": item.college_rejected,
                 "is_supplementary": item.is_supplementary,
                 "college_code": student_college,
-                "college_name": student_data.get("trm_academyname", ""),
-                "department_name": student_data.get("trm_depname", ""),
+                # API 1 (std_*) decides 學院/系所; the term row only fills a gap
+                "college_name": get_academy_name_from_data(student_data) or "",
+                "department_name": get_department_name_from_data(student_data, department_names) or "",
                 "term_count": term_count,
                 "student_name": student_data.get("std_cname", ""),
                 "nationality": student_data.get("std_nation", ""),
@@ -1725,8 +1733,12 @@ class ManualDistributionService:
             return f"{app.academic_year}新申請"
 
     def _compute_term_count(self, student_data: dict) -> int | None:
-        """Get student's semester count (第幾學期) from SIS API data."""
-        term_count = student_data.get("trm_termcount")
+        """Get student's semester count (第幾學期) from SIS API data.
+
+        The term row's count first, API 1's std_termcount when the term lookup
+        failed — so a SIS timeout at submission does not blank 年級.
+        """
+        term_count = get_term_count_from_data(student_data)
         if term_count is not None:
             try:
                 return int(term_count)

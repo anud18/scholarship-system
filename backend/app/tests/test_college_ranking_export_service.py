@@ -67,6 +67,7 @@ def _build_workbook(
     sub_type_labels: Optional[Dict[str, str]] = None,
     title: str = "114學年度博士生獎學金學生資料彙整表",
     sheet_name: str = "114學年",
+    department_names: Optional[Dict[str, str]] = None,
 ) -> List[List[Any]]:
     svc = CollegeRankingExportService()
     blob = svc.build_workbook(
@@ -75,6 +76,7 @@ def _build_workbook(
         sub_type_labels=sub_type_labels or {},
         title=title,
         sheet_name=sheet_name,
+        department_names=department_names,
     )
     wb = load_workbook(io.BytesIO(blob))
     ws = wb[sheet_name]
@@ -269,6 +271,67 @@ class TestStaticFieldEdgeCases:
         # 16=E-mail, 17=通訊地址, 18=指導教授姓名 (default None -> "").
         for idx in [3, 4, 6, 7, 8, 9, 12, 13, 14, 15, 16, 17]:
             assert data[idx] == "", f"col {idx} expected empty string, got {data[idx]!r}"
+
+
+class TestApiOneIdentityColumns:
+    """學院/系所 come from the student's own record (API 1 codes, names resolved
+    from those codes); the term row only fills a gap. 年級 falls back to
+    std_termcount when the term lookup failed."""
+
+    COLLEGE, DEPT, GRADE = 3, 4, 5
+
+    def test_std_only_snapshot_fills_college_department_and_grade(self):
+        # Term lookup failed (SIS timeout): no trm_* keys at all.
+        app = FakeApplication(student_data={"std_academyno": "C", "std_depno": "1000", "std_termcount": 3})
+        data = _build_workbook([_make_row(app=app)], department_names={"1000": "資訊工程學系"})[2]
+        assert data[self.COLLEGE] == "6. 資訊學院"
+        assert data[self.DEPT] == "資訊工程學系"
+        assert data[self.GRADE] == 2
+
+    def test_transferred_student_is_labelled_by_the_api1_units(self):
+        app = FakeApplication(
+            student_data={
+                "std_academyno": "C",
+                "std_depno": "3000",
+                "trm_academyno": "E",
+                "trm_academyname": "電機學院",
+                "trm_depno": "1000",
+                "trm_depname": "電機工程學系",
+                "trm_termcount": 4,
+            }
+        )
+        data = _build_workbook([_make_row(app=app)], department_names={"3000": "資訊工程學系"})[2]
+        assert data[self.COLLEGE] == "6. 資訊學院"
+        assert data[self.DEPT] == "資訊工程學系"
+        assert data[self.GRADE] == 2  # term-only 年級 still reads trm_termcount
+
+    def test_unknown_department_code_falls_back_to_trm_depname(self):
+        app = FakeApplication(student_data={"std_depno": "9999", "trm_depname": "舊系名"})
+        data = _build_workbook([_make_row(app=app)], department_names={"1000": "資訊工程學系"})[2]
+        assert data[self.DEPT] == "舊系名"
+
+    def test_without_a_mapping_the_term_name_is_used(self):
+        # Callers that do not pass department_names keep rendering trm_depname.
+        app = FakeApplication(student_data={"std_depno": "1000", "trm_depname": "某系"})
+        assert _build_workbook([_make_row(app=app)])[2][self.DEPT] == "某系"
+
+    def test_trm_termcount_wins_over_std_termcount(self):
+        app = FakeApplication(student_data={"trm_termcount": 7, "std_termcount": 9})
+        assert _build_workbook([_make_row(app=app)])[2][self.GRADE] == 4
+
+    def test_pdf_shares_the_department_mapping(self):
+        app = FakeApplication(student_data={"std_depno": "1000", "trm_depname": "舊系名"})
+        svc = CollegeRankingExportService()
+        cells = svc._row_cells(_make_row(app=app), 1, {}, [], department_names={"1000": "資訊工程學系"})
+        assert cells[self.DEPT] == "資訊工程學系"
+        pdf = svc.build_pdf(
+            rows=[_make_row(app=app)],
+            dynamic_fields=[],
+            sub_type_labels={},
+            title="T",
+            department_names={"1000": "資訊工程學系"},
+        )
+        assert pdf.startswith(b"%PDF")
 
 
 class TestSubTypeRendering:

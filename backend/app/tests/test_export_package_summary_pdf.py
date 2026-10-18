@@ -170,6 +170,60 @@ class TestDegreeRendering:
         assert "學位\n9" in text
 
 
+def _basic_info_text(student_data, department_names=None):
+    svc = ExportPackageService(db=None, minio_service=None)
+    app = SimpleNamespace(id=1, student_data=student_data, submitted_form_data={"fields": {}, "documents": []})
+    pdf = svc._generate_summary_pdf(app, "某獎學金", 114, "first", {}, department_names=department_names)
+    return PdfReader(io.BytesIO(pdf)).pages[0].extract_text()
+
+
+class TestApiOneIdentityRows:
+    """學院/系所 follow the student's own record (API 1 codes); term-only rows
+    fall back to the API 1 value when the term lookup failed."""
+
+    def test_std_only_snapshot_fills_every_identity_row(self):
+        text = _basic_info_text(
+            {
+                "std_stdcode": "001",
+                "std_cname": "甲",
+                "std_academyno": "C",
+                "std_depno": "1000",
+                "std_degree": "1",
+                "std_termcount": 3,
+            },
+            {"1000": "資訊工程學系"},
+        )
+        assert "學院\n資訊學院" in text
+        assert "系所\n資訊工程學系" in text
+        assert "學位\n博士" in text
+        assert "修業學期數\n3" in text
+
+    def test_transferred_student_shows_the_api1_units(self):
+        text = _basic_info_text(
+            {
+                "std_academyno": "C",
+                "std_depno": "3000",
+                "trm_academyno": "E",
+                "trm_academyname": "電機學院",
+                "trm_depno": "1000",
+                "trm_depname": "電機工程學系",
+            },
+            {"3000": "資訊工程學系"},
+        )
+        assert "學院\n資訊學院" in text
+        assert "系所\n資訊工程學系" in text
+        assert "電機" not in text
+
+    def test_unknown_department_code_falls_back_to_trm_depname(self):
+        text = _basic_info_text({"std_depno": "9999", "trm_depname": "舊系名"}, {"1000": "資訊工程學系"})
+        assert "系所\n舊系名" in text
+
+    def test_no_identity_data_renders_dashes(self):
+        text = _basic_info_text({})
+        assert "學院\n—" in text
+        assert "系所\n—" in text
+
+
 class TestSummaryPdfBasics:
     @pytest.mark.parametrize(
         "semester,expected",

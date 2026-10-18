@@ -7,7 +7,7 @@ import logging
 from copy import deepcopy
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from sqlalchemy import and_, desc
 from sqlalchemy import func as sa_func
@@ -42,11 +42,18 @@ from app.schemas.application import (
 )
 from app.services.application_builder import backfill_professor_assignments, order_sub_type_preferences
 from app.services.application_field_service import FIXED_ADVISOR_KEYS, FIXED_KEY_POSTAL_ACCOUNT
+from app.services.department_names import load_department_names
 from app.services.eligibility_service import EligibilityService
 from app.services.email_automation_service import email_automation_service
 from app.services.email_service import EmailService
 from app.services.minio_service import minio_service
 from app.services.student_service import StudentService
+from app.utils.application_helpers import (
+    get_academy_code_from_data,
+    get_academy_name_from_data,
+    get_department_code_from_data,
+    get_department_name_from_data,
+)
 from app.utils.college_scope import (
     college_scope_for_user,
     college_user_may_access,
@@ -131,12 +138,19 @@ class ApplicationService:
             return None
         return user.nycu_id
 
-    def _extract_student_fields(self, student_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _extract_student_fields(
+        self, student_data: Dict[str, Any], department_names: Optional[Mapping[str, str]] = None
+    ) -> Dict[str, Any]:
         """
         Extract commonly used student fields from student_data snapshot.
 
         Converts raw API data into structured fields for ApplicationResponse.
-        Prefers term data (trm_*) over basic data (std_*) when both available.
+        學院/系所 follow the API 1 record (std_*): the code comes from std_* first and the
+        name is resolved from that code (``department_names``: code → name, see
+        load_department_names), the term row only filling a gap — so a snapshot whose
+        term lookup failed still has names, and a transferred student's code and name
+        describe the same unit. Term-only data (degree, term count, GPA, rankings)
+        prefers the term row (trm_*).
         """
         if not student_data:
             return {}
@@ -149,11 +163,11 @@ class ApplicationService:
             "student_pid": student_data.get("std_pid"),
             "student_email": student_data.get("com_email"),
             "student_phone": student_data.get("com_cellphone"),
-            # Academic org (prefer term data)
-            "academy_code": student_data.get("trm_academyno") or student_data.get("std_academyno"),
-            "academy_name": student_data.get("trm_academyname"),
-            "department_code": student_data.get("trm_depno") or student_data.get("std_depno"),
-            "department_name": student_data.get("trm_depname"),
+            # Academic org (API 1 first; names resolved from the API 1 code)
+            "academy_code": get_academy_code_from_data(student_data),
+            "academy_name": get_academy_name_from_data(student_data),
+            "department_code": get_department_code_from_data(student_data),
+            "department_name": get_department_name_from_data(student_data, department_names),
             "degree": student_data.get("trm_degree") or student_data.get("std_degree"),
             "studying_status": student_data.get("std_studingstatus"),
             # Enrollment
@@ -254,7 +268,7 @@ class ApplicationService:
         )
 
         # Extract student fields from student_data snapshot
-        student_fields = self._extract_student_fields(application.student_data)
+        student_fields = self._extract_student_fields(application.student_data, await load_department_names(self.db))
 
         return ApplicationResponse(
             id=application.id,
@@ -1008,7 +1022,7 @@ class ApplicationService:
             scholarship_name = application.scholarship.name
 
         # Extract student fields from student_data snapshot
-        student_fields = self._extract_student_fields(application.student_data)
+        student_fields = self._extract_student_fields(application.student_data, await load_department_names(self.db))
 
         # Get user information as fallback for student_name and student_no
         if not student_fields.get("student_name") and application.student:

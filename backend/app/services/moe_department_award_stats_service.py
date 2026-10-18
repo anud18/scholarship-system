@@ -32,6 +32,7 @@ from app.models.student import Department
 from app.services.export_table_chassis import apply_xlsx_borders
 from app.services.moe_department_stats_layout import MOE_DEPARTMENT_FIELD_LAYOUT
 from app.services.stats_applicant_source import load_applicant_rows
+from app.utils.application_helpers import get_department_code_from_data
 from app.utils.excel_safety import sanitize_excel_cell
 from app.utils.export_download import sanitise_filename_part
 from app.utils.sub_type_agency import sub_type_agency_label
@@ -106,9 +107,9 @@ _ROW_BY_NAME: Dict[str, Tuple[str, str]] = {
 
 
 def department_code_from_data(student_data: Optional[Mapping[str, Any]]) -> Optional[str]:
-    """``std_depno`` first — the same std-first precedence the 獲獎人數 sheets use."""
-    data = student_data or {}
-    code = data.get("std_depno") or data.get("trm_depno")
+    """API 1's ``std_depno`` first (``get_department_code_from_data``) — the same
+    std-first precedence the 獲獎人數 sheets use."""
+    code = get_department_code_from_data(dict(student_data or {}))
     return str(code).strip() if code else None
 
 

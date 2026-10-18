@@ -7,6 +7,7 @@ Application.__new__, which leaves _sa_instance_state unset).
 
 import io
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from openpyxl import load_workbook
@@ -55,6 +56,21 @@ class TestDeptNameFromApps:
         apps = [_mk_app(1, 11, "1000", "", "001")]
         assert _dept_name_from_apps(apps) == "未知系所"
 
+    def test_names_the_api1_code_from_the_departments_table(self):
+        # Transferred student: the term row still says 1000/A系, API 1 says 3000.
+        app = _mk_app(1, 11, "1000", "A系", "001")
+        app.student_data = {**app.student_data, "std_depno": "3000"}
+        assert _dept_name_from_apps([app], {"3000": "C系"}) == "C系"
+
+    def test_std_only_snapshot_is_named_from_its_code(self):
+        app = Application(user_id=11, scholarship_type_id=1, academic_year=114, student_data={"std_depno": "1000"})
+        assert _dept_name_from_apps([app], {"1000": "A系"}) == "A系"
+
+    def test_unknown_code_falls_back_to_trm_depname(self):
+        app = _mk_app(1, 11, "1000", "舊系名", "001")
+        app.student_data = {**app.student_data, "std_depno": "9999"}
+        assert _dept_name_from_apps([app], {"1000": "A系"}) == "舊系名"
+
 
 @pytest.fixture
 def _patch_aux(monkeypatch):
@@ -63,6 +79,9 @@ def _patch_aux(monkeypatch):
         return ([], {}, {}, {})
 
     monkeypatch.setattr("app.services.export_summary_tables.load_export_aux_data", _fake_aux)
+    loader = AsyncMock(return_value={})
+    monkeypatch.setattr("app.services.export_summary_tables.load_department_names", loader)
+    return loader
 
 
 def _read_col(xlsx_bytes, col_idx):
@@ -130,7 +149,7 @@ async def test_college_name_falls_back_to_全校(_patch_aux):
 
 @pytest.mark.asyncio
 async def test_table_build_failure_writes_error_txt(_patch_aux, monkeypatch):
-    def _boom(self, *, rows, dynamic_fields, sub_type_labels, title, sheet_name, professor_review):
+    def _boom(self, *, rows, dynamic_fields, sub_type_labels, title, sheet_name, professor_review, department_names):
         raise RuntimeError("render exploded")
 
     monkeypatch.setattr(
@@ -155,3 +174,51 @@ async def test_table_build_failure_writes_error_txt(_patch_aux, monkeypatch):
     assert b"render exploded" in tables["1000_A系/_錯誤_總表生成失敗.txt"]
     # No xlsx produced when every build fails
     assert not any(k.endswith(".xlsx") for k in tables)
+
+
+@pytest.mark.asyncio
+async def test_departments_table_loaded_once_and_names_every_table(_patch_aux):
+    """Without a caller-supplied mapping the departments table is loaded once for
+    all tables; a std-only snapshot (term lookup failed) gets its 系所 and 年級
+    from API 1, and a transferred student is named by std_depno."""
+    _patch_aux.return_value = {"1000": "A系", "3000": "C系"}
+    std_only = Application(
+        user_id=11,
+        scholarship_type_id=1,
+        academic_year=114,
+        student_data={"std_depno": "1000", "std_termcount": 5, "std_stdcode": "001"},
+    )
+    std_only.id = 1
+    transferred = _mk_app(2, 12, "1000", "A系", "002")
+    transferred.student_data = {**transferred.student_data, "std_depno": "3000"}
+    stype = SimpleNamespace(name="某獎學金", code="phd", sub_type_configs=[])
+
+    tables = await build_embedded_summary_tables(
+        db=None,
+        scholarship_type=stype,
+        dept_groups={"1000_A系": [std_only], "3000_C系": [transferred]},
+        college_name="某學院",
+        academic_year=114,
+        professor_review=ProfessorReviewData(),
+    )
+
+    assert _patch_aux.await_count == 1
+    college_key = "114學年度某獎學金學生資料彙整表_某學院.xlsx"
+    assert _read_col(tables[college_key], 5) == ["A系", "C系"]  # 系所
+    assert _read_col(tables[college_key], 6) == [3, ""]  # 年級: ceil(5/2); no termcount at all → blank
+    assert "3000_C系/114學年度某獎學金學生資料彙整表_C系.xlsx" in tables
+
+
+@pytest.mark.asyncio
+async def test_caller_supplied_mapping_skips_the_load(_patch_aux):
+    stype = SimpleNamespace(name="某獎學金", code="phd", sub_type_configs=[])
+    await build_embedded_summary_tables(
+        db=None,
+        scholarship_type=stype,
+        dept_groups={"1000_A系": [_mk_app(1, 11, "1000", "A系", "001")]},
+        college_name="某學院",
+        academic_year=114,
+        professor_review=ProfessorReviewData(),
+        department_names={"1000": "A系"},
+    )
+    assert _patch_aux.await_count == 0

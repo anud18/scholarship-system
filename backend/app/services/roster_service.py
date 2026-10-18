@@ -6,7 +6,7 @@ Roster service core logic for scholarship payment roster generation
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from sqlalchemy import and_, case as sa_case, func, or_
 from sqlalchemy.orm import Session, joinedload
@@ -37,10 +37,12 @@ from app.models.payment_roster import (
 )
 from app.models.roster_audit import RosterAuditAction, RosterAuditLevel, RosterAuditLog
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule
+from app.models.student import Department
 from app.models.user import User
 from app.schemas.payment_roster import DistributionDiffEntry, RevokedSuspendedEntry
 from app.services.audit_service import audit_service
 from app.services.student_verification_service import StudentVerificationService
+from app.utils.application_helpers import get_academy_name_from_data, get_department_name_from_data
 from app.utils.bank_account_fields import BANK_ACCOUNT_FIELD_LOOKUP
 from app.utils.pii_masking import mask_id_number
 
@@ -2225,10 +2227,23 @@ class RosterService:
                 result[item.application_id] = item
         return result
 
-    def get_distribution_diff_for_roster(self, roster_id: int) -> dict:
+    def _load_department_names(self) -> Dict[str, str]:
+        """系所代碼 → 名稱 — the sync-session twin of ``load_department_names``.
+
+        Read once per operation (the table is tiny), never per row.
+        """
+        rows = self.db.query(Department.code, Department.name).filter(Department.code.isnot(None)).all()
+        return {code: name for code, name in rows}
+
+    def get_distribution_diff_for_roster(
+        self, roster_id: int, department_names: Optional[Mapping[str, str]] = None
+    ) -> dict:
         """Compute the diff between this roster and its slice of the
         distribution. Returns a dict with to_add (allocated-but-missing) and
-        to_remove (in-roster-but-unallocated) lists of DistributionDiffEntry."""
+        to_remove (in-roster-but-unallocated) lists of DistributionDiffEntry.
+
+        學院/系所 follow API 1 (std_academyno / std_depno, names resolved from the
+        code); ``department_names`` (代碼 → 名稱) is loaded here when not given."""
         from app.models.application import ApplicationStatus
 
         roster = self.db.get(PaymentRoster, roster_id)
@@ -2242,6 +2257,8 @@ class RosterService:
 
         existing_items = self.db.query(PaymentRosterItem).filter(PaymentRosterItem.roster_id == roster_id).all()
         existing_app_ids = {it.application_id for it in existing_items}
+        if department_names is None:
+            department_names = self._load_department_names()
 
         to_add = []
         for app_id, ranking_item in allocated_map.items():
@@ -2275,8 +2292,8 @@ class RosterService:
                     item_id=None,
                     student_id=std_code,
                     student_name=std_name,
-                    department_name=sd.get("trm_depname"),
-                    college_name=sd.get("trm_academyname"),
+                    department_name=get_department_name_from_data(sd, department_names),
+                    college_name=get_academy_name_from_data(sd),
                     allocation_year=consumed.academic_year,
                     allocated_sub_type=ranking_item.allocated_sub_type,
                     application_identity=None,
@@ -2308,8 +2325,8 @@ class RosterService:
                     # which would render under the 學號 column in the UI).
                     student_id=sd.get("std_stdcode"),
                     student_name=item.student_name,
-                    department_name=sd.get("trm_depname"),
-                    college_name=sd.get("trm_academyname"),
+                    department_name=get_department_name_from_data(sd, department_names),
+                    college_name=get_academy_name_from_data(sd),
                     allocation_year=item.allocation_year,
                     allocated_sub_type=item.allocated_sub_type,
                     application_identity=item.application_identity,
