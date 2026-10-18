@@ -153,3 +153,15 @@ tbody tr:last-child td { border-bottom: 0; }
 
 .hits { margin: 0; padding-left: 16px; }
 .hits .remark { color: var(--muted); }
+
+/* 申請人數統計 */
+.warnings {
+  margin: 10px 0; padding: 10px 14px 10px 30px; border-radius: 8px;
+  background: var(--warn-bg); color: var(--warn-text); font-size: .88rem;
+}
+.report-caption { margin: 10px 0; }
+table.stats th.num, table.stats td.num { text-align: right; font-variant-numeric: tabular-nums; }
+table.stats td.zero { color: var(--muted); }
+table.stats td.strong { font-weight: 700; }
+table.stats tr.empty-row td { color: var(--muted); }
+table.stats tfoot td { font-weight: 700; background: var(--bg); border-top: 2px solid var(--border); border-bottom: 0; }
