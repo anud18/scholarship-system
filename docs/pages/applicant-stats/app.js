@@ -21,7 +21,7 @@
       tab: "外籍生國科會申請人數",
       sheetName: "統計各學院-外籍生國科會人數",
       titleSuffix: "統計各學院外籍生國科會申請人數",
-      caption: "國籍不是中華民國，且申請類別包含國科會（含國科會為第一或第二志願）的學生，依學院 × 年級計數。",
+      caption: "國籍不是中華民國，且申請類別包含國科會（含國科會為第一或第二志願）的學生，依學院 × 國籍計數；最後一欄為國籍分布概況。",
     },
   ]);
 
@@ -65,11 +65,21 @@
 
   function renderTable(table) {
     const labels = Export.headerLabels(table).map(String);
+    const numeric = Export.numericColumnCount(table);
+    const cells = (values, bold) =>
+      values.map((value, i) =>
+        i < numeric
+          ? numberCell(value, bold || i === numeric - 1)
+          : el("td", { className: `distribution${bold ? " strong" : ""}`, text: value }),
+      );
     $("stats-head").replaceChildren(
       el("tr", {}, [
         el("th", { text: "編號" }),
         el("th", { text: "學院/年級" }),
-        ...labels.map((label, i) => el("th", { className: "num", text: i < table.grades.length ? `${label} 年級` : label })),
+        ...labels.map((label, i) => {
+          const isGrade = i < table.columns.length && typeof table.columns[i].label === "number";
+          return el("th", { className: i < numeric ? "num" : "", text: isGrade ? `${label} 年級` : label });
+        }),
       ]),
     );
     $("stats-body").replaceChildren(
@@ -77,7 +87,7 @@
         el("tr", { className: row.total === 0 ? "empty-row" : "" }, [
           el("td", { className: "num", text: row.no == null ? "" : String(row.no) }),
           el("td", { text: row.label }),
-          ...Export.rowValues(table, row).map((value, i, all) => numberCell(value, i === all.length - 1)),
+          ...cells(Export.rowValues(table, row), false),
         ]),
       ),
     );
@@ -85,7 +95,7 @@
       el("tr", { className: "total" }, [
         el("td", {}),
         el("td", { text: "合計" }),
-        ...Export.rowValues(table, table.totals).map((value) => numberCell(value, true)),
+        ...cells(Export.rowValues(table, table.totals), true),
       ]),
     );
   }

@@ -4,7 +4,8 @@
  * Input is the 學生資料彙整表 parsed by RenewalCompare.parseSheet (one record
  * per applicant row, `row` = the raw cells). Output tables follow the office's
  * 「統計各學院各年級申請人數」 template: one row per college in the template's
- * order (all 19, zero rows included), one column per 年級, then 合計.
+ * order (all 19, zero rows included), one column per 年級 (or per 國籍 for the
+ * 外籍生 report, which also ends with a 國籍分布概況 text column), then 合計.
  *
  * Loaded as a classic <script> (window.ApplicantStats) and via require() in
  * the Node tests.
@@ -111,6 +112,7 @@
       rowNumber: record.rowIndex + 1,
       college: resolveCollege(cell(record.row, columns.college)),
       grade: parseGrade(cell(record.row, columns.grade)),
+      nationality: compact(cell(record.row, columns.nationality)),
       foreign: isForeign(cell(record.row, columns.nationality)),
       nationalityBlank: compact(cell(record.row, columns.nationality)) === "",
       nstc: appliesNstc(cell(record.row, columns.category)),
@@ -120,29 +122,65 @@
   const range = (n) => Array.from({ length: n }, (_, i) => i + 1);
 
   /**
-   * College × 年級 counts. Every template college gets a row (zeros included);
+   * College × column counts. `columns` = [{ key, label }], keyOf(applicant)
+   * picks the column key. Every template college gets a row (zeros included);
    * unknown colleges are appended after them so nobody silently drops out.
    */
-  function tallyByCollegeGrade(applicants) {
-    const maxGrade = applicants.reduce((max, a) => Math.max(max, a.grade || 0), 0);
-    const grades = range(Math.max(MIN_GRADE_COLUMNS, maxGrade));
-    const hasUnknownGrade = applicants.some((a) => a.grade === null);
+  function tallyByCollege(applicants, columns, keyOf) {
     const unknownLabels = [...new Set(applicants.filter((a) => a.college.index === -1).map((a) => a.college.label))];
     const labels = [...COLLEGES.map((c) => c.name), ...unknownLabels];
-
     const rows = labels.map((label, i) => {
       const members = applicants.filter((a) => a.college.label === label);
-      const counts = grades.map((g) => members.filter((a) => a.grade === g).length);
-      const unknownGrade = members.filter((a) => a.grade === null).length;
-      return { no: i < COLLEGES.length ? i + 1 : null, label, counts, unknownGrade, total: members.length };
+      const counts = columns.map((column) => members.filter((a) => keyOf(a) === column.key).length);
+      return { no: i < COLLEGES.length ? i + 1 : null, label, counts, total: members.length };
     });
-    const sumOf = (pick) => rows.reduce((sum, row) => sum + pick(row), 0);
     const totals = {
-      counts: grades.map((_, gi) => sumOf((row) => row.counts[gi])),
-      unknownGrade: sumOf((row) => row.unknownGrade),
-      total: sumOf((row) => row.total),
+      counts: columns.map((_, ci) => rows.reduce((sum, row) => sum + row.counts[ci], 0)),
+      total: rows.reduce((sum, row) => sum + row.total, 0),
     };
-    return { grades, hasUnknownGrade, rows, totals };
+    return { columns, rows, totals };
+  }
+
+  /** 年級 1..max(9, highest), plus 年級未填 only when some 年級 is blank. */
+  function gradeColumns(applicants) {
+    const maxGrade = applicants.reduce((max, a) => Math.max(max, a.grade || 0), 0);
+    const grades = range(Math.max(MIN_GRADE_COLUMNS, maxGrade)).map((g) => ({ key: g, label: g }));
+    const unknown = applicants.some((a) => a.grade === null) ? [{ key: null, label: "年級未填" }] : [];
+    return [...grades, ...unknown];
+  }
+
+  /** One column per 國籍, most applicants first (ties by name). */
+  function nationalityColumns(applicants) {
+    const counts = applicants.reduce((map, a) => new Map(map).set(a.nationality, (map.get(a.nationality) || 0) + 1), new Map());
+    return [...counts.entries()]
+      .sort(([nameA, countA], [nameB, countB]) => countB - countA || nameA.localeCompare(nameB, "zh-Hant"))
+      .map(([name]) => ({ key: name, label: name }));
+  }
+
+  /** "越南2人，印尼1人" — non-zero columns, most first, in column order on ties. */
+  function distributionText(columns, counts) {
+    return columns
+      .map((column, i) => ({ label: column.label, count: counts[i], order: i }))
+      .filter((entry) => entry.count > 0)
+      .sort((a, b) => b.count - a.count || a.order - b.order)
+      .map((entry) => `${entry.label}${entry.count}人`)
+      .join("，");
+  }
+
+  function tallyByCollegeGrade(applicants) {
+    return { ...tallyByCollege(applicants, gradeColumns(applicants), (a) => a.grade), totalLabel: "所有年級合計" };
+  }
+
+  function tallyByCollegeNationality(applicants) {
+    const table = tallyByCollege(applicants, nationalityColumns(applicants), (a) => a.nationality);
+    const withText = (row) => ({ ...row, distribution: distributionText(table.columns, row.counts) });
+    return {
+      ...table,
+      rows: table.rows.map(withText),
+      totals: withText(table.totals),
+      totalLabel: "外籍生合計",
+      distributionLabel: "外籍學生國籍分布概況",
+    };
   }
 
   /** Data-quality notes worth showing next to the tables. */
@@ -167,7 +205,7 @@
     const applicants = toApplicants(records, columns);
     return {
       byGrade: tallyByCollegeGrade(applicants),
-      foreignNstc: tallyByCollegeGrade(applicants.filter((a) => a.foreign && a.nstc)),
+      foreignNstc: tallyByCollegeNationality(applicants.filter((a) => a.foreign && a.nstc)),
       warnings: collectWarnings(applicants, columns),
       applicantCount: applicants.length,
     };
@@ -188,6 +226,8 @@
     appliesNstc,
     locateColumns,
     tallyByCollegeGrade,
+    tallyByCollegeNationality,
+    distributionText,
     buildReports,
     reportPrefix,
   };

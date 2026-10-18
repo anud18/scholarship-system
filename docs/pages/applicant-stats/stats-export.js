@@ -10,19 +10,24 @@
   const FONT_SIZE = 14;
   const ROW_HEIGHT = 21;
   const TITLE_HEIGHT = 30;
-  const WIDTHS = Object.freeze({ no: 7, college: 26, grade: 9, total: 16 });
+  const WIDTHS = Object.freeze({ no: 7, college: 26, count: 10, total: 16, distribution: 48 });
   const THIN = { style: "thin" };
   const BORDER = Object.freeze({ top: THIN, left: THIN, bottom: THIN, right: THIN });
   const HEADER_FILL = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F2F2" } };
   const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
-  /** Header labels after 編號 / 學院: 1..N, optional 未填, 所有年級合計. */
+  /** Header labels after 編號 / 學院: one per column, 合計, optional 分布概況 text. */
   function headerLabels(table) {
-    return [...table.grades, ...(table.hasUnknownGrade ? ["年級未填"] : []), "所有年級合計"];
+    return [...table.columns.map((c) => c.label), table.totalLabel, ...(table.distributionLabel ? [table.distributionLabel] : [])];
   }
 
   function rowValues(table, row) {
-    return [...row.counts, ...(table.hasUnknownGrade ? [row.unknownGrade] : []), row.total];
+    return [...row.counts, row.total, ...(table.distributionLabel ? [row.distribution] : [])];
+  }
+
+  /** Count + 合計 columns; the 分布概況 column (if any) is text and comes last. */
+  function numericColumnCount(table) {
+    return table.columns.length + 1;
   }
 
   function styleCell(cell, { bold = false, align = "center", fill = null } = {}) {
@@ -50,8 +55,11 @@
 
     sheet.getColumn(1).width = WIDTHS.no;
     sheet.getColumn(2).width = WIDTHS.college;
+    const numeric = numericColumnCount(table);
+    const widthOf = (i) => (i >= numeric ? WIDTHS.distribution : i === numeric - 1 ? WIDTHS.total : WIDTHS.count);
+    const alignOf = (col) => (col === 2 || col - 3 >= numeric ? "left" : "center");
     labels.forEach((_, i) => {
-      sheet.getColumn(3 + i).width = i === labels.length - 1 ? WIDTHS.total : WIDTHS.grade;
+      sheet.getColumn(3 + i).width = widthOf(i);
     });
 
     sheet.mergeCells(1, 1, 1, lastCol);
@@ -63,13 +71,13 @@
     const header = sheet.getRow(2);
     header.values = ["編號", "學院/年級", ...labels];
     header.height = ROW_HEIGHT;
-    header.eachCell((cell, col) => styleCell(cell, { bold: true, align: col === 2 ? "left" : "center", fill: HEADER_FILL }));
+    header.eachCell((cell, col) => styleCell(cell, { bold: true, align: alignOf(col), fill: HEADER_FILL }));
 
     table.rows.forEach((row, i) => {
       const excelRow = sheet.getRow(3 + i);
       excelRow.values = [row.no ?? "", row.label, ...rowValues(table, row)];
       excelRow.height = ROW_HEIGHT;
-      excelRow.eachCell({ includeEmpty: true }, (cell, col) => styleCell(cell, { align: col === 2 ? "left" : "center" }));
+      excelRow.eachCell({ includeEmpty: true }, (cell, col) => styleCell(cell, { align: alignOf(col) }));
     });
 
     const firstDataRow = 3;
@@ -80,11 +88,12 @@
     totalRow.getCell(2).value = "合計";
     totalValues.forEach((result, i) => {
       const letter = columnLetter(3 + i);
-      totalRow.getCell(3 + i).value = { formula: `SUM(${letter}${firstDataRow}:${letter}${lastDataRow})`, result };
+      totalRow.getCell(3 + i).value =
+        i < numeric ? { formula: `SUM(${letter}${firstDataRow}:${letter}${lastDataRow})`, result } : result;
     });
     totalRow.height = ROW_HEIGHT;
     totalRow.eachCell({ includeEmpty: true }, (cell, col) =>
-      styleCell(cell, { bold: true, align: col === 2 ? "left" : "center", fill: HEADER_FILL }),
+      styleCell(cell, { bold: true, align: alignOf(col), fill: HEADER_FILL }),
     );
     return sheet;
   }
@@ -99,5 +108,5 @@
     window.RenewalDom.saveBlob(new Blob([buffer], { type: XLSX_MIME }), fileName);
   }
 
-  window.ApplicantStatsExport = { downloadReports, headerLabels, rowValues };
+  window.ApplicantStatsExport = { downloadReports, headerLabels, rowValues, numericColumnCount };
 })();

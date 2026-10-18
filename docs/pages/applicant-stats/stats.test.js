@@ -53,21 +53,24 @@ test("buildReports tallies college × 年級 and the foreign 國科會 subset", 
   const row = (table, label) => table.rows.find((r) => r.label === label);
 
   assert.equal(report.applicantCount, 5);
-  assert.equal(report.byGrade.grades.length, 9);
+  assert.deepEqual(report.byGrade.columns.map((c) => c.label), [1, 2, 3, 4, 5, 6, 7, 8, 9, "年級未填"]);
   assert.equal(report.byGrade.rows.length, 20); // 19 template colleges + 外太空學院
   assert.deepEqual(row(report.byGrade, "醫學院").counts.slice(0, 3), [2, 0, 0]);
   assert.equal(row(report.byGrade, "電機學院").total, 2);
-  assert.equal(row(report.byGrade, "外太空學院").unknownGrade, 1);
+  assert.equal(row(report.byGrade, "外太空學院").counts[9], 1);
   assert.equal(row(report.byGrade, "人文藝術與社會學院").total, 0);
-  assert.equal(report.byGrade.hasUnknownGrade, true);
   assert.equal(report.byGrade.totals.total, 5);
   assert.equal(report.byGrade.totals.counts[0], 2);
 
   // 乙 (越南, 國科會) + 丙 (印度, 第二志願 國科會); 丁 is 教育部 only, 戊 has no 國籍.
-  assert.equal(report.foreignNstc.totals.total, 2);
-  assert.equal(row(report.foreignNstc, "醫學院").counts[0], 1);
-  assert.equal(row(report.foreignNstc, "電機學院").counts[2], 1);
-  assert.equal(report.foreignNstc.hasUnknownGrade, false);
+  const foreign = report.foreignNstc;
+  assert.equal(foreign.totals.total, 2);
+  assert.deepEqual(foreign.columns.map((c) => c.label), ["印度", "越南"]);
+  assert.deepEqual(row(foreign, "醫學院").counts, [0, 1]);
+  assert.equal(row(foreign, "醫學院").distribution, "越南1人");
+  assert.equal(row(foreign, "電機學院").distribution, "印度1人");
+  assert.equal(row(foreign, "工學院").distribution, "");
+  assert.equal(foreign.totals.distribution, "印度1人，越南1人");
 
   assert.deepEqual(report.warnings, [
     "學院無法對應到 19 個學院：第 7 列",
@@ -76,9 +79,22 @@ test("buildReports tallies college × 年級 and the foreign 國科會 subset", 
   ]);
 });
 
-test("grade columns grow past 9 when the data has higher grades", () => {
+test("grade columns grow past 9 and omit 年級未填 when every 年級 is filled", () => {
   const applicants = [{ college: { index: 0, label: "人文藝術與社會學院" }, grade: 11 }];
-  assert.equal(AS.tallyByCollegeGrade(applicants).grades.length, 11);
+  assert.deepEqual(
+    AS.tallyByCollegeGrade(applicants).columns.map((c) => c.key),
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+  );
+});
+
+test("nationality columns are ordered by headcount and the summary by count", () => {
+  const at = (nationality) => ({ college: { index: 6, label: "電機學院" }, nationality });
+  const table = AS.tallyByCollegeNationality([at("日本"), at("越南"), at("印尼"), at("越南")]);
+  assert.equal(table.columns[0].label, "越南");
+  assert.equal(table.columns.length, 3);
+  assert.equal(table.rows[6].distribution.split("，")[0], "越南2人");
+  assert.equal(table.rows[6].total, 4);
+  assert.equal(AS.distributionText([{ label: "甲" }, { label: "乙" }], [1, 1]), "甲1人，乙1人");
 });
 
 test("reportPrefix reads the 彙整表 title, falling back to the file name", () => {

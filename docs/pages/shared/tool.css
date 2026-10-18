@@ -165,3 +165,5 @@ table.stats td.zero { color: var(--muted); }
 table.stats td.strong { font-weight: 700; }
 table.stats tr.empty-row td { color: var(--muted); }
 table.stats tfoot td { font-weight: 700; background: var(--bg); border-top: 2px solid var(--border); border-bottom: 0; }
+table.stats td.distribution { min-width: 220px; }
+table.stats td:nth-child(2), table.stats th { white-space: nowrap; }
