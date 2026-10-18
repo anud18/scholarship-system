@@ -21,12 +21,10 @@
     { key: STATUS.NONE, label: "不在名單" },
   ]);
 
-  const EXPORT_COLUMNS = ["續領比對結果", "名冊出處", "名冊姓名", "名冊備註"];
-
   const $ = (id) => document.getElementById(id);
 
   let state = {
-    applicant: null, // { fileName, rows, header, records }
+    applicant: null, // { fileName, data, sheetName, rows, origin, columnCount, header, records }
     renewals: [], // [{ fileName, sheetName, records }]
     results: [],
     filter: "all",
@@ -50,7 +48,13 @@
 
   async function readWorkbook(file) {
     const data = await file.arrayBuffer();
-    return XLSX.read(data, { type: "array" });
+    return { data, workbook: XLSX.read(data, { type: "array" }) };
+  }
+
+  /** Top-left cell and width of a sheet's used range (rows are relative to it). */
+  function sheetBounds(workbook, sheetName) {
+    const range = XLSX.utils.decode_range(workbook.Sheets[sheetName]["!ref"] || "A1");
+    return { origin: range.s, columnCount: range.e.c - range.s.c + 1 };
   }
 
   function sheetRows(workbook, sheetName) {
@@ -68,14 +72,14 @@
     status.className = "status";
     status.textContent = "讀取中…";
     try {
-      const workbook = await readWorkbook(file);
+      const { data, workbook } = await readWorkbook(file);
       const parsed = workbook.SheetNames.map((sheetName) => {
         const rows = sheetRows(workbook, sheetName);
-        return { sheetName, rows, ...RC.parseSheet(rows) };
+        return { sheetName, rows, ...sheetBounds(workbook, sheetName), ...RC.parseSheet(rows) };
       }).find((sheet) => sheet.header !== null);
       if (!parsed) throw new Error("找不到含「學號」欄位的工作表，請確認檔案是否為申請資料彙整表。");
       if (parsed.records.length === 0) throw new Error(`工作表「${parsed.sheetName}」沒有任何學號資料。`);
-      setState({ applicant: { fileName: file.name, ...parsed } });
+      setState({ applicant: { fileName: file.name, data, ...parsed } });
       const nameNote = parsed.header.nameCol === -1 ? "（未找到姓名欄，將只用學號比對）" : "";
       status.textContent = `工作表「${parsed.sheetName}」：讀到 ${parsed.records.length} 位申請學生${nameNote}`;
     } catch (error) {
@@ -89,7 +93,7 @@
 
   async function parseRenewalFile(file) {
     try {
-      const workbook = await readWorkbook(file);
+      const { workbook } = await readWorkbook(file);
       const sheets = workbook.SheetNames.map((sheetName) => ({
         fileName: file.name,
         sheetName,
@@ -233,49 +237,6 @@
     $("empty").hidden = rows.length > 0;
   }
 
-  // ---- export -------------------------------------------------------------
-
-  function exportColumns(result) {
-    if (!result) return ["", "", "", ""];
-    const label = STATUS_LABELS[result.status] + (result.nameMismatch ? "（學號相符但姓名不同）" : "");
-    const unique = (values) => [...new Set(values.filter(Boolean))].join("\n");
-    return [
-      label,
-      result.hits.map(RC.describeSource).join("\n"),
-      unique(result.hits.map((hit) => hit.name)),
-      unique(result.hits.map((hit) => hit.remark)),
-    ];
-  }
-
-  function buildExportRows(rows, headerRow, resultByRow, filterStatus) {
-    const before = rows.slice(0, headerRow);
-    const header = [...(rows[headerRow] || []), ...EXPORT_COLUMNS];
-    const body = rows
-      .slice(headerRow + 1)
-      .map((row, offset) => ({ row: row || [], result: resultByRow.get(headerRow + 1 + offset) }))
-      .filter(({ result }) => !filterStatus || (result && result.status === filterStatus))
-      .map(({ row, result }) => [...row, ...exportColumns(result)]);
-    return [...before, header, ...body];
-  }
-
-  function downloadExport() {
-    const { applicant, results } = state;
-    const resultByRow = new Map(results.map((r) => [r.rowIndex, r]));
-    const { headerRow } = applicant.header;
-    const workbook = XLSX.utils.book_new();
-    const addSheet = (name, filterStatus) =>
-      XLSX.utils.book_append_sheet(
-        workbook,
-        XLSX.utils.aoa_to_sheet(buildExportRows(applicant.rows, headerRow, resultByRow, filterStatus)),
-        name,
-      );
-    addSheet("全部申請學生", null);
-    addSheet("在續領名單", STATUS.MATCHED);
-    addSheet("需人工確認", STATUS.NAME_ONLY);
-    const baseName = applicant.fileName.replace(/\.[^.]+$/, "");
-    XLSX.writeFile(workbook, `${baseName}_續領比對.xlsx`);
-  }
-
   // ---- wiring -------------------------------------------------------------
 
   $("applicant-file").addEventListener("change", (event) => {
@@ -290,12 +251,16 @@
     setState({ query: event.target.value });
     renderRows();
   });
-  $("download").addEventListener("click", () => {
+  $("download").addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
     try {
-      downloadExport();
+      await window.RenewalExport.downloadComparison(state.applicant, state.results);
     } catch (error) {
       console.error("export", error);
       window.alert(`匯出失敗：${error.message}`);
+    } finally {
+      button.disabled = false;
     }
   });
 

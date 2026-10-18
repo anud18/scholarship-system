@@ -6,7 +6,7 @@
   <!-- The uploaded 彙整表 / 名冊 hold PII. connect-src 'none' guarantees the
        page cannot send them anywhere: everything is parsed in this tab. -->
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'none'; script-src 'self' https://cdn.sheetjs.com; style-src 'self'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+        content="default-src 'none'; script-src 'self' https://cdn.sheetjs.com https://cdn.jsdelivr.net; style-src 'self'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
   <title>續領名單比對</title>
   <link rel="stylesheet" href="style.css">
@@ -40,7 +40,7 @@
     <section id="results" class="card" hidden>
       <div class="results-head">
         <h2><span class="step">3</span>比對結果</h2>
-        <button id="download" type="button" class="primary">下載標記後的彙整表 (.xlsx)</button>
+        <button id="download" type="button" class="primary">下載比對結果（原彙整表＋比對欄位）</button>
       </div>
       <div id="summary" class="summary"></div>
       <div class="toolbar">
@@ -65,7 +65,11 @@
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"
           integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT"
           crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"
+          integrity="sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz"
+          crossorigin="anonymous"></script>
   <script src="compare.js"></script>
+  <script src="export.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
