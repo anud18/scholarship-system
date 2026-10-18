@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- The uploaded 彙整表 / 名冊 hold PII. connect-src 'none' guarantees the
+       page cannot send them anywhere: everything is parsed in this tab. -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self' https://cdn.sheetjs.com; style-src 'self'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>續領名單比對</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="page">
+    <header class="page-header">
+      <h1>續領名單比對</h1>
+      <p class="lead">上傳學生申請資料彙整表與過往獎勵名冊，標記出申請者中哪些學生已在續領名單內。</p>
+    </header>
+
+    <section class="notice" aria-label="隱私說明">
+      <strong>資料不會離開您的電腦。</strong>
+      檔案只在此瀏覽器分頁內讀取與比對，不會上傳到任何伺服器（本頁的安全政策禁止對外連線）；關閉分頁即清除。
+    </section>
+
+    <section class="card">
+      <h2><span class="step">1</span>申請資料彙整表</h2>
+      <p class="hint">例如「115學年度博士生獎學金學生資料彙整表_全校.xlsx」。需含「學號」欄，建議含「學生中文姓名」。</p>
+      <input id="applicant-file" type="file" accept=".xlsx,.xls,.csv">
+      <p id="applicant-status" class="status" role="status"></p>
+    </section>
+
+    <section class="card">
+      <h2><span class="step">2</span>過往續領名冊（可多選）</h2>
+      <p class="hint">例如國科會、教育部獎勵名冊。每個工作表會自動找出「學號」、「姓名」、「備註」欄；找不到「學號」的工作表會略過。</p>
+      <input id="renewal-files" type="file" accept=".xlsx,.xls,.csv" multiple>
+      <ul id="renewal-status" class="sheet-list"></ul>
+    </section>
+
+    <section id="results" class="card" hidden>
+      <div class="results-head">
+        <h2><span class="step">3</span>比對結果</h2>
+        <button id="download" type="button" class="primary">下載標記後的彙整表 (.xlsx)</button>
+      </div>
+      <div id="summary" class="summary"></div>
+      <div class="toolbar">
+        <div id="filters" class="filters" role="group" aria-label="篩選"></div>
+        <input id="search" type="search" placeholder="搜尋姓名、學號、系所…" aria-label="搜尋">
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>NO.</th><th>學院</th><th>系所</th><th>年級</th><th>姓名</th><th>學號</th>
+              <th>申請類別</th><th>比對結果</th><th>名冊出處</th>
+            </tr>
+          </thead>
+          <tbody id="result-rows"></tbody>
+        </table>
+      </div>
+      <p id="empty" class="hint" hidden>沒有符合條件的學生。</p>
+    </section>
+  </main>
+
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"
+          integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT"
+          crossorigin="anonymous"></script>
+  <script src="compare.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

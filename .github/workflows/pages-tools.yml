@@ -1,0 +1,85 @@
+# Static admin tools served from GitHub Pages (docs/pages/** → site root),
+# e.g. https://anud18.github.io/scholarship-system/renewal-compare/ .
+#
+# The Pages site root is the nightly Playwright report (nightly.yml
+# publish-e2e-report), and every deploy replaces the whole site. So when a
+# tool changes on main, this re-publishes the latest nightly report together
+# with the updated tools instead of wiping the report.
+name: Pages tools
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/pages/**'
+      - '.github/workflows/pages-tools.yml'
+  pull_request:
+    paths:
+      - 'docs/pages/**'
+      - '.github/workflows/pages-tools.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test static tools
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: docs/pages
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run node:test suites
+        run: node --test docs/pages/*/*.test.js
+
+  deploy:
+    name: Publish to GitHub Pages
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      actions: read      # download the latest nightly report artifact
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: docs/pages
+
+      - name: Fetch the latest nightly Playwright report
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p site
+          run_id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow nightly.yml --status completed \
+            --limit 1 --json databaseId --jq '.[0].databaseId')
+          if [ -n "$run_id" ] && gh run download "$run_id" --repo "$GITHUB_REPOSITORY" \
+               --name playwright-report-nightly --dir report \
+             && [ -f report/playwright-report/index.html ]; then
+            cp -r report/playwright-report/. site/
+          else
+            echo "::warning::No nightly Playwright report artifact available — publishing a placeholder index."
+            printf '%s' '<!doctype html><meta charset="utf-8"><title>E2E report</title><h1>No e2e report available</h1><p>The next nightly run will publish it. Tools: <a href="renewal-compare/">續領名單比對</a></p>' > site/index.html
+          fi
+
+      - name: Add the static tools to the site
+        run: cp -r docs/pages/. site/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4

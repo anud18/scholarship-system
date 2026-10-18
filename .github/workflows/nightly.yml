@@ -277,6 +277,7 @@ jobs:
     needs: e2e-full
     if: always()
     permissions:
+      contents: read     # sparse-checkout docs/pages
       pages: write       # deploy to the github-pages environment
       id-token: write    # OIDC token deploy-pages requires
     environment:
@@ -301,6 +302,18 @@ jobs:
             mkdir -p report/playwright-report
             printf '%s' '<!doctype html><meta charset="utf-8"><title>E2E report</title><h1>No e2e report from the last nightly run</h1><p>The full Playwright suite did not produce an HTML report (the run may have failed before tests started). Check the nightly workflow logs.</p>' > report/playwright-report/index.html
           fi
+
+      # Every deploy replaces the whole site, so the static admin tools under
+      # docs/pages/ (e.g. /renewal-compare/) ride along with each report.
+      # pages-tools.yml redeploys them on their own when they change.
+      - name: Check out the static Pages tools
+        uses: actions/checkout@v5
+        with:
+          path: src
+          sparse-checkout: docs/pages
+
+      - name: Add the static tools to the site
+        run: cp -r src/docs/pages/. report/playwright-report/
 
       - name: Upload the Playwright HTML report as the Pages artifact
         uses: actions/upload-pages-artifact@v3
