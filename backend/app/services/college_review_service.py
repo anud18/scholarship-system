@@ -44,6 +44,7 @@ from app.services.college_review_errors import (  # noqa: F401 - re-exported for
     ReviewPermissionError,
 )
 from app.services.email_automation_service import email_automation_service
+from app.services.ranking_groups import application_round_of, find_group_order_violation
 from app.utils.date_utils import to_taipei_str
 
 func: Any = sa_func
@@ -104,7 +105,8 @@ class CollegeReviewService(RankingScopeMixin):
         if config is None:
             return  # no configuration → don't block (let other validation surface the missing config)
 
-        deadline = config.college_review_end
+        # 多梯次申請: the ranking stays editable until the last round's college review closes.
+        deadline = config.effective_college_review_end
         if deadline is None:
             return  # no deadline configured → don't block
 
@@ -360,6 +362,7 @@ class CollegeReviewService(RankingScopeMixin):
                 "created_at": app.created_at,
                 "student_data": student_payload,
                 "is_renewal": app.is_renewal,
+                "application_round": application_round_of(app),
                 # Whether this application requires a professor recommendation step
                 # (renewals carry their own admin-configured flag).
                 # Lets the college UI distinguish "professor hasn't recommended yet"
@@ -567,23 +570,21 @@ class CollegeReviewService(RankingScopeMixin):
             if item_id and new_position is not None:
                 order_lookup[item_id] = new_position
 
-        # Validate: renewal students must rank before all new applications
+        # Validate the group order: renewals before all new applications, and a later
+        # 申請梯次 behind the earlier ones. Items left out of the request keep their
+        # position; college-rejected rows (parked at the end) are exempt.
         item_lookup = {item.id: item for item in ranking.items}
-        renewal_positions = []
-        new_positions = []
-        for item_id, pos in order_lookup.items():
-            item = item_lookup.get(item_id)
-            if item and item.application:
-                if item.application.is_renewal:
-                    renewal_positions.append(pos)
-                else:
-                    new_positions.append(pos)
-
-        if renewal_positions and new_positions:
-            max_renewal_pos = max(renewal_positions)
-            min_new_pos = min(new_positions)
-            if max_renewal_pos > min_new_pos:
-                raise InvalidRankingDataError("續領學生的排名必須在所有新申請學生之前")
+        resulting_order = sorted(
+            (
+                (order_lookup.get(item.id, item.rank_position), item.application)
+                for item in ranking.items
+                if item.application is not None and not item.college_rejected
+            ),
+            key=lambda pair: pair[0] if pair[0] is not None else float("inf"),
+        )
+        violation = find_group_order_violation(app for _position, app in resulting_order)
+        if violation:
+            raise InvalidRankingDataError(violation)
 
         # Update rank positions
         updated_count = 0

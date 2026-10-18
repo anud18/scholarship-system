@@ -92,6 +92,12 @@ import { ApplicationReviewDialog } from "@/components/common/ApplicationReviewDi
 import { StudentIdentityLabel } from "@/components/common/StudentIdentityLabel";
 import { Application as ApplicationType, User } from "@/lib/api";
 import { ApplicationStatus, getApplicationStatusLabel } from "@/lib/enums";
+import {
+  applicationRoundOf,
+  findGroupOrderViolation,
+  isLaterRound,
+  roundLabel,
+} from "@/lib/utils/application-round";
 
 interface Application {
   id: number;
@@ -127,6 +133,8 @@ interface Application {
   college_rejected: boolean;
   is_renewal?: boolean;
   renewal_year?: number | null;
+  /** 申請梯次 (1 = 一般申請期間); later rounds always rank behind earlier ones */
+  application_round?: number | null;
   status: string;
   review_status?: string;
 }
@@ -335,6 +343,17 @@ function SortableItem({
                   : `Renewal${application.renewal_year ? ` ${application.renewal_year}` : ""}`}
               </Badge>
             )}
+            {!application.is_renewal && isLaterRound(application) && (
+              <Badge
+                variant="outline"
+                className="text-xs bg-sky-50 text-sky-700 border-sky-300"
+              >
+                {roundLabel(
+                  applicationRoundOf(application),
+                  locale === "zh" ? "zh" : "en"
+                )}
+              </Badge>
+            )}
           </div>
           <p className="text-xs text-gray-400">{application.app_id}</p>
         </div>
@@ -500,6 +519,14 @@ export function CollegeRankingTable({
     );
 
     const newItems = arrayMove(localApplications, oldIndex, newIndex);
+
+    // 續領 → 第一梯次 → 第二梯次 …: refuse a move that breaks the group order
+    // (the backend rejects it too). An order that was already off stays movable.
+    const violation = findGroupOrderViolation(newItems);
+    if (violation && !findGroupOrderViolation(localApplications)) {
+      toast.error(violation);
+      return;
+    }
 
     // Update rank positions only - allocation status is set by distribution execution
     const updatedItems = newItems.map((item, index) => ({

@@ -83,6 +83,7 @@ import { ApplicationStatus } from "@/lib/enums";
 import { getApplicationTimeline } from "@/lib/utils/application-helpers";
 import { clsx } from "@/lib/utils";
 import { formatDeadline } from "@/lib/utils/format-deadline";
+import { roundLabel } from "@/lib/utils/application-round";
 import { User } from "@/types/user";
 
 // 使用API的Application類型
@@ -1408,8 +1409,12 @@ export function EnhancedStudentPortal({
                                     : tagLookup;
                                 })
                                 .filter((s): s is string => Boolean(s));
-                              const reasonText =
-                                failedTagLabels.length > 0
+                              const reasonText = eligibility?.closed_in_round
+                                ? // 多梯次申請: qualified, but this round does not open the sub-type
+                                  locale === "zh"
+                                  ? `${roundLabel(scholarship.current_application_round ?? 1)}未開放`
+                                  : "Not open in this round"
+                                : failedTagLabels.length > 0
                                   ? `${t("applications.missing")}：${failedTagLabels.join(
                                       "、"
                                     )}`
@@ -1702,6 +1707,42 @@ export function EnhancedStudentPortal({
                                   scholarship.application_end_date
                                 ) ?? "-"}
                               </p>
+                              {/* 多梯次申請：第二梯次起 */}
+                              {(scholarship.application_rounds ?? []).map(
+                                round => (
+                                  <p
+                                    key={round.round_number}
+                                    className={clsx(
+                                      "text-sm mt-1",
+                                      round.is_open
+                                        ? "text-sky-700 font-medium"
+                                        : "text-gray-600"
+                                    )}
+                                  >
+                                    {roundLabel(
+                                      round.round_number,
+                                      locale === "zh" ? "zh" : "en"
+                                    )}
+                                    ：
+                                    {formatDeadline(
+                                      round.application_start_date
+                                    ) ?? "-"}{" "}
+                                    -{" "}
+                                    {formatDeadline(
+                                      round.application_end_date
+                                    ) ?? "-"}
+                                    （
+                                    {round.open_sub_types
+                                      .map(code => {
+                                        const key = `rule_types.${code}`;
+                                        const lookup = getTranslation(locale, key);
+                                        return lookup === key ? code : lookup;
+                                      })
+                                      .join("、")}
+                                    ）
+                                  </p>
+                                )
+                              )}
                             </div>
                           </div>
                         )}

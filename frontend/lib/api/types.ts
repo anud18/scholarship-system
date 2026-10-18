@@ -134,6 +134,8 @@ export interface Application {
    *  roster entry). Absent on other list endpoints. */
   is_deletable?: boolean;
   is_renewal?: boolean;
+  /** 申請梯次 (1 = 一般申請期間, 2+ = 多梯次申請的後續梯次) */
+  application_round?: number | null;
   /** 續領年份 (民國年，如 113)；批次匯入指定或承接自前一申請 */
   renewal_year?: number | null;
   /** 承接的前一份核可申請 ID（續領申請填） */
@@ -260,6 +262,18 @@ export interface ScholarshipType {
   // scholarship is still effective (生效) but its application window has closed,
   // so it is shown read-only and cannot be applied to.
   is_application_period?: boolean;
+  /** 多梯次申請：目前開放的梯次（1 = 一般申請期間，null = 未開放） */
+  current_application_round?: number | null;
+  /** 目前梯次的申請截止時間 */
+  current_round_application_end_date?: string | null;
+  /** 第二梯次起的所有梯次 */
+  application_rounds?: Array<{
+    round_number: number;
+    application_start_date: string;
+    application_end_date: string;
+    open_sub_types: string[];
+    is_open: boolean;
+  }>;
   whitelist_enabled?: boolean;
   eligible_sub_types?: Array<{
     value: string | null;
@@ -271,6 +285,8 @@ export interface ScholarshipType {
   subtype_eligibility?: {
     [subTypeKey: string]: {
       eligible: boolean;
+      /** 學生符合資格，但目前梯次未開放此子類別 */
+      closed_in_round?: boolean;
       failed_rules: Array<{
         rule_name: string;
         message?: string | null;
@@ -392,9 +408,40 @@ export interface ScholarshipConfiguration {
   allow_college_view_distribution?: boolean;
   effective_start_date?: string;
   effective_end_date?: string;
+  /** 多梯次申請：第二梯次起（本配置的一般申請期間即第一梯次） */
+  application_rounds?: ApplicationRound[];
   version: string;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * 申請梯次（第二梯次起）。第一梯次是配置本身的一般申請期間，開放所有子類別；
+ * 之後的梯次只開放 open_sub_types。審查期間留空時沿用配置的一般審查期間。
+ */
+export interface ApplicationRound {
+  id?: number;
+  round_number: number;
+  application_start_date: string;
+  application_end_date: string;
+  open_sub_types: string[];
+  professor_review_start?: string | null;
+  professor_review_end?: string | null;
+  college_review_start?: string | null;
+  college_review_end?: string | null;
+  is_open?: boolean;
+}
+
+export interface ApplicationRoundsPayload {
+  configuration_id: number;
+  first_round: {
+    round_number: number;
+    application_start_date: string | null;
+    application_end_date: string | null;
+  };
+  current_application_round: number | null;
+  available_sub_types: string[];
+  rounds: ApplicationRound[];
 }
 
 // Whitelist Management Interfaces

@@ -69,6 +69,11 @@ import {
 } from "@/components/admin/manual-distribution/AllocationStatusControl";
 import { CollegeQuotaMatrix } from "@/components/admin/manual-distribution/CollegeQuotaMatrix";
 import {
+  applicationRoundOf,
+  isLaterRound,
+  roundLabel,
+} from "@/lib/utils/application-round";
+import {
   Loader2,
   Save,
   CheckCircle2,
@@ -2161,6 +2166,11 @@ export function ManualDistributionPanel({
                                       >
                                         {student.application_identity}
                                       </span>
+                                      {isLaterRound(student) && (
+                                        <span className="inline-flex w-fit items-center px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 border border-sky-300 text-[10px]">
+                                          {roundLabel(applicationRoundOf(student))}
+                                        </span>
+                                      )}
                                       {distributionState && (
                                         <span className="text-[10px] text-slate-500 font-normal">
                                           純新

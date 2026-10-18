@@ -58,6 +58,8 @@ export interface DistributionStudent {
   application_identity: string;
   is_renewal: boolean;
   renewal_year: number | null;
+  /** 申請梯次 (1 = 一般申請期間); absent on older payloads */
+  application_round?: number;
   renewal_sub_type: string | null;
   received_months: number | null;
   received_months_source: string | null;

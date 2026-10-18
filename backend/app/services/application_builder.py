@@ -56,6 +56,24 @@ def validate_sub_type_for_submission(scholarship, sub_scholarship_type: Optional
         raise ValidationError("此獎學金不提供申請類別選擇，不可指定子類別")
 
 
+def validate_sub_types_open_in_round(config, application_round: Optional[int], sub_types: List[str]) -> None:
+    """Reject sub-types the application's 申請梯次 does not open (多梯次申請).
+
+    Round 1 (the configuration's own window) opens every sub-type; a later round
+    only the ones the administrator picked for it.
+    """
+    from app.services.ranking_groups import round_label
+
+    open_codes = config.open_sub_types_for_round(application_round) if config is not None else None
+    if open_codes is None:
+        return
+    closed = [st for st in sub_types if st and st.lower().strip() not in open_codes]
+    if closed:
+        label = round_label(application_round)
+        opened = "、".join(open_codes) if open_codes else "無"
+        raise ValidationError(f"{label}僅開放申請：{opened}；不可申請：{'、'.join(closed)}")
+
+
 def order_sub_type_preferences(sub_types: List[str]) -> List[str]:
     """Order a selected sub-type list the way the student wizard does:
     FORCED_FIRST_PREFERENCE (moe_1w) leads when present; the rest keep

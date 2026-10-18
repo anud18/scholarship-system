@@ -76,6 +76,7 @@ import { PROFILE_OWNED_FIELD_SOURCES } from "@/lib/utils/profile-owned-fields";
 import { uppercaseInputValue } from "@/lib/utils/uppercase-input";
 import { useApplications } from "@/hooks/use-applications";
 import { useStudentProfile } from "@/hooks/use-student-profile";
+import { roundLabel } from "@/lib/utils/application-round";
 import {
   validateAdvisorInfo,
   validateBankInfo,
@@ -1488,6 +1489,13 @@ export function ScholarshipApplicationStep({
                 <span className="font-semibold">1. {text.selectPrograms}</span>{" "}
                 <span className="text-red-500">*</span>
               </Label>
+              {(selectedScholarship.current_application_round ?? 1) > 1 && (
+                <p className="text-sm text-sky-700">
+                  {locale === "zh"
+                    ? `目前為${roundLabel(selectedScholarship.current_application_round ?? 1)}申請，僅列出本梯次開放的類別。`
+                    : `${roundLabel(selectedScholarship.current_application_round ?? 1, "en")} is open: only the programs it accepts are listed.`}
+                </p>
+              )}
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 {eligibleSubTypes.map((subType, index) => {
                   const subTypeValue = subType.value;

@@ -26,6 +26,7 @@ from app.models.student import Academy
 from app.services.application_builder import order_sub_type_preferences
 from app.services.department_names import load_department_names
 from app.services.professor_review_export import load_professor_reviews, normalize_sub_type
+from app.services.ranking_groups import application_round_of, ranking_group
 from app.services.received_months_service import (
     calculate_received_months_bulk_async,
     get_imported_months_bulk_async,
@@ -336,7 +337,8 @@ def _compute_suggestions(
 
     sorted_items = sorted(
         [item for item in unique_items if _is_undecided(item)],
-        key=lambda i: (0 if i.application.is_renewal else 1, i.rank_position),
+        # 續領 → 第一梯次 → 第二梯次 …, then the college's rank inside the group
+        key=lambda i: (ranking_group(i.application), i.rank_position),
     )
 
     results: list[dict] = []
@@ -885,6 +887,7 @@ class ManualDistributionService:
                 "application_identity": identity,
                 "is_renewal": app.is_renewal,
                 "renewal_year": app.renewal_year,
+                "application_round": application_round_of(app),
                 "renewal_sub_type": self._get_renewal_sub_type(app),
                 "received_months": rm_value,
                 "received_months_source": rm_source,

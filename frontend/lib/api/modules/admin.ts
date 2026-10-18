@@ -18,7 +18,12 @@
 import { typedClient } from '../typed-client';
 import { fetchBinaryExport } from './binary-export';
 import { toApiResponse } from '../compat';
-import type { ApiResponse, DashboardStats, HistoricalApplicationFilters } from '../types';
+import type {
+  ApiResponse,
+  ApplicationRoundsPayload,
+  DashboardStats,
+  HistoricalApplicationFilters,
+} from '../types';
 import type { components } from '../generated/schema';
 
 /** Result of POST /admin/applications/{id}/resync-sis-term-data */
@@ -873,6 +878,31 @@ export function createAdminApi() {
         body: targetData as never,
       });
       return toApiResponse(response) as ApiResponse<unknown>;
+    },
+
+    /**
+     * 多梯次申請: list a configuration's application rounds (第一梯次 = its own window)
+     */
+    getApplicationRounds: async (id: number): Promise<ApiResponse<ApplicationRoundsPayload>> => {
+      const response = await typedClient.raw.GET(
+        '/api/v1/scholarship-configurations/configurations/{id}/application-rounds',
+        { params: { path: { id } } }
+      );
+      return toApiResponse(response) as unknown as ApiResponse<ApplicationRoundsPayload>;
+    },
+
+    /**
+     * 多梯次申請: replace a configuration's later rounds (第二梯次起); [] = single round
+     */
+    updateApplicationRounds: async (
+      id: number,
+      rounds: components['schemas']['ApplicationRoundInput'][]
+    ): Promise<ApiResponse<ApplicationRoundsPayload>> => {
+      const response = await typedClient.raw.PUT(
+        '/api/v1/scholarship-configurations/configurations/{id}/application-rounds',
+        { params: { path: { id } }, body: { rounds } }
+      );
+      return toApiResponse(response) as unknown as ApiResponse<ApplicationRoundsPayload>;
     },
 
     // ========== Professor Management ==========

@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import DEV_SCHOLARSHIP_SETTINGS, settings
 from app.models.application import Application, ApplicationStatus, build_config_match_filters
+from app.models.application_round import window_contains
 from app.models.enums import HIDDEN_APPLICATION_STATUSES
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule
 
@@ -35,6 +36,26 @@ class EligibilityService:
     def _should_bypass_application_period(self) -> bool:
         """Check if should bypass application period in dev mode"""
         return self._is_dev_mode() and DEV_SCHOLARSHIP_SETTINGS.get("ALWAYS_OPEN_APPLICATION", False)
+
+    @staticmethod
+    def _within_application_period(config: ScholarshipConfiguration) -> bool:
+        """True inside the general window (第一梯次), a later 申請梯次 or the renewal window.
+
+        A configuration with neither a general window nor a later round is not period-gated.
+        Reads the date columns directly (not the model properties) so lightweight stand-ins work.
+        """
+        rounds = getattr(config, "application_rounds", None)
+        extra_rounds = list(rounds) if isinstance(rounds, (list, tuple)) else []
+        has_general_window = bool(config.application_start_date and config.application_end_date)
+        if not has_general_window and not extra_rounds:
+            return True
+
+        now = datetime.now(timezone.utc)
+        return (
+            window_contains(config.application_start_date, config.application_end_date, now)
+            or window_contains(config.renewal_application_start_date, config.renewal_application_end_date, now)
+            or any(application_round.is_open(now) for application_round in extra_rounds)
+        )
 
     async def check_student_eligibility(
         self,
@@ -63,36 +84,11 @@ class EligibilityService:
         # Existing application check is moved to separate method
         # We want to show scholarships regardless of application status
 
-        # Check application period (unless bypassed in dev mode)
-        if not self._should_bypass_application_period():
-            now = datetime.now(timezone.utc)
-
-            # Check regular application period
-            if config.application_start_date and config.application_end_date:
-                # Handle timezone-aware and naive datetime comparison
-                app_start = config.application_start_date
-                if app_start.tzinfo is None:
-                    app_start = app_start.replace(tzinfo=timezone.utc)
-
-                app_end = config.application_end_date
-                if app_end.tzinfo is None:
-                    app_end = app_end.replace(tzinfo=timezone.utc)
-
-                if not (app_start <= now <= app_end):
-                    # Check renewal application period if applicable
-                    if config.renewal_application_start_date and config.renewal_application_end_date:
-                        renewal_start = config.renewal_application_start_date
-                        if renewal_start.tzinfo is None:
-                            renewal_start = renewal_start.replace(tzinfo=timezone.utc)
-
-                        renewal_end = config.renewal_application_end_date
-                        if renewal_end.tzinfo is None:
-                            renewal_end = renewal_end.replace(tzinfo=timezone.utc)
-
-                        if not (renewal_start <= now <= renewal_end):
-                            reasons.append("不在申請期間內")
-                    else:
-                        reasons.append("不在申請期間內")
+        # Check application period (unless bypassed in dev mode): the general window
+        # (第一梯次), any later 申請梯次, or the renewal window. A configuration with no
+        # general window and no extra round is not period-gated.
+        if not self._should_bypass_application_period() and not self._within_application_period(config):
+            reasons.append("不在申請期間內")
 
         # Check whitelist if enabled (unless bypassed in dev mode)
         if config.scholarship_type.whitelist_enabled and not self._should_bypass_whitelist():

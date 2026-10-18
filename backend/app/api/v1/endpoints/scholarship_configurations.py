@@ -1048,6 +1048,10 @@ async def get_scholarship_configuration(
             "allow_college_view_distribution": config.allow_college_view_distribution,
             "effective_start_date": config.effective_start_date.isoformat() if config.effective_start_date else None,
             "effective_end_date": config.effective_end_date.isoformat() if config.effective_end_date else None,
+            # 多梯次申請: later rounds (the general application window above is 第一梯次)
+            "application_rounds": [
+                application_round.to_dict() for application_round in config.extra_application_rounds
+            ],
             "version": config.version,
             "created_at": config.created_at.isoformat() if config.created_at else None,
             "updated_at": config.updated_at.isoformat() if config.updated_at else None,
@@ -1566,6 +1570,8 @@ async def list_scholarship_configurations(
                     config.effective_start_date.isoformat() if config.effective_start_date else None
                 ),
                 "effective_end_date": config.effective_end_date.isoformat() if config.effective_end_date else None,
+                # 多梯次申請: later rounds (the general application window above is 第一梯次)
+                "application_rounds": [r.to_dict() for r in config.extra_application_rounds],
                 "version": config.version,
                 "created_at": config.created_at.isoformat() if config.created_at else None,
                 "updated_at": config.updated_at.isoformat() if config.updated_at else None,

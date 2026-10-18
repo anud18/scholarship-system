@@ -523,13 +523,46 @@ describe("createAdminApi", () => {
     });
   });
 
+  // ─── 多梯次申請 (application rounds) ───────────────────────────────
+
+  it("getApplicationRounds GETs the config's /application-rounds", async () => {
+    mockedRaw.GET.mockResolvedValueOnce({});
+    const api = createAdminApi();
+    await api.getApplicationRounds(7);
+    expect(mockedRaw.GET).toHaveBeenCalledWith(
+      "/api/v1/scholarship-configurations/configurations/{id}/application-rounds",
+      { params: { path: { id: 7 } } }
+    );
+  });
+
+  it("updateApplicationRounds PUTs the full round list wrapped under `rounds`", async () => {
+    // Pin: replace-all semantics — the body always carries every later round,
+    // [] turns the configuration back into a single round.
+    mockedRaw.PUT.mockResolvedValueOnce({});
+    const api = createAdminApi();
+    const rounds = [
+      {
+        round_number: 2,
+        application_start_date: "2026-11-01T00:00:00.000Z",
+        application_end_date: "2026-11-15T00:00:00.000Z",
+        open_sub_types: ["nstc"],
+      },
+    ];
+    await api.updateApplicationRounds(7, rounds);
+    expect(mockedRaw.PUT).toHaveBeenCalledWith(
+      "/api/v1/scholarship-configurations/configurations/{id}/application-rounds",
+      { params: { path: { id: 7 } }, body: { rounds } }
+    );
+  });
+
   // ─── Method count invariant ───────────────────────────────────────
 
-  it("module exposes exactly 81 methods", async () => {
-    // Pin: 81 methods is the current admin surface (80 + resyncSisTermData). Pin so
+  it("module exposes exactly 83 methods", async () => {
+    // Pin: 83 methods is the current admin surface (80 + resyncSisTermData
+    // + getApplicationRounds / updateApplicationRounds). Pin so
     // refactor adding/removing methods requires explicit review.
     // SECURITY-critical surface — every change should be deliberate.
     const api = createAdminApi();
-    expect(Object.keys(api).length).toBe(81);
+    expect(Object.keys(api).length).toBe(83);
   });
 });
