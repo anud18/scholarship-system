@@ -268,7 +268,8 @@ jobs:
   # Publish the nightly Playwright HTML report to GitHub Pages so the e2e
   # results — including the screenshot / video / trace / backend-logs / db-state
   # attachments captured on failure — are browsable at
-  # https://anud18.github.io/scholarship-system/ . Runs after e2e-full
+  # https://anud18.github.io/scholarship-system/e2e/ (the site root is the
+  # docs/pages/ portal linking to it and the admin tools). Runs after e2e-full
   # regardless of pass/fail (`if: always()`): a failed run is exactly the
   # bug report we want to see.
   publish-e2e-report:
@@ -303,8 +304,8 @@ jobs:
             printf '%s' '<!doctype html><meta charset="utf-8"><title>E2E report</title><h1>No e2e report from the last nightly run</h1><p>The full Playwright suite did not produce an HTML report (the run may have failed before tests started). Check the nightly workflow logs.</p>' > report/playwright-report/index.html
           fi
 
-      # Every deploy replaces the whole site, so the static admin tools under
-      # docs/pages/ (e.g. /renewal-compare/) ride along with each report.
+      # Every deploy replaces the whole site, so the portal + static admin
+      # tools under docs/pages/ ride along with each report.
       # pages-tools.yml redeploys them on their own when they change.
       - name: Check out the static Pages tools
         uses: actions/checkout@v5
@@ -312,15 +313,18 @@ jobs:
           path: src
           sparse-checkout: docs/pages
 
-      - name: Add the static tools to the site
-        run: cp -r src/docs/pages/. report/playwright-report/
+      # The HTML report is self-contained (attachments bundled under
+      # playwright-report/data/), so it moves as one directory to /e2e/.
+      - name: Assemble the site (portal + tools at /, report at /e2e/)
+        run: |
+          mkdir -p site
+          cp -r src/docs/pages/. site/
+          cp -r report/playwright-report site/e2e
 
-      - name: Upload the Playwright HTML report as the Pages artifact
+      - name: Upload the site as the Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # The HTML report is self-contained (attachments bundled under
-          # playwright-report/data/), so publish that dir as the site root.
-          path: report/playwright-report
+          path: site
 
       - name: Deploy to GitHub Pages
         id: deploy
@@ -365,7 +369,7 @@ jobs:
           # the literal name in the body.
           evidence_line=""
           if [ "${{ needs.e2e-full.result }}" = "failure" ]; then
-            evidence_line="- E2E failure evidence (video/trace/screenshots), retained until this issue is closed: download artifact \`nightly-failure-report-${{ github.run_id }}\` from the run page above, or browse the latest report at https://anud18.github.io/scholarship-system/"
+            evidence_line="- E2E failure evidence (video/trace/screenshots), retained until this issue is closed: download artifact \`nightly-failure-report-${{ github.run_id }}\` from the run page above, or browse the latest report at https://anud18.github.io/scholarship-system/e2e/"
           fi
           body=$(cat <<EOF
           One or more jobs in the nightly long-running lane failed today.

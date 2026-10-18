@@ -48,6 +48,8 @@ body {
 }
 
 .page { max-width: 1200px; margin: 0 auto; padding: 24px 16px 64px; }
+.back { display: inline-block; margin-bottom: 6px; color: var(--accent); font-size: .9rem; text-decoration: none; }
+.back:hover { text-decoration: underline; }
 .page-header h1 { margin: 0 0 4px; font-size: 1.6rem; }
 .lead { margin: 0 0 16px; color: var(--muted); }
 
