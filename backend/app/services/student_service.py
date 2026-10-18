@@ -28,6 +28,8 @@ SIS_MAX_CONNECTIONS = 20
 SIS_POOL_TIMEOUT = 30.0
 # Concurrent term lookups per get_term_history call
 TERM_LOOKUP_CONCURRENCY = 6
+# Scholarship semester → SIS term code; yearly scholarships (None / "yearly") look at both terms
+SEMESTER_TERM_CODES = {"first": "1", "second": "2"}
 
 # One pooled client per event loop instead of a new connection per SIS call.
 # The loop check matters for scripts / tests that each run their own loop.
@@ -324,6 +326,28 @@ class StudentService:
             return term_data, "partial", f"Term 2 lookup failed ({term2_error}); used {academic_year} term 1"
         return None, "error", f"Term 2 lookup failed ({term2_error}); no data for {academic_year} term 1"
 
+    async def get_scholarship_term_info(
+        self, student_code: str, academic_year: str, semester: Any, fresh: bool = False
+    ) -> tuple[Optional[Dict[str, Any]], str, Optional[str]]:
+        """The term record a scholarship period reads. Returns ``(data, status, error_message)``.
+
+        The one place that decides which SIS term a scholarship looks at:
+        ``first`` / ``second`` → that term only; yearly (``None`` / ``yearly``) → term 2,
+        else term 1 (``partial`` when term 2 failed rather than being empty).
+        ``semester`` may be the ``Semester`` enum or its value. A failed single-term
+        lookup raises, like ``get_student_term_info``; ``status`` is ``success`` / ``partial`` / ``error``.
+        """
+        semester_value = getattr(semester, "value", semester)
+        term = SEMESTER_TERM_CODES.get(semester_value)
+        if term is None:
+            return await self._get_yearly_term_info(student_code, academic_year, fresh)
+
+        logger.info(f"Fetching term data for {student_code}: {academic_year} term {term}")
+        term_data = await self.get_student_term_info(student_code, academic_year, term, fresh=fresh)
+        if term_data:
+            return term_data, "success", None
+        return None, "error", f"No data for {academic_year} term {term}"
+
     async def get_student_snapshot(
         self,
         student_code: str,
@@ -366,19 +390,9 @@ class StudentService:
 
         if academic_year:
             try:
-                if semester in ("first", "second"):
-                    # Semester-based: query that semester only
-                    term = "1" if semester == "first" else "2"
-                    logger.info(f"Fetching term data for {student_code}: {academic_year} term {term}")
-                    term_data = await self.get_student_term_info(student_code, academic_year, term, fresh=fresh)
-                    term_data_status = "success" if term_data else "error"
-                    if not term_data:
-                        term_error_message = f"No data for {academic_year} term {term}"
-                else:
-                    term_data, term_data_status, term_error_message = await self._get_yearly_term_info(
-                        student_code, academic_year, fresh
-                    )
-
+                term_data, term_data_status, term_error_message = await self.get_scholarship_term_info(
+                    student_code, academic_year, semester, fresh=fresh
+                )
             except Exception as e:
                 logger.warning(f"Failed to fetch term data for {student_code}", exc_info=True)
                 term_data_status = "error"

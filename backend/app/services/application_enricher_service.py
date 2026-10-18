@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.application import Application
-from app.services.student_service import StudentService
+from app.services.student_service import SEMESTER_TERM_CODES, StudentService
 from app.utils.application_helpers import (
     get_academy_code_from_data,
     get_department_code_from_data,
@@ -33,9 +33,6 @@ logger = logging.getLogger(__name__)
 
 # Cap concurrent live SIS term lookups so a large list cannot flood the external API
 MAX_CONCURRENT_PERIOD_LOOKUPS = 8
-
-# Semester → SIS term code; yearly scholarships (None) accept either term
-SEMESTER_TERM_CODES = {"first": "1", "second": "2"}
 
 
 class ApplicationEnricherService:
@@ -230,24 +227,12 @@ class ApplicationEnricherService:
         """
         獲取單個申請的獎學金期間數據
 
-        查詢邏輯（參考 application_helpers.py）：
-        1. Semester.first → 只查 term="1"
-        2. Semester.second → 只查 term="2"
-        3. None (學年制) → 先查 term="2"，無資料再查 term="1"
+        學期規則由 StudentService.get_scholarship_term_info 統一決定：
+        first → term 1、second → term 2、學年制 → 先 term 2，無資料再 term 1。
         """
         try:
-            if semester == "first":
-                # 學期制 - 只查第一學期
-                return await self.student_service.get_student_term_info(student_id, str(academic_year), "1")
-            elif semester == "second":
-                # 學期制 - 只查第二學期
-                return await self.student_service.get_student_term_info(student_id, str(academic_year), "2")
-            else:
-                # 學年制 - 先查第二學期，無資料再查第一學期
-                data = await self.student_service.get_student_term_info(student_id, str(academic_year), "2")
-                if not data:
-                    data = await self.student_service.get_student_term_info(student_id, str(academic_year), "1")
-                return data
+            data, _, _ = await self.student_service.get_scholarship_term_info(student_id, str(academic_year), semester)
+            return data
         except Exception as e:
             logger.debug(f"Failed to fetch period data for {student_id}: {e}")
             return None

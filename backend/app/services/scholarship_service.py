@@ -84,16 +84,16 @@ class ScholarshipService:
                 cache_key = f"{config.academic_year}_{config.semester.value if config.semester else 'yearly'}"
 
                 if cache_key not in student_data_cache["student_term"]:
-                    # Convert semester enum to string for API call
-                    semester_str = config.semester.value if config.semester else "1"  # Default to first semester
+                    semester_str = config.semester.value if config.semester else "yearly"
                     academic_year_str = str(config.academic_year)
 
                     # Fetch term-specific data
                     student_code = student_data.get("std_stdcode")
                     if student_code:
                         try:
-                            term_data = await student_service.get_student_term_info(
-                                student_code, academic_year_str, semester_str
+                            # Same term rule as the application snapshot (yearly: term 2, else term 1)
+                            term_data, _, _ = await student_service.get_scholarship_term_info(
+                                student_code, academic_year_str, config.semester
                             )
                             if term_data:
                                 # Merge basic data with term-specific data
@@ -107,7 +107,7 @@ class ScholarshipService:
                                 current_student_data = {
                                     **student_data,
                                     "_term_data_status": "not_found",
-                                    "_term_error_message": f"查無 {academic_year_str} 學年第 {semester_str} 學期的學期資料",
+                                    "_term_error_message": f"查無 {academic_year_str} 學年（{semester_str}）的學期資料",
                                 }
                                 student_data_cache["student_term"][cache_key] = current_student_data
                         except Exception as e:
