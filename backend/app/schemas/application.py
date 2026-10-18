@@ -371,10 +371,10 @@ class ApplicationResponse(BaseModel):
     advisor_nycu_id: Optional[str] = Field(None, description="指導教授本校人事編號（來自學生 UserProfile）")
 
     # === Academic Organization ===
-    academy_code: Optional[str] = None  # std_academyno / trm_academyno
-    academy_name: Optional[str] = None  # trm_academyname
-    department_code: Optional[str] = None  # std_depno / trm_depno
-    department_name: Optional[str] = None  # trm_depname
+    academy_code: Optional[str] = None  # std_academyno, else trm_academyno
+    academy_name: Optional[str] = None  # from the std_academyno code (academy table); trm_academyname only as fallback
+    department_code: Optional[str] = None  # std_depno, else trm_depno
+    department_name: Optional[str] = None  # from the std_depno code (departments table); trm_depname only as fallback
     degree: Optional[int] = None  # std_degree / trm_degree
     studying_status: Optional[int] = None  # std_studingstatus
     studying_status_name: Optional[str] = None  # mgd_title
@@ -616,10 +616,10 @@ class ApplicationListResponse(BaseModel):
     student_phone: Optional[str] = None  # com_cellphone
 
     # === Academic Organization ===
-    academy_code: Optional[str] = None  # std_academyno / trm_academyno
-    academy_name: Optional[str] = None  # trm_academyname
-    department_code: Optional[str] = None  # std_depno / trm_depno
-    department_name: Optional[str] = None  # trm_depname
+    academy_code: Optional[str] = None  # std_academyno, else trm_academyno
+    academy_name: Optional[str] = None  # from the std_academyno code (academy table); trm_academyname only as fallback
+    department_code: Optional[str] = None  # std_depno, else trm_depno
+    department_name: Optional[str] = None  # from the std_depno code (departments table); trm_depname only as fallback
     degree: Optional[int] = None  # std_degree / trm_degree
     studying_status: Optional[int] = None  # std_studingstatus
     studying_status_name: Optional[str] = None  # mgd_title
