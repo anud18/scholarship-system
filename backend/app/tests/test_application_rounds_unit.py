@@ -278,9 +278,16 @@ class TestFirstSubmitRoundAssignment:
         ApplicationService._assign_application_round_on_first_submit(application)
         assert application.application_round == 1
 
-    def test_outside_every_window_keeps_round(self):
+    def test_draft_outside_every_window_is_refused(self):
+        from app.core.exceptions import ApplicationPeriodClosedError
+
         config = _config(first_window=PAST, rounds=[_round(2, FUTURE, ("nstc",))])
         application = self._draft(config, round_number=1, sub_types=("moe_1w",))
+        with pytest.raises(ApplicationPeriodClosedError):
+            ApplicationService._assign_application_round_on_first_submit(application)
+
+    def test_configuration_without_windows_is_not_period_gated(self):
+        application = self._draft(_config(first_window=None), round_number=1)
         ApplicationService._assign_application_round_on_first_submit(application)
         assert application.application_round == 1
 

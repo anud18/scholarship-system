@@ -519,13 +519,16 @@ class ApplicationService:
         if not is_draft:
             self._validate_sub_type_for_submission(scholarship, sub_scholarship_type)
 
-        # 多梯次申請: the application belongs to the round open now (round 1 outside
-        # every window, e.g. the dev always-open bypass); a later round only accepts
-        # the sub-types the administrator opened for it.
+        # 多梯次申請: the application belongs to the round open now and may only pick
+        # the sub-types that round opens. A draft saved outside every window keeps
+        # round 1 until its first submit (_assign_application_round_on_first_submit).
         from app.models.application_round import FIRST_APPLICATION_ROUND
         from app.services.application_builder import validate_sub_types_open_in_round
 
-        application_round = config.current_application_round or FIRST_APPLICATION_ROUND
+        if is_draft:
+            application_round = config.current_application_round or FIRST_APPLICATION_ROUND
+        else:
+            application_round = self._submission_round(config, FIRST_APPLICATION_ROUND)
         validate_sub_types_open_in_round(config, application_round, scholarship_subtype_list)
 
         from app.models.enums import ApplicationStatus
@@ -1308,14 +1311,38 @@ class ApplicationService:
             return
         validate_sub_types_open_in_round(config, cls._round_for_sub_type_check(application, config), sub_types)
 
+    @staticmethod
+    def _submission_round(config, stored_round: int) -> int:
+        """The 申請梯次 a new application joins when it is submitted: the round open now.
+
+        Outside every window the submission is refused, except for a configuration
+        that is not period-gated at all or under the dev ALWAYS_OPEN_APPLICATION
+        bypass, where the application keeps ``stored_round``.
+        """
+        from app.core.exceptions import ApplicationPeriodClosedError
+        from app.services.eligibility_service import application_period_bypassed
+
+        current_round = config.current_application_round
+        if current_round is not None:
+            return current_round
+        if application_period_bypassed() or not config.is_period_gated:
+            return stored_round
+        raise ApplicationPeriodClosedError()
+
     @classmethod
     def _assign_application_round_on_first_submit(cls, application: Application) -> None:
-        """Set a draft's 申請梯次 to the round open now, then check the sub-types against
-        the application's round (a returned application keeps its round but is re-checked)."""
+        """Set a draft's 申請梯次 to the round open now (refused outside every window),
+        then check the sub-types against the application's round. A returned
+        application keeps its round and is only re-checked."""
+        from app.models.application_round import FIRST_APPLICATION_ROUND
+
         config = application.scholarship_configuration
         if config is None or application.is_renewal:
             return
-        application.application_round = cls._round_for_sub_type_check(application, config)
+        if cls._is_draft(application):
+            application.application_round = cls._submission_round(
+                config, application.application_round or FIRST_APPLICATION_ROUND
+            )
         sub_types = list(application.scholarship_subtype_list or []) or [application.sub_scholarship_type]
         cls._check_sub_types_against_round(application, config, sub_types)
 

@@ -19,6 +19,13 @@ from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule
 logger = logging.getLogger(__name__)
 
 
+def application_period_bypassed() -> bool:
+    """Dev-only ALWAYS_OPEN_APPLICATION: treat every configuration as open for applications."""
+    return (settings.debug or settings.environment == "development") and bool(
+        DEV_SCHOLARSHIP_SETTINGS.get("ALWAYS_OPEN_APPLICATION", False)
+    )
+
+
 class EligibilityService:
     """Service for checking student eligibility for scholarships"""
 
@@ -35,7 +42,7 @@ class EligibilityService:
 
     def _should_bypass_application_period(self) -> bool:
         """Check if should bypass application period in dev mode"""
-        return self._is_dev_mode() and DEV_SCHOLARSHIP_SETTINGS.get("ALWAYS_OPEN_APPLICATION", False)
+        return application_period_bypassed()
 
     @staticmethod
     def _within_application_period(config: ScholarshipConfiguration) -> bool:

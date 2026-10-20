@@ -928,6 +928,11 @@ class ScholarshipConfiguration(Base):
         return application_round.open_sub_type_codes
 
     @property
+    def is_period_gated(self) -> bool:
+        """Whether applications are limited to windows at all (a general window or a later round)."""
+        return bool(self.application_start_date and self.application_end_date) or bool(self.extra_application_rounds)
+
+    @property
     def application_round_numbers(self) -> List[int]:
         """Every round of the configuration: 1 (its own window), then the later rounds."""
         return [FIRST_APPLICATION_ROUND] + [r.round_number for r in self.extra_application_rounds]
