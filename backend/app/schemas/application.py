@@ -243,7 +243,9 @@ class ApplicationUpdate(BaseModel):
     # professor review, college ranking and quota allocation entirely. Workflow
     # transitions belong to the guarded PUT /applications/{id}/status path.
     agree_terms: Optional[bool] = Field(None, description="同意條款")
-    is_renewal: Optional[bool] = Field(None, description="是否為續領申請")
+    # SECURITY: `is_renewal` is NOT accepted either. A student flipping it on their own
+    # draft would skip the 申請梯次 sub-type gate and rank in the 續領 group, ahead of
+    # every new applicant. Renewals only come from the admin renewal import.
     sub_type_preferences: Optional[List[str]] = Field(None, description="Ordered sub-type preference list")
 
     @field_validator("sub_type_preferences")

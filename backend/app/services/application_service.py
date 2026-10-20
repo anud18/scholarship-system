@@ -1171,11 +1171,7 @@ class ApplicationService:
                 strip_profile_owned_fields(update_data.form_data.dict())
             )
 
-        # NOTE: status is intentionally not updatable here — see ApplicationUpdate.
-
-        # 更新續領申請標識
-        if update_data.is_renewal is not None:
-            application.is_renewal = update_data.is_renewal
+        # NOTE: status and is_renewal are intentionally not updatable here — see ApplicationUpdate.
 
         # 更新子項目列表（如果提供）
         if update_data.scholarship_subtype_list is not None:

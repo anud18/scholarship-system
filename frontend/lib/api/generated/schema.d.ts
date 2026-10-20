@@ -9173,11 +9173,6 @@ export interface components {
              */
             agree_terms?: boolean | null;
             /**
-             * Is Renewal
-             * @description 是否為續領申請
-             */
-            is_renewal?: boolean | null;
-            /**
              * Sub Type Preferences
              * @description Ordered sub-type preference list
              */
