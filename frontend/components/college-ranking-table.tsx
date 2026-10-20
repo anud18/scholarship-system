@@ -93,11 +93,9 @@ import { StudentIdentityLabel } from "@/components/common/StudentIdentityLabel";
 import { Application as ApplicationType, User } from "@/lib/api";
 import { ApplicationStatus, getApplicationStatusLabel } from "@/lib/enums";
 import {
-  applicationRoundOf,
+  applicationRoundLabel,
   countGroupOrderInversions,
   findGroupOrderViolation,
-  isLaterRound,
-  roundLabel,
 } from "@/lib/utils/application-round";
 
 interface Application {
@@ -344,15 +342,12 @@ function SortableItem({
                   : `Renewal${application.renewal_year ? ` ${application.renewal_year}` : ""}`}
               </Badge>
             )}
-            {!application.is_renewal && isLaterRound(application) && (
+            {!application.is_renewal && (
               <Badge
                 variant="outline"
                 className="text-xs bg-sky-50 text-sky-700 border-sky-300"
               >
-                {roundLabel(
-                  applicationRoundOf(application),
-                  locale === "zh" ? "zh" : "en"
-                )}
+                {applicationRoundLabel(application, locale === "zh" ? "zh" : "en")}
               </Badge>
             )}
           </div>

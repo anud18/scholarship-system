@@ -352,24 +352,25 @@ class TestBuildWorkbook:
         assert ws.cell(row=2, column=1).value == "序號"
         assert ws.cell(row=3, column=1).value is None
         assert ws.cell(row=2, column=2).value == "基本資料"
-        assert [ws.cell(row=3, column=c).value for c in range(2, 8)] == [
+        assert [ws.cell(row=3, column=c).value for c in range(2, 9)] == [
             "學院",
             "系所",
             "姓名",
             "國籍",
             "性別",
             "碩士畢業院/校/系所",
+            "申請梯次",
         ]
-        assert ws.cell(row=2, column=8).value == "學籍資料"
-        assert ws.cell(row=3, column=9).value == "學號"
-        assert ws.cell(row=2, column=10).value == "請領資格檢核"
-        assert ws.cell(row=2, column=11).value == AUTO_CHECK_GROUP
-        assert ws.cell(row=3, column=11).value == HEADERS[10]
+        assert ws.cell(row=2, column=9).value == "學籍資料"
+        assert ws.cell(row=3, column=10).value == "學號"
+        assert ws.cell(row=2, column=11).value == "請領資格檢核"
+        assert ws.cell(row=2, column=12).value == AUTO_CHECK_GROUP
+        assert ws.cell(row=3, column=12).value == HEADERS[11]
 
     def test_data_row_renders_expected_values(self):
         svc = ManualDistributionExportService()
         ws = self._load(svc.build_workbook(groups=[_group([_sample_row()])], title="T")).active
-        values = [ws.cell(row=4, column=c).value for c in range(1, 14)]
+        values = [ws.cell(row=4, column=c).value for c in range(1, 15)]
         assert values == [
             1,  # 序號 keeps native int typing
             "工學院",
@@ -378,6 +379,7 @@ class TestBuildWorkbook:
             "中華民國",
             "女",
             "台灣大學工學院土木工程學系",
+            "第一梯次",
             "113.02.01",
             "312345611",
             None,  # 請領資格檢核 left for the 承辦人 (empty cell reads back None)

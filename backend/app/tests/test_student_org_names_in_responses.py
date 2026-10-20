@@ -88,6 +88,7 @@ async def test_build_application_response_resolves_department_name_from_the_tabl
         scholarship_type_id=1,
         status=ApplicationStatus.submitted,
         is_renewal=False,
+        application_round=1,
         academic_year=113,
         student_data=TRANSFERRED,
         submitted_form_data={},

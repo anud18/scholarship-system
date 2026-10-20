@@ -2,11 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { logger } from "@/lib/utils/logger";
-import {
-  applicationRoundOf,
-  isLaterRound,
-  roundLabel,
-} from "@/lib/utils/application-round";
+import { applicationRoundLabel } from "@/lib/utils/application-round";
 import { buildFileProxyUrl } from "@/lib/api/modules/system-settings";
 import { previewMimeType } from "@/lib/utils";
 import { triggerAttachmentDownload } from "@/lib/utils/download";
@@ -1012,12 +1008,12 @@ export function ApplicationReviewPanel({
                         >
                           {app.is_renewal ? "續領" : "初領"}
                         </Badge>
-                        {!app.is_renewal && isLaterRound(app) && (
+                        {!app.is_renewal && (
                           <Badge
                             variant="outline"
                             className="ml-1 bg-sky-50 text-sky-700 border-sky-300"
                           >
-                            {roundLabel(applicationRoundOf(app))}
+                            {applicationRoundLabel(app)}
                           </Badge>
                         )}
                       </TableCell>

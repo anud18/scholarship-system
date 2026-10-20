@@ -327,6 +327,7 @@ class ApplicationResponse(BaseModel):
     review_stage: Optional[str] = None  # 審核階段（用於前端進度顯示）
     is_renewal: bool = Field(False, description="是否為續領申請")
     renewal_year: Optional[int] = Field(None, description="續領年份 (民國年，如 113)；批次匯入指定，或承接自前一申請")
+    application_round: int = Field(1, description="申請梯次 (1 = 第一梯次, 2 = 第二梯次 …)；續領申請不分梯次")
     previous_application_id: Optional[int] = Field(None, description="承接的前一份核可申請 ID（續領申請填）")
     challenges_application_id: Optional[int] = Field(
         None,
@@ -583,6 +584,7 @@ class ApplicationListResponse(BaseModel):
     )
     is_renewal: bool = Field(False, description="是否為續領申請")
     renewal_year: Optional[int] = Field(None, description="續領年份 (民國年，如 113)；批次匯入指定，或承接自前一申請")
+    application_round: int = Field(1, description="申請梯次 (1 = 第一梯次, 2 = 第二梯次 …)；續領申請不分梯次")
     previous_application_id: Optional[int] = Field(None, description="承接的前一份核可申請 ID（續領申請填）")
     challenges_application_id: Optional[int] = Field(
         None,

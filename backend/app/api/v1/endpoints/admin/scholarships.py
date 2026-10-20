@@ -150,6 +150,8 @@ async def get_applications_by_scholarship(
             "amount": app.scholarship_configuration.amount if app.scholarship_configuration else None,
             "currency": app.scholarship_configuration.currency if app.scholarship_configuration else "TWD",
             "scholarship_subtype_list": app.scholarship_subtype_list or [],
+            "is_renewal": bool(app.is_renewal),
+            "application_round": app.application_round,
             "status": app.status,
             "status_name": app.status_name,
             "review_stage": app.review_stage.value if hasattr(app.review_stage, "value") else app.review_stage,

@@ -1,8 +1,8 @@
 import {
+  applicationRoundLabel,
   applicationRoundOf,
   countGroupOrderInversions,
   findGroupOrderViolation,
-  isLaterRound,
   rankingGroup,
   roundLabel,
 } from "../application-round";
@@ -18,8 +18,14 @@ describe("application-round helpers", () => {
   it("treats a missing round as round 1", () => {
     expect(applicationRoundOf({})).toBe(1);
     expect(applicationRoundOf({ application_round: null })).toBe(1);
-    expect(isLaterRound({ application_round: 1 })).toBe(false);
-    expect(isLaterRound({ application_round: 2 })).toBe(true);
+  });
+
+  it("labels an application 續領 or 第N梯次, 第一梯次 included", () => {
+    expect(applicationRoundLabel({ is_renewal: true, application_round: 2 })).toBe("續領");
+    expect(applicationRoundLabel({ is_renewal: false, application_round: 1 })).toBe("第一梯次");
+    expect(applicationRoundLabel({ application_round: 2 })).toBe("第二梯次");
+    expect(applicationRoundLabel({})).toBe("第一梯次");
+    expect(applicationRoundLabel({ is_renewal: true }, "en")).toBe("Renewal");
   });
 
   it("groups renewals first, then by round", () => {

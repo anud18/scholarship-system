@@ -31,9 +31,13 @@ export const IMPORT_ROUND_COLUMN_HINT = {
   en: "The 申請梯次 column takes the round number (1, 2, …); it may stay blank only while the scholarship has a single round.",
 } as const;
 
-/** Whether a row belongs to a later round and should carry a 梯次 badge. */
-export function isLaterRound(item: { application_round?: number | null }): boolean {
-  return applicationRoundOf(item) > FIRST_APPLICATION_ROUND;
+/** 梯次 label shown to admins and colleges: 續領 for a renewal, else 第N梯次 (第一梯次 included). */
+export function applicationRoundLabel(
+  item: { is_renewal?: boolean | null; application_round?: number | null },
+  locale: "zh" | "en" = "zh"
+): string {
+  if (item.is_renewal) return locale === "en" ? "Renewal" : "續領";
+  return roundLabel(applicationRoundOf(item), locale);
 }
 
 interface RankedRow {

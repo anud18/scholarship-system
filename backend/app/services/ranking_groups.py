@@ -26,6 +26,16 @@ def round_label(round_number: int) -> str:
     return f"第{round_number}梯次"
 
 
+RENEWAL_LABEL = "續領"
+
+
+def application_round_label(app: Any) -> str:
+    """Round label shown to admins and colleges: 續領 for a renewal, else 第N梯次."""
+    if getattr(app, "is_renewal", False):
+        return RENEWAL_LABEL
+    return round_label(application_round_of(app))
+
+
 def application_round_of(app: Any) -> int:
     """The application's 梯次 (missing / NULL → round 1)."""
     return getattr(app, "application_round", None) or FIRST_APPLICATION_ROUND
