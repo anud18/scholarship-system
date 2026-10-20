@@ -16,7 +16,7 @@ from app.models.application_round import ScholarshipApplicationRound
 from app.models.enums import ApplicationStatus
 from app.models.scholarship import ScholarshipConfiguration
 from app.schemas.application_round import ApplicationRoundsUpdate
-from app.services.application_builder import build_submitted_application_values, validate_sub_types_open_in_round
+from app.services.application_builder import validate_sub_types_open_in_round
 from app.services.application_round_rules import ApplicationRoundRuleError, validate_rounds_against_config
 from app.services.application_service import ApplicationService
 from app.services.ranking_groups import (
@@ -363,9 +363,3 @@ class TestRoundRules:
     def test_review_not_required_is_not_checked(self):
         config = self._cfg(requires_professor_recommendation=False, professor_review_end=PAST[1])
         validate_rounds_against_config(config, [_round(2, OPEN)], self.SUB_TYPES)
-
-    def test_submitted_values_carry_the_open_round(self):
-        config = _config(rounds=[_round(2, OPEN, ("nstc",))])
-        values = build_submitted_application_values(SimpleNamespace(name="phd"), config)
-        assert values["application_round"] == 2
-        assert build_submitted_application_values(SimpleNamespace(name="phd"), _config())["application_round"] == 1

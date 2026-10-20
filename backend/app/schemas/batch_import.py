@@ -117,8 +117,25 @@ class ApplicationDataRow(BaseModel):
     is_renewal: bool = Field(default=False, description="是否為續領申請")
     renewal_year: Optional[int] = Field(default=None, description="續領年份，例如 113")
 
+    # 多梯次申請: 申請梯次 (1 = 第一梯次); blank = 第一梯次 for a single-round configuration
+    application_round: Optional[int] = Field(default=None, description="申請梯次")
+
     # 其他動態欄位
     custom_fields: Optional[Dict[str, Any]] = Field(default={}, description="其他自定義欄位")
+
+    @field_validator("application_round", mode="before")
+    @classmethod
+    def parse_application_round(cls, v: Any) -> Optional[int]:
+        """申請梯次 cell: blank → None, otherwise a positive whole number."""
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return None
+        try:
+            number = int(str(v).strip())
+        except ValueError:
+            number = 0
+        if number < 1:
+            raise ValueError("申請梯次請填正整數（1 = 第一梯次、2 = 第二梯次…）")
+        return number
 
     @field_validator("student_id")
     @classmethod

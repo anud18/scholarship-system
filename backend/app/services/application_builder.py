@@ -77,6 +77,29 @@ def validate_sub_types_open_in_round(config, application_round: Optional[int], s
         raise ValidationError(f"{label}僅開放申請：{opened}；不可申請：{'、'.join(closed)}")
 
 
+def resolve_imported_application_round(
+    config, requested_round: Optional[int], sub_types: List[str], is_renewal: bool = False
+) -> int:
+    """申請梯次 of an imported row (the 申請梯次 column of 批次匯入 / 補充匯入).
+
+    A blank cell means 第一梯次 only while the configuration has no later round;
+    otherwise the column is required. The round must exist and open the row's
+    sub-types. Renewals rank in their own group, so their round stays 1.
+    """
+    if is_renewal:
+        return FIRST_APPLICATION_ROUND
+    round_numbers = config.application_round_numbers
+    choices = "、".join(str(number) for number in round_numbers)
+    if requested_round is None:
+        if len(round_numbers) > 1:
+            raise ValidationError(f"此獎學金設有多個申請梯次，請填寫「申請梯次」（可填：{choices}）")
+        requested_round = FIRST_APPLICATION_ROUND
+    if requested_round not in round_numbers:
+        raise ValidationError(f"申請梯次 {requested_round} 不存在（可填：{choices}）")
+    validate_sub_types_open_in_round(config, requested_round, sub_types)
+    return requested_round
+
+
 def order_sub_type_preferences(sub_types: List[str]) -> List[str]:
     """Order a selected sub-type list the way the student wizard does:
     FORCED_FIRST_PREFERENCE (moe_1w) leads when present; the rest keep
@@ -92,7 +115,7 @@ def order_sub_type_preferences(sub_types: List[str]) -> List[str]:
 
 async def ensure_application_rounds_loaded(db: AsyncSession, config) -> None:
     """Load ``config.application_rounds`` when it is not loaded yet (e.g. a configuration
-    created in this session), so build_submitted_application_values never lazy-loads."""
+    created in this session), so resolve_imported_application_round never lazy-loads."""
     state = sa_inspect(config, raiseerr=False)
     if state is not None and "application_rounds" in state.unloaded:
         await db.refresh(config, attribute_names=["application_rounds"])
@@ -109,9 +132,6 @@ def build_submitted_application_values(scholarship, config) -> Dict[str, Any]:
         "submitted_at": datetime.now(timezone.utc),
         "amount": config.amount,
         "scholarship_name": config.config_name or scholarship.name,
-        # 多梯次申請: the round open now; round 1 outside every window (e.g. an import
-        # after the last round) so the application ranks with the general applicants.
-        "application_round": getattr(config, "current_application_round", None) or FIRST_APPLICATION_ROUND,
     }
 
 

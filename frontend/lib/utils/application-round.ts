@@ -25,6 +25,12 @@ export function applicationRoundOf(item: { application_round?: number | null }):
   return item.application_round || FIRST_APPLICATION_ROUND;
 }
 
+/** 批次匯入 / 補充匯入 workbook: what the 申請梯次 column takes. */
+export const IMPORT_ROUND_COLUMN_HINT = {
+  zh: "「申請梯次」欄填梯次編號（1 = 第一梯次、2 = 第二梯次…）；只有第一梯次時可留白，設有多個梯次時必填。",
+  en: "The 申請梯次 column takes the round number (1, 2, …); it may stay blank only while the scholarship has a single round.",
+} as const;
+
 /** Whether a row belongs to a later round and should carry a 梯次 badge. */
 export function isLaterRound(item: { application_round?: number | null }): boolean {
   return applicationRoundOf(item) > FIRST_APPLICATION_ROUND;
