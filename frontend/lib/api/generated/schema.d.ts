@@ -3748,7 +3748,8 @@ export interface paths {
          *
          *     Rounds missing from the body are removed (409 when a round already holds
          *     applications); an empty list turns the configuration back into a single round.
-         *     A null ``first_round_open_sub_types`` opens every sub-type in 第一梯次.
+         *     A null ``first_round_open_sub_types`` opens every sub-type in 第一梯次. A round may
+         *     not stop opening a sub-type its submitted applications use (409).
          */
         put: operations["update_application_rounds_api_v1_scholarship_configurations_configurations__id__application_rounds_put"];
         post?: never;

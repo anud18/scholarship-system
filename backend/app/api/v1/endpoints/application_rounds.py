@@ -8,7 +8,8 @@ Mounted under /scholarship-configurations.
 """
 
 import logging
-from typing import Any, Dict, List
+from collections import defaultdict
+from typing import Any, Dict, List, Optional, Set
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import and_, func, select
@@ -19,8 +20,12 @@ from app.api.v1.endpoints.scholarship_configurations import get_user_accessible_
 from app.core.cache import invalidate
 from app.core.security import require_admin
 from app.db.deps import get_db
-from app.models.application import Application
-from app.models.application_round import FIRST_APPLICATION_ROUND, ScholarshipApplicationRound
+from app.models.application import Application, ApplicationStatus
+from app.models.application_round import (
+    FIRST_APPLICATION_ROUND,
+    ScholarshipApplicationRound,
+    normalize_sub_type_codes,
+)
 from app.models.audit_log import AuditAction, AuditLog
 from app.models.scholarship import ScholarshipConfiguration
 from app.models.user import User
@@ -121,6 +126,54 @@ async def _assert_removed_rounds_unused(db: AsyncSession, config_id: int, remove
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"以下梯次已有申請，無法刪除：{detail}")
 
 
+def _requested_open_sub_types(body: ApplicationRoundsUpdate) -> Dict[int, Optional[List[str]]]:
+    """Round number → the sub-types it will open (None = every sub-type)."""
+    requested: Dict[int, Optional[List[str]]] = {FIRST_APPLICATION_ROUND: body.first_round_open_sub_types}
+    requested.update({r.round_number: r.open_sub_types for r in body.rounds})
+    return requested
+
+
+def _application_sub_types(sub_type_list, sub_scholarship_type) -> Set[str]:
+    return set(normalize_sub_type_codes(list(sub_type_list or []) + [sub_scholarship_type]))
+
+
+async def _assert_no_used_sub_type_closed(db: AsyncSession, config_id: int, body: ApplicationRoundsUpdate) -> None:
+    """A round cannot stop opening a sub-type its submitted applications already use.
+
+    Drafts are not counted (they are re-checked on submit), nor renewals (their
+    sub-type is inherited, not chosen in a round).
+    """
+    restricted = {number: set(codes) for number, codes in _requested_open_sub_types(body).items() if codes is not None}
+    if not restricted:
+        return
+    stmt = select(
+        Application.application_round, Application.scholarship_subtype_list, Application.sub_scholarship_type
+    ).where(
+        Application.scholarship_configuration_id == config_id,
+        Application.application_round.in_(list(restricted)),
+        Application.deleted_at.is_(None),
+        Application.is_renewal.is_(False),
+        Application.status.notin_([ApplicationStatus.draft.value, ApplicationStatus.deleted.value]),
+    )
+    closing: Dict[int, Set[str]] = defaultdict(set)
+    counts: Dict[int, int] = defaultdict(int)
+    for round_number, sub_type_list, sub_scholarship_type in (await db.execute(stmt)).all():
+        dropped = _application_sub_types(sub_type_list, sub_scholarship_type) - restricted[round_number]
+        dropped.discard("general")
+        if dropped:
+            closing[round_number] |= dropped
+            counts[round_number] += 1
+    if closing:
+        detail = "；".join(
+            f"{round_label(number)}的{'、'.join(sorted(closing[number]))}（{counts[number]} 件）"
+            for number in sorted(closing)
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"以下子類別已有申請，無法從該梯次移除：{detail}",
+        )
+
+
 @router.get("/configurations/{id}/application-rounds")
 async def get_application_rounds(
     id: int,
@@ -143,7 +196,8 @@ async def update_application_rounds(
 
     Rounds missing from the body are removed (409 when a round already holds
     applications); an empty list turns the configuration back into a single round.
-    A null ``first_round_open_sub_types`` opens every sub-type in 第一梯次.
+    A null ``first_round_open_sub_types`` opens every sub-type in 第一梯次. A round may
+    not stop opening a sub-type its submitted applications use (409).
     """
     config = await _load_accessible_config(db, id, current_user)
     _validate_against_config(config, body)
@@ -152,6 +206,7 @@ async def update_application_rounds(
     requested = {application_round.round_number: application_round for application_round in body.rounds}
     removed_numbers = sorted(set(existing) - set(requested))
     await _assert_removed_rounds_unused(db, config.id, removed_numbers)
+    await _assert_no_used_sub_type_closed(db, config.id, body)
 
     old_values = _round_settings(config)
 
