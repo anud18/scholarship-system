@@ -20,6 +20,7 @@ import {
   getRealSubTypes,
   isApplyableScholarship,
   isSelectableScholarship,
+  restorableSubTypes,
 } from "../scholarship-eligibility";
 
 // Minimal ScholarshipType shape — only the fields the predicate reads.
@@ -185,5 +186,25 @@ describe("getRealSubTypes", () => {
     expect(getRealSubTypes({ eligible_sub_types: [] })).toEqual([]);
     expect(getRealSubTypes({})).toEqual([]);
     expect(getRealSubTypes(null)).toEqual([]);
+  });
+});
+
+describe("restorableSubTypes", () => {
+  const offering = (...codes: string[]) => ({
+    eligible_sub_types: codes.map(value => ({ value, label: value, label_en: value, is_default: false })),
+  }) as Pick<ScholarshipType, "eligible_sub_types">;
+
+  it("drops a saved sub-type the current round no longer offers", () => {
+    expect(restorableSubTypes(["nstc", "moe_1w"], offering("nstc"))).toEqual(["nstc"]);
+  });
+
+  it("keeps every saved sub-type that is still offered, in saved order", () => {
+    expect(restorableSubTypes(["moe_1w", "nstc"], offering("nstc", "moe_1w"))).toEqual(["moe_1w", "nstc"]);
+  });
+
+  it("never restores the synthetic general bucket or anything without a scholarship", () => {
+    expect(restorableSubTypes(["general"], offering("general", "nstc"))).toEqual([]);
+    expect(restorableSubTypes(["nstc"], null)).toEqual([]);
+    expect(restorableSubTypes(undefined, offering("nstc"))).toEqual([]);
   });
 });

@@ -11,10 +11,13 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.core.exceptions import ValidationError
 from app.models.application import Application
+from app.models.application_round import FIRST_APPLICATION_ROUND, ScholarshipApplicationRound
 from app.models.application_sequence import ApplicationSequence
 from app.models.enums import PROFESSOR_ACTIONABLE_APPLICATION_STATUSES, ApplicationStatus, ReviewStage
 from app.models.scholarship import ScholarshipConfiguration
@@ -56,6 +59,47 @@ def validate_sub_type_for_submission(scholarship, sub_scholarship_type: Optional
         raise ValidationError("此獎學金不提供申請類別選擇，不可指定子類別")
 
 
+def validate_sub_types_open_in_round(config, application_round: Optional[int], sub_types: List[str]) -> None:
+    """Reject sub-types the application's 申請梯次 does not open (多梯次申請).
+
+    Each round opens the sub-types the administrator picked for it; round 1 opens
+    every sub-type unless the configuration restricts it.
+    """
+    from app.services.ranking_groups import round_label
+
+    open_codes = config.open_sub_types_for_round(application_round) if config is not None else None
+    if open_codes is None:
+        return
+    closed = [st for st in sub_types if st and st.lower().strip() not in open_codes]
+    if closed:
+        label = round_label(application_round)
+        opened = "、".join(open_codes) if open_codes else "無"
+        raise ValidationError(f"{label}僅開放申請：{opened}；不可申請：{'、'.join(closed)}")
+
+
+def resolve_imported_application_round(
+    config, requested_round: Optional[int], sub_types: List[str], is_renewal: bool = False
+) -> int:
+    """申請梯次 of an imported row (the 申請梯次 column of 批次匯入 / 補充匯入).
+
+    A blank cell means 第一梯次 only while the configuration has no later round;
+    otherwise the column is required. The round must exist and open the row's
+    sub-types. Renewals rank in their own group, so their round stays 1.
+    """
+    if is_renewal:
+        return FIRST_APPLICATION_ROUND
+    round_numbers = config.application_round_numbers
+    choices = "、".join(str(number) for number in round_numbers)
+    if requested_round is None:
+        if len(round_numbers) > 1:
+            raise ValidationError(f"此獎學金設有多個申請梯次，請填寫「申請梯次」（可填：{choices}）")
+        requested_round = FIRST_APPLICATION_ROUND
+    if requested_round not in round_numbers:
+        raise ValidationError(f"申請梯次 {requested_round} 不存在（可填：{choices}）")
+    validate_sub_types_open_in_round(config, requested_round, sub_types)
+    return requested_round
+
+
 def order_sub_type_preferences(sub_types: List[str]) -> List[str]:
     """Order a selected sub-type list the way the student wizard does:
     FORCED_FIRST_PREFERENCE (moe_1w) leads when present; the rest keep
@@ -67,6 +111,14 @@ def order_sub_type_preferences(sub_types: List[str]) -> List[str]:
         return (st or "").lower().strip() == FORCED_FIRST_PREFERENCE
 
     return [st for st in sub_types if _is_forced(st)] + [st for st in sub_types if not _is_forced(st)]
+
+
+async def ensure_application_rounds_loaded(db: AsyncSession, config) -> None:
+    """Load ``config.application_rounds`` when it is not loaded yet (e.g. a configuration
+    created in this session), so resolve_imported_application_round never lazy-loads."""
+    state = sa_inspect(config, raiseerr=False)
+    if state is not None and "application_rounds" in state.unloaded:
+        await db.refresh(config, attribute_names=["application_rounds"])
 
 
 def build_submitted_application_values(scholarship, config) -> Dict[str, Any]:
@@ -250,13 +302,31 @@ async def backfill_professor_assignments(db: AsyncSession, professor: Optional[U
     # (ApplicationService.get_professor_applications_paginated) plus the time
     # gate of ApplicationService.can_professor_submit_review.
     now = datetime.now(timezone.utc)
-    initial_actionable_configs = select(ScholarshipConfiguration.id).where(
-        ScholarshipConfiguration.requires_professor_recommendation.is_(True),
-        or_(
-            ScholarshipConfiguration.application_start_date.is_(None),
-            ScholarshipConfiguration.professor_review_end.is_(None),
-            ScholarshipConfiguration.professor_review_end >= now,
-        ),
+    # 多梯次申請: a later-round application uses its round's professor window,
+    # falling back to the general one (ScholarshipConfiguration.review_window_for).
+    application_round = aliased(ScholarshipApplicationRound)
+    initial_review_end = func.coalesce(
+        application_round.professor_review_end, ScholarshipConfiguration.professor_review_end
+    )
+    initial_actionable = (
+        select(ScholarshipConfiguration.id)
+        .outerjoin(
+            application_round,
+            and_(
+                application_round.configuration_id == ScholarshipConfiguration.id,
+                application_round.round_number == Application.application_round,
+            ),
+        )
+        .where(
+            ScholarshipConfiguration.id == Application.scholarship_configuration_id,
+            ScholarshipConfiguration.requires_professor_recommendation.is_(True),
+            or_(
+                ScholarshipConfiguration.application_start_date.is_(None),
+                initial_review_end.is_(None),
+                initial_review_end >= now,
+            ),
+        )
+        .exists()
     )
     renewal_actionable_configs = select(ScholarshipConfiguration.id).where(
         ScholarshipConfiguration.renewal_requires_professor_review.is_(True),
@@ -278,10 +348,7 @@ async def backfill_professor_assignments(db: AsyncSession, professor: Optional[U
             Application.status.in_(PROFESSOR_ACTIONABLE_APPLICATION_STATUSES),
             Application.user_id.in_(advisee_user_ids),
             or_(
-                and_(
-                    Application.is_renewal.is_(False),
-                    Application.scholarship_configuration_id.in_(initial_actionable_configs),
-                ),
+                and_(Application.is_renewal.is_(False), initial_actionable),
                 and_(
                     Application.is_renewal.is_(True),
                     Application.scholarship_configuration_id.in_(renewal_actionable_configs),

@@ -159,6 +159,16 @@ class ScholarshipService:
                     eligibility_details,
                     scholarship_type,
                 )
+                returned_round = await self._returned_application_round(user_id, config.id) if user_id else None
+                round_fields = self._application_round_fields(config, returned_round)
+                eligible_subtypes, subtype_eligibility_info = self._restrict_subtypes_to_round(
+                    eligible_subtypes, subtype_eligibility_info, round_fields["open_sub_types"]
+                )
+                # A round that opens none of the student's sub-types takes no
+                # application from them: show the scholarship read-only.
+                is_application_period = eligibility_details.get("is_application_period", True) and not (
+                    round_fields["open_sub_types"] is not None and not eligible_subtypes
+                )
 
                 scholarship_dict = {
                     "id": scholarship_type.id,
@@ -230,13 +240,92 @@ class ScholarshipService:
                         # Whether the scholarship is currently accepting applications.
                         # False for effective-but-closed (生效但已截止) scholarships, which
                         # are shown read-only and cannot be applied to.
-                        "is_application_period": eligibility_details.get("is_application_period", True),
+                        "is_application_period": is_application_period,
+                        "current_application_round": round_fields["current_application_round"],
+                        "current_round_application_end_date": round_fields["current_round_application_end_date"],
+                        "application_rounds": round_fields["application_rounds"],
                     }
                 )
 
                 eligible_scholarships.append(scholarship_dict)
 
         return eligible_scholarships
+
+    async def _returned_application_round(self, user_id: int, config_id: int) -> Optional[int]:
+        """申請梯次 of the student's returned (退回補件) application for a configuration, if any.
+
+        Editing it keeps its own round's sub-types, not the round open now.
+        """
+        stmt = (
+            select(Application.application_round)
+            .where(
+                Application.user_id == user_id,
+                Application.scholarship_configuration_id == config_id,
+                Application.status == ApplicationStatus.returned.value,
+                Application.is_renewal.is_(False),
+                Application.deleted_at.is_(None),
+            )
+            .limit(1)
+        )
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
+    @staticmethod
+    def _application_round_fields(config, returned_round: Optional[int] = None) -> Dict[str, Any]:
+        """多梯次申請 state of a configuration for the student view.
+
+        ``returned_round``: the round of the student's returned application, whose
+        sub-types (not the current round's) apply while they correct it.
+        """
+        current_round = config.current_application_round
+        round_row = config.get_application_round(current_round)
+        if round_row is not None:
+            current_end = round_row.application_end_date
+        elif current_round is not None:
+            current_end = config.application_end_date
+        else:
+            current_end = None
+        return {
+            "current_application_round": current_round,
+            "current_round_application_end_date": current_end,
+            "open_sub_types": config.open_sub_types_for_round(
+                returned_round if returned_round is not None else current_round
+            ),
+            "application_rounds": [
+                {
+                    "round_number": r.round_number,
+                    "application_start_date": r.application_start_date,
+                    "application_end_date": r.application_end_date,
+                    "open_sub_types": r.open_sub_type_codes,
+                    "is_open": r.is_open(),
+                }
+                for r in config.extra_application_rounds
+            ],
+        }
+
+    @staticmethod
+    def _restrict_subtypes_to_round(
+        eligible_subtypes: List[Dict[str, Any]],
+        subtype_eligibility_info: Dict[str, Any],
+        open_sub_types: Optional[List[str]],
+    ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+        """Keep only the sub-types the current 申請梯次 opens (None = every sub-type)."""
+        if open_sub_types is None:
+            return eligible_subtypes, subtype_eligibility_info
+
+        def is_open(code: Any) -> bool:
+            return str(code or "").lower().strip() in open_sub_types
+
+        restricted = [subtype for subtype in eligible_subtypes if is_open(subtype.get("value"))]
+        # closed_in_round only where the student qualifies; a failed rule keeps its own reason.
+        info = {
+            code: (
+                detail
+                if is_open(code)
+                else {**detail, "eligible": False, "closed_in_round": bool(detail.get("eligible", True))}
+            )
+            for code, detail in subtype_eligibility_info.items()
+        }
+        return restricted, info
 
     async def _filter_eligible_subtypes(
         self,

@@ -4,6 +4,7 @@ Import all models here for easy access
 
 from app.models.application import Application, ApplicationFile, ApplicationStatus, FileType, ReviewStatus
 from app.models.application_field import ApplicationDocument, ApplicationField, FieldType
+from app.models.application_round import ScholarshipApplicationRound
 from app.models.application_sequence import ApplicationSequence
 from app.models.audit_log import AuditAction, AuditLog
 from app.models.bank_verification_task import BankVerificationTask, BankVerificationTaskStatus
@@ -78,6 +79,7 @@ __all__ = [
     "ScholarshipType",
     "ScholarshipRule",
     "ScholarshipConfiguration",
+    "ScholarshipApplicationRound",
     # Other models
     "Notification",
     "NotificationType",

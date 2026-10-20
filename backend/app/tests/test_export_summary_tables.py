@@ -13,6 +13,7 @@ import pytest
 from openpyxl import load_workbook
 
 from app.models.application import Application
+from app.services.college_ranking_export_service import STATIC_HEADERS
 from app.services.professor_review_export import ProfessorReviewData
 from app.services.export_summary_tables import (
     _dept_name_from_apps,
@@ -89,6 +90,10 @@ def _patch_aux(monkeypatch):
     return loader
 
 
+# 1-based worksheet column of each static header
+_COL = {header: index for index, header in enumerate(STATIC_HEADERS, start=1)}
+
+
 def _read_col(xlsx_bytes, col_idx):
     """Return values of `col_idx` (1-based) for all data rows (row >= 3).
 
@@ -126,12 +131,12 @@ async def test_builds_college_and_per_dept_tables(_patch_aux):
     assert set(tables.keys()) == {college_key, a_key, b_key}
 
     # Per-dept row counts == dept sizes; codes sorted within dept
-    assert _read_col(tables[a_key], 13) == ["001", "002"]
-    assert _read_col(tables[b_key], 13) == ["003"]
+    assert _read_col(tables[a_key], _COL["學號"]) == ["001", "002"]
+    assert _read_col(tables[b_key], _COL["學號"]) == ["003"]
 
     # College table: grouped by dept folder order (A系 before B系), sorted within
-    assert _read_col(tables[college_key], 13) == ["001", "002", "003"]
-    assert _read_col(tables[college_key], 5) == ["A系", "A系", "B系"]  # 系所 column
+    assert _read_col(tables[college_key], _COL["學號"]) == ["001", "002", "003"]
+    assert _read_col(tables[college_key], _COL["系所"]) == ["A系", "A系", "B系"]  # 系所 column
 
     # 排序 column (學院初審會議之學院排序, col 2) is empty for every row
     assert _read_col(tables[college_key], 2) == ["", "", ""]
@@ -209,8 +214,8 @@ async def test_departments_table_loaded_once_and_names_every_table(_patch_aux):
 
     assert _patch_aux.await_count == 1
     college_key = "114學年度某獎學金學生資料彙整表_某學院.xlsx"
-    assert _read_col(tables[college_key], 5) == ["A系", "C系"]  # 系所
-    assert _read_col(tables[college_key], 6) == [3, ""]  # 年級: ceil(5/2); no termcount at all → blank
+    assert _read_col(tables[college_key], _COL["系所"]) == ["A系", "C系"]  # 系所
+    assert _read_col(tables[college_key], _COL["年級"]) == [3, ""]  # 年級: ceil(5/2); no termcount at all → blank
     assert "3000_C系/114學年度某獎學金學生資料彙整表_C系.xlsx" in tables
 
 

@@ -269,6 +269,7 @@ class ApplicationEnricherService:
                 "academic_year": app.get("academic_year"),
                 "semester": app.get("semester"),
                 "is_renewal": app.get("is_renewal", False),
+                "application_round": app.get("application_round", 1),
                 "created_at": app.get("created_at"),
                 "submitted_at": app.get("submitted_at"),
                 # 學生基本信息（使用 helpers 統一提取）

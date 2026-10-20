@@ -174,7 +174,7 @@ class TestApplicationRenewal:
         assert application.status == ApplicationStatus.submitted.value
 
     @pytest.mark.asyncio
-    async def test_update_application_renewal_status(
+    async def test_update_cannot_mark_application_as_renewal(
         self, db: AsyncSession, test_user: User, test_scholarship: ScholarshipType
     ):
         """Test updating application renewal status"""
@@ -208,7 +208,7 @@ class TestApplicationRenewal:
         # Act - Update to renewal
         from app.schemas.application import ApplicationUpdate
 
-        update_data = ApplicationUpdate(is_renewal=True)
+        update_data = ApplicationUpdate.model_validate({"is_renewal": True})
 
         updated_application = await service.update_application(
             application_id=application.id,
@@ -216,8 +216,8 @@ class TestApplicationRenewal:
             current_user=test_user,
         )
 
-        # Assert
-        assert updated_application.is_renewal is True
+        # Assert: a student cannot turn their application into a renewal
+        assert updated_application.is_renewal is False
 
     @pytest.mark.asyncio
     async def test_get_user_applications_includes_renewal_flag(
@@ -250,15 +250,13 @@ class TestApplicationRenewal:
                 is_draft=True,
             )
 
-        # Toggle the renewal flag through the update path (the only path that
-        # honors is_renewal) so the list response genuinely carries the flag.
-        from app.schemas.application import ApplicationUpdate
+        # Renewals come from the admin renewal import; set the flag on the row
+        # directly so the list response genuinely carries it.
+        from app.models.application import Application
 
-        await service.update_application(
-            application_id=application.id,
-            update_data=ApplicationUpdate(is_renewal=True),
-            current_user=test_user,
-        )
+        row = await db.get(Application, application.id)
+        row.is_renewal = True
+        await db.commit()
 
         # Act
         applications = await service.get_user_applications(test_user)

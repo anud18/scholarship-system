@@ -4,7 +4,7 @@ Scholarship type and rule models
 
 import enum
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import (
     JSON,
@@ -23,6 +23,13 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.base_class import Base
+from app.models.application_round import (
+    FIRST_APPLICATION_ROUND,
+    ScholarshipApplicationRound,
+    as_utc,
+    normalize_sub_type_codes,
+    window_contains,
+)
 from app.models.enums import ApplicationCycle, QuotaManagementMode, Semester, SubTypeSelectionMode
 
 if TYPE_CHECKING:
@@ -573,6 +580,8 @@ class ScholarshipConfiguration(Base):
     # 一般申請期間（續領處理完畢後）
     application_start_date = Column(DateTime(timezone=True), nullable=True)
     application_end_date = Column(DateTime(timezone=True), nullable=True)
+    # 多梯次申請: sub-type codes the general window (第一梯次) opens; NULL = every sub-type
+    first_round_open_sub_types = Column(JSON, nullable=True)
 
     # 續領審查期間 (從 ScholarshipType 移至此處)
     # 管理員決定續領是否需要教授/學院審查（與一般申請的 requires_* 各自獨立）
@@ -621,6 +630,15 @@ class ScholarshipConfiguration(Base):
     creator = relationship("User", foreign_keys=[created_by])
     updater = relationship("User", foreign_keys=[updated_by])
     roster_schedules = relationship("RosterSchedule", back_populates="scholarship_configuration")
+    # 多梯次申請: rounds 2..n (the config's own application window is round 1).
+    # selectin so the period properties below never lazy-load inside an async session.
+    application_rounds = relationship(
+        "ScholarshipApplicationRound",
+        back_populates="configuration",
+        order_by="ScholarshipApplicationRound.round_number",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
 
     # 唯一性約束：每個獎學金類型在每個學年度/學期只能有一個配置
     __table_args__ = (
@@ -649,11 +667,9 @@ class ScholarshipConfiguration(Base):
             return bool(self.renewal_requires_college_review)
         return bool(self.requires_college_review)
 
-    def professor_review_end_for(self, is_renewal: bool) -> Optional[datetime]:
-        """教授審查截止 for an application of the given kind."""
-        if is_renewal:
-            return self.renewal_professor_review_end
-        return self.professor_review_end
+    def professor_review_end_for(self, is_renewal: bool, application_round: Optional[int] = None) -> Optional[datetime]:
+        """教授審查截止 for an application of the given kind (and 梯次)."""
+        return self.review_window_for("professor", is_renewal, application_round)[1]
 
     @property
     def cycle(self) -> str:
@@ -837,27 +853,8 @@ class ScholarshipConfiguration(Base):
     # Time-related methods moved from ScholarshipType
     @property
     def is_application_period(self) -> bool:
-        """Check if within application period (renewal or general)"""
-        now = datetime.now(timezone.utc)
-
-        # 檢查續領申請期間
-        if self.is_renewal_application_period:
-            return True
-
-        # 檢查一般申請期間
-        if not self.application_start_date or not self.application_end_date:
-            return False
-
-        # Handle timezone-aware and naive datetime comparison
-        start_date = self.application_start_date
-        if start_date.tzinfo is None:
-            start_date = start_date.replace(tzinfo=timezone.utc)
-
-        end_date = self.application_end_date
-        if end_date.tzinfo is None:
-            end_date = end_date.replace(tzinfo=timezone.utc)
-
-        return bool(start_date <= now <= end_date)
+        """Check if within application period (renewal or any general round)"""
+        return self.is_renewal_application_period or self.is_general_application_period
 
     @property
     def is_renewal_application_period(self) -> bool:
@@ -878,22 +875,93 @@ class ScholarshipConfiguration(Base):
         return bool(start_date <= now <= end_date)
 
     @property
+    def is_first_round_application_period(self) -> bool:
+        """Check if within the configuration's own (第一梯次) general application window"""
+        return window_contains(self.application_start_date, self.application_end_date, datetime.now(timezone.utc))
+
+    @property
     def is_general_application_period(self) -> bool:
-        """Check if within general application period"""
+        """Check if within a general application period (第一梯次 or any later round)"""
+        return self.current_application_round is not None
+
+    # ---- 多梯次申請 helpers ------------------------------------------------------
+
+    @property
+    def extra_application_rounds(self) -> List[ScholarshipApplicationRound]:
+        """Rounds 2..n in round order (empty for a single-round configuration)."""
+        return sorted(self.application_rounds or [], key=lambda r: r.round_number)
+
+    def get_application_round(self, round_number: Optional[int]) -> Optional[ScholarshipApplicationRound]:
+        """The round row for ``round_number`` (None for round 1 / unknown rounds)."""
+        for application_round in self.extra_application_rounds:
+            if application_round.round_number == round_number:
+                return application_round
+        return None
+
+    @property
+    def current_application_round(self) -> Optional[int]:
+        """Round number whose general application window is open now, else None.
+
+        The configuration's own window is round 1 and wins when windows overlap.
+        """
+        if self.is_first_round_application_period:
+            return FIRST_APPLICATION_ROUND
         now = datetime.now(timezone.utc)
-        if not self.application_start_date or not self.application_end_date:
-            return False
+        for application_round in self.extra_application_rounds:
+            if application_round.is_open(now):
+                return application_round.round_number
+        return None
 
-        # Handle timezone-aware and naive datetime comparison
-        start_date = self.application_start_date
-        if start_date.tzinfo is None:
-            start_date = start_date.replace(tzinfo=timezone.utc)
+    def open_sub_types_for_round(self, round_number: Optional[int]) -> Optional[List[str]]:
+        """Sub-type codes a round accepts; None means every sub-type.
 
-        end_date = self.application_end_date
-        if end_date.tzinfo is None:
-            end_date = end_date.replace(tzinfo=timezone.utc)
+        Round 1 reads ``first_round_open_sub_types`` (NULL = every sub-type); a later
+        round reads its own row. An unknown round (or None) restricts nothing.
+        """
+        if round_number == FIRST_APPLICATION_ROUND:
+            if self.first_round_open_sub_types is None:
+                return None
+            return normalize_sub_type_codes(self.first_round_open_sub_types)
+        application_round = self.get_application_round(round_number)
+        if application_round is None:
+            return None
+        return application_round.open_sub_type_codes
 
-        return bool(start_date <= now <= end_date)
+    @property
+    def is_period_gated(self) -> bool:
+        """Whether applications are limited to windows at all (a general window or a later round)."""
+        return bool(self.application_start_date and self.application_end_date) or bool(self.extra_application_rounds)
+
+    @property
+    def application_round_numbers(self) -> List[int]:
+        """Every round of the configuration: 1 (its own window), then the later rounds."""
+        return [FIRST_APPLICATION_ROUND] + [r.round_number for r in self.extra_application_rounds]
+
+    def review_window_for(
+        self, role: str, is_renewal: bool, application_round: Optional[int] = None
+    ) -> Tuple[Optional[datetime], Optional[datetime]]:
+        """(start, end) of the professor/college review window for an application.
+
+        Renewals use the renewal window; a later-round application uses its round's
+        window, falling back to the general window for any bound the round leaves NULL.
+        """
+        if role not in ("professor", "college"):
+            raise ValueError(f"Unknown review role: {role!r}")
+        if is_renewal:
+            return getattr(self, f"renewal_{role}_review_start"), getattr(self, f"renewal_{role}_review_end")
+        start, end = getattr(self, f"{role}_review_start"), getattr(self, f"{role}_review_end")
+        round_row = self.get_application_round(application_round)
+        if round_row is not None:
+            start = getattr(round_row, f"{role}_review_start") or start
+            end = getattr(round_row, f"{role}_review_end") or end
+        return start, end
+
+    @property
+    def effective_college_review_end(self) -> Optional[datetime]:
+        """Latest general college-review end over every round (the ranking deadline)."""
+        ends = [self.college_review_end] + [r.college_review_end for r in self.extra_application_rounds]
+        aware = [as_utc(end) for end in ends if end is not None]
+        return max(aware) if aware else None
 
     @property
     def current_application_type(self) -> Optional[str]:

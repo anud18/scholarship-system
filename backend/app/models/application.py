@@ -102,6 +102,9 @@ class Application(Base):
     )
     is_renewal = Column(Boolean, default=False, nullable=False)  # 是否為續領申請
     renewal_year = Column(Integer, nullable=True)  # 續領年份 (e.g. 113)，display-only (§9，不再參與配額計算)
+    # 申請梯次: 1 = the configuration's own window, 2+ = ScholarshipApplicationRound.round_number.
+    # College rankings keep later rounds behind earlier ones.
+    application_round = Column(Integer, nullable=False, default=1, server_default="1")
     allocation_config_id = Column(
         Integer, ForeignKey("scholarship_configurations.id"), nullable=True
     )  # Config a renewal consumes (§9); NEVER NULL for an approved renewal

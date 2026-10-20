@@ -94,6 +94,8 @@ async def add_application(
     is_renewal: bool = False,
     order: int = 0,
     status: ApplicationStatus = ApplicationStatus.approved,
+    application_round: int = 1,
+    configuration_id: Optional[int] = None,
 ) -> Application:
     """An application of one college — ranking-eligible with the defaults (approved).
 
@@ -112,6 +114,8 @@ async def add_application(
         sub_scholarship_type=sub_type,
         scholarship_subtype_list=[sub_type],
         is_renewal=is_renewal,
+        application_round=application_round,
+        scholarship_configuration_id=configuration_id,
         submitted_at=_BASE_SUBMITTED_AT + timedelta(minutes=order),
         student_data={"std_stdcode": key, "std_cname": f"Student {key}", "std_academyno": college_code},
         submitted_form_data={},

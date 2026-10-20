@@ -35,6 +35,7 @@ import { BatchDocumentUpload } from "@/components/batch-document-upload";
 import { BatchApplicationFileUpload } from "@/components/batch-application-file-upload";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getTranslation } from "@/lib/i18n";
+import { IMPORT_ROUND_COLUMN_HINT } from "@/lib/utils/application-round";
 
 interface BatchImportPanelProps {
   locale?: "zh" | "en";
@@ -682,6 +683,9 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
                 {locale === "zh" ? "歷史紀錄" : "History"}
               </Button>
             </div>
+            <p className="text-xs text-muted-foreground">
+              {locale === "zh" ? IMPORT_ROUND_COLUMN_HINT.zh : IMPORT_ROUND_COLUMN_HINT.en}
+            </p>
           </CardContent>
         </Card>
       )}

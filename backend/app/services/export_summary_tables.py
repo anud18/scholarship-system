@@ -33,16 +33,16 @@ from app.services.college_ranking_export_service import (
 )
 from app.services.department_names import load_department_names
 from app.services.professor_review_export import ProfessorReviewData
+from app.services.ranking_groups import ranking_group
 from app.utils.application_helpers import get_department_name_from_data
 
 logger = logging.getLogger(__name__)
 
 
 def _sort_key(a: Application):
-    """Sort key: renewal applications first, then by student code (blanks last)."""
+    """Sort key: renewals first, then each 申請梯次 in round order, then by student code (blanks last)."""
     code = ((a.student_data or {}).get("std_stdcode") or "").strip()
-    renewal_group = 0 if getattr(a, "is_renewal", False) else 1  # 0=renewal first, 1=new
-    return (renewal_group, not code, code, a.id)
+    return (ranking_group(a), not code, code, a.id)
 
 
 def _dept_name_from_apps(apps: List[Application], department_names: Optional[Mapping[str, str]] = None) -> str:

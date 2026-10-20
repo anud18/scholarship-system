@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import NotFoundError, ServiceUnavailableError
+from app.core.exceptions import ValidationError as ScholarshipValidationError
 from app.models.application import Application
 from app.models.batch_import import BatchImport
 from app.models.enums import BatchImportStatus, Semester
@@ -29,9 +30,11 @@ from app.schemas.batch_import import ApplicationDataRow, BatchImportValidationEr
 from app.services.application_builder import (
     assign_professor_from_profile,
     build_submitted_application_values,
+    ensure_application_rounds_loaded,
     derive_sub_scholarship_type,
     generate_app_id,
     order_sub_type_preferences,
+    resolve_imported_application_round,
 )
 from app.services.eligibility_service import EligibilityService
 from app.services.student_service import StudentService
@@ -131,6 +134,7 @@ _ROW_FIELD_LABELS = {
     "advisor_nycu_id": "指導教授本校人事編號",
     "renewal_year": "續領年份",
     "is_renewal": "續領",
+    "application_round": "申請梯次",
     "sub_types": "申請類別",
     "custom_fields": "自訂欄位",
 }
@@ -150,6 +154,24 @@ def _format_row_validation_error(exc: PydanticValidationError) -> str:
             msg = msg[len("Value error, ") :]
         parts.append(f"{label}：{msg}")
     return "；".join(parts) or str(exc)
+
+
+# 多梯次申請: the round an imported application belongs to (Chinese / English header).
+APPLICATION_ROUND_COLUMN = "申請梯次"
+APPLICATION_ROUND_COLUMN_EN = "application_round"
+
+
+def application_round_error(config: Optional[ScholarshipConfiguration], row: Dict[str, Any]) -> Optional[str]:
+    """Why a parsed row's 申請梯次 does not fit ``config`` (None when it fits or no config)."""
+    if config is None:
+        return None
+    try:
+        resolve_imported_application_round(
+            config, row.get("application_round"), row.get("sub_types") or [], bool(row.get("is_renewal"))
+        )
+    except ScholarshipValidationError as exc:
+        return exc.message
+    return None
 
 
 # Chinese column label → sub-type code. Shared by the parser below and the
@@ -448,6 +470,10 @@ class BatchImportService:
             sub_type_labels.setdefault(raw_code, code)
             sub_type_labels.setdefault(code, code)
 
+        # 申請梯次 is checked against this period's configuration (missing → the
+        # confirm step fails with its own "找不到獎學金配置" error).
+        config = await self._resolve_configuration(scholarship_type_id, academic_year, semester)
+
         # Pre-compute column set for O(1) membership tests
         df_columns = set(df.columns)
 
@@ -531,6 +557,7 @@ class BatchImportService:
                         "advisor_nycu_id": _normalize_optional(row.get("指導教授本校人事編號")),
                         "is_renewal": is_renewal,
                         "renewal_year": renewal_year,
+                        "application_round": _normalize_optional(row.get(APPLICATION_ROUND_COLUMN)),
                         "sub_types": [],
                         "custom_fields": {},
                     }
@@ -571,6 +598,7 @@ class BatchImportService:
                         "advisor_nycu_id": _normalize_optional(row.get("advisor_nycu_id")),
                         "is_renewal": is_renewal,
                         "renewal_year": renewal_year,
+                        "application_round": _normalize_optional(row.get(APPLICATION_ROUND_COLUMN_EN)),
                         "sub_types": [],
                         "custom_fields": {},
                     }
@@ -614,6 +642,19 @@ class BatchImportService:
                             field="sub_types",
                             error_type="missing_sub_type",
                             message="未勾選任何申請類別（國科會/教育部），請於 Excel 中標記後重新上傳",
+                        )
+                    )
+                    continue
+
+                round_error = application_round_error(config, normalized_row)
+                if round_error:
+                    errors.append(
+                        BatchImportValidationError(
+                            row_number=row_number,
+                            student_id=student_id,
+                            field="application_round",
+                            error_type="invalid_application_round",
+                            message=round_error,
                         )
                     )
                     continue
@@ -1139,6 +1180,7 @@ class BatchImportService:
 
             # Submitted-state values are loop-invariant (one shared
             # submitted_at timestamp for the whole batch is intended).
+            await ensure_application_rounds_loaded(self.db, scholarship_config)
             submitted_values = build_submitted_application_values(scholarship, scholarship_config)
 
             # Concurrent SIS snapshot prefetch — the sequential per-row fetch
@@ -1200,6 +1242,12 @@ class BatchImportService:
                     semester=semester,
                     is_renewal=row_data.get("is_renewal", False),
                     renewal_year=row_data.get("renewal_year"),
+                    application_round=resolve_imported_application_round(
+                        scholarship_config,
+                        row_data.get("application_round"),
+                        row_data.get("sub_types") or [],
+                        bool(row_data.get("is_renewal")),
+                    ),
                     status=submitted_values["status"],
                     status_name=submitted_values["status_name"],
                     review_stage=submitted_values["review_stage"],

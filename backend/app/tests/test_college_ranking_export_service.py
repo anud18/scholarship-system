@@ -110,29 +110,31 @@ class TestStaticColumns:
         data = rows[2]
         assert data[0] == 1  # NO. (1-based row index)
         assert data[1] == 2  # 學院初審會議之學院排序
-        assert data[2] == "國科會"  # 申請獎學金類別 (sub_type_labels lookup happens externally)
-        assert data[3] == "工學院"
-        assert data[4] == "土木工程學系"
-        assert data[5] == 3  # 年級 = ceil(5/2)
-        assert data[6] == "否"  # 是否為逕博學生 (std_enrolltype=1)
-        assert data[7] == "王小明"
-        assert data[8] == "WANG, XIAO-MING"
-        assert data[9] == "中華民國"
-        assert data[10] == "男"
-        assert data[11] == "110.9.1"
-        assert data[12] == "411511000"
-        assert data[13] == "A123456789"
-        assert data[14] == "277506027171"  # 學生匯款帳號 (from user_profile.account_number)
-        assert data[15] == "test@nycu.edu.tw"
-        assert data[16] == "新竹市東區大學路1001號"  # 學生通訊地址 (from student_data.com_commadd)
-        assert data[17] == "林教授、陳教授"  # 指導教授姓名 (joined when multiple)
+        assert data[2] == "第一梯次"  # 申請梯次
+        assert data[3] == "國科會"  # 申請獎學金類別 (sub_type_labels lookup happens externally)
+        assert data[4] == "工學院"
+        assert data[5] == "土木工程學系"
+        assert data[6] == 3  # 年級 = ceil(5/2)
+        assert data[7] == "否"  # 是否為逕博學生 (std_enrolltype=1)
+        assert data[8] == "王小明"
+        assert data[9] == "WANG, XIAO-MING"
+        assert data[10] == "中華民國"
+        assert data[11] == "男"
+        assert data[12] == "110.9.1"
+        assert data[13] == "411511000"
+        assert data[14] == "A123456789"
+        assert data[15] == "277506027171"  # 學生匯款帳號 (from user_profile.account_number)
+        assert data[16] == "test@nycu.edu.tw"
+        assert data[17] == "新竹市東區大學路1001號"  # 學生通訊地址 (from student_data.com_commadd)
+        assert data[18] == "林教授、陳教授"  # 指導教授姓名 (joined when multiple)
 
     def test_header_row(self):
         rows = _build_workbook([])
         headers = rows[1]
-        assert headers[:18] == [
+        assert headers[:19] == [
             "NO.",
             "學院初審會議之學院排序",
+            "申請梯次",
             "申請獎學金類別",
             "學院",
             "系所",
@@ -175,7 +177,7 @@ class TestStaticFieldEdgeCases:
     def test_gender_mapping(self, sex, expected):
         app = FakeApplication(student_data={"std_sex": sex})
         rows = _build_workbook([_make_row(app=app)])
-        assert rows[2][10] == expected
+        assert rows[2][11] == expected
 
     @pytest.mark.parametrize(
         "bank_account,expected",
@@ -188,7 +190,7 @@ class TestStaticFieldEdgeCases:
     )
     def test_bank_account_column(self, bank_account, expected):
         rows = _build_workbook([_make_row(bank_account=bank_account)])
-        assert rows[2][14] == expected
+        assert rows[2][15] == expected
 
     @pytest.mark.parametrize(
         "advisor_names,expected",
@@ -201,7 +203,7 @@ class TestStaticFieldEdgeCases:
     )
     def test_advisor_names_column(self, advisor_names, expected):
         rows = _build_workbook([_make_row(advisor_names=advisor_names)])
-        assert rows[2][17] == expected
+        assert rows[2][18] == expected
 
     @pytest.mark.parametrize(
         "commadd,expected",
@@ -215,7 +217,7 @@ class TestStaticFieldEdgeCases:
     def test_address_column(self, commadd, expected):
         app = FakeApplication(student_data={"com_commadd": commadd})
         rows = _build_workbook([_make_row(app=app)])
-        assert rows[2][16] == expected
+        assert rows[2][17] == expected
 
     @pytest.mark.parametrize(
         "enrolltype,expected",
@@ -235,7 +237,7 @@ class TestStaticFieldEdgeCases:
     def test_direct_phd_mapping(self, enrolltype, expected):
         app = FakeApplication(student_data={"std_enrolltype": enrolltype})
         rows = _build_workbook([_make_row(app=app)])
-        assert rows[2][6] == expected
+        assert rows[2][7] == expected
 
     @pytest.mark.parametrize(
         "termcount,expected",
@@ -244,7 +246,7 @@ class TestStaticFieldEdgeCases:
     def test_grade_formula(self, termcount, expected):
         app = FakeApplication(student_data={"trm_termcount": termcount})
         rows = _build_workbook([_make_row(app=app)])
-        assert rows[2][5] == expected
+        assert rows[2][6] == expected
 
     @pytest.mark.parametrize(
         "year,term,expected",
@@ -259,17 +261,17 @@ class TestStaticFieldEdgeCases:
     def test_enrollment_date(self, year, term, expected):
         app = FakeApplication(student_data={"std_enrollyear": year, "std_enrollterm": term})
         rows = _build_workbook([_make_row(app=app)])
-        assert rows[2][11] == expected
+        assert rows[2][12] == expected
 
     def test_missing_student_data_renders_empty_strings(self):
         app = FakeApplication(student_data={})
         rows = _build_workbook([_make_row(app=app)])
         data = rows[2]
         # Static text columns should be "" not None. Indices map to:
-        # 3=學院, 4=系所, 6=年級, 7=是否為逕博, 8=中文姓名, 9=英文姓名,
-        # 12=註冊入學日期, 13=學號, 14=身分證, 15=匯款帳號 (None via default),
-        # 16=E-mail, 17=通訊地址, 18=指導教授姓名 (default None -> "").
-        for idx in [3, 4, 6, 7, 8, 9, 12, 13, 14, 15, 16, 17]:
+        # 4=學院, 5=系所, 7=是否為逕博, 8=中文姓名, 9=英文姓名, 10=國籍,
+        # 13=學號, 14=身分證, 15=匯款帳號 (None via default), 16=E-mail,
+        # 17=通訊地址, 18=指導教授姓名 (default None -> "").
+        for idx in [4, 5, 7, 8, 9, 10, 13, 14, 15, 16, 17, 18]:
             assert data[idx] == "", f"col {idx} expected empty string, got {data[idx]!r}"
 
 
@@ -278,7 +280,7 @@ class TestApiOneIdentityColumns:
     from those codes); the term row only fills a gap. 年級 falls back to
     std_termcount when the term lookup failed."""
 
-    COLLEGE, DEPT, GRADE = 3, 4, 5
+    COLLEGE, DEPT, GRADE = 4, 5, 6
 
     def test_std_only_snapshot_fills_college_department_and_grade(self):
         # Term lookup failed (SIS timeout): no trm_* keys at all.
@@ -338,17 +340,17 @@ class TestSubTypeRendering:
     def test_zero_preferences_uses_fallback(self):
         app = FakeApplication(sub_type_preferences=[], sub_scholarship_type="moe_1w")
         rows = _build_workbook([_make_row(app=app)], sub_type_labels={"moe_1w": "教育部"})
-        assert rows[2][2] == "教育部"
+        assert rows[2][3] == "教育部"
 
     def test_zero_preferences_unknown_code_uses_raw_code(self):
         app = FakeApplication(sub_type_preferences=None, sub_scholarship_type="custom_x")
         rows = _build_workbook([_make_row(app=app)])
-        assert rows[2][2] == "custom_x"
+        assert rows[2][3] == "custom_x"
 
     def test_one_preference(self):
         app = FakeApplication(sub_type_preferences=["nstc"])
         rows = _build_workbook([_make_row(app=app)], sub_type_labels={"nstc": "國科會"})
-        assert rows[2][2] == "國科會"
+        assert rows[2][3] == "國科會"
 
     def test_two_preferences(self):
         app = FakeApplication(sub_type_preferences=["nstc", "moe_1w"])
@@ -356,12 +358,12 @@ class TestSubTypeRendering:
             [_make_row(app=app)],
             sub_type_labels={"nstc": "國科會", "moe_1w": "教育部"},
         )
-        assert rows[2][2] == "國科會(第一志願)暨教育部(第二志願)"
+        assert rows[2][3] == "國科會(第一志願)暨教育部(第二志願)"
 
     def test_unknown_sub_type_in_preferences_uses_code(self):
         app = FakeApplication(sub_type_preferences=["nstc", "unknown_code"])
         rows = _build_workbook([_make_row(app=app)], sub_type_labels={"nstc": "國科會"})
-        assert rows[2][2] == "國科會(第一志願)暨unknown_code(第二志願)"
+        assert rows[2][3] == "國科會(第一志願)暨unknown_code(第二志願)"
 
 
 class TestDynamicColumns:
@@ -379,8 +381,8 @@ class TestDynamicColumns:
             )
         ]
         rows = _build_workbook([_make_row(app=app)], dynamic_fields=fields)
-        assert rows[1][18] == "碩士畢業學校"
-        assert rows[2][18] == "台大土木系"
+        assert rows[1][19] == "碩士畢業學校"
+        assert rows[2][19] == "台大土木系"
 
     def test_export_column_label_overrides_field_label(self):
         app = FakeApplication(submitted_form_data={"fields": {"phone": {"value": "0912345678"}}})
@@ -393,8 +395,8 @@ class TestDynamicColumns:
             )
         ]
         rows = _build_workbook([_make_row(app=app)], dynamic_fields=fields)
-        assert rows[1][18] == "學生手機"
-        assert rows[2][18] == "0912345678"
+        assert rows[1][19] == "學生手機"
+        assert rows[2][19] == "0912345678"
 
     def test_dynamic_fields_sorted_by_display_order(self):
         app = FakeApplication(
@@ -410,26 +412,26 @@ class TestDynamicColumns:
             DynamicFieldSpec("a_first", "First", None, display_order=10),
         ]
         rows = _build_workbook([_make_row(app=app)], dynamic_fields=fields)
-        assert rows[1][18:20] == ["First", "Second"]
-        assert rows[2][18:20] == ["A", "B"]
+        assert rows[1][19:21] == ["First", "Second"]
+        assert rows[2][19:21] == ["A", "B"]
 
     def test_missing_dynamic_value_renders_empty(self):
         app = FakeApplication(submitted_form_data={"fields": {}})
         fields = [DynamicFieldSpec("phone", "手機", None, display_order=1)]
         rows = _build_workbook([_make_row(app=app)], dynamic_fields=fields)
-        assert rows[2][18] == ""
+        assert rows[2][19] == ""
 
     def test_none_value_renders_empty(self):
         app = FakeApplication(submitted_form_data={"fields": {"phone": {"value": None}}})
         fields = [DynamicFieldSpec("phone", "手機", None, display_order=1)]
         rows = _build_workbook([_make_row(app=app)], dynamic_fields=fields)
-        assert rows[2][18] == ""
+        assert rows[2][19] == ""
 
     def test_non_string_value_coerced_to_string(self):
         app = FakeApplication(submitted_form_data={"fields": {"count": {"value": 42}}})
         fields = [DynamicFieldSpec("count", "次數", None, display_order=1)]
         rows = _build_workbook([_make_row(app=app)], dynamic_fields=fields)
-        assert rows[2][18] == "42"
+        assert rows[2][19] == "42"
 
 
 class TestEmptyRanking:
@@ -478,7 +480,7 @@ class TestFormulaInjectionSanitization:
             )
         ]
         rows = _build_workbook([_make_row(app=app)], dynamic_fields=fields)
-        assert rows[2][18] == "'" + payload
+        assert rows[2][19] == "'" + payload
 
     def test_malicious_student_name_is_neutralized(self):
         data = _full_student_data()
@@ -502,4 +504,4 @@ class TestFormulaInjectionSanitization:
             )
         ]
         rows = _build_workbook([_make_row(app=app)], dynamic_fields=fields)
-        assert rows[2][18] == "台大土木系"
+        assert rows[2][19] == "台大土木系"

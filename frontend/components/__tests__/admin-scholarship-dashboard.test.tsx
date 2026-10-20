@@ -218,4 +218,44 @@ describe("AdminScholarshipDashboard", () => {
       1
     );
   });
+
+  it("shows each application's 梯次: 續領, 第一梯次 or a later round", () => {
+    const row = (id: number, name: string, overrides: Record<string, unknown>) => ({
+      id,
+      app_id: `APP-${id}`,
+      status: "under_review",
+      academic_year: "114",
+      semester: "first",
+      student_data: { std_cname: name, std_stdcode: `31046000${id}` },
+      submitted_form_data: {},
+      scholarship_subtype_list: [],
+      created_at: "2026-09-01T00:00:00Z",
+      updated_at: "2026-09-01T00:00:00Z",
+      ...overrides,
+    });
+    mockUseScholarshipSpecificApplications.mockReturnValue({
+      applicationsByType: {
+        phd: [
+          row(1, "續領生", { is_renewal: true, application_round: 1 }),
+          row(2, "一梯生", { is_renewal: false, application_round: 1 }),
+          row(3, "二梯生", { is_renewal: false, application_round: 2 }),
+        ],
+      },
+      scholarshipTypes: ["phd"],
+      scholarshipStats: { phd: { total: 3 } },
+      isLoading: false,
+      error: null,
+      refetch: mockRefetch,
+      updateApplicationStatus: jest.fn(),
+    });
+
+    render(<AdminScholarshipDashboard user={baseUser as never} />);
+
+    expect(screen.getByRole("columnheader", { name: "梯次" })).toBeInTheDocument();
+    const roundOf = (name: string) =>
+      screen.getByText(new RegExp(name)).closest("tr")?.textContent ?? "";
+    expect(roundOf("續領生")).toContain("續領");
+    expect(roundOf("一梯生")).toContain("第一梯次");
+    expect(roundOf("二梯生")).toContain("第二梯次");
+  });
 });

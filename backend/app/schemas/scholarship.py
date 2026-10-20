@@ -261,6 +261,18 @@ class SubtypeEligibilityInfo(BaseModel):
     eligible: bool
     failed_rules: List[SubtypeRuleDetail] = []
     warning_rules: List[SubtypeRuleDetail] = []
+    # 多梯次申請: the student qualifies, but the current 申請梯次 does not open this sub-type
+    closed_in_round: bool = False
+
+
+class ApplicationRoundSummary(BaseModel):
+    """A later 申請梯次 (第二梯次起) as students see it"""
+
+    round_number: int
+    application_start_date: datetime
+    application_end_date: datetime
+    open_sub_types: List[str] = []
+    is_open: bool = False
 
 
 class EligibleScholarshipResponse(BaseModel):
@@ -295,6 +307,11 @@ class EligibleScholarshipResponse(BaseModel):
     # Whether the scholarship is currently accepting applications. False for
     # effective-but-closed (生效但已截止) scholarships, which are shown read-only.
     is_application_period: bool = True
+    # 多梯次申請: the round open now (1 = the general window, None = closed), the
+    # closing time of that round, and every later round of the configuration.
+    current_application_round: Optional[int] = None
+    current_round_application_end_date: Optional[datetime] = None
+    application_rounds: List[ApplicationRoundSummary] = []
 
     model_config = ConfigDict(from_attributes=True)
 
