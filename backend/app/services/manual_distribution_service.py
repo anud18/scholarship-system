@@ -26,7 +26,7 @@ from app.models.student import Academy
 from app.services.application_builder import order_sub_type_preferences
 from app.services.department_names import load_department_names
 from app.services.professor_review_export import load_professor_reviews, normalize_sub_type
-from app.services.ranking_groups import application_round_of, ranking_group
+from app.services.ranking_groups import application_round_of, distribution_order_key, ranking_group_sql
 from app.services.received_months_service import (
     calculate_received_months_bulk_async,
     get_imported_months_bulk_async,
@@ -271,6 +271,37 @@ def _dedupe_preview_items(
     return unique_items
 
 
+# ORDER BY for non-renewal candidate queries: the SQL twin of distribution_order_key.
+_CANDIDATE_ORDER = (ranking_group_sql(Application), CollegeRankingItem.rank_position, CollegeRankingItem.id)
+
+
+def _item_distribution_order(item) -> tuple:
+    """distribution_order_key of a CollegeRankingItem (續領 → 第一梯次 → … → rank → item)."""
+    return distribution_order_key(item.application, item.rank_position, item.id)
+
+
+def _with_effective_ranks(students: list[dict], order_keys: dict[int, tuple]) -> list[dict]:
+    """Each college's rows in 預設分發 order, numbered 實際順位 1..n.
+
+    ``order_keys`` maps ranking_item_id → distribution_order_key. College-rejected
+    rows ('N', never allocated by 預設分發) get effective_rank None and follow their
+    college's ranked rows.
+    """
+
+    def row_order(student: dict) -> tuple:
+        return (student["college_code"], bool(student["college_rejected"]), order_keys[student["ranking_item_id"]])
+
+    numbered: list[dict] = []
+    ranked_so_far: dict[str, int] = {}
+    for student in sorted(students, key=row_order):
+        effective_rank = None
+        if not student["college_rejected"]:
+            effective_rank = ranked_so_far.get(student["college_code"], 0) + 1
+            ranked_so_far[student["college_code"]] = effective_rank
+        numbered.append({**student, "effective_rank": effective_rank})
+    return numbered
+
+
 def _compute_suggestions(
     unique_items: list,
     default_prefs: list[str],
@@ -337,8 +368,7 @@ def _compute_suggestions(
 
     sorted_items = sorted(
         [item for item in unique_items if _is_undecided(item)],
-        # 續領 → 第一梯次 → 第二梯次 …, then the college's rank inside the group
-        key=lambda i: (ranking_group(i.application), i.rank_position),
+        key=_item_distribution_order,
     )
 
     results: list[dict] = []
@@ -777,6 +807,7 @@ class ManualDistributionService:
 
         students = []
         index_by_app: dict[int, int] = {}
+        order_keys: dict[int, tuple] = {}
         for item in items:
             app = item.application
             if not app:
@@ -900,6 +931,7 @@ class ManualDistributionService:
             # carries the real allocation — otherwise the (rank-ordered) first item, if
             # unallocated, would hide a persisted allocation on the duplicate. Iteration
             # order is deterministic (rank_position, id).
+            order_keys[item.id] = _item_distribution_order(item)
             existing_idx = index_by_app.get(app.id)
             if existing_idx is not None:
                 kept = students[existing_idx]
@@ -923,9 +955,8 @@ class ManualDistributionService:
             index_by_app[app.id] = len(students)
             students.append(student)
 
-        # Sort by college_code, then rank_position
-        students.sort(key=lambda s: (s["college_code"], s["rank_position"]))
-        return students
+        # Grouped by college, in 預設分發 order (續領 → 第一梯次 → 第二梯次 …, then rank)
+        return _with_effective_ranks(students, order_keys)
 
     async def get_quota_status(
         self,
@@ -1836,7 +1867,7 @@ class ManualDistributionService:
         3. Load default preferences and previous allocation years for renewal students.
         4. Build quota tracker from config (current year + prior years per sub-type).
         5. Subtract the allocations in force — see `staged` — from the tracker.
-        6. Sort students: renewal first, then by rank_position ascending.
+        6. Sort students: 續領 → 第一梯次 → 第二梯次 …, then rank_position (distribution_order_key).
         7. Allocate sequentially following preference order and quota constraints.
 
         `college_code` narrows step 2 to that college's students only (admins can
@@ -2437,7 +2468,7 @@ class ManualDistributionService:
                 ),
                 Application.deleted_at.is_(None),
             )
-            .order_by(CollegeRankingItem.rank_position)
+            .order_by(*_CANDIDATE_ORDER)
         )
         return list((await self.db.execute(stmt)).scalars().all())
 
@@ -2482,7 +2513,7 @@ class ManualDistributionService:
                 ),
                 Application.deleted_at.is_(None),
             )
-            .order_by(CollegeRankingItem.rank_position)
+            .order_by(*_CANDIDATE_ORDER)
         )
         if limit is not None:
             stmt = stmt.limit(limit)
@@ -2893,7 +2924,7 @@ class ManualDistributionService:
                 Application.is_renewal.is_(False),
                 Application.deleted_at.is_(None),
             )
-            .order_by(CollegeRankingItem.rank_position)
+            .order_by(*_CANDIDATE_ORDER)
         )
         cands = candidates_result.unique().all()
 

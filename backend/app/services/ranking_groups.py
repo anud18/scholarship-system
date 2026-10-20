@@ -6,7 +6,9 @@ The college orders freely inside a group. Rows the college rejected ('N') are
 parked at the end of the ranking and are exempt from the group order.
 """
 
-from typing import Any, Iterable, Optional
+from typing import Any, Iterable, Optional, Tuple
+
+from sqlalchemy import case, func
 
 from app.models.application_round import FIRST_APPLICATION_ROUND
 
@@ -36,6 +38,20 @@ def ranking_group(app: Any) -> int:
     if getattr(app, "is_renewal", False):
         return RENEWAL_GROUP
     return application_round_of(app)
+
+
+def ranking_group_sql(application_cls):
+    """SQL twin of ranking_group for ORDER BY on an Application query."""
+    return case(
+        (application_cls.is_renewal.is_(True), RENEWAL_GROUP),
+        else_=func.coalesce(application_cls.application_round, FIRST_APPLICATION_ROUND),
+    )
+
+
+def distribution_order_key(app: Any, rank_position: int, ranking_item_id: int) -> Tuple[int, int, int]:
+    """Order of a college's ranked students on the admin distribution page and in 預設分發:
+    續領 → 第一梯次 → 第二梯次 …, then the college's rank, then the ranking item."""
+    return (ranking_group(app), rank_position, ranking_item_id)
 
 
 def round_order_error(earlier_group: int, later_group: int) -> str:

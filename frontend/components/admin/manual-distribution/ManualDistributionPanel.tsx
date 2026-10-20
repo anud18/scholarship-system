@@ -99,6 +99,9 @@ const ALL_ACADEMIES_SYSTEM = "__all__";
 /** In-flight marker for the whole-page 預設分發 run; no college_code collides. */
 const ALL_COLLEGES = "__all_colleges__";
 
+// Columns other than the per-(year × sub_type) 核配 columns, for full-width rows.
+const FIXED_COLUMN_COUNT = 15;
+
 /** Refusals when a college is over its own cell of quotas[sub_type] — the
  * offending cells are listed in the banner, so these only say why nothing ran. */
 const OVERFLOW_BLOCKED_SAVE = "有學院超過名額上限，無法儲存（詳見上方紅色提示）";
@@ -1634,7 +1637,7 @@ export function ManualDistributionPanel({
             <div className="overflow-x-auto">
               <table
                 className="w-full text-left border-collapse text-xs"
-                style={{ minWidth: `${1140 + subTypeCols.length * 85}px` }}
+                style={{ minWidth: `${1180 + subTypeCols.length * 85}px` }}
               >
                 <thead className="bg-slate-50 text-[13px] text-slate-600">
                   {/* Row 1 */}
@@ -1642,8 +1645,15 @@ export function ManualDistributionPanel({
                     <th
                       rowSpan={2}
                       className="px-1.5 py-1.5 border border-slate-200 text-center font-semibold w-10 whitespace-nowrap text-[11px]"
+                      title="預設分發的實際順序：續領 → 第一梯次 → 第二梯次…，同組內依學院名次"
                     >
-                      排序
+                      實際順位
+                    </th>
+                    <th
+                      rowSpan={2}
+                      className="px-1.5 py-1.5 border border-slate-200 text-center font-semibold w-10 whitespace-nowrap text-[11px]"
+                    >
+                      學院名次
                     </th>
                     <th
                       rowSpan={2}
@@ -1754,7 +1764,7 @@ export function ManualDistributionPanel({
                   {filteredStudents.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={14 + subTypeCols.length}
+                        colSpan={FIXED_COLUMN_COUNT + subTypeCols.length}
                         className="px-4 py-10 border border-slate-200 text-center text-slate-500"
                       >
                         {students.length === 0
@@ -1776,7 +1786,7 @@ export function ManualDistributionPanel({
                             className="bg-slate-100"
                           >
                             <td
-                              colSpan={14 + subTypeCols.length}
+                              colSpan={FIXED_COLUMN_COUNT + subTypeCols.length}
                               className="px-4 py-1.5 text-xs font-bold text-slate-600 border border-slate-300"
                             >
                               {/* Left-aligned next to the college name: the row
@@ -1863,6 +1873,9 @@ export function ManualDistributionPanel({
                                         : "hover:bg-slate-50"
                                 }`}
                               >
+                                <td className="px-1.5 py-1.5 border border-slate-200 text-center font-bold text-slate-900 text-[11px]">
+                                  {student.effective_rank ?? "-"}
+                                </td>
                                 <td className="px-1.5 py-1.5 border border-slate-200 text-center font-bold text-slate-700 text-[11px]">
                                   {student.college_rejected ? (
                                     <span className="text-red-600">N</span>
