@@ -63,6 +63,7 @@ import {
 import { logger } from "@/lib/utils/logger";
 import {
   getRealSubTypes,
+  restorableSubTypes,
   isApplyableScholarship,
 } from "@/lib/scholarship-eligibility";
 import { clsx } from "@/lib/utils";
@@ -702,16 +703,14 @@ export function ScholarshipApplicationStep({
         setSelectedScholarship(scholarship);
       }
 
-      // Load sub-types
-      if (
-        editingApplication.scholarship_subtype_list &&
-        editingApplication.scholarship_subtype_list.length > 0
-      ) {
-        const validSubTypes =
-          editingApplication.scholarship_subtype_list.filter(
-            st => st !== "general"
-          );
-        setSelectedSubTypes(validSubTypes);
+      // Load sub-types the scholarship still offers (a closed one would stay
+      // selected without a visible checkbox)
+      const restoredSubTypes = restorableSubTypes(
+        editingApplication.scholarship_subtype_list,
+        scholarship
+      );
+      if (restoredSubTypes.length > 0) {
+        setSelectedSubTypes(restoredSubTypes);
       }
 
       // Load form data
