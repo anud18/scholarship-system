@@ -23,7 +23,13 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.base_class import Base
-from app.models.application_round import FIRST_APPLICATION_ROUND, ScholarshipApplicationRound, as_utc, window_contains
+from app.models.application_round import (
+    FIRST_APPLICATION_ROUND,
+    ScholarshipApplicationRound,
+    as_utc,
+    normalize_sub_type_codes,
+    window_contains,
+)
 from app.models.enums import ApplicationCycle, QuotaManagementMode, Semester, SubTypeSelectionMode
 
 if TYPE_CHECKING:
@@ -574,6 +580,8 @@ class ScholarshipConfiguration(Base):
     # 一般申請期間（續領處理完畢後）
     application_start_date = Column(DateTime(timezone=True), nullable=True)
     application_end_date = Column(DateTime(timezone=True), nullable=True)
+    # 多梯次申請: sub-type codes the general window (第一梯次) opens; NULL = every sub-type
+    first_round_open_sub_types = Column(JSON, nullable=True)
 
     # 續領審查期間 (從 ScholarshipType 移至此處)
     # 管理員決定續領是否需要教授/學院審查（與一般申請的 requires_* 各自獨立）
@@ -905,11 +913,24 @@ class ScholarshipConfiguration(Base):
         return None
 
     def open_sub_types_for_round(self, round_number: Optional[int]) -> Optional[List[str]]:
-        """Sub-type codes a round accepts; None means every sub-type (round 1)."""
+        """Sub-type codes a round accepts; None means every sub-type.
+
+        Round 1 reads ``first_round_open_sub_types`` (NULL = every sub-type); a later
+        round reads its own row. An unknown round (or None) restricts nothing.
+        """
+        if round_number == FIRST_APPLICATION_ROUND:
+            if self.first_round_open_sub_types is None:
+                return None
+            return normalize_sub_type_codes(self.first_round_open_sub_types)
         application_round = self.get_application_round(round_number)
         if application_round is None:
             return None
         return application_round.open_sub_type_codes
+
+    @property
+    def application_round_numbers(self) -> List[int]:
+        """Every round of the configuration: 1 (its own window), then the later rounds."""
+        return [FIRST_APPLICATION_ROUND] + [r.round_number for r in self.extra_application_rounds]
 
     def review_window_for(
         self, role: str, is_renewal: bool, application_round: Optional[int] = None

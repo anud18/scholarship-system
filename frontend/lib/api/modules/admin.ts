@@ -892,15 +892,16 @@ export function createAdminApi() {
     },
 
     /**
-     * 多梯次申請: replace a configuration's later rounds (第二梯次起); [] = single round
+     * 多梯次申請: replace a configuration's round settings — 第一梯次's open sub-types
+     * (null = every sub-type) and the later rounds (第二梯次起; [] = single round)
      */
     updateApplicationRounds: async (
       id: number,
-      rounds: components['schemas']['ApplicationRoundInput'][]
+      body: components['schemas']['ApplicationRoundsUpdate']
     ): Promise<ApiResponse<ApplicationRoundsPayload>> => {
       const response = await typedClient.raw.PUT(
         '/api/v1/scholarship-configurations/configurations/{id}/application-rounds',
-        { params: { path: { id } }, body: { rounds } }
+        { params: { path: { id } }, body }
       );
       return toApiResponse(response) as unknown as ApiResponse<ApplicationRoundsPayload>;
     },

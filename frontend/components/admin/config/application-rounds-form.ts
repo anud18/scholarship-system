@@ -6,6 +6,7 @@ import {
 } from "@/lib/utils/datetime-local";
 
 export type ApplicationRoundInput = components["schemas"]["ApplicationRoundInput"];
+export type ApplicationRoundsUpdate = components["schemas"]["ApplicationRoundsUpdate"];
 
 /** Editable state of one later round; dates are `datetime-local` values. */
 export interface RoundDraft {
@@ -72,15 +73,41 @@ export function nextRoundDraft(
   };
 }
 
+function toggleCode(codes: string[], code: string): string[] {
+  return codes.includes(code) ? codes.filter(existing => existing !== code) : [...codes, code];
+}
+
 export function toggleSubType(draft: RoundDraft, code: string): RoundDraft {
-  const open_sub_types = draft.open_sub_types.includes(code)
-    ? draft.open_sub_types.filter(existing => existing !== code)
-    : [...draft.open_sub_types, code];
-  return { ...draft, open_sub_types };
+  return { ...draft, open_sub_types: toggleCode(draft.open_sub_types, code) };
+}
+
+/** 第一梯次's open sub-types: null = every sub-type (「開放所有子類別」). */
+export type FirstRoundSubTypes = string[] | null;
+
+/** Turning 「開放所有子類別」 off starts from every sub-type ticked. */
+export function setOpenAllFirstRound(
+  openAll: boolean,
+  availableSubTypes: string[]
+): FirstRoundSubTypes {
+  return openAll ? null : [...availableSubTypes];
+}
+
+export function toggleFirstRoundSubType(
+  current: FirstRoundSubTypes,
+  code: string,
+  availableSubTypes: string[]
+): FirstRoundSubTypes {
+  return toggleCode(current ?? availableSubTypes, code);
 }
 
 /** Client-side checks before saving; the backend validates the same rules again. */
-export function validateRoundDrafts(drafts: RoundDraft[]): string | null {
+export function validateRoundDrafts(
+  drafts: RoundDraft[],
+  firstRoundSubTypes: FirstRoundSubTypes = null
+): string | null {
+  if (firstRoundSubTypes !== null && firstRoundSubTypes.length === 0) {
+    return "第一梯次至少需開放一個子類別（或勾選開放所有子類別）";
+  }
   for (const draft of drafts) {
     const label = `第 ${draft.round_number} 梯次`;
     if (!draft.application_start_date || !draft.application_end_date) {
@@ -100,6 +127,13 @@ export function validateRoundDrafts(drafts: RoundDraft[]): string | null {
     }
   }
   return null;
+}
+
+export function toRoundsUpdate(
+  drafts: RoundDraft[],
+  firstRoundSubTypes: FirstRoundSubTypes
+): ApplicationRoundsUpdate {
+  return { first_round_open_sub_types: firstRoundSubTypes, rounds: toRoundInputs(drafts) };
 }
 
 export function toRoundInputs(drafts: RoundDraft[]): ApplicationRoundInput[] {

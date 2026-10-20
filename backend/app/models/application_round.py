@@ -2,8 +2,8 @@
 多梯次申請 (additional application rounds) model
 
 A ScholarshipConfiguration's own ``application_start_date`` / ``application_end_date``
-is always the first round (第一梯次), open to every sub-type. Each row here opens one
-more round (第二梯次, 第三梯次, ...) with its own application window, the subset of
+is always the first round (第一梯次); its ``first_round_open_sub_types`` names the
+sub-types round 1 opens (NULL = every sub-type). Each row here opens one more round (第二梯次, 第三梯次, ...) with its own application window, the subset of
 sub-types students may apply for, and optional per-round review windows. A NULL
 review window falls back to the configuration's general window.
 
@@ -11,7 +11,7 @@ College rankings keep later rounds behind earlier ones (see app.services.ranking
 """
 
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Iterable, List, Optional
 
 from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, UniqueConstraint
 from sqlalchemy.orm import relationship
@@ -30,6 +30,12 @@ def as_utc(value: Optional[datetime]) -> Optional[datetime]:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value
+
+
+def normalize_sub_type_codes(codes: Optional[Iterable]) -> List[str]:
+    """Lowercase, stripped, de-duplicated sub-type codes in their original order."""
+    normalized = [str(code).strip().lower() for code in (codes or []) if code is not None and str(code).strip()]
+    return list(dict.fromkeys(normalized))
 
 
 def window_contains(start: Optional[datetime], end: Optional[datetime], now: datetime) -> bool:
@@ -80,7 +86,7 @@ class ScholarshipApplicationRound(Base):
 
     @property
     def open_sub_type_codes(self) -> List[str]:
-        return [str(code).strip().lower() for code in (self.open_sub_types or []) if str(code).strip()]
+        return normalize_sub_type_codes(self.open_sub_types)
 
     def is_open(self, now: Optional[datetime] = None) -> bool:
         return window_contains(

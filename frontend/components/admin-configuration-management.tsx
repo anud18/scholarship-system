@@ -841,6 +841,11 @@ export function AdminConfigurationManagement({
                                       ~{" "}
                                       {formatDate(config.application_end_date)}
                                     </div>
+                                    {config.first_round_open_sub_types && (
+                                      <div className="text-xs text-muted-foreground">
+                                        開放：{config.first_round_open_sub_types.join("、")}
+                                      </div>
+                                    )}
                                   </div>
                                 ) : null}
 

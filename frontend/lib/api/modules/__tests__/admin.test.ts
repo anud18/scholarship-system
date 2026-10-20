@@ -535,9 +535,9 @@ describe("createAdminApi", () => {
     );
   });
 
-  it("updateApplicationRounds PUTs the full round list wrapped under `rounds`", async () => {
-    // Pin: replace-all semantics — the body always carries every later round,
-    // [] turns the configuration back into a single round.
+  it("updateApplicationRounds PUTs 第一梯次's sub-types and the full round list", async () => {
+    // Pin: replace-all semantics — the body always carries every later round
+    // ([] = single round) and 第一梯次's sub-types (null = every sub-type).
     mockedRaw.PUT.mockResolvedValueOnce({});
     const api = createAdminApi();
     const rounds = [
@@ -548,10 +548,10 @@ describe("createAdminApi", () => {
         open_sub_types: ["nstc"],
       },
     ];
-    await api.updateApplicationRounds(7, rounds);
+    await api.updateApplicationRounds(7, { first_round_open_sub_types: ["moe_1w"], rounds });
     expect(mockedRaw.PUT).toHaveBeenCalledWith(
       "/api/v1/scholarship-configurations/configurations/{id}/application-rounds",
-      { params: { path: { id: 7 } }, body: { rounds } }
+      { params: { path: { id: 7 } }, body: { first_round_open_sub_types: ["moe_1w"], rounds } }
     );
   });
 

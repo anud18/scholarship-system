@@ -1489,7 +1489,10 @@ export function ScholarshipApplicationStep({
                 <span className="font-semibold">1. {text.selectPrograms}</span>{" "}
                 <span className="text-red-500">*</span>
               </Label>
-              {(selectedScholarship.current_application_round ?? 1) > 1 && (
+              {((selectedScholarship.current_application_round ?? 1) > 1 ||
+                Object.values(selectedScholarship.subtype_eligibility ?? {}).some(
+                  info => info.closed_in_round
+                )) && (
                 <p className="text-sm text-sky-700">
                   {locale === "zh"
                     ? `目前為${roundLabel(selectedScholarship.current_application_round ?? 1)}申請，僅列出本梯次開放的類別。`

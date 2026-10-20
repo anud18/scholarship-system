@@ -23,10 +23,13 @@ import { logger } from "@/lib/utils/logger";
 import { roundLabel } from "@/lib/utils/application-round";
 import {
   nextRoundDraft,
+  setOpenAllFirstRound,
+  toggleFirstRoundSubType,
   toggleSubType,
   toRoundDrafts,
-  toRoundInputs,
+  toRoundsUpdate,
   validateRoundDrafts,
+  type FirstRoundSubTypes,
   type RoundDraft,
 } from "./application-rounds-form";
 
@@ -51,10 +54,43 @@ const formatWindow = (start: string | null, end: string | null) => {
   return `${format(start)} ~ ${format(end)}`;
 };
 
+interface SubTypeCheckboxesProps {
+  idPrefix: string;
+  codes: string[];
+  isChecked: (code: string) => boolean;
+  onToggle: (code: string) => void;
+  nameOf: (code: string) => string;
+  disabled?: boolean;
+}
+
+function SubTypeCheckboxes({ idPrefix, codes, isChecked, onToggle, nameOf, disabled }: SubTypeCheckboxesProps) {
+  return (
+    <div className="flex flex-wrap gap-4">
+      {codes.map(code => {
+        const id = `${idPrefix}-sub-${code}`;
+        return (
+          <div key={code} className="flex items-center gap-2">
+            <Checkbox
+              id={id}
+              checked={isChecked(code)}
+              disabled={disabled}
+              onCheckedChange={() => onToggle(code)}
+            />
+            <Label htmlFor={id} className="font-normal">
+              {nameOf(code)}
+            </Label>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /**
- * 多梯次申請 editor: the configuration's own window is 第一梯次 (every sub-type);
- * the admin adds 第二梯次起 with a window, the sub-types it opens and optional
- * review windows (blank → the configuration's general review windows).
+ * 多梯次申請 editor: the configuration's own window is 第一梯次 (its sub-types are
+ * picked here, 「開放所有子類別」 = every one); the admin adds 第二梯次起 with a window,
+ * the sub-types it opens and optional review windows (blank → the configuration's
+ * general review windows).
  */
 export function ApplicationRoundsDialog({
   open,
@@ -65,6 +101,7 @@ export function ApplicationRoundsDialog({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [drafts, setDrafts] = useState<RoundDraft[]>([]);
+  const [firstRoundSubTypes, setFirstRoundSubTypes] = useState<FirstRoundSubTypes>(null);
   const [availableSubTypes, setAvailableSubTypes] = useState<string[]>([]);
   const [subTypeNames, setSubTypeNames] = useState<Record<string, string>>({});
   const [firstRound, setFirstRound] = useState<{ start: string | null; end: string | null }>({
@@ -84,6 +121,7 @@ export function ApplicationRoundsDialog({
     setLoading(true);
     setLoadedId(null);
     setDrafts([]);
+    setFirstRoundSubTypes(null);
     setAvailableSubTypes([]);
     setFirstRound({ start: null, end: null });
     try {
@@ -97,6 +135,7 @@ export function ApplicationRoundsDialog({
       }
       const payload = roundsResponse.data;
       setDrafts(toRoundDrafts(payload.rounds));
+      setFirstRoundSubTypes(payload.first_round_open_sub_types);
       setAvailableSubTypes(payload.available_sub_types);
       setFirstRound({
         start: payload.first_round.application_start_date,
@@ -129,7 +168,7 @@ export function ApplicationRoundsDialog({
 
   const handleSave = async () => {
     if (!configurationId || !isLoaded) return;
-    const problem = validateRoundDrafts(drafts);
+    const problem = validateRoundDrafts(drafts, firstRoundSubTypes);
     if (problem) {
       toast.error(problem);
       return;
@@ -138,7 +177,7 @@ export function ApplicationRoundsDialog({
     try {
       const response = await apiClient.admin.updateApplicationRounds(
         configurationId,
-        toRoundInputs(drafts)
+        toRoundsUpdate(drafts, firstRoundSubTypes)
       );
       if (!response.success) throw new Error(response.message || "儲存失敗");
       toast.success("申請梯次已更新");
@@ -160,7 +199,7 @@ export function ApplicationRoundsDialog({
         <DialogHeader>
           <DialogTitle>多梯次申請 — {configuration?.config_name}</DialogTitle>
           <DialogDescription>
-            一般申請期間即第一梯次（開放所有子類別）。之後的梯次可選擇開放的子類別；
+            一般申請期間即第一梯次。每個梯次都可選擇開放的子類別；
             學院排名時，後面梯次的學生一律排在前面梯次之後。
           </DialogDescription>
         </DialogHeader>
@@ -171,11 +210,45 @@ export function ApplicationRoundsDialog({
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="rounded-md border bg-muted/30 p-3 text-sm">
-              <div className="font-medium">{roundLabel(1)}（一般申請期間）</div>
-              <div className="text-muted-foreground">
-                {formatWindow(firstRound.start, firstRound.end)}・開放所有子類別
+            <div className="space-y-3 rounded-md border bg-muted/30 p-4 text-sm">
+              <Badge variant="outline">{roundLabel(1)}</Badge>
+              <div>
+                <div className="text-muted-foreground">
+                  申請期間：{formatWindow(firstRound.start, firstRound.end)}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  第一梯次的申請期間請於「編輯配置」的一般申請開始／截止時間修改。
+                </p>
               </div>
+              {availableSubTypes.length > 0 && (
+              <div className="space-y-2">
+                <Label>開放申請的子類別</Label>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="round-1-open-all"
+                    checked={firstRoundSubTypes === null}
+                    onCheckedChange={checked =>
+                      setFirstRoundSubTypes(setOpenAllFirstRound(checked === true, availableSubTypes))
+                    }
+                  />
+                  <Label htmlFor="round-1-open-all" className="font-normal">
+                    開放所有子類別
+                  </Label>
+                </div>
+                <SubTypeCheckboxes
+                  idPrefix="round-1"
+                  codes={availableSubTypes}
+                  isChecked={code => firstRoundSubTypes === null || firstRoundSubTypes.includes(code)}
+                  onToggle={code =>
+                    setFirstRoundSubTypes(current =>
+                      toggleFirstRoundSubType(current, code, availableSubTypes)
+                    )
+                  }
+                  nameOf={subTypeName}
+                  disabled={firstRoundSubTypes === null}
+                />
+              </div>
+              )}
             </div>
 
             {drafts.length === 0 && (
@@ -228,23 +301,13 @@ export function ApplicationRoundsDialog({
 
                 <div className="space-y-1">
                   <Label>開放申請的子類別</Label>
-                  <div className="flex flex-wrap gap-4">
-                    {availableSubTypes.map(code => {
-                      const id = `round-${draft.round_number}-sub-${code}`;
-                      return (
-                        <div key={code} className="flex items-center gap-2">
-                          <Checkbox
-                            id={id}
-                            checked={draft.open_sub_types.includes(code)}
-                            onCheckedChange={() => updateDraft(index, toggleSubType(draft, code))}
-                          />
-                          <Label htmlFor={id} className="font-normal">
-                            {subTypeName(code)}
-                          </Label>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <SubTypeCheckboxes
+                    idPrefix={`round-${draft.round_number}`}
+                    codes={availableSubTypes}
+                    isChecked={code => draft.open_sub_types.includes(code)}
+                    onToggle={code => updateDraft(index, toggleSubType(draft, code))}
+                    nameOf={subTypeName}
+                  />
                 </div>
 
                 {REVIEW_FIELDS.map(field => (

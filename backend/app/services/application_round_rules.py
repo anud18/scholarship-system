@@ -7,7 +7,7 @@ scholarship's sub-types and the general review windows a round falls back to.
 
 from typing import Iterable, List, Optional
 
-from app.models.application_round import as_utc
+from app.models.application_round import FIRST_APPLICATION_ROUND, as_utc
 from app.services.ranking_groups import round_label
 
 _REVIEW_ROLES = (
@@ -53,12 +53,30 @@ def _check_review_windows(config, application_round) -> None:
             )
 
 
-def validate_rounds_against_config(config, rounds: Iterable, sub_type_list: Optional[List[str]] = None) -> None:
-    """Raise ApplicationRoundRuleError when ``rounds`` do not fit ``config``.
+def _check_known_sub_types(round_number: int, codes: Iterable[str], allowed: set) -> None:
+    unknown = [code for code in codes if code not in allowed]
+    if unknown:
+        raise ApplicationRoundRuleError(f"{round_label(round_number)}包含此獎學金沒有的子類別：{'、'.join(unknown)}")
+
+
+def validate_rounds_against_config(
+    config,
+    rounds: Iterable,
+    sub_type_list: Optional[List[str]] = None,
+    first_round_open_sub_types: Optional[List[str]] = None,
+) -> None:
+    """Raise ApplicationRoundRuleError when the round settings do not fit ``config``.
 
     ``rounds`` are ApplicationRoundInput payloads or ScholarshipApplicationRound rows.
+    ``first_round_open_sub_types``: the sub-types 第一梯次 opens (None = every sub-type).
     ``sub_type_list`` defaults to the configuration's scholarship type's list.
     """
+    if sub_type_list is None:
+        sub_type_list = config.scholarship_type.sub_type_list if config.scholarship_type else []
+    allowed = {code.lower().strip() for code in (sub_type_list or []) if code}
+    if first_round_open_sub_types is not None:
+        _check_known_sub_types(FIRST_APPLICATION_ROUND, first_round_open_sub_types, allowed)
+
     rounds = sorted(rounds, key=lambda r: r.round_number)
     if not rounds:
         return
@@ -70,13 +88,6 @@ def validate_rounds_against_config(config, rounds: Iterable, sub_type_list: Opti
             f"{round_label(first_extra.round_number)}的申請期間不可早於第一梯次（一般申請）結束"
         )
 
-    if sub_type_list is None:
-        sub_type_list = config.scholarship_type.sub_type_list if config.scholarship_type else []
-    allowed = {code.lower().strip() for code in (sub_type_list or []) if code}
     for application_round in rounds:
-        unknown = [code for code in _open_codes(application_round) if code not in allowed]
-        if unknown:
-            raise ApplicationRoundRuleError(
-                f"{round_label(application_round.round_number)}包含此獎學金沒有的子類別：{'、'.join(unknown)}"
-            )
+        _check_known_sub_types(application_round.round_number, _open_codes(application_round), allowed)
         _check_review_windows(config, application_round)

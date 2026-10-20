@@ -164,7 +164,7 @@ class ScholarshipService:
                 eligible_subtypes, subtype_eligibility_info = self._restrict_subtypes_to_round(
                     eligible_subtypes, subtype_eligibility_info, round_fields["open_sub_types"]
                 )
-                # A later round that opens none of the student's sub-types takes no
+                # A round that opens none of the student's sub-types takes no
                 # application from them: show the scholarship read-only.
                 is_application_period = eligibility_details.get("is_application_period", True) and not (
                     round_fields["open_sub_types"] is not None and not eligible_subtypes

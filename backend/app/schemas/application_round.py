@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.models.application_round import as_utc
+from app.models.application_round import as_utc, normalize_sub_type_codes
 
 # The configuration's own application window is round 1; extra rounds start at 2.
 FIRST_EXTRA_ROUND = 2
@@ -27,10 +27,10 @@ class ApplicationRoundInput(BaseModel):
     @field_validator("open_sub_types")
     @classmethod
     def normalize_sub_types(cls, value: List[str]) -> List[str]:
-        normalized = [code.lower().strip() for code in value if code and code.strip()]
+        normalized = normalize_sub_type_codes(value)
         if not normalized:
             raise ValueError("至少需開放一個子類別")
-        return list(dict.fromkeys(normalized))
+        return normalized
 
     @model_validator(mode="after")
     def check_windows(self) -> "ApplicationRoundInput":
@@ -48,9 +48,23 @@ class ApplicationRoundInput(BaseModel):
 
 
 class ApplicationRoundsUpdate(BaseModel):
-    """The full list of later rounds of a configuration (replaces the current set)."""
+    """A configuration's round settings: the sub-types 第一梯次 opens and the full list of
+    later rounds. Both replace the current values."""
 
+    first_round_open_sub_types: Optional[List[str]] = Field(
+        None, description="第一梯次開放申請的子類別代碼；null = 開放所有子類別"
+    )
     rounds: List[ApplicationRoundInput] = Field(default_factory=list, max_length=MAX_EXTRA_ROUNDS)
+
+    @field_validator("first_round_open_sub_types")
+    @classmethod
+    def normalize_first_round_sub_types(cls, value: Optional[List[str]]) -> Optional[List[str]]:
+        if value is None:
+            return None
+        normalized = normalize_sub_type_codes(value)
+        if not normalized:
+            raise ValueError("第一梯次至少需開放一個子類別（或選擇開放所有子類別）")
+        return normalized
 
     @model_validator(mode="after")
     def check_sequence(self) -> "ApplicationRoundsUpdate":

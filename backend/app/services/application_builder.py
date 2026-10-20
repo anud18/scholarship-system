@@ -62,8 +62,8 @@ def validate_sub_type_for_submission(scholarship, sub_scholarship_type: Optional
 def validate_sub_types_open_in_round(config, application_round: Optional[int], sub_types: List[str]) -> None:
     """Reject sub-types the application's 申請梯次 does not open (多梯次申請).
 
-    Round 1 (the configuration's own window) opens every sub-type; a later round
-    only the ones the administrator picked for it.
+    Each round opens the sub-types the administrator picked for it; round 1 opens
+    every sub-type unless the configuration restricts it.
     """
     from app.services.ranking_groups import round_label
 

@@ -3744,10 +3744,11 @@ export interface paths {
         get: operations["get_application_rounds_api_v1_scholarship_configurations_configurations__id__application_rounds_get"];
         /**
          * Update Application Rounds
-         * @description Replace a configuration's later 申請梯次 (第二梯次起).
+         * @description Replace a configuration's round settings: 第一梯次's sub-types and the later 申請梯次.
          *
          *     Rounds missing from the body are removed (409 when a round already holds
          *     applications); an empty list turns the configuration back into a single round.
+         *     A null ``first_round_open_sub_types`` opens every sub-type in 第一梯次.
          */
         put: operations["update_application_rounds_api_v1_scholarship_configurations_configurations__id__application_rounds_put"];
         post?: never;
@@ -8950,9 +8951,15 @@ export interface components {
         };
         /**
          * ApplicationRoundsUpdate
-         * @description The full list of later rounds of a configuration (replaces the current set).
+         * @description A configuration's round settings: the sub-types 第一梯次 opens and the full list of
+         *     later rounds. Both replace the current values.
          */
         ApplicationRoundsUpdate: {
+            /**
+             * First Round Open Sub Types
+             * @description 第一梯次開放申請的子類別代碼；null = 開放所有子類別
+             */
+            first_round_open_sub_types?: string[] | null;
             /** Rounds */
             rounds?: components["schemas"]["ApplicationRoundInput"][];
         };

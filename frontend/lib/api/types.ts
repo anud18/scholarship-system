@@ -408,6 +408,8 @@ export interface ScholarshipConfiguration {
   allow_college_view_distribution?: boolean;
   effective_start_date?: string;
   effective_end_date?: string;
+  /** 多梯次申請：第一梯次（一般申請期間）開放的子類別；null = 所有子類別 */
+  first_round_open_sub_types?: string[] | null;
   /** 多梯次申請：第二梯次起（本配置的一般申請期間即第一梯次） */
   application_rounds?: ApplicationRound[];
   version: string;
@@ -416,8 +418,9 @@ export interface ScholarshipConfiguration {
 }
 
 /**
- * 申請梯次（第二梯次起）。第一梯次是配置本身的一般申請期間，開放所有子類別；
- * 之後的梯次只開放 open_sub_types。審查期間留空時沿用配置的一般審查期間。
+ * 申請梯次（第二梯次起）。第一梯次是配置本身的一般申請期間，開放
+ * first_round_open_sub_types（null = 所有子類別）；之後的梯次只開放 open_sub_types。
+ * 審查期間留空時沿用配置的一般審查期間。
  */
 export interface ApplicationRound {
   id?: number;
@@ -434,6 +437,8 @@ export interface ApplicationRound {
 
 export interface ApplicationRoundsPayload {
   configuration_id: number;
+  /** 第一梯次開放的子類別；null = 開放所有子類別 */
+  first_round_open_sub_types: string[] | null;
   first_round: {
     round_number: number;
     application_start_date: string | null;

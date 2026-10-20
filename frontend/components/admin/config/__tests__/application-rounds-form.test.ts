@@ -1,5 +1,7 @@
 import {
   nextRoundDraft,
+  setOpenAllFirstRound,
+  toggleFirstRoundSubType,
   toggleSubType,
   toRoundDrafts,
   toRoundInputs,
@@ -69,6 +71,18 @@ describe("application-rounds-form", () => {
     expect(added.open_sub_types).toEqual(["nstc", "moe_1w"]);
     expect(original.open_sub_types).toEqual(["nstc"]);
     expect(toggleSubType(added, "nstc").open_sub_types).toEqual(["moe_1w"]);
+  });
+
+  it("unticking a sub-type of an open-to-all 第一梯次 keeps the others open", () => {
+    expect(toggleFirstRoundSubType(null, "nstc", ["nstc", "moe_1w"])).toEqual(["moe_1w"]);
+    expect(toggleFirstRoundSubType(["moe_1w"], "nstc", ["nstc", "moe_1w"])).toEqual(["moe_1w", "nstc"]);
+    expect(setOpenAllFirstRound(false, ["nstc", "moe_1w"])).toEqual(["nstc", "moe_1w"]);
+    expect(setOpenAllFirstRound(true, ["nstc", "moe_1w"])).toBeNull();
+  });
+
+  it("refuses a 第一梯次 that opens no sub-type", () => {
+    expect(validateRoundDrafts([], [])).toContain("第一梯次至少需開放一個子類別");
+    expect(validateRoundDrafts([], null)).toBeNull();
   });
 
   it("validates required fields and review pairs", () => {

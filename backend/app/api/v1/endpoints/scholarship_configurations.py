@@ -23,6 +23,7 @@ from app.db.deps import get_db
 
 # Student model removed - student data now fetched from external API
 from app.models.application import Application, ApplicationStatus
+from app.models.application_round import FIRST_APPLICATION_ROUND
 from app.models.enums import QuotaManagementMode, Semester
 from app.models.audit_log import AuditAction, AuditLog
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
@@ -1049,7 +1050,9 @@ async def get_scholarship_configuration(
             "allow_college_view_distribution": config.allow_college_view_distribution,
             "effective_start_date": config.effective_start_date.isoformat() if config.effective_start_date else None,
             "effective_end_date": config.effective_end_date.isoformat() if config.effective_end_date else None,
-            # 多梯次申請: later rounds (the general application window above is 第一梯次)
+            # 多梯次申請: the general application window above is 第一梯次 (its sub-types:
+            # NULL = every sub-type), then the later rounds
+            "first_round_open_sub_types": config.open_sub_types_for_round(FIRST_APPLICATION_ROUND),
             "application_rounds": [
                 application_round.to_dict() for application_round in config.extra_application_rounds
             ],
@@ -1594,7 +1597,8 @@ async def list_scholarship_configurations(
                     config.effective_start_date.isoformat() if config.effective_start_date else None
                 ),
                 "effective_end_date": config.effective_end_date.isoformat() if config.effective_end_date else None,
-                # 多梯次申請: later rounds (the general application window above is 第一梯次)
+                # 多梯次申請: 第一梯次's sub-types (NULL = every sub-type), then the later rounds
+                "first_round_open_sub_types": config.open_sub_types_for_round(FIRST_APPLICATION_ROUND),
                 "application_rounds": [r.to_dict() for r in config.extra_application_rounds],
                 "version": config.version,
                 "created_at": config.created_at.isoformat() if config.created_at else None,
