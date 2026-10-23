@@ -43,7 +43,7 @@ aiosmtplib==5.1.2  # Direct SMTP sending (EmailService); declared explicitly aft
 jinja2==3.1.6  # Security: Fixed sandbox escape vulnerability (GHSA-cpwx-vrp4-4pq7)
 
 # File processing and OCR
-pillow==12.3.0  # Security: PYSEC-2026-2253..2257, PYSEC-2026-3451..3454, CVE-2026-54058/59198/59200/59204 (<12.3.0)
+pillow==13.0.0  # Security: PYSEC-2026-2253..2257, PYSEC-2026-3451..3454, CVE-2026-54058/59198/59200/59204 (<12.3.0)
 google-generativeai==0.8.3
 python-magic==0.4.27
 
