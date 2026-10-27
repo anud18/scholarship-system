@@ -68,9 +68,9 @@ jobs:
             if [ "$existing" != "0" ]; then continue; fi
 
             body=$(jq -r ".[$i] | \"**Manifests:** \" + ([.[].manifest] | unique | join(\", \"))
-              + \"\n\n**Minimum patched version:** \" + ([.[].fixed | select(. != null)] | max // \"none published\")
+              + \"\n\n**Minimum patched version:** \" + ([.[].fixed | select(. != null)] | sort_by(split(\".\") | map(tonumber? // 0)) | last // \"none published\")
               + \"\n\n| Severity | Advisory | Summary |\n|---|---|---|\n\"
-              + (map(\"| \(.sev) | [\(.ghsa)](\(.url)) | \(.summary) |\") | join(\"\n\"))" groups.json)
+              + (unique_by(.ghsa) | map(\"| \(.sev) | [\(.ghsa)](\(.url)) | \(.summary) |\") | join(\"\n\"))" groups.json)
 
             gh issue create --repo "$REPO" --title "$title" --label "$ISSUE_LABEL" \
               --body "$body
