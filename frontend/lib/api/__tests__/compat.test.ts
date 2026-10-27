@@ -81,6 +81,27 @@ describe("toApiResponse: error normalization", () => {
     const r = toApiResponse(makeResponse({ error: {}, status: 503, ok: false }));
     expect(r.message).toBe("Request failed with status 503");
   });
+
+  it("non-2xx with an empty body is a failure, not success", () => {
+    /** openapi-fetch leaves `error` as "" for an empty error body — it must
+     * not fall through to the success fallback. */
+    const r = toApiResponse(makeResponse({ error: "", status: 403, ok: false }));
+    expect(r.success).toBe(false);
+    expect(r.message).toBe("Request failed with status 403");
+  });
+
+  it("2xx with an empty body is a failure (request intercepted before backend)", () => {
+    /** Prod 2026-10-27: the campus WAF answered a config PUT with an empty
+     * 200, and the UI showed 「配置更新成功」 while nothing was saved. */
+    const r = toApiResponse(makeResponse({ status: 200 }));
+    expect(r.success).toBe(false);
+    expect(r.message).toContain("變更未儲存");
+  });
+
+  it("204 No Content stays a success", () => {
+    const r = toApiResponse(makeResponse({ status: 204 }));
+    expect(r.success).toBe(true);
+  });
 });
 
 // ─── toApiResponse: success paths ───────────────────────────────────

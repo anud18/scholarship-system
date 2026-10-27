@@ -121,6 +121,30 @@ export function toApiResponse<T>(
     };
   }
 
+  // A non-2xx with an empty body leaves `response.error` as "" (falsy), so it
+  // must be caught here rather than fall through to the success fallback.
+  if (!response.response.ok) {
+    const body = response.data as { message?: unknown } | undefined;
+    return {
+      success: false,
+      message: body?.message
+        ? safeStringify(body.message)
+        : `Request failed with status ${response.response.status}`,
+      data: undefined,
+    };
+  }
+
+  // Every backend endpoint returns an ApiResponse body. An empty 2xx means
+  // something in front of the backend (e.g. the campus WAF) answered instead,
+  // so the write never happened — never report it as success.
+  if (response.data === undefined && response.response.status !== 204) {
+    return {
+      success: false,
+      message: '伺服器未回傳任何內容（請求可能被防火牆攔截），變更未儲存',
+      data: undefined,
+    };
+  }
+
   // Handle success responses
   // Backend already returns ApiResponse format {success, message, data}
   if (response.data && typeof response.data === 'object') {
