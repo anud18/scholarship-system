@@ -105,6 +105,10 @@ jobs:
         with:
           python-version: '3.13'
 
+      # PDF tests render CJK text via reportlab and need this font (same as CI).
+      - name: Install CJK font
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq fonts-wqy-zenhei libmagic1
+
       # Pre-install so the agent only has to swap the one vulnerable package.
       - name: Install backend dependencies
         working-directory: backend
@@ -131,7 +135,6 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GH_PAT }}
-          show_full_output: true # TEMP: debug permission denials, remove after
           claude_args: >-
             --max-turns 80
             --allowedTools "Read,Edit,Write,Glob,Grep,Bash(gh issue:*),Bash(gh pr:*),Bash(gh api:*),Bash(git:*),Bash(bun:*),Bash(bunx:*),Bash(pip:*),Bash(pip3:*),Bash(python:*),Bash(python3:*),Bash(pytest:*),Bash(cd:*),Bash(ls:*),Bash(cat:*),Bash(grep:*),Bash(jq:*),Bash(sed:*),Bash(head:*),Bash(tail:*),Bash(echo:*),Bash(test:*)"
