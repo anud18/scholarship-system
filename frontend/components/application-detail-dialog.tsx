@@ -983,6 +983,10 @@ export function ApplicationDetailDialog({
                               application.professor?.nycu_id ||
                               professorInfo?.nycu_id
                             }
+                            currentProfessorName={
+                              application.professor?.name ||
+                              professorInfo?.name
+                            }
                             onAssigned={handleProfessorAssigned}
                           />
                         </div>
