@@ -2375,6 +2375,10 @@ export function ApplicationReviewDialog({
                                       (detailedApplication as Application).professor?.nycu_id ||
                                       professorInfo?.nycu_id
                                     }
+                                    currentProfessorName={
+                                      (detailedApplication as Application).professor?.name ||
+                                      professorInfo?.name
+                                    }
                                     onAssigned={handleProfessorAssigned}
                                   />
                                 </div>
