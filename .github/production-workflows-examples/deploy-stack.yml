@@ -679,6 +679,12 @@ jobs:
           # Config is bind-mounted read-only; `compose up -d` does not reload
           # nginx when only the file contents change. Validate first — never
           # leave a broken config running.
+          # A just-(re)created container has not written its PID file yet;
+          # reloading then fails with `invalid PID number ""`. Wait for it.
+          for i in $(seq 1 15); do
+            docker exec scholarship_nginx_prod test -s /run/nginx.pid && break
+            sleep 1
+          done
           if docker exec scholarship_nginx_prod nginx -t; then
             docker exec scholarship_nginx_prod nginx -s reload
             echo "✅ nginx config validated and reloaded"
