@@ -112,9 +112,10 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GH_PAT }}
+          show_full_output: true # TEMP: debug permission denials, remove after
           claude_args: >-
             --max-turns 80
-            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(gh issue:*),Bash(gh pr:*),Bash(git:*),Bash(bun:*),Bash(pip:*),Bash(python:*),Bash(pytest:*)"
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(gh issue:*),Bash(gh pr:*),Bash(gh api:*),Bash(git:*),Bash(bun:*),Bash(bunx:*),Bash(pip:*),Bash(pip3:*),Bash(python:*),Bash(python3:*),Bash(pytest:*),Bash(cd:*),Bash(ls:*),Bash(cat:*),Bash(grep:*),Bash(jq:*),Bash(sed:*),Bash(head:*),Bash(tail:*),Bash(echo:*),Bash(test:*)"
           prompt: |
             You maintain dependency security for this repo. Work through open issues
             labeled `dependabot-alert` (`gh issue list --label dependabot-alert --state open`).
