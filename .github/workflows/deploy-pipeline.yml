@@ -274,6 +274,12 @@ jobs:
           # contents change, so config edits (e.g. preview-iframe X-Frame-Options)
           # would silently stay inactive until a manual reload. Validate, then
           # hot-reload — never leave a broken config running.
+          # A just-(re)created container has not written its PID file yet;
+          # reloading then fails with `invalid PID number ""`. Wait for it.
+          for i in $(seq 1 15); do
+            docker exec scholarship_nginx_staging test -s /run/nginx.pid && break
+            sleep 1
+          done
           if docker exec scholarship_nginx_staging nginx -t; then
             docker exec scholarship_nginx_staging nginx -s reload
             echo "✅ nginx config validated and reloaded"
