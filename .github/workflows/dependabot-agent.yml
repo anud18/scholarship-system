@@ -105,10 +105,29 @@ jobs:
         with:
           python-version: '3.13'
 
+      # Pre-install so the agent only has to swap the one vulnerable package.
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: bun install --frozen-lockfile
+
       - name: Claude fixes open alert issues
         uses: anthropics/claude-code-action@v1
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
+          # app.core.config.Settings() needs these at import time (mirrors ci.yml).
+          DATABASE_URL: postgresql+asyncpg://test_user:test_password@localhost:5432/test_db
+          DATABASE_URL_SYNC: postgresql://test_user:test_password@localhost:5432/test_db
+          SECRET_KEY: test-secret-key-dependabot-agent
+          MINIO_ACCESS_KEY: ci-test-minio-access
+          MINIO_SECRET_KEY: ci-test-minio-secret
+          APP_ENV: test
+          TESTING: 'true'
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GH_PAT }}
@@ -134,6 +153,12 @@ jobs:
                Commit messages are in English.
             6. If the bump is a major-version jump, breaks tests, or no patched version exists,
                do NOT open a PR. Comment on the issue with what you found and stop.
+
+            Environment notes: backend and frontend dependencies are already installed in the
+            runner environment. Install a new version with `pip install <pkg>==<ver>` (do NOT
+            create a venv) or `bun add`/`bun install` in `frontend/`. Run each command on its own:
+            no pipes, no `;`/`&&` chains, no `cd` (use `git -C`, `bun --cwd frontend ...`,
+            `python -m pytest backend/app/tests/<file>`). Unit tests need no running database.
 
             Hard rules: never add `--ignore` flags or weaken audit gates, never touch files
             unrelated to the dependency, never merge PRs, never force-push.
