@@ -22,6 +22,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import apiClient from "@/lib/api";
 
+const SEARCH_DEBOUNCE_MS = 300;
+
 interface Professor {
   nycu_id: string;
   name: string;
@@ -33,6 +35,7 @@ interface Professor {
 interface ProfessorAssignmentDropdownProps {
   applicationId: number;
   currentProfessorId?: string;
+  currentProfessorName?: string;
   onAssigned?: (professor: Professor) => void;
   disabled?: boolean;
   compact?: boolean;
@@ -41,6 +44,7 @@ interface ProfessorAssignmentDropdownProps {
 function ProfessorAssignmentDropdownInner({
   applicationId,
   currentProfessorId,
+  currentProfessorName,
   onAssigned,
   disabled = false,
   compact = false,
@@ -48,50 +52,52 @@ function ProfessorAssignmentDropdownInner({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [professors, setProfessors] = useState<Professor[]>([]);
-  const [selectedProfessor, setSelectedProfessor] = useState<Professor | null>(
+  // Set on a successful assign until the caller passes the new current professor
+  const [assignedProfessor, setAssignedProfessor] = useState<Professor | null>(
     null
   );
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [assigning, setAssigning] = useState(false);
+  // Query the current `professors` list was fetched for; null until the first load
+  const [loadedQuery, setLoadedQuery] = useState<string | null>(null);
 
-  // Load professors
   useEffect(() => {
-    fetchProfessors("");
-  }, []);
+    setAssignedProfessor(null);
+  }, [currentProfessorId]);
 
-  // Set current professor if exists
-  useEffect(() => {
-    if (currentProfessorId && professors.length > 0) {
-      const current = professors.find(p => p.nycu_id === currentProfessorId);
-      if (current) setSelectedProfessor(current);
-    }
-  }, [currentProfessorId, professors]);
+  const currentNycuId = assignedProfessor?.nycu_id ?? currentProfessorId;
+  const currentName = assignedProfessor?.name ?? currentProfessorName;
 
+  // The list is only fetched while the popover is open. Compact dropdowns
+  // render once per table row, and fetching on mount (N rows x 2 requests)
+  // tripped the nginx rate limit and 429'd the rest of the page (#1499).
   const fetchProfessors = async (searchQuery: string) => {
     setLoading(true);
     try {
       const response = await apiClient.admin.getProfessors(searchQuery);
-      if (response.success && response.data) {
-        setProfessors(response.data as Professor[]);
+      if (!response.success || !response.data) {
+        throw new Error(response.message || "Failed to fetch professors");
       }
+      setProfessors(response.data as Professor[]);
+      setLoadedQuery(searchQuery);
     } catch (error) {
       logger.error("Failed to fetch professors", { error: error });
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
   };
 
-  // Debounced search effect to prevent memory leaks
+  // Fetch while open: immediately on open, debounced while typing.
+  // After a failure, wait for 重試 rather than re-firing at a rate limiter.
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (search !== undefined) {
-        // Only fetch if search has been set
-        fetchProfessors(search);
-      }
-    }, 300);
-
-    return () => clearTimeout(timer); // Proper cleanup
-  }, [search]);
+    if (loadError) return;
+    if (!open || search === loadedQuery) return;
+    const delay = search === "" ? 0 : SEARCH_DEBOUNCE_MS;
+    const timer = setTimeout(() => fetchProfessors(search), delay);
+    return () => clearTimeout(timer);
+  }, [open, search, loadedQuery, loadError]);
 
   const handleSearch = (value: string) => {
     setSearch(value);
@@ -105,7 +111,7 @@ function ProfessorAssignmentDropdownInner({
         professor.nycu_id
       );
       if (response.success) {
-        setSelectedProfessor(professor);
+        setAssignedProfessor(professor);
         setOpen(false);
         onAssigned?.(professor);
       }
@@ -128,17 +134,17 @@ function ProfessorAssignmentDropdownInner({
         >
           {compact ? (
             // Compact mode for when professor is already assigned
-            selectedProfessor ? (
+            currentNycuId ? (
               <span className="text-xs">修改</span>
             ) : (
               <span className="text-xs">選擇</span>
             )
           ) : // Full mode for when no professor is assigned
-          selectedProfessor ? (
+          currentNycuId ? (
             <div className="flex items-center gap-2">
               <User className="h-4 w-4" />
-              <span>{selectedProfessor.name}</span>
-              <Badge variant="secondary">{selectedProfessor.nycu_id}</Badge>
+              {currentName && <span>{currentName}</span>}
+              <Badge variant="secondary">{currentNycuId}</Badge>
             </div>
           ) : (
             <span className="text-muted-foreground">選擇教授...</span>
@@ -149,14 +155,27 @@ function ProfessorAssignmentDropdownInner({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[400px] p-0">
-        <Command>
+        {/* The backend already filters by name/NYCU ID; cmdk's own filter
+            matches only the item value (nycu_id) and would hide name hits */}
+        <Command shouldFilter={false}>
           <CommandInput
             placeholder="搜尋姓名或 NYCU ID..."
             value={search}
             onValueChange={handleSearch}
           />
           <CommandList>
-            {loading ? (
+            {loadError ? (
+              <div className="flex items-center justify-between gap-2 px-3 py-4 text-sm text-red-600">
+                <span>載入教授清單失敗，請稍後再試</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setLoadError(false)}
+                >
+                  重試
+                </Button>
+              </div>
+            ) : loading || loadedQuery === null ? (
               <CommandEmpty>載入中...</CommandEmpty>
             ) : professors.length === 0 ? (
               <CommandEmpty>找不到符合的教授</CommandEmpty>
@@ -171,7 +190,7 @@ function ProfessorAssignmentDropdownInner({
                     <Check
                       className={cn(
                         "mr-2 h-4 w-4",
-                        selectedProfessor?.nycu_id === professor.nycu_id
+                        currentNycuId === professor.nycu_id
                           ? "opacity-100"
                           : "opacity-0"
                       )}

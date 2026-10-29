@@ -1,0 +1,167 @@
+name: Dependabot Alert Agent
+
+# Stage 1 (deterministic): open Dependabot alerts -> one GitHub issue per package.
+# Stage 2 (Claude): fix each issue that has no PR yet, verify, open a PR.
+# PRs are never auto-merged here; a human (or the existing review flow) merges.
+
+on:
+  schedule:
+    - cron: '0 1 * * 1-5' # 09:00 Asia/Taipei, weekdays
+  workflow_dispatch:
+    inputs:
+      create_prs:
+        description: 'Run stage 2 (Claude opens fix PRs)'
+        type: boolean
+        default: true
+
+concurrency:
+  group: dependabot-agent
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  ISSUE_LABEL: dependabot-alert
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    outputs:
+      has_work: ${{ steps.issues.outputs.has_work }}
+    steps:
+      - name: Sync alerts to issues
+        id: issues
+        env:
+          # GITHUB_TOKEN cannot read Dependabot alerts; GH_PAT needs
+          # security_events (or Dependabot alerts: read) on this repo.
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          gh label create "$ISSUE_LABEL" --repo "$REPO" --color B60205 \
+            --description "Tracked by the Dependabot alert agent" 2>/dev/null || true
+
+          # Group open alerts by ecosystem + lowercased package name.
+          gh api --paginate "repos/$REPO/dependabot/alerts?state=open&per_page=100" \
+            | jq -s 'add // []
+                | map({eco: .dependency.package.ecosystem,
+                       pkg: (.dependency.package.name | ascii_downcase),
+                       sev: .security_advisory.severity,
+                       ghsa: .security_advisory.ghsa_id,
+                       summary: .security_advisory.summary,
+                       fixed: (.security_vulnerability.first_patched_version.identifier // null),
+                       manifest: .dependency.manifest_path,
+                       url: .html_url})
+                | group_by(.eco + "/" + .pkg)' > groups.json
+
+          created=0
+          for i in $(jq 'range(0; length)' groups.json); do
+            eco=$(jq -r ".[$i][0].eco" groups.json)
+            pkg=$(jq -r ".[$i][0].pkg" groups.json)
+            title="[Dependabot] ${eco}: ${pkg}"
+
+            existing=$(gh issue list --repo "$REPO" --label "$ISSUE_LABEL" --state open \
+              --search "in:title \"$title\"" --json number --jq 'length')
+            if [ "$existing" != "0" ]; then continue; fi
+
+            body=$(jq -r ".[$i] | \"**Manifests:** \" + ([.[].manifest] | unique | join(\", \"))
+              + \"\n\n**Minimum patched version:** \" + ([.[].fixed | select(. != null)] | sort_by(split(\".\") | map(tonumber? // 0)) | last // \"none published\")
+              + \"\n\n| Severity | Advisory | Summary |\n|---|---|---|\n\"
+              + (unique_by(.ghsa) | map(\"| \(.sev) | [\(.ghsa)](\(.url)) | \(.summary) |\") | join(\"\n\"))" groups.json)
+
+            gh issue create --repo "$REPO" --title "$title" --label "$ISSUE_LABEL" \
+              --body "$body
+
+          _Opened automatically by the Dependabot Alert Agent. Fix PRs reference this issue._" >/dev/null
+            created=$((created + 1))
+          done
+
+          open=$(gh issue list --repo "$REPO" --label "$ISSUE_LABEL" --state open --json number --jq 'length')
+          echo "created=$created open=$open"
+          echo "has_work=$([ "$open" != "0" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+  fix:
+    needs: triage
+    if: needs.triage.outputs.has_work == 'true' && (github.event_name == 'schedule' || inputs.create_prs)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          # PRs pushed with GITHUB_TOKEN do not trigger CI; use the PAT.
+          token: ${{ secrets.GH_PAT }}
+
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      # PDF tests render CJK text via reportlab and need this font (same as CI).
+      - name: Install CJK font
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq fonts-wqy-zenhei libmagic1
+
+      # Pre-install so the agent only has to swap the one vulnerable package.
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: bun install --frozen-lockfile
+
+      - name: Claude fixes open alert issues
+        uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          # app.core.config.Settings() needs these at import time (mirrors ci.yml).
+          DATABASE_URL: postgresql+asyncpg://test_user:test_password@localhost:5432/test_db
+          DATABASE_URL_SYNC: postgresql://test_user:test_password@localhost:5432/test_db
+          SECRET_KEY: test-secret-key-dependabot-agent
+          MINIO_ACCESS_KEY: ci-test-minio-access
+          MINIO_SECRET_KEY: ci-test-minio-secret
+          APP_ENV: test
+          TESTING: 'true'
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GH_PAT }}
+          claude_args: >-
+            --max-turns 80
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(gh issue:*),Bash(gh pr:*),Bash(gh api:*),Bash(git:*),Bash(bun:*),Bash(bunx:*),Bash(pip:*),Bash(pip3:*),Bash(python:*),Bash(python3:*),Bash(pytest:*),Bash(cd:*),Bash(ls:*),Bash(cat:*),Bash(grep:*),Bash(jq:*),Bash(sed:*),Bash(head:*),Bash(tail:*),Bash(echo:*),Bash(test:*)"
+          prompt: |
+            You maintain dependency security for this repo. Work through open issues
+            labeled `dependabot-alert` (`gh issue list --label dependabot-alert --state open`).
+
+            For each issue, at most 3 per run, highest severity first:
+            1. Skip it if an open PR already references it (`gh pr list --search "#<n>"`).
+            2. Branch off origin/main as `fix/dependabot-<ecosystem>-<package>`.
+            3. Bump ONLY to the minimum patched version in the issue (or the smallest
+               newer version that is clean).
+               - pip: edit BOTH `backend/requirements.txt` and `backend/pyproject.toml`, keep them in sync.
+               - npm: edit `frontend/package.json` (overrides if transitive) and refresh `bun.lock`.
+            4. Verify: frontend -> `bun audit --audit-level=moderate`, `bunx tsc --noEmit`, `bun run lint`, `bun run test`;
+               backend -> pytest for the modules that import the package.
+            5. If verification passes, open a PR: title `fix: bump <package> to <version> (Dependabot)`,
+               body with `Closes #<issue>`, the advisories fixed and the checks you ran.
+               Commit messages are in English.
+            6. If the bump is a major-version jump, breaks tests, or no patched version exists,
+               do NOT open a PR. Comment on the issue with what you found and stop.
+
+            Environment notes: backend and frontend dependencies are already installed in the
+            runner environment. Install a new version with `pip install <pkg>==<ver>` (do NOT
+            create a venv) or `bun add`/`bun install` in `frontend/`. Run each command on its own:
+            no pipes, no `;`/`&&` chains, no `cd` (use `git -C`, `bun --cwd frontend ...`,
+            `python -m pytest backend/app/tests/<file>`). Unit tests need no running database.
+
+            Hard rules: never add `--ignore` flags or weaken audit gates, never touch files
+            unrelated to the dependency, never merge PRs, never force-push.
