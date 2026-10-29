@@ -22,6 +22,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import apiClient from "@/lib/api";
 
+const SEARCH_DEBOUNCE_MS = 300;
+
 interface Professor {
   nycu_id: string;
   name: string;
@@ -53,11 +55,17 @@ function ProfessorAssignmentDropdownInner({
   );
   const [loading, setLoading] = useState(false);
   const [assigning, setAssigning] = useState(false);
+  // Query the current `professors` list was fetched for; null until the first load
+  const [loadedQuery, setLoadedQuery] = useState<string | null>(null);
 
-  // Load professors
+  // Only the full-mode button shows the current professor's name, so only it
+  // needs the list before opening. Compact dropdowns render once per table row
+  // and must not fetch on mount: N rows x eager fetches tripped the nginx rate
+  // limit and 429'd the rest of the page's requests (#1499).
+  const needsListForLabel = !compact && Boolean(currentProfessorId);
   useEffect(() => {
-    fetchProfessors("");
-  }, []);
+    if (needsListForLabel) fetchProfessors("");
+  }, [needsListForLabel]);
 
   // Set current professor if exists
   useEffect(() => {
@@ -73,6 +81,7 @@ function ProfessorAssignmentDropdownInner({
       const response = await apiClient.admin.getProfessors(searchQuery);
       if (response.success && response.data) {
         setProfessors(response.data as Professor[]);
+        setLoadedQuery(searchQuery);
       }
     } catch (error) {
       logger.error("Failed to fetch professors", { error: error });
@@ -81,17 +90,13 @@ function ProfessorAssignmentDropdownInner({
     }
   };
 
-  // Debounced search effect to prevent memory leaks
+  // Fetch while open: immediately on open, debounced while typing
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (search !== undefined) {
-        // Only fetch if search has been set
-        fetchProfessors(search);
-      }
-    }, 300);
-
-    return () => clearTimeout(timer); // Proper cleanup
-  }, [search]);
+    if (!open || search === loadedQuery) return;
+    const delay = search === "" ? 0 : SEARCH_DEBOUNCE_MS;
+    const timer = setTimeout(() => fetchProfessors(search), delay);
+    return () => clearTimeout(timer);
+  }, [open, search, loadedQuery]);
 
   const handleSearch = (value: string) => {
     setSearch(value);
@@ -128,7 +133,7 @@ function ProfessorAssignmentDropdownInner({
         >
           {compact ? (
             // Compact mode for when professor is already assigned
-            selectedProfessor ? (
+            selectedProfessor || currentProfessorId ? (
               <span className="text-xs">修改</span>
             ) : (
               <span className="text-xs">選擇</span>
