@@ -263,6 +263,7 @@ class ApplicationEnricherService:
                 "app_id": app.get("app_id"),
                 "status": app.get("status"),
                 "status_zh": ScholarshipI18n.get_application_status_text(app.get("status", "")),
+                "is_deletable": app.get("is_deletable", False),
                 "scholarship_type": app.get("scholarship_type"),
                 "scholarship_type_zh": app.get("scholarship_type_zh", app.get("scholarship_type")),
                 "sub_type": app.get("sub_type"),

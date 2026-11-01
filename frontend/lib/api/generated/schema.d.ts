@@ -1354,7 +1354,11 @@ export interface paths {
         post?: never;
         /**
          * Delete Application
-         * @description Hard-delete an application (admin only).
+         * @description Hard-delete an application (admin, or 學院承辦人 for their own college).
+         *
+         *     A college user may only delete applications whose SIS snapshot belongs to
+         *     their bound college; anything else returns 404, exactly like a nonexistent
+         *     id, so the endpoint cannot enumerate other colleges' applications.
          *
          *     Allowed at any point BEFORE the application enters the 配額分發 stage
          *     (see app.services.application_deletion_policy). Once an allocation has

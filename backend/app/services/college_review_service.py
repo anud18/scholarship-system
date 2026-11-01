@@ -27,6 +27,7 @@ from app.models.enums import REVIEWABLE_APPLICATION_STATUSES, Semester
 from app.models.review import ApplicationReview  # Unified review system
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User, UserRole
+from app.services.application_deletion_policy import find_distributed_application_ids, has_entered_distribution
 from app.services.college_ranking_scope import (  # noqa: F401 - re-exported for callers
     RANKING_SCOPE_LOCK_NAMESPACE,
     DeletedRankingInfo,
@@ -331,6 +332,10 @@ class CollegeReviewService(RankingScopeMixin):
         # Note: CollegeReview removed - use Application.final_ranking_position instead
         # college_review_lookup logic removed - data now in Application model
 
+        # Batch-resolve which rows already hold a saved/finalized allocation or a
+        # roster entry, so each row can carry an `is_deletable` flag for the UI.
+        distributed_ids = await find_distributed_application_ids(self.db, [app.id for app in applications])
+
         # Format response with additional review information
         formatted_applications = []
         for app in applications:
@@ -357,6 +362,8 @@ class CollegeReviewService(RankingScopeMixin):
                 "semester": app.semester.value if app.semester else None,
                 "submitted_at": app.submitted_at,
                 "status": app.status,
+                # 學院/admin may hard-delete until the application enters 分發階段.
+                "is_deletable": not has_entered_distribution(app, distributed_ids),
                 "created_at": app.created_at,
                 "student_data": student_payload,
                 "is_renewal": app.is_renewal,

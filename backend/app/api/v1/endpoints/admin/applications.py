@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import AuthorizationError, NotFoundError, ValidationError
-from app.core.security import require_admin
+from app.core.security import require_admin, require_scholarship_manager
 from app.db.deps import get_db
 from app.models.application import Application, ApplicationStatus
 from app.models.audit_log import AuditAction
@@ -33,7 +33,7 @@ from app.models.college_review import CollegeRankingItem
 from app.models.enums import Semester
 from app.models.payment_roster import PaymentRosterItem
 from app.models.scholarship import ScholarshipType
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.application import (
     ApplicationListResponse,
     ApplicationStatusUpdate,
@@ -47,6 +47,7 @@ from app.services.application_deletion_policy import DELETE_BLOCKED_MESSAGE, is_
 from app.services.application_service import ApplicationService
 from app.services.bulk_approval_service import BulkApprovalService
 from app.services.student_snapshot_resync import needs_term_resync, resync_application_term_data
+from app.utils.college_scope import college_user_may_access, get_application_college_code, get_user_college_code
 from app.utils.excel_safety import sanitize_excel_cell
 
 logger = logging.getLogger(__name__)
@@ -669,11 +670,15 @@ async def delete_application(
     id: int,
     payload: DeleteApplicationRequest,
     request: Request = None,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_scholarship_manager),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Hard-delete an application (admin only).
+    Hard-delete an application (admin, or 學院承辦人 for their own college).
+
+    A college user may only delete applications whose SIS snapshot belongs to
+    their bound college; anything else returns 404, exactly like a nonexistent
+    id, so the endpoint cannot enumerate other colleges' applications.
 
     Allowed at any point BEFORE the application enters the 配額分發 stage
     (see app.services.application_deletion_policy). Once an allocation has
@@ -692,6 +697,18 @@ async def delete_application(
     app = result.scalar_one_or_none()
 
     if not app:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+
+    if current_user.role == UserRole.college and not college_user_may_access(current_user, app):
+        logger.warning(
+            "SECURITY: college user attempted cross-college application hard-delete",
+            extra={
+                "user_id": current_user.id,
+                "user_college": get_user_college_code(current_user),
+                "owner_college": get_application_college_code(app),
+                "application_id": app.id,
+            },
+        )
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
 
     if not await is_application_deletable(db, app):
