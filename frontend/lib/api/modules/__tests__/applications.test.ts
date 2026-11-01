@@ -23,6 +23,7 @@ jest.mock("../../typed-client", () => ({
       GET: jest.fn(),
       POST: jest.fn(),
       PUT: jest.fn(),
+      PATCH: jest.fn(),
       DELETE: jest.fn(),
     },
   },
@@ -40,6 +41,7 @@ const mockedRaw = typedClient.raw as unknown as {
   GET: jest.Mock;
   POST: jest.Mock;
   PUT: jest.Mock;
+  PATCH: jest.Mock;
   DELETE: jest.Mock;
 };
 
@@ -170,6 +172,16 @@ describe("createApplicationsApi", () => {
     await api.updateStatus(42, { status: "approved", comments: "ok" });
     expect(mockedRaw.PUT.mock.calls[0][0]).toBe(
       "/api/v1/applications/{id}/status"
+    );
+  });
+
+  it("updateFormFields PATCHes /{id}/form-fields with the changed fields under `fields`", async () => {
+    mockedRaw.PATCH.mockResolvedValueOnce({});
+    const api = createApplicationsApi();
+    await api.updateFormFields(42, { remark: "新備註" });
+    expect(mockedRaw.PATCH).toHaveBeenCalledWith(
+      "/api/v1/applications/{id}/form-fields",
+      { params: { path: { id: 42 } }, body: { fields: { remark: "新備註" } } }
     );
   });
 

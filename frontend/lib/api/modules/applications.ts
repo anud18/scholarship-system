@@ -121,6 +121,21 @@ export function createApplicationsApi() {
     },
 
     /**
+     * Correct submitted form fields (admin / college staff only).
+     * Send only the changed fields; returns the updated application detail.
+     */
+    updateFormFields: async (
+      id: number,
+      fields: Record<string, unknown>
+    ): Promise<ApiResponse<Application>> => {
+      const response = await typedClient.raw.PATCH('/api/v1/applications/{id}/form-fields', {
+        params: { path: { id } },
+        body: { fields },
+      });
+      return toApiResponse<Application>(response);
+    },
+
+    /**
      * Update application status (staff/admin only)
      * Type-safe: Path parameter and body validated against OpenAPI
      *
