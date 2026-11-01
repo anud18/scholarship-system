@@ -237,8 +237,8 @@ class ApplicationUpdate(BaseModel):
 
     scholarship_subtype_list: Optional[List[str]] = Field(None, description="獎學金子類型列表")
     form_data: Optional[ApplicationFormData] = Field(None, description="表單資料")
-    # SECURITY: `is_renewal` is NOT accepted either: it exempts an application from
-    # the 本次開放申請類別 submit gate, so a student must never be able to set it.
+    # SECURITY: `is_renewal` is not accepted: it exempts an application from the
+    # 本次開放申請類別 submit gate, so a student must never be able to set it.
     # SECURITY: `status` is deliberately NOT accepted here. It used to be assigned
     # straight onto the model in ApplicationService.update_application, letting a
     # student PUT {"status": "approved"} onto their own editable draft and skip
