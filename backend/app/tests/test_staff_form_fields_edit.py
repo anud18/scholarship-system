@@ -1,9 +1,3 @@
-"""Staff (admin / 學院) correction of a submitted application's form fields.
-
-PATCH /api/v1/applications/{id}/form-fields and the pure merge in
-app/services/staff_form_edit.py.
-"""
-
 from copy import deepcopy
 from datetime import datetime, timezone
 
@@ -198,10 +192,6 @@ class TestApplyStaffFormEdit:
         with pytest.raises(ValidationError):
             _apply({"remark": "ok", "category": "vip"}, stored)
         assert stored == _stored_form()
-
-
-# ---------------------------------------------------------------------------
-# HTTP
 
 
 @pytest_asyncio.fixture

@@ -1284,26 +1284,16 @@ class ApplicationService:
     async def update_submitted_form_fields(
         self, application_id: int, raw_fields: Dict[str, Any], current_user: User
     ) -> Dict[str, FieldChange]:
-        """Staff correction of a submitted application's form fields.
-
-        Only the scholarship's active form-config fields are editable, minus the
-        UserProfile-owned ones. Returns the fields whose value changed; nothing is
-        written when there are none.
-        """
         application = await self._get_application_model(application_id, current_user)
         if not application:
             raise NotFoundError("Application", str(application_id))
 
-        # Lock the row and re-read what we merge into, so two concurrent staff
-        # edits of different fields cannot drop each other's change.
         await self.db.refresh(application, attribute_names=["status", "submitted_form_data"], with_for_update=True)
 
         if not application.is_staff_form_editable:
             raise ValidationError(
                 "此申請目前的狀態不允許修改表單內容（草稿、退回修改或已撤回／取消的申請由學生自行處理）"
             )
-        # Same scholarship code get_application_by_id reports as `scholarship_type`,
-        # which is what the review dialog loads the form config with.
         configuration = application.scholarship_configuration
         scholarship = configuration.scholarship_type if configuration else None
         scholarship = scholarship or application.scholarship
@@ -1316,8 +1306,6 @@ class ApplicationService:
         if not edit.changes:
             return {}
 
-        # Only an edited phone is checked: a malformed stored phone must not block
-        # staff from correcting some other field.
         changed_fields = {name: edit.form_data["fields"][name] for name in edit.changes}
         self._enforce_contact_phone_format(changed_fields)
 

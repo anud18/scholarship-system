@@ -34,9 +34,7 @@ interface FieldInputProps {
 
 interface ApplicationFormDataEditorProps {
   applicationId: number;
-  /** Form-config definitions, already narrowed to the staff-editable ones. */
-  fields: ApplicationField[];
-  /** Submitted values by field_name. */
+  editableFields: ApplicationField[];
   initialValues: Record<string, unknown>;
   locale: Locale;
   onSaved: (application: Application) => void;
@@ -68,7 +66,6 @@ const TextInput = ({ field, value, onChange, invalid }: FieldInputProps) => (
   />
 );
 
-// One input per field_type the backend accepts (staff_form_edit.FIELD_CODECS).
 const FIELD_INPUTS: Record<string, (props: FieldInputProps) => ReactElement> = {
   text: TextInput,
   email: TextInput,
@@ -145,7 +142,7 @@ const FIELD_INPUTS: Record<string, (props: FieldInputProps) => ReactElement> = {
 
 export function ApplicationFormDataEditor({
   applicationId,
-  fields,
+  editableFields,
   initialValues,
   locale,
   onSaved,
@@ -156,23 +153,23 @@ export function ApplicationFormDataEditor({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const editableFields = useMemo(
-    () => fields.filter((field) => field.field_type in FIELD_INPUTS),
-    [fields]
+  const inputFields = useMemo(
+    () => editableFields.filter((field) => field.field_type in FIELD_INPUTS),
+    [editableFields]
   );
 
   const changedFields = useMemo(() => {
     const changed: Record<string, unknown> = {};
-    editableFields.forEach(({ field_name }) => {
+    inputFields.forEach(({ field_name }) => {
       if (!sameValue(values[field_name], initialValues[field_name])) {
         changed[field_name] = values[field_name];
       }
     });
     return changed;
-  }, [editableFields, values, initialValues]);
+  }, [inputFields, values, initialValues]);
 
   const fieldErrors: Record<string, string> = {};
-  editableFields.forEach((field) => {
+  inputFields.forEach((field) => {
     const value = values[field.field_name];
     const isChanged = field.field_name in changedFields;
     if (field.is_required && field.field_type !== "checkbox" && isChanged && isBlank(value)) {
@@ -209,13 +206,13 @@ export function ApplicationFormDataEditor({
 
   return (
     <div className="space-y-4">
-      {editableFields.length === 0 && (
+      {inputFields.length === 0 && (
         <p className="text-sm text-muted-foreground">
           {t("此獎學金沒有可修改的表單欄位", "This scholarship has no editable form fields")}
         </p>
       )}
 
-      {editableFields.map((field) => {
+      {inputFields.map((field) => {
         const FieldInput = FIELD_INPUTS[field.field_type];
         const fieldError = fieldErrors[field.field_name];
         return (

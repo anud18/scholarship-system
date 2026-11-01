@@ -1,10 +1,3 @@
-"""Staff (admin / 學院) corrections to a submitted application form.
-
-Pure: no DB access. Takes the stored ``submitted_form_data``, the scholarship's
-form-config field definitions and the raw values from the request, and returns a
-new form-data dict plus the per-field changes. The input is never mutated.
-"""
-
 import math
 import re
 from dataclasses import dataclass
@@ -30,10 +23,8 @@ class FieldChange:
 
 @dataclass(frozen=True)
 class EditableFormSpec:
-    """Which fields staff may edit (by field_name) and which are profile-owned."""
-
     definitions: Dict[str, FieldDefinition]
-    locked: FrozenSet[str]
+    profile_owned: FrozenSet[str]
 
 
 @dataclass(frozen=True)
@@ -55,8 +46,6 @@ def _invalid(definition: FieldDefinition, reason: str) -> ValidationError:
 
 
 def _full_match(definition: FieldDefinition, pattern: str, value: str) -> bool:
-    # Same semantics as the HTML pattern attribute the student form uses: the
-    # whole value must match, not just a prefix.
     try:
         match = safe_regex_match(pattern, value)
     except RegexValidationError as exc:
@@ -106,7 +95,7 @@ def _parse_date(definition: FieldDefinition, raw: Any) -> str:
 
 
 def _parse_choice(definition: FieldDefinition, raw: Any) -> str:
-    allowed = {str(option.get("value")) for option in definition.field_options or [] if isinstance(option, dict)}
+    allowed = {str(option.get("value")) for option in definition.field_options or []}
     if not isinstance(raw, str) or raw not in allowed:
         raise _invalid(definition, "的值不在可選選項中")
     return raw
@@ -120,10 +109,8 @@ def _parse_checkbox(definition: FieldDefinition, raw: Any) -> bool:
 
 @dataclass(frozen=True)
 class FieldCodec:
-    """How one field_type turns a raw request value into its stored value."""
-
     parse: Callable[[FieldDefinition, Any], Any]
-    blank: Any  # stored when a non-required field is cleared
+    cleared_value: Any
 
 
 FIELD_CODECS: Dict[str, FieldCodec] = {
@@ -139,13 +126,12 @@ FIELD_CODECS: Dict[str, FieldCodec] = {
 
 
 def build_editable_form_spec(definitions: Iterable[FieldDefinition], profile_owned: FrozenSet[str]) -> EditableFormSpec:
-    """Active form-config fields minus the UserProfile-owned built-ins."""
     definitions = list(definitions)
-    locked = frozenset(profile_owned) | {
+    owned = frozenset(profile_owned) | {
         d.field_name for d in definitions if d.field_name in profile_owned or d.fixed_key in profile_owned
     }
-    editable = {d.field_name: d for d in definitions if d.is_active and d.field_name not in locked}
-    return EditableFormSpec(definitions=editable, locked=locked)
+    editable = {d.field_name: d for d in definitions if d.is_active and d.field_name not in owned}
+    return EditableFormSpec(definitions=editable, profile_owned=owned)
 
 
 def parse_field_value(definition: FieldDefinition, raw: Any) -> Any:
@@ -155,25 +141,20 @@ def parse_field_value(definition: FieldDefinition, raw: Any) -> Any:
     if definition.field_type != FieldType.CHECKBOX.value and _is_blank(raw):
         if definition.is_required:
             raise _invalid(definition, "為必填欄位，不可清空")
-        return codec.blank
+        return codec.cleared_value
     return codec.parse(definition, raw)
 
 
 def apply_staff_form_edit(
     form_data: Mapping[str, Any] | None, spec: EditableFormSpec, raw_fields: Mapping[str, Any]
 ) -> StaffFormEdit:
-    """Merge `raw_fields` into a copy of `form_data`.
-
-    Untouched fields and ``documents`` are carried over as-is. A value equal to
-    the stored one is not a change; when nothing changes the input comes back.
-    """
     current: Dict[str, Any] = dict(form_data or {})
     stored_fields: Mapping[str, Any] = current.get("fields") or {}
     written: Dict[str, Any] = {}
     changes: Dict[str, FieldChange] = {}
 
     for name, raw in raw_fields.items():
-        if name in spec.locked:
+        if name in spec.profile_owned:
             raise ValidationError(f"「{name}」屬於學生個人資料（郵局帳號／指導教授），不可在此修改", field=name)
         definition = spec.definitions.get(name)
         if definition is None:

@@ -1,7 +1,3 @@
-/**
- * 表單內容 → 編輯: admin and college staff correct the submitted form fields in
- * place; the professor, and any staff on a student-owned status, only read them.
- */
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import api from "@/lib/api";

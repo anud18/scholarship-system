@@ -731,7 +731,6 @@ export function ApplicationReviewDialog({
   const isAdminRole = role === "admin" || role === "super_admin";
   const canSubmitReview = isAdminRole;
 
-  // Admin and college staff may correct the submitted form fields.
   const canEditFormData =
     (isAdminRole || role === "college") &&
     isStaffFormEditable(detailedApplication?.status);
@@ -1860,7 +1859,7 @@ export function ApplicationReviewDialog({
                               )}
                               <ApplicationFormDataEditor
                                 applicationId={detailedApplication.id}
-                                fields={editableFormFields}
+                                editableFields={editableFormFields}
                                 initialValues={getSubmittedFieldValues(
                                   detailedApplication.submitted_form_data,
                                   editableFormFields

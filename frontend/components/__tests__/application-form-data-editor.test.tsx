@@ -31,7 +31,7 @@ const renderEditor = (onSaved = jest.fn()) =>
   render(
     <ApplicationFormDataEditor
       applicationId={42}
-      fields={FIELDS}
+      editableFields={FIELDS}
       initialValues={INITIAL}
       locale="zh"
       onSaved={onSaved}
@@ -104,7 +104,7 @@ describe("ApplicationFormDataEditor", () => {
     render(
       <ApplicationFormDataEditor
         applicationId={42}
-        fields={FIELDS}
+        editableFields={FIELDS}
         initialValues={{ ...INITIAL, contact_phone: "範例聯絡電話1" }}
         locale="zh"
         onSaved={jest.fn()}
