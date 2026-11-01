@@ -708,6 +708,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/applications/{id}/form-fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Application Form Fields
+         * @description Correct the form fields a student submitted (admin / college staff).
+         */
+        patch: operations["update_application_form_fields_api_v1_applications__id__form_fields_patch"];
+        trace?: never;
+    };
     "/api/v1/applications/{id}/submit": {
         parameters: {
             query?: never;
@@ -11154,6 +11174,19 @@ export interface components {
             body: string;
         };
         /**
+         * StaffFormFieldsUpdate
+         * @description Staff correction of submitted form fields: field_name → new value.
+         */
+        StaffFormFieldsUpdate: {
+            /**
+             * Fields
+             * @description 要修改的表單欄位（field_name → 新值）
+             */
+            fields: {
+                [key: string]: unknown;
+            };
+        };
+        /**
          * StudentHistoryVisibilityUpdate
          * @description Admin toggle body for PUT /student-history/visibility.
          *
@@ -12663,6 +12696,42 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_application_form_fields_api_v1_applications__id__form_fields_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Application ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffFormFieldsUpdate"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
