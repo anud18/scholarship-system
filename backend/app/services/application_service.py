@@ -41,12 +41,17 @@ from app.schemas.application import (
     ApplicationUpdate,
 )
 from app.services.application_builder import backfill_professor_assignments, order_sub_type_preferences
-from app.services.application_field_service import FIXED_ADVISOR_KEYS, FIXED_KEY_POSTAL_ACCOUNT
+from app.services.application_field_service import (
+    FIXED_ADVISOR_KEYS,
+    FIXED_KEY_POSTAL_ACCOUNT,
+    ApplicationFieldService,
+)
 from app.services.department_names import load_department_names
 from app.services.eligibility_service import EligibilityService
 from app.services.email_automation_service import email_automation_service
 from app.services.email_service import EmailService
 from app.services.minio_service import minio_service
+from app.services.staff_form_edit import FieldChange, apply_staff_form_edit, build_editable_form_spec
 from app.services.student_service import StudentService
 from app.utils.application_helpers import (
     get_academy_code_from_data,
@@ -1275,6 +1280,54 @@ class ApplicationService:
             return
         if not is_valid_taiwan_mobile(phone):
             raise ValidationError(TAIWAN_MOBILE_MESSAGE)
+
+    async def update_submitted_form_fields(
+        self, application_id: int, raw_fields: Dict[str, Any], current_user: User
+    ) -> Dict[str, FieldChange]:
+        """Staff correction of a submitted application's form fields.
+
+        Only the scholarship's active form-config fields are editable, minus the
+        UserProfile-owned ones. Returns the fields whose value changed; nothing is
+        written when there are none.
+        """
+        application = await self._get_application_model(application_id, current_user)
+        if not application:
+            raise NotFoundError(f"Application {application_id} not found")
+
+        # Lock the row and re-read what we merge into, so two concurrent staff
+        # edits of different fields cannot drop each other's change.
+        await self.db.refresh(application, attribute_names=["status", "submitted_form_data"], with_for_update=True)
+
+        if not application.is_staff_form_editable:
+            raise ValidationError(
+                "此申請目前的狀態不允許修改表單內容（草稿、退回修改或已撤回／取消的申請由學生自行處理）"
+            )
+        # Same scholarship code get_application_by_id reports as `scholarship_type`,
+        # which is what the review dialog loads the form config with.
+        configuration = application.scholarship_configuration
+        scholarship = configuration.scholarship_type if configuration else None
+        scholarship = scholarship or application.scholarship
+        if scholarship is None:
+            raise ValidationError("找不到此申請的獎學金類型，無法修改表單內容")
+
+        form_config = await ApplicationFieldService(self.db).get_scholarship_form_config(scholarship.code)
+        spec = build_editable_form_spec(form_config.fields, PROFILE_OWNED_FORM_FIELDS)
+        edit = apply_staff_form_edit(application.submitted_form_data, spec, raw_fields)
+        if not edit.changes:
+            return {}
+
+        self._enforce_contact_phone_format(edit.form_data.get("fields"))
+
+        application.submitted_form_data = edit.form_data
+        await self.db.commit()
+        await self._invalidate_app_caches()
+        logger.info(
+            "Staff %s edited form fields %s of application %s",
+            current_user.id,
+            sorted(edit.changes),
+            application.app_id,
+        )
+        return edit.changes
 
     async def submit_application(self, application_id: int, user: User) -> ApplicationResponse:
         """提交申請"""

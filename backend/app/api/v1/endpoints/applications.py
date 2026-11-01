@@ -13,15 +13,17 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AuthorizationError, NotFoundError, ScholarshipException
-from app.core.security import get_current_user, require_staff, require_student
+from app.core.security import get_current_user, require_roles, require_staff, require_student
 from app.db.deps import get_db
+from app.models.audit_log import AuditAction
 from app.models.enums import REAPPLY_ALLOWED_APPLICATION_STATUSES
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.application import (
     ApplicationCreate,
     ApplicationStatusUpdate,
     ApplicationStatusUpdateResponse,
     ApplicationUpdate,
+    StaffFormFieldsUpdate,
     StudentDataSchema,
 )
 from app.services.application_audit_service import ApplicationAuditService
@@ -392,6 +394,45 @@ async def update_application(
     return {
         "success": True,
         "message": "更新成功",
+        "data": _serialize_result(result),
+    }
+
+
+@router.patch("/{id}/form-fields")
+async def update_application_form_fields(
+    id: int = Path(..., description="Application ID"),
+    update_data: StaffFormFieldsUpdate = Body(...),
+    current_user: User = Depends(require_roles(UserRole.admin, UserRole.super_admin, UserRole.college)),
+    db: AsyncSession = Depends(get_db),
+    request: Request = None,
+):
+    """Correct the form fields a student submitted (admin / college staff)."""
+    service = ApplicationService(db)
+    changes = await service.update_submitted_form_fields(id, update_data.fields, current_user)
+
+    result = await service.get_application_by_id(id, current_user)
+    if result is None:
+        raise NotFoundError(f"Application {id} not found")
+
+    if changes:
+        await ApplicationAuditService(db).log_application_operation(
+            application_id=id,
+            action=AuditAction.update,
+            user=current_user,
+            request=request,
+            description=f"修改申請表單內容 {result.app_id}",
+            old_values={name: change.old for name, change in changes.items()},
+            new_values={name: change.new for name, change in changes.items()},
+            meta_data={
+                "app_id": result.app_id,
+                "update_type": "staff_form_fields_edit",
+                "changed_fields": sorted(changes),
+            },
+        )
+
+    return {
+        "success": True,
+        "message": "表單內容已更新" if changes else "表單內容沒有變更",
         "data": _serialize_result(result),
     }
 

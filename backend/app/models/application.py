@@ -34,6 +34,20 @@ if TYPE_CHECKING:
 
 # ScholarshipMainType enum removed - use scholarship_type_id instead
 
+# Statuses in which staff may NOT edit submitted_form_data. A draft or returned
+# form belongs to the student, whose save overwrites the whole form; the other
+# states are applications that left the process.
+STAFF_FORM_EDIT_BLOCKED_STATUSES = frozenset(
+    {
+        ApplicationStatus.draft,
+        ApplicationStatus.returned,
+        ApplicationStatus.withdrawn,
+        ApplicationStatus.cancelled,
+        ApplicationStatus.cancelled_by_challenge,
+        ApplicationStatus.deleted,
+    }
+)
+
 
 class ReviewCycle(enum.Enum):
     """Review cycle types"""
@@ -282,6 +296,11 @@ class Application(Base):
     def is_editable(self) -> bool:
         """Check if application can be edited"""
         return bool(self.status in [ApplicationStatus.draft, ApplicationStatus.returned])
+
+    @property
+    def is_staff_form_editable(self) -> bool:
+        """Whether admin/college staff may correct the submitted form fields."""
+        return self.status not in STAFF_FORM_EDIT_BLOCKED_STATUSES
 
     @property
     def is_submitted(self) -> bool:
