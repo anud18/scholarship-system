@@ -45,6 +45,10 @@ logging.basicConfig(
 logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 logging.getLogger("sqlalchemy.pool").setLevel(logging.WARNING)
 logging.getLogger("sqlalchemy.dialects").setLevel(logging.WARNING)
+# pypdf logs a WARNING for every malformed-but-auto-repaired annotation/xref in
+# student PDFs (~97% of prod backend warnings). Unreadable PDFs still raise and
+# are logged by app.services.pdf_merge with exc_info.
+logging.getLogger("pypdf").setLevel(logging.ERROR)
 
 
 # Create JSON formatter for structured logging
