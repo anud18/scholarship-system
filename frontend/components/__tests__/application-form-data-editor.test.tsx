@@ -95,6 +95,30 @@ describe("ApplicationFormDataEditor", () => {
     expect(onSaved).not.toHaveBeenCalled();
   });
 
+  it("lets staff save another field while the stored phone is malformed", async () => {
+    const updated = { id: 42 } as unknown as Application;
+    const updateFormFields = jest
+      .spyOn(api.applications, "updateFormFields")
+      .mockResolvedValue({ success: true, message: "表單內容已更新", data: updated });
+    const user = userEvent.setup();
+    render(
+      <ApplicationFormDataEditor
+        applicationId={42}
+        fields={FIELDS}
+        initialValues={{ ...INITIAL, contact_phone: "範例聯絡電話1" }}
+        locale="zh"
+        onSaved={jest.fn()}
+        onCancel={jest.fn()}
+      />
+    );
+
+    expect(screen.queryByText("請輸入本人有效的台灣手機 (09xxxxxx)")).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("備註"), "!");
+    await user.click(screen.getByRole("button", { name: "儲存" }));
+
+    await waitFor(() => expect(updateFormFields).toHaveBeenCalledWith(42, { remark: "舊備註!" }));
+  });
+
   it("blocks an invalid contact phone before it reaches the backend", async () => {
     const updateFormFields = jest.spyOn(api.applications, "updateFormFields");
     const user = userEvent.setup();

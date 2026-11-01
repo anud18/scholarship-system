@@ -412,7 +412,7 @@ async def update_application_form_fields(
 
     result = await service.get_application_by_id(id, current_user)
     if result is None:
-        raise NotFoundError(f"Application {id} not found")
+        raise NotFoundError("Application", str(id))
 
     if changes:
         await ApplicationAuditService(db).log_application_operation(

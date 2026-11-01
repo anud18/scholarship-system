@@ -1292,7 +1292,7 @@ class ApplicationService:
         """
         application = await self._get_application_model(application_id, current_user)
         if not application:
-            raise NotFoundError(f"Application {application_id} not found")
+            raise NotFoundError("Application", str(application_id))
 
         # Lock the row and re-read what we merge into, so two concurrent staff
         # edits of different fields cannot drop each other's change.
@@ -1316,7 +1316,10 @@ class ApplicationService:
         if not edit.changes:
             return {}
 
-        self._enforce_contact_phone_format(edit.form_data.get("fields"))
+        # Only an edited phone is checked: a malformed stored phone must not block
+        # staff from correcting some other field.
+        changed_fields = {name: edit.form_data["fields"][name] for name in edit.changes}
+        self._enforce_contact_phone_format(changed_fields)
 
         application.submitted_form_data = edit.form_data
         await self.db.commit()

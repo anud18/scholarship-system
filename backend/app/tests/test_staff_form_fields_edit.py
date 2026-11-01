@@ -346,6 +346,26 @@ class TestStaffFormFieldsEndpoint:
         assert response.status_code == 200, response.text
         assert await _audit_rows(db, application.id) == []
 
+    async def test_malformed_stored_phone_does_not_block_other_fields(self, client, db, login, users, scholarship):
+        application = await _make_application(db, users, scholarship)
+        form = _stored_form()
+        application.submitted_form_data = {
+            **form,
+            "fields": {
+                **form["fields"],
+                "contact_phone": {**form["fields"]["contact_phone"], "value": "範例聯絡電話1"},
+            },
+        }
+        await db.commit()
+        login(users["admin"])
+
+        response = await client.patch(URL.format(id=application.id), json={"fields": {"category": "general"}})
+
+        assert response.status_code == 200, response.text
+        stored = await _stored_fields(db, application.id)
+        assert stored["fields"]["category"]["value"] == "general"
+        assert stored["fields"]["contact_phone"]["value"] == "範例聯絡電話1"
+
     async def test_same_college_staff_may_edit(self, client, db, login, users, scholarship):
         application = await _make_application(db, users, scholarship)
         login(users["college_eng"])

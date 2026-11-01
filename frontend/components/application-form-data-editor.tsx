@@ -174,11 +174,12 @@ export function ApplicationFormDataEditor({
   const fieldErrors: Record<string, string> = {};
   editableFields.forEach((field) => {
     const value = values[field.field_name];
-    const isCleared = field.field_name in changedFields && isBlank(value);
-    if (field.is_required && field.field_type !== "checkbox" && isCleared) {
+    const isChanged = field.field_name in changedFields;
+    if (field.is_required && field.field_type !== "checkbox" && isChanged && isBlank(value)) {
       fieldErrors[field.field_name] = t("此欄位為必填", "This field is required");
     } else if (
       field.field_name === "contact_phone" &&
+      isChanged &&
       !isBlank(value) &&
       !isValidTaiwanMobile(asText(value).trim())
     ) {
