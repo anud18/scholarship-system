@@ -24,6 +24,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.api.v1.endpoints.college_review._helpers import _check_scholarship_permission
 from app.core.exceptions import AuthorizationError, NotFoundError, ValidationError
 from app.core.security import require_admin, require_scholarship_manager
 from app.db.deps import get_db
@@ -43,7 +44,12 @@ from app.schemas.application import (
 )
 from app.schemas.common import PaginatedResponse
 from app.services.application_audit_service import ApplicationAuditService
-from app.services.application_deletion_policy import DELETE_BLOCKED_MESSAGE, is_application_deletable
+from app.services.application_deletion_policy import (
+    DELETE_BLOCKED_MESSAGE,
+    LOCKED_RANKING_DELETE_BLOCKED_MESSAGE,
+    find_locked_ranking_application_ids,
+    is_application_deletable,
+)
 from app.services.application_service import ApplicationService
 from app.services.bulk_approval_service import BulkApprovalService
 from app.services.student_snapshot_resync import needs_term_resync, resync_application_term_data
@@ -665,6 +671,34 @@ class DeleteApplicationRequest(BaseModel):
     reason: str = Field(..., min_length=1, max_length=500)
 
 
+async def _assert_college_may_delete(db: AsyncSession, user: User, app: Application) -> None:
+    """Extra gates for a 學院承辦人 hard-delete (admins skip these).
+
+    - Own college only. Anything else is 404, not 403, so an out-of-scope id is
+      indistinguishable from a nonexistent one (no cross-college enumeration).
+    - Same per-scholarship AdminScholarship permission as the 學院審查 list.
+    - Not while the application sits in a finalized (確認排名) ranking — deleting
+      would silently rewrite a locked ranking; unlock it first.
+    """
+    if not college_user_may_access(user, app):
+        logger.warning(
+            "SECURITY: college user attempted cross-college application hard-delete",
+            extra={
+                "user_id": user.id,
+                "user_college": get_user_college_code(user),
+                "owner_college": get_application_college_code(app),
+                "application_id": app.id,
+            },
+        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+
+    if not await _check_scholarship_permission(user, app.scholarship_type_id, db):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="您沒有此獎學金的管理權限")
+
+    if await find_locked_ranking_application_ids(db, [app.id]):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=LOCKED_RANKING_DELETE_BLOCKED_MESSAGE)
+
+
 @router.delete("/applications/{id}")
 async def delete_application(
     id: int,
@@ -699,17 +733,8 @@ async def delete_application(
     if not app:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
 
-    if current_user.role == UserRole.college and not college_user_may_access(current_user, app):
-        logger.warning(
-            "SECURITY: college user attempted cross-college application hard-delete",
-            extra={
-                "user_id": current_user.id,
-                "user_college": get_user_college_code(current_user),
-                "owner_college": get_application_college_code(app),
-                "application_id": app.id,
-            },
-        )
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+    if current_user.role == UserRole.college:
+        await _assert_college_may_delete(db, current_user, app)
 
     if not await is_application_deletable(db, app):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=DELETE_BLOCKED_MESSAGE)

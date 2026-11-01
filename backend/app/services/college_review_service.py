@@ -27,7 +27,11 @@ from app.models.enums import REVIEWABLE_APPLICATION_STATUSES, Semester
 from app.models.review import ApplicationReview  # Unified review system
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User, UserRole
-from app.services.application_deletion_policy import find_distributed_application_ids, has_entered_distribution
+from app.services.application_deletion_policy import (
+    find_distributed_application_ids,
+    find_locked_ranking_application_ids,
+    has_entered_distribution,
+)
 from app.services.college_ranking_scope import (  # noqa: F401 - re-exported for callers
     RANKING_SCOPE_LOCK_NAMESPACE,
     DeletedRankingInfo,
@@ -334,7 +338,10 @@ class CollegeReviewService(RankingScopeMixin):
 
         # Batch-resolve which rows already hold a saved/finalized allocation or a
         # roster entry, so each row can carry an `is_deletable` flag for the UI.
-        distributed_ids = await find_distributed_application_ids(self.db, [app.id for app in applications])
+        # A 學院 user additionally may not delete rows of a finalized (locked) ranking.
+        app_ids = [app.id for app in applications]
+        undeletable_ids = await find_distributed_application_ids(self.db, app_ids)
+        undeletable_ids |= await find_locked_ranking_application_ids(self.db, app_ids)
 
         # Format response with additional review information
         formatted_applications = []
@@ -363,7 +370,7 @@ class CollegeReviewService(RankingScopeMixin):
                 "submitted_at": app.submitted_at,
                 "status": app.status,
                 # 學院/admin may hard-delete until the application enters 分發階段.
-                "is_deletable": not has_entered_distribution(app, distributed_ids),
+                "is_deletable": not has_entered_distribution(app, undeletable_ids),
                 "created_at": app.created_at,
                 "student_data": student_payload,
                 "is_renewal": app.is_renewal,

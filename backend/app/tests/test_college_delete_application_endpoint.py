@@ -14,8 +14,9 @@ import pytest_asyncio
 from sqlalchemy import select
 
 from app.models.application import Application, ApplicationStatus
+from app.models.college_review import CollegeRanking, CollegeRankingItem
 from app.models.scholarship import ScholarshipType, SubTypeSelectionMode
-from app.models.user import User, UserRole, UserType
+from app.models.user import AdminScholarship, User, UserRole, UserType
 from app.services.college_review_service import CollegeReviewService
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
@@ -57,6 +58,7 @@ async def actors(db):
         "college_own": _employee("del_college_c", UserRole.college, OWN_COLLEGE),
         "college_other": _employee("del_college_e", UserRole.college, OTHER_COLLEGE),
         "college_unbound": _employee("del_college_none", UserRole.college, None),
+        "college_no_perm": _employee("del_college_c_noperm", UserRole.college, OWN_COLLEGE),
         "professor": _employee("del_prof", UserRole.professor),
         "admin": _employee("del_admin", UserRole.admin),
     }
@@ -70,8 +72,28 @@ async def actors(db):
     db.add_all([*users.values(), student])
     stype = ScholarshipType(code="del_test", name="Delete Test Scholarship")
     db.add(stype)
+    await db.flush()
+    # 學院 users are gated per scholarship type by AdminScholarship rows, exactly
+    # like the 學院審查 list; college_no_perm deliberately gets none.
+    for key in ("college_own", "college_other", "college_unbound"):
+        db.add(AdminScholarship(admin_id=users[key].id, scholarship_id=stype.id))
     await db.commit()
     return {**users, "student": student, "stype": stype}
+
+
+async def _rank(db, actors, app_row: Application, *, finalized: bool) -> None:
+    ranking = CollegeRanking(
+        scholarship_type_id=actors["stype"].id,
+        sub_type_code="default",
+        academic_year=114,
+        college_code=OWN_COLLEGE,
+        is_finalized=finalized,
+        ranking_status="finalized" if finalized else "draft",
+    )
+    db.add(ranking)
+    await db.flush()
+    db.add(CollegeRankingItem(ranking_id=ranking.id, application_id=app_row.id, rank_position=1))
+    await db.commit()
 
 
 async def _make_application(db, actors, suffix: str, **overrides) -> Application:
@@ -155,6 +177,50 @@ async def test_college_user_blocked_once_application_entered_distribution(client
     assert await _exists(db, app_row.id)
 
 
+async def test_college_user_without_scholarship_permission_cannot_delete(client, db, actors, login):
+    app_row = await _make_application(db, actors, "NOPERM")
+    login(actors["college_no_perm"])
+
+    response = await _delete(client, app_row.id)
+
+    assert response.status_code == 403
+    assert await _exists(db, app_row.id)
+
+
+async def test_college_user_blocked_by_finalized_ranking(client, db, actors, login):
+    app_row = await _make_application(db, actors, "LOCKED")
+    await _rank(db, actors, app_row, finalized=True)
+    login(actors["college_own"])
+
+    response = await _delete(client, app_row.id)
+
+    assert response.status_code == 400
+    assert "解除排名鎖定" in response.text
+    assert await _exists(db, app_row.id)
+
+
+async def test_college_user_may_delete_from_draft_ranking(client, db, actors, login):
+    app_row = await _make_application(db, actors, "DRAFTRANK")
+    await _rank(db, actors, app_row, finalized=False)
+    login(actors["college_own"])
+
+    response = await _delete(client, app_row.id)
+
+    assert response.status_code == 200, response.text
+    assert not await _exists(db, app_row.id)
+
+
+async def test_admin_not_blocked_by_finalized_ranking(client, db, actors, login):
+    app_row = await _make_application(db, actors, "ADMINLOCKED")
+    await _rank(db, actors, app_row, finalized=True)
+    login(actors["admin"])
+
+    response = await _delete(client, app_row.id)
+
+    assert response.status_code == 200, response.text
+    assert not await _exists(db, app_row.id)
+
+
 async def test_professor_still_cannot_use_delete_endpoint(client, db, actors, login):
     app_row = await _make_application(db, actors, "PROF")
     login(actors["professor"])
@@ -178,8 +244,10 @@ async def test_admin_still_deletes_any_college_application(client, db, actors, l
 async def test_college_review_list_carries_is_deletable(db, actors):
     deletable = await _make_application(db, actors, "LIST-OK")
     distributed = await _make_application(db, actors, "LIST-DIST", quota_allocation_status="allocated")
+    locked = await _make_application(db, actors, "LIST-LOCKED")
+    await _rank(db, actors, locked, finalized=True)
 
     rows = await CollegeReviewService(db).get_applications_for_review(college_code=OWN_COLLEGE)
 
     flags = {row["id"]: row["is_deletable"] for row in rows}
-    assert flags == {deletable.id: True, distributed.id: False}
+    assert flags == {deletable.id: True, distributed.id: False, locked.id: False}

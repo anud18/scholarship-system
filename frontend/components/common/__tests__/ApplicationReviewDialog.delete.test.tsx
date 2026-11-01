@@ -74,6 +74,19 @@ describe("ApplicationReviewDialog 刪除申請 (學院承辦人)", () => {
     expect(onDelete).toHaveBeenCalledWith(row);
   });
 
+  it("still offers 刪除申請 when the detail fetch fails (only the list row is needed)", async () => {
+    jest
+      .spyOn(api.applications, "getApplicationById")
+      .mockResolvedValue({ success: false, message: "SIS 逾時", data: undefined } as never);
+    const onDelete = jest.fn();
+    const row = { ...BASE_APPLICATION, is_deletable: true } as Application;
+    renderDialog(row, onDelete);
+
+    fireEvent.click(await screen.findByRole("button", { name: /刪除申請/ }));
+
+    expect(onDelete).toHaveBeenCalledWith(row);
+  });
+
   it("hides 刪除申請 once the application has entered 分發階段", async () => {
     renderDialog({ ...BASE_APPLICATION, is_deletable: false } as Application, jest.fn());
 

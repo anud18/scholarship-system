@@ -2428,7 +2428,7 @@ export function ApplicationReviewDialog({
             </Tabs>
           ) : null}
 
-          {canDelete && detailedApplication && (
+          {canDelete && (
             <div className="flex justify-end border-t pt-3">
               <Button
                 variant="outline"
