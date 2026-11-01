@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AuthorizationError, NotFoundError, ScholarshipException
+from app.api.v1.endpoints.user_profiles import get_client_info
 from app.core.security import get_current_user, require_roles, require_staff, require_student
 from app.db.deps import get_db
 from app.models.audit_log import AuditAction
@@ -408,31 +409,44 @@ async def update_application_form_fields(
 ):
     """Correct the form fields a student submitted (admin / college staff)."""
     service = ApplicationService(db)
-    changes = await service.update_submitted_form_fields(id, update_data.fields, current_user)
+    ip_address, user_agent = get_client_info(request) if request else (None, None)
+    edit = await service.update_submitted_form_fields(
+        id, update_data.fields, current_user, ip_address=ip_address, user_agent=user_agent
+    )
 
     result = await service.get_application_by_id(id, current_user)
     if result is None:
         raise NotFoundError("Application", str(id))
 
-    if changes:
+    if edit.changes:
+        meta_data = {
+            "app_id": result.app_id,
+            "update_type": "staff_form_fields_edit",
+            "changed_fields": sorted(edit.changes),
+            "profile_fields_updated": list(edit.profile_fields_updated),
+        }
+        if edit.cleared_meta:
+            meta_data["cleared_meta_data"] = edit.cleared_meta
+        if edit.professor_reassignment is not None:
+            meta_data["professor_reassignment"] = {
+                "outcome": edit.professor_reassignment.outcome.value,
+                "from_professor_id": edit.professor_reassignment.from_professor_id,
+                "to_professor_id": edit.professor_reassignment.to_professor_id,
+            }
         await ApplicationAuditService(db).log_application_operation(
             application_id=id,
             action=AuditAction.update,
             user=current_user,
             request=request,
             description=f"修改申請表單內容 {result.app_id}",
-            old_values={name: change.old for name, change in changes.items()},
-            new_values={name: change.new for name, change in changes.items()},
-            meta_data={
-                "app_id": result.app_id,
-                "update_type": "staff_form_fields_edit",
-                "changed_fields": sorted(changes),
-            },
+            old_values={name: change.old for name, change in edit.changes.items()},
+            new_values={name: change.new for name, change in edit.changes.items()},
+            meta_data=meta_data,
         )
 
     return {
         "success": True,
-        "message": "表單內容已更新" if changes else "表單內容沒有變更",
+        "message": edit.message,
         "data": _serialize_result(result),
     }
 
