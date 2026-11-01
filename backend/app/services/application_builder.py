@@ -17,7 +17,7 @@ from app.core.exceptions import ValidationError
 from app.models.application import Application
 from app.models.application_sequence import ApplicationSequence
 from app.models.enums import PROFESSOR_ACTIONABLE_APPLICATION_STATUSES, ApplicationStatus, ReviewStage
-from app.models.scholarship import ScholarshipConfiguration
+from app.models.scholarship import ScholarshipConfiguration, ScholarshipSubTypeConfig
 from app.models.user import User, UserRole
 from app.models.user_profile import UserProfile
 from app.utils.i18n import ScholarshipI18n
@@ -54,6 +54,23 @@ def validate_sub_type_for_submission(scholarship, sub_scholarship_type: Optional
             raise ValidationError("此獎學金需選擇申請類別（" + "、".join(real_sub_types) + "），不可使用通用類別")
     elif normalized != "general":
         raise ValidationError("此獎學金不提供申請類別選擇，不可指定子類別")
+
+
+async def ensure_sub_types_open(
+    db: AsyncSession, config: ScholarshipConfiguration, sub_types: Optional[List[str]]
+) -> None:
+    """Reject a new (一般) application that selects a sub-type the admin has not opened this round."""
+    closed = [code for code in sub_types or [] if not config.is_sub_type_open(code)]
+    if not closed:
+        return
+    rows = await db.execute(
+        select(ScholarshipSubTypeConfig.sub_type_code, ScholarshipSubTypeConfig.name).where(
+            ScholarshipSubTypeConfig.scholarship_type_id == config.scholarship_type_id
+        )
+    )
+    names = {code.strip().lower(): name for code, name in rows.all()}
+    label = "、".join(names.get(code.strip().lower(), code) for code in closed)
+    raise ValidationError(f"{label} 本次未開放申請，請取消勾選")
 
 
 def order_sub_type_preferences(sub_types: List[str]) -> List[str]:

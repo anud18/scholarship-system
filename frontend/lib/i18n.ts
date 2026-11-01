@@ -257,6 +257,7 @@ export const translations = {
       一般生: "一般生",
       逕博生: "逕讀博士生",
       第一學年: "第一學年",
+      本次未開放申請類別: "本次未開放您符合資格的申請類別",
     },
     rule_types: {
       nstc: "國科會博士生獎學金",
@@ -314,6 +315,7 @@ export const translations = {
       application_info: "申請資訊",
       missing: "不符",
       not_eligible_short: "不符資格",
+      sub_type_not_open: "本次未開放",
       not_eligible_parenthetical: "（不符資格）",
       warnings: "注意事項",
     },
@@ -787,6 +789,7 @@ export const translations = {
       一般生: "Regular Student",
       逕博生: "Direct PhD Student",
       第一學年: "First Academic Year",
+      本次未開放申請類別: "No category you qualify for is open this round",
     },
     rule_types: {
       nstc: "NSTC PhD Scholarship",
@@ -846,6 +849,7 @@ export const translations = {
       application_info: "Application Info",
       missing: "Missing",
       not_eligible_short: "Not eligible",
+      sub_type_not_open: "Not open this round",
       not_eligible_parenthetical: "(Not eligible)",
       warnings: "Warnings",
     },

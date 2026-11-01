@@ -63,6 +63,7 @@ import { ConfigToggleSwitch } from "@/components/admin/config/ConfigToggleSwitch
 import { QuotaExcelButtons } from "@/components/admin/quota-import/QuotaExcelButtons";
 import { QuotaManagementMode, getQuotaManagementModeLabel } from "@/lib/enums";
 import { toast } from "sonner";
+import { useReferenceData } from "@/hooks/use-reference-data";
 import {
   dateTimeLocalToIso,
   formatDateTimeLocal,
@@ -115,6 +116,54 @@ interface AdminConfigurationManagementProps {
     id: number,
     updates: Partial<ScholarshipType>
   ) => void;
+}
+
+const NO_OPEN_SUB_TYPES_ERROR = "請至少勾選一個開放申請類別";
+
+/** 本次開放申請類別: null means every sub-type is open, so all ticked saves as null. */
+function OpenSubTypesPicker({
+  subTypes,
+  value,
+  onChange,
+  labelFor,
+}: {
+  subTypes: string[];
+  value: string[] | null | undefined;
+  onChange: (next: string[] | null) => void;
+  labelFor: (code: string) => string;
+}) {
+  const open = value ?? subTypes;
+
+  const toggle = (code: string, on: boolean) => {
+    const next = on ? [...open, code] : open.filter(st => st !== code);
+    onChange(subTypes.every(st => next.includes(st)) ? null : next);
+  };
+
+  return (
+    <div>
+      <Label>本次開放申請類別</Label>
+      <p className="mt-1 mb-2 text-sm text-muted-foreground">
+        學生本次一般申請只能勾選已開放的類別；續領不受影響。
+      </p>
+      <div className="flex flex-wrap gap-4">
+        {subTypes.map(st => (
+          <label key={st} className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={open.includes(st)}
+              onChange={e => toggle(st, e.target.checked)}
+            />
+            {labelFor(st)}
+          </label>
+        ))}
+      </div>
+      {open.length === 0 && (
+        <p className="mt-2 text-sm text-destructive">
+          {NO_OPEN_SUB_TYPES_ERROR}
+        </p>
+      )}
+    </div>
+  );
 }
 
 function SharedQuotaSourcesPicker({
@@ -231,6 +280,11 @@ export function AdminConfigurationManagement({
   const quotaSubTypes = (subTypeList?.length ? subTypeList : ["nstc", "moe_1w", "moe_2w"]).map(
     code => ({ code })
   );
+  const openableSubTypes = (subTypeList ?? []).filter(
+    st => st && st !== "general"
+  );
+  const { subTypeTranslations } = useReferenceData();
+  const subTypeLabel = (code: string) => subTypeTranslations.zh?.[code] ?? code;
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
@@ -389,6 +443,8 @@ export function AdminConfigurationManagement({
     },
     []
   );
+
+  const hasNoOpenSubTypes = formData.open_sub_types?.length === 0;
 
   const handleCreateConfig = async () => {
     try {
@@ -618,6 +674,7 @@ export function AdminConfigurationManagement({
         config.application_start_date
       ),
       application_end_date: formatDateTimeLocal(config.application_end_date),
+      open_sub_types: config.open_sub_types ?? null,
       renewal_requires_professor_review:
         config.renewal_requires_professor_review,
       renewal_professor_review_start: formatDateTimeLocal(
@@ -838,6 +895,15 @@ export function AdminConfigurationManagement({
                                     </div>
                                   </div>
                                 ) : null}
+
+                                {config.open_sub_types && (
+                                  <div className="text-xs text-muted-foreground">
+                                    開放類別：
+                                    {config.open_sub_types
+                                      .map(subTypeLabel)
+                                      .join("、")}
+                                  </div>
+                                )}
 
                                 {/* 續領申請期間 */}
                                 {config.renewal_application_start_date &&
@@ -2071,6 +2137,17 @@ export function AdminConfigurationManagement({
                     </div>
                   </div>
 
+                  {openableSubTypes.length > 0 && (
+                    <OpenSubTypesPicker
+                      subTypes={openableSubTypes}
+                      value={formData.open_sub_types}
+                      onChange={next =>
+                        setFormData(prev => ({ ...prev, open_sub_types: next }))
+                      }
+                      labelFor={subTypeLabel}
+                    />
+                  )}
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="renewal_application_start_date">
@@ -2155,7 +2232,10 @@ export function AdminConfigurationManagement({
             >
               取消
             </Button>
-            <Button onClick={handleCreateConfig} disabled={formLoading}>
+            <Button
+              onClick={handleCreateConfig}
+              disabled={formLoading || hasNoOpenSubTypes}
+            >
               {formLoading ? "建立中..." : "建立配置"}
             </Button>
           </DialogFooter>
@@ -2569,6 +2649,17 @@ export function AdminConfigurationManagement({
                     </div>
                   </div>
 
+                  {openableSubTypes.length > 0 && (
+                    <OpenSubTypesPicker
+                      subTypes={openableSubTypes}
+                      value={formData.open_sub_types}
+                      onChange={next =>
+                        setFormData(prev => ({ ...prev, open_sub_types: next }))
+                      }
+                      labelFor={subTypeLabel}
+                    />
+                  )}
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="edit_renewal_application_start_date">
@@ -2954,7 +3045,10 @@ export function AdminConfigurationManagement({
             >
               取消
             </Button>
-            <Button onClick={handleUpdateConfig} disabled={formLoading}>
+            <Button
+              onClick={handleUpdateConfig}
+              disabled={formLoading || hasNoOpenSubTypes}
+            >
               {formLoading ? "更新中..." : "更新配置"}
             </Button>
           </DialogFooter>

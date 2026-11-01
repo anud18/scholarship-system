@@ -7,10 +7,8 @@
 export const IDENTITY_NAME_EN: Record<string, string> = {
   一般生: "Regular Student",
   原住民: "Indigenous Student",
-  "僑生(目前有中華民國國籍生)":
-    "Overseas Chinese Student (Currently holds R.O.C. nationality)",
-  "外籍生(目前有中華民國國籍生)":
-    "Foreign Student (Currently holds R.O.C. nationality)",
+  僑生: "Overseas Chinese Student",
+  外籍生: "Foreign Student",
   外交子女: "Diplomat's Child",
   身心障礙生: "Student with Disability",
   運動成績優良甄試學生: "Outstanding Athletic Performance Admission Student",

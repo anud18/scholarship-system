@@ -167,7 +167,7 @@ async def get_all_reference_data(
 
 
 @cached(
-    key_fn=lambda *_, **__: "refdata:all:v3", ttl=86400
+    key_fn=lambda *_, **__: "refdata:all:v4", ttl=86400
 )  # 24 h; :v3 busts stale pre-enroll_types-fallback cache on deploy
 async def _get_all_reference_data_cached(session: AsyncSession) -> dict:
     """Server-side cached body of /reference-data/all. See the wrapper above for

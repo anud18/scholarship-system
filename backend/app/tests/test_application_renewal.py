@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.application import ApplicationStatus
+from app.models.application import Application, ApplicationStatus
 from app.models.enums import QuotaManagementMode, Semester
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User
@@ -103,8 +103,7 @@ class TestApplicationRenewal:
 
         create_application() deliberately forces is_renewal=False for newly
         created applications (renewals are produced through the dedicated
-        renewal flow, not the generic create path). The renewal flag is then
-        toggled via update_application (see test_update_application_renewal_status).
+        renewal flow, not the generic create path).
         """
         # Arrange
         config = await _create_active_configuration(db, test_scholarship)
@@ -174,52 +173,6 @@ class TestApplicationRenewal:
         assert application.status == ApplicationStatus.submitted.value
 
     @pytest.mark.asyncio
-    async def test_update_application_renewal_status(
-        self, db: AsyncSession, test_user: User, test_scholarship: ScholarshipType
-    ):
-        """Test updating application renewal status"""
-        # Arrange
-        config = await _create_active_configuration(db, test_scholarship)
-
-        with _mock_student_service() as mock_student:
-            mock_instance = AsyncMock()
-            mock_student.return_value = mock_instance
-            mock_instance.get_student_basic_info.return_value = _STUDENT_SNAPSHOT
-            mock_instance.get_student_snapshot.return_value = _STUDENT_SNAPSHOT
-
-            service = ApplicationService(db)
-            application_data = ApplicationCreate(
-                scholarship_type=test_scholarship.code,
-                configuration_id=config.id,
-                scholarship_subtype_list=["general"],
-                form_data=_build_form_data(),
-                agree_terms=True,
-                is_renewal=False,
-            )
-
-            # Create initial draft application
-            application = await service.create_application(
-                user_id=test_user.id,
-                student_code="112550001",
-                application_data=application_data,
-                is_draft=True,
-            )
-
-        # Act - Update to renewal
-        from app.schemas.application import ApplicationUpdate
-
-        update_data = ApplicationUpdate(is_renewal=True)
-
-        updated_application = await service.update_application(
-            application_id=application.id,
-            update_data=update_data,
-            current_user=test_user,
-        )
-
-        # Assert
-        assert updated_application.is_renewal is True
-
-    @pytest.mark.asyncio
     async def test_get_user_applications_includes_renewal_flag(
         self, db: AsyncSession, test_user: User, test_scholarship: ScholarshipType
     ):
@@ -250,15 +203,10 @@ class TestApplicationRenewal:
                 is_draft=True,
             )
 
-        # Toggle the renewal flag through the update path (the only path that
-        # honors is_renewal) so the list response genuinely carries the flag.
-        from app.schemas.application import ApplicationUpdate
-
-        await service.update_application(
-            application_id=application.id,
-            update_data=ApplicationUpdate(is_renewal=True),
-            current_user=test_user,
-        )
+        # Students cannot set is_renewal; renewals are created server-side, so flip it in the DB.
+        stored = await db.get(Application, application.id)
+        stored.is_renewal = True
+        await db.commit()
 
         # Act
         applications = await service.get_user_applications(test_user)

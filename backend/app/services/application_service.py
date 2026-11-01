@@ -51,6 +51,7 @@ from app.schemas.application import (
 from app.schemas.user_profile import UserProfileUpdate
 from app.services.application_builder import (
     backfill_professor_assignments,
+    ensure_sub_types_open,
     find_professor_by_nycu_id,
     order_sub_type_preferences,
 )
@@ -549,6 +550,7 @@ class ApplicationService:
         # scholarship defines real ones — drafts may stay incomplete.
         if not is_draft:
             self._validate_sub_type_for_submission(scholarship, sub_scholarship_type)
+            await ensure_sub_types_open(self.db, config, scholarship_subtype_list)
 
         from app.models.enums import ApplicationStatus
         from app.services.application_builder import build_submitted_application_values
@@ -1194,10 +1196,6 @@ class ApplicationService:
 
         # NOTE: status is intentionally not updatable here — see ApplicationUpdate.
 
-        # 更新續領申請標識
-        if update_data.is_renewal is not None:
-            application.is_renewal = update_data.is_renewal
-
         # 更新子項目列表（如果提供）
         if update_data.scholarship_subtype_list is not None:
             application.scholarship_subtype_list = update_data.scholarship_subtype_list
@@ -1477,6 +1475,11 @@ class ApplicationService:
         # for scholarships that define real ones (the "general" fallback maps
         # to no quota slot at distribution time).
         self._validate_sub_type_for_submission(application.scholarship, application.sub_scholarship_type)
+
+        # The admin's current opening governs every submit, including a 退回補件 resubmit; renewals keep their award.
+        if application.scholarship_configuration_id and not application.is_renewal:
+            config = await self.db.get(ScholarshipConfiguration, application.scholarship_configuration_id)
+            await ensure_sub_types_open(self.db, config, application.scholarship_subtype_list)
 
         # Load user profile once (reused for the 存摺封面 check, auto-assign professor and email notification)
         advisor_profile = await self._get_user_profile(application.user_id)

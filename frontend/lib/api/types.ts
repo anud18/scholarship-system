@@ -267,6 +267,12 @@ export interface ScholarshipType {
     label_en: string;
     is_default: boolean;
   }>;
+  // Sub-types the student qualifies for but the admin has not opened this round.
+  closed_sub_types?: Array<{
+    value: string | null;
+    label: string;
+    label_en: string;
+  }>;
   all_sub_type_list?: string[];
   subtype_eligibility?: {
     [subTypeKey: string]: {
@@ -374,6 +380,8 @@ export interface ScholarshipConfiguration {
   renewal_application_end_date?: string;
   application_start_date?: string;
   application_end_date?: string;
+  // 本次開放申請類別; null = every real sub-type is open.
+  open_sub_types?: string[] | null;
   renewal_requires_professor_review: boolean;
   renewal_professor_review_start?: string;
   renewal_professor_review_end?: string;
@@ -1248,6 +1256,7 @@ export interface ScholarshipConfigurationFormData {
   renewal_application_end_date?: string;
   application_start_date?: string;
   application_end_date?: string;
+  open_sub_types?: string[] | null;
   renewal_requires_professor_review?: boolean;
   renewal_professor_review_start?: string;
   renewal_professor_review_end?: string;
