@@ -23,6 +23,7 @@ import { toast } from "sonner";
 import { ProgressTimeline } from "@/components/progress-timeline";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { ApplicationFormDataDisplay } from "@/components/application-form-data-display";
+import { ApplicationFormDataEditor } from "@/components/application-form-data-editor";
 import { ApplicationAuditTrail } from "@/components/application-audit-trail";
 import { ProfessorAssignmentDropdown } from "@/components/professor-assignment-dropdown";
 import { SisTermResyncCard } from "@/components/admin/SisTermResyncCard";
@@ -47,9 +48,10 @@ import {
   ShieldCheck,
   ShieldX,
   Send,
+  Pencil,
 } from "lucide-react";
 import { Locale } from "@/lib/validators";
-import { Application, HistoricalApplication, User } from "@/lib/api";
+import { Application, ApplicationField, HistoricalApplication, User } from "@/lib/api";
 import api from "@/lib/api";
 import { useStudentPreview } from "@/hooks/use-student-preview";
 import {
@@ -74,6 +76,11 @@ import {
   fetchApplicationFiles,
   formatFieldName,
 } from "@/lib/utils/application-helpers";
+import {
+  getSubmittedFieldValues,
+  isStaffFormEditable,
+  splitStaffEditableFields,
+} from "@/lib/utils/staff-form-edit";
 import { getCurrentSemesterROC, toROCYear } from "@/src/utils/dateUtils";
 
 // Shape of document entries in `submitted_form_data.documents` from
@@ -657,6 +664,8 @@ export function ApplicationReviewDialog({
     [key: string]: { zh?: string; en?: string };
   }>({});
   const [applicationFields, setApplicationFields] = useState<string[]>([]);
+  const [fieldDefinitions, setFieldDefinitions] = useState<ApplicationField[]>([]);
+  const [isEditingForm, setIsEditingForm] = useState(false);
   const [isLoadingFields, setIsLoadingFields] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -722,6 +731,13 @@ export function ApplicationReviewDialog({
   const isAdminRole = role === "admin" || role === "super_admin";
   const canSubmitReview = isAdminRole;
 
+  // Admin and college staff may correct the submitted form fields.
+  const canEditFormData =
+    (isAdminRole || role === "college") &&
+    isStaffFormEditable(detailedApplication?.status);
+  const { editable: editableFormFields, profileOwned: profileOwnedFormFields } =
+    splitStaffEditableFields(fieldDefinitions);
+
   // The professor sees the application itself, but not the live SIS 學生資訊
   // tab nor the 操作紀錄 audit trail (the basic tab keeps its 學生資訊 card).
   const canViewStudentAndAudit = role !== "professor";
@@ -743,6 +759,13 @@ export function ApplicationReviewDialog({
   // Handle professor assignment
   const handleProfessorAssigned = (professor: ProfessorInfo) => {
     setProfessorInfo(professor);
+  };
+
+  const handleFormDataSaved = (updated: Application) => {
+    setDetailedApplication(updated);
+    setIsEditingForm(false);
+    toast.success(locale === "zh" ? "表單內容已更新" : "Form content updated");
+    onReviewSubmitted?.();
   };
 
   // NOTE: Old admin approve/reject handlers removed - admin now uses unified sub-type review system
@@ -1008,6 +1031,7 @@ export function ApplicationReviewDialog({
   useEffect(() => {
     if (open && application) {
       setActiveTab("basic");
+      setIsEditingForm(false);
       loadApplicationDetails(application.id);
       // Reset admin comments when opening a new application
       setAdminComments("");
@@ -1064,6 +1088,7 @@ export function ApplicationReviewDialog({
         setDocumentLabels({});
         setFieldLabels({});
         setApplicationFields([]);
+        setFieldDefinitions([]);
         setIsLoadingLabels(false);
         setIsLoadingFields(false);
         return;
@@ -1098,6 +1123,7 @@ export function ApplicationReviewDialog({
 
           setFieldLabels(fieldLabels);
           setApplicationFields(fieldNames);
+          setFieldDefinitions(response.data.fields);
         }
       }
     } catch (error) {
@@ -1105,6 +1131,7 @@ export function ApplicationReviewDialog({
       setDocumentLabels({});
       setFieldLabels({});
       setApplicationFields([]);
+      setFieldDefinitions([]);
     } finally {
       setIsLoadingLabels(false);
       setIsLoadingFields(false);
@@ -1775,10 +1802,16 @@ export function ApplicationReviewDialog({
                 {/* Form Content Tab */}
                 <TabsContent value="form" className="space-y-4 mt-4">
                   <Card>
-                    <CardHeader>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0">
                       <CardTitle className="text-lg">
                         {locale === "zh" ? "申請表單內容" : "Application Form Content"}
                       </CardTitle>
+                      {canEditFormData && !isEditingForm && !isLoadingFields && (
+                        <Button size="sm" variant="outline" onClick={() => setIsEditingForm(true)}>
+                          <Pencil className="h-4 w-4 mr-1" />
+                          {locale === "zh" ? "編輯" : "Edit"}
+                        </Button>
+                      )}
                     </CardHeader>
                     <CardContent>
                       {error ? (
@@ -1813,11 +1846,37 @@ export function ApplicationReviewDialog({
                             return null;
                           })()}
 
-                          <ApplicationFormDataDisplay
-                            formData={detailedApplication}
-                            locale={locale}
-                            fieldLabels={fieldLabels}
-                          />
+                          {isEditingForm && detailedApplication ? (
+                            <div className="space-y-4">
+                              {profileOwnedFormFields.length > 0 && (
+                                <Alert>
+                                  <Info className="h-4 w-4" />
+                                  <AlertDescription>
+                                    {locale === "zh"
+                                      ? `${profileOwnedFormFields.map((f) => f.field_label).join("、")} 為學生個人資料，無法在此修改。`
+                                      : "Post office account and advisor details are the student's profile data and cannot be edited here."}
+                                  </AlertDescription>
+                                </Alert>
+                              )}
+                              <ApplicationFormDataEditor
+                                applicationId={detailedApplication.id}
+                                fields={editableFormFields}
+                                initialValues={getSubmittedFieldValues(
+                                  detailedApplication.submitted_form_data,
+                                  editableFormFields
+                                )}
+                                locale={locale}
+                                onSaved={handleFormDataSaved}
+                                onCancel={() => setIsEditingForm(false)}
+                              />
+                            </div>
+                          ) : (
+                            <ApplicationFormDataDisplay
+                              formData={detailedApplication}
+                              locale={locale}
+                              fieldLabels={fieldLabels}
+                            />
+                          )}
                         </>
                       )}
                     </CardContent>
