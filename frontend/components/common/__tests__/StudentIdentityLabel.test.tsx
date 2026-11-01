@@ -12,8 +12,8 @@ jest.mock("@/hooks/use-reference-data", () => ({
 // Mirrors the seeded `identities` table (SIS std_identity codes).
 const IDENTITIES = [
   { id: 1, name: "一般生" },
-  { id: 3, name: "僑生(目前有中華民國國籍生)" },
-  { id: 4, name: "外籍生(目前有中華民國國籍生)" },
+  { id: 3, name: "僑生" },
+  { id: 4, name: "外籍生" },
   { id: 17, name: "陸生" },
 ];
 
@@ -29,9 +29,7 @@ describe("StudentIdentityLabel", () => {
   it("labels code 4 as 外籍生, not 陸生", () => {
     render(<StudentIdentityLabel code={4} />);
 
-    expect(
-      screen.getByText("外籍生(目前有中華民國國籍生)")
-    ).toBeInTheDocument();
+    expect(screen.getByText("外籍生")).toBeInTheDocument();
     expect(screen.queryByText("陸生")).not.toBeInTheDocument();
   });
 
