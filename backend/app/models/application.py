@@ -34,6 +34,17 @@ if TYPE_CHECKING:
 
 # ScholarshipMainType enum removed - use scholarship_type_id instead
 
+STUDENT_OWNED_FORM_STATUSES = frozenset({ApplicationStatus.draft, ApplicationStatus.returned})
+CLOSED_APPLICATION_STATUSES = frozenset(
+    {
+        ApplicationStatus.withdrawn,
+        ApplicationStatus.cancelled,
+        ApplicationStatus.cancelled_by_challenge,
+        ApplicationStatus.deleted,
+    }
+)
+STAFF_FORM_EDIT_BLOCKED_STATUSES = STUDENT_OWNED_FORM_STATUSES | CLOSED_APPLICATION_STATUSES
+
 
 class ReviewCycle(enum.Enum):
     """Review cycle types"""
@@ -281,7 +292,11 @@ class Application(Base):
     @property
     def is_editable(self) -> bool:
         """Check if application can be edited"""
-        return bool(self.status in [ApplicationStatus.draft, ApplicationStatus.returned])
+        return self.status in STUDENT_OWNED_FORM_STATUSES
+
+    @property
+    def is_staff_form_editable(self) -> bool:
+        return self.status not in STAFF_FORM_EDIT_BLOCKED_STATUSES
 
     @property
     def is_submitted(self) -> bool:

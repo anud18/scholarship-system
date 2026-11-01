@@ -1,0 +1,199 @@
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import api from "@/lib/api";
+import type { Application, ApplicationField } from "@/lib/api";
+import { ApplicationFormDataEditor } from "../application-form-data-editor";
+
+const field = (overrides: Partial<ApplicationField>): ApplicationField =>
+  ({
+    id: 1,
+    scholarship_type: "phd",
+    field_name: "field",
+    field_label: "欄位",
+    field_type: "text",
+    is_required: false,
+    display_order: 0,
+    is_active: true,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+    ...overrides,
+  }) as ApplicationField;
+
+const FIELDS = [
+  field({ field_name: "contact_phone", field_label: "聯絡電話", is_required: true }),
+  field({ field_name: "remark", field_label: "備註", field_type: "textarea" }),
+  field({ field_name: "household_size", field_label: "家庭人數", field_type: "number" }),
+];
+
+const INITIAL = { contact_phone: "0912345678", remark: "舊備註", household_size: 3 };
+
+const renderEditor = (onSaved = jest.fn()) =>
+  render(
+    <ApplicationFormDataEditor
+      applicationId={42}
+      editableFields={FIELDS}
+      initialValues={INITIAL}
+      locale="zh"
+      onSaved={onSaved}
+      onCancel={jest.fn()}
+    />
+  );
+
+describe("ApplicationFormDataEditor", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("keeps 儲存 disabled until a value changes", async () => {
+    const user = userEvent.setup();
+    renderEditor();
+
+    const save = screen.getByRole("button", { name: "儲存" });
+    expect(save).toBeDisabled();
+
+    const remark = screen.getByLabelText("備註");
+    await user.type(remark, "!");
+    expect(save).toBeEnabled();
+
+    await user.type(remark, "{backspace}");
+    expect(save).toBeDisabled();
+  });
+
+  it("sends only the changed field and hands back the updated application", async () => {
+    const updated = { id: 42, app_id: "APP-114-1-00042" } as unknown as Application;
+    const updateFormFields = jest
+      .spyOn(api.applications, "updateFormFields")
+      .mockResolvedValue({ success: true, message: "表單內容已更新", data: updated });
+    const onSaved = jest.fn();
+    const user = userEvent.setup();
+    renderEditor(onSaved);
+
+    const householdSize = screen.getByLabelText("家庭人數");
+    await user.clear(householdSize);
+    await user.type(householdSize, "5");
+    await user.click(screen.getByRole("button", { name: "儲存" }));
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(updated, "表單內容已更新"));
+    expect(updateFormFields).toHaveBeenCalledTimes(1);
+    expect(updateFormFields).toHaveBeenCalledWith(42, { household_size: 5 });
+  });
+
+  it("shows the backend's message when the save is rejected", async () => {
+    jest.spyOn(api.applications, "updateFormFields").mockResolvedValue({
+      success: false,
+      message: "「備註」不可超過 10 字",
+      data: undefined,
+    });
+    const onSaved = jest.fn();
+    const user = userEvent.setup();
+    renderEditor(onSaved);
+
+    await user.type(screen.getByLabelText("備註"), "很長的補充");
+    await user.click(screen.getByRole("button", { name: "儲存" }));
+
+    expect(await screen.findByText("「備註」不可超過 10 字")).toBeInTheDocument();
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+
+  it("lets staff save another field while the stored phone is malformed", async () => {
+    const updated = { id: 42 } as unknown as Application;
+    const updateFormFields = jest
+      .spyOn(api.applications, "updateFormFields")
+      .mockResolvedValue({ success: true, message: "表單內容已更新", data: updated });
+    const user = userEvent.setup();
+    render(
+      <ApplicationFormDataEditor
+        applicationId={42}
+        editableFields={FIELDS}
+        initialValues={{ ...INITIAL, contact_phone: "範例聯絡電話1" }}
+        locale="zh"
+        onSaved={jest.fn()}
+        onCancel={jest.fn()}
+      />
+    );
+
+    expect(screen.queryByText("請輸入本人有效的台灣手機 (09xxxxxx)")).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("備註"), "!");
+    await user.click(screen.getByRole("button", { name: "儲存" }));
+
+    await waitFor(() => expect(updateFormFields).toHaveBeenCalledWith(42, { remark: "舊備註!" }));
+  });
+
+  it("blocks an invalid contact phone before it reaches the backend", async () => {
+    const updateFormFields = jest.spyOn(api.applications, "updateFormFields");
+    const user = userEvent.setup();
+    renderEditor();
+
+    const phone = screen.getByLabelText(/聯絡電話/);
+    await user.clear(phone);
+    await user.type(phone, "12345");
+
+    expect(screen.getByText("請輸入本人有效的台灣手機 (09xxxxxx)")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "儲存" })).toBeDisabled();
+    expect(updateFormFields).not.toHaveBeenCalled();
+  });
+});
+
+const PROFILE_FIELDS = [
+  field({ field_name: "postal_account", fixed_key: "postal_account", field_label: "郵局帳號", is_required: true }),
+  field({ field_name: "advisor_name", fixed_key: "advisor_name", field_label: "教授姓名", is_required: true }),
+  field({ field_name: "advisor_email", fixed_key: "advisor_email", field_label: "教授 Email", field_type: "email" }),
+  field({ field_name: "advisor_nycu_id", fixed_key: "advisor_nycu_id", field_label: "人事編號", is_required: true }),
+];
+
+const PROFILE_INITIAL = {
+  postal_account: "11111111111111",
+  advisor_name: "王教授",
+  advisor_email: "wang@nycu.edu.tw",
+  advisor_nycu_id: "P0001",
+};
+
+const renderProfileEditor = () =>
+  render(
+    <ApplicationFormDataEditor
+      applicationId={42}
+      editableFields={PROFILE_FIELDS}
+      initialValues={PROFILE_INITIAL}
+      locale="zh"
+      onSaved={jest.fn()}
+      onCancel={jest.fn()}
+    />
+  );
+
+describe("ApplicationFormDataEditor 郵局帳號與指導教授", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("offers the account and advisor fields with their current values", () => {
+    renderProfileEditor();
+
+    expect(screen.getByLabelText(/郵局帳號/)).toHaveValue("11111111111111");
+    expect(screen.getByLabelText(/教授姓名/)).toHaveValue("王教授");
+    expect(screen.getByLabelText(/教授 Email/)).toHaveValue("wang@nycu.edu.tw");
+    expect(screen.getByLabelText(/人事編號/)).toHaveValue("P0001");
+    expect(
+      screen.getByText("指導教授資料存於學生個人資料，修改後會套用到該生的所有申請")
+    ).toBeInTheDocument();
+  });
+
+  it("blocks a postal account that is not 14 digits", async () => {
+    const updateFormFields = jest
+      .spyOn(api.applications, "updateFormFields")
+      .mockResolvedValue({ success: true, message: "表單內容已更新", data: { id: 42 } as unknown as Application });
+    const user = userEvent.setup();
+    renderProfileEditor();
+
+    const account = screen.getByLabelText(/郵局帳號/);
+    await user.clear(account);
+    await user.type(account, "1234567");
+
+    expect(screen.getByText("郵局帳號必須為 14 位數字，目前為 7 位")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "儲存" })).toBeDisabled();
+
+    await user.type(account, "-8901234");
+    expect(screen.queryByText(/郵局帳號必須為 14 位數字/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "儲存" }));
+    expect(updateFormFields).toHaveBeenCalledWith(42, { postal_account: "1234567-8901234" });
+  });
+});

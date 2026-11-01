@@ -150,6 +150,20 @@ async def generate_app_id(
     return f"{app_id}{suffix}"
 
 
+async def find_professor_by_nycu_id(db: AsyncSession, nycu_id: str) -> Optional[User]:
+    """The professor account a student's advisor 人事代號 names, or None."""
+    # 人事代號 is entered uppercased, but account nycu_ids may not be. users.nycu_id
+    # is unique only case-sensitively, so prefer an exact match and never let two
+    # case-variant accounts raise MultipleResultsFound mid-submit.
+    stmt = (
+        select(User)
+        .where(func.upper(User.nycu_id) == nycu_id.upper(), User.role == UserRole.professor)
+        .order_by((User.nycu_id == nycu_id).desc(), User.id)
+        .limit(1)
+    )
+    return (await db.execute(stmt)).scalars().first()
+
+
 async def assign_professor_from_profile(
     db: AsyncSession, application, user_id: int, profile: Optional[UserProfile] = None
 ) -> Optional[User]:
@@ -171,21 +185,7 @@ async def assign_professor_from_profile(
     if not profile or not profile.advisor_nycu_id:
         return None
 
-    # 人事代號 is entered uppercased, but account nycu_ids may not be. users.nycu_id
-    # is unique only case-sensitively, so prefer an exact match and never let two
-    # case-variant accounts raise MultipleResultsFound mid-submit.
-    professor_stmt = (
-        select(User)
-        .where(
-            func.upper(User.nycu_id) == profile.advisor_nycu_id.upper(),
-            User.role == UserRole.professor,
-        )
-        .order_by((User.nycu_id == profile.advisor_nycu_id).desc(), User.id)
-        .limit(1)
-    )
-    professor_result = await db.execute(professor_stmt)
-    professor = professor_result.scalars().first()
-
+    professor = await find_professor_by_nycu_id(db, profile.advisor_nycu_id)
     if professor:
         application.professor_id = professor.id
         logger.info(

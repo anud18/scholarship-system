@@ -7,17 +7,25 @@ import logging
 from copy import deepcopy
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Dict, FrozenSet, List, Mapping, Optional, Tuple
 
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import and_, desc
 from sqlalchemy import func as sa_func
 from sqlalchemy import or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.cache import invalidate as cache_invalidate
 from app.core.college_mappings import ORIGINAL_ACADEMY_CODES_KEY
-from app.core.exceptions import AuthorizationError, BusinessLogicError, NotFoundError, ValidationError
+from app.core.exceptions import (
+    AuthorizationError,
+    BusinessLogicError,
+    ConflictError,
+    NotFoundError,
+    ValidationError,
+)
 from app.core.metrics import scholarship_applications_total
 from app.core.schema_validation import serialize_value
 from app.models.audit_log import AuditAction, AuditLog
@@ -40,18 +48,38 @@ from app.schemas.application import (
     ApplicationStatusUpdate,
     ApplicationUpdate,
 )
+from app.schemas.user_profile import UserProfileUpdate
 from app.services.application_builder import (
     backfill_professor_assignments,
     ensure_sub_types_open,
+    find_professor_by_nycu_id,
     order_sub_type_preferences,
 )
-from app.services.application_field_service import FIXED_ADVISOR_KEYS, FIXED_KEY_POSTAL_ACCOUNT
+from app.services.application_field_service import (
+    FIXED_ADVISOR_KEYS,
+    FIXED_KEY_ADVISOR_NYCU_ID,
+    FIXED_KEY_POSTAL_ACCOUNT,
+    ApplicationFieldService,
+)
 from app.services.department_names import load_department_names
 from app.services.eligibility_service import EligibilityService
 from app.services.email_automation_service import email_automation_service
 from app.services.email_service import EmailService
 from app.services.minio_service import minio_service
+from app.services.staff_form_edit import (
+    PROFILE_ATTRS,
+    AppliedStaffFormEdit,
+    FieldChange,
+    ProfessorFacts,
+    ProfessorReassignment,
+    ReassignmentOutcome,
+    advisor_nycu_id_changed,
+    apply_staff_form_edit,
+    build_editable_form_spec,
+    decide_professor_reassignment,
+)
 from app.services.student_service import StudentService
+from app.services.user_profile_service import UserProfileService
 from app.utils.application_helpers import (
     get_academy_code_from_data,
     get_academy_name_from_data,
@@ -1276,6 +1304,141 @@ class ApplicationService:
             return
         if not is_valid_taiwan_mobile(phone):
             raise ValidationError(TAIWAN_MOBILE_MESSAGE)
+
+    async def update_submitted_form_fields(
+        self,
+        application_id: int,
+        raw_fields: Dict[str, Any],
+        current_user: User,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+    ) -> AppliedStaffFormEdit:
+        application = await self._get_application_model(application_id, current_user)
+        if not application:
+            raise NotFoundError("Application", str(application_id))
+
+        await self.db.refresh(
+            application,
+            attribute_names=["status", "submitted_form_data", "meta_data", "professor_id"],
+            with_for_update=True,
+        )
+
+        if not application.is_staff_form_editable:
+            raise ValidationError(
+                "此申請目前的狀態不允許修改表單內容（草稿、退回修改或已撤回／取消的申請由學生自行處理）"
+            )
+        configuration = application.scholarship_configuration
+        scholarship = configuration.scholarship_type if configuration else None
+        scholarship = scholarship or application.scholarship
+        if scholarship is None:
+            raise ValidationError("找不到此申請的獎學金類型，無法修改表單內容")
+
+        form_config = await ApplicationFieldService(self.db).get_scholarship_form_config(scholarship.code)
+        profile = (
+            await self.db.execute(
+                select(UserProfile).where(UserProfile.user_id == application.user_id).with_for_update()
+            )
+        ).scalar_one_or_none()
+        profile_values = {attr: getattr(profile, attr) if profile else None for attr in PROFILE_ATTRS}
+
+        edit = apply_staff_form_edit(
+            application.submitted_form_data, build_editable_form_spec(form_config.fields), raw_fields, profile_values
+        )
+        if not edit.changes:
+            return AppliedStaffFormEdit(changes={})
+
+        if "contact_phone" in edit.changes:
+            self._enforce_contact_phone_format(edit.form_data["fields"])
+        profile_update = self._profile_update_from(edit.profile_updates)
+
+        application.submitted_form_data = edit.form_data
+        cleared_meta = self._clear_stale_meta(application, edit.stale_meta_keys)
+        if profile_update is not None:
+            await UserProfileService(self.db).stage_user_profile_update(
+                user_id=application.user_id,
+                profile_data=profile_update,
+                change_reason=f"審核人員 {current_user.name} 於申請 {application.app_id} 修改",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+        reassignment, new_professor = await self._follow_advisor_nycu_id_edit(application, edit.changes)
+
+        try:
+            await self.db.commit()
+        except IntegrityError as exc:
+            await self.db.rollback()
+            raise ConflictError("學生個人資料同時被其他操作建立，請重新整理後再試一次") from exc
+        await self._invalidate_app_caches()
+        logger.info(
+            "Staff %s edited form fields %s of application %s (professor reassignment: %s)",
+            current_user.id,
+            sorted(edit.changes),
+            application.app_id,
+            reassignment,
+        )
+        applied = AppliedStaffFormEdit(
+            changes=edit.changes,
+            profile_fields_updated=tuple(sorted(edit.profile_updates)),
+            cleared_meta=cleared_meta,
+            professor_reassignment=reassignment,
+            new_professor_name=new_professor.name if new_professor else None,
+        )
+        if new_professor is not None:
+            await self._notify_professor_assigned(application, new_professor, current_user)
+        return applied
+
+    @staticmethod
+    def _clear_stale_meta(application: Application, stale_keys: FrozenSet[str]) -> Dict[str, Any]:
+        """Drop meta_data markers the edit made untrue; returns what was dropped for the audit row."""
+        meta_data = application.meta_data or {}
+        cleared = {key: meta_data[key] for key in stale_keys if key in meta_data}
+        if cleared:
+            application.meta_data = {key: value for key, value in meta_data.items() if key not in cleared}
+        return cleared
+
+    async def _follow_advisor_nycu_id_edit(
+        self, application: Application, changes: Mapping[str, FieldChange]
+    ) -> Tuple[Optional[ProfessorReassignment], Optional[User]]:
+        """Move the reviewing professor to the advisor a staff edit names, unless they already reviewed.
+
+        Returns the decision (None when the 人事編號 did not really change) and the
+        newly assigned professor, if any.
+        """
+        change = changes.get(FIXED_KEY_ADVISOR_NYCU_ID)
+        if change is None or not advisor_nycu_id_changed(change.old, change.new):
+            return None, None
+
+        config = application.scholarship_configuration
+        current_id = application.professor_id
+        matched = await find_professor_by_nycu_id(self.db, change.new) if change.new else None
+        decision = decide_professor_reassignment(
+            ProfessorFacts(
+                has_professor_stage=bool(config and config.requires_professor_review_for(bool(application.is_renewal))),
+                is_professor_actionable=getattr(application.status, "value", application.status)
+                in PROFESSOR_ACTIONABLE_APPLICATION_STATUSES,
+                current_professor_id=current_id,
+                current_professor_reviewed=current_id is not None
+                and await self._has_professor_reviewed(application.id, current_id),
+                matched_professor_id=matched.id if matched else None,
+            )
+        )
+        if decision.changes_assignment:
+            application.professor_id = decision.to_professor_id
+        is_reassigned = decision.outcome is ReassignmentOutcome.REASSIGNED
+        return decision, matched if is_reassigned else None
+
+    async def _has_professor_reviewed(self, application_id: int, professor_id: int) -> bool:
+        stmt = select(Application.id).where(Application.id == application_id, self._professor_reviewed(professor_id))
+        return (await self.db.execute(stmt)).first() is not None
+
+    @staticmethod
+    def _profile_update_from(profile_updates: Dict[str, Any]) -> Optional[UserProfileUpdate]:
+        if not profile_updates:
+            return None
+        try:
+            return UserProfileUpdate(**profile_updates)
+        except PydanticValidationError as exc:
+            raise ValidationError(f"指導教授資料格式不正確：{exc.errors()[0].get('msg')}") from exc
 
     async def submit_application(self, application_id: int, user: User) -> ApplicationResponse:
         """提交申請"""
@@ -3090,10 +3253,8 @@ class ApplicationService:
         """Assign professor to application with notification"""
         try:
             from app.core.exceptions import NotFoundError, ValidationError
-            from app.models.notification import NotificationChannel, NotificationPriority, NotificationType
             from app.models.user import UserRole
             from app.services.email_service import EmailService
-            from app.services.notification_service import NotificationService
 
             # Get application with all relationships loaded to avoid lazy loading
             stmt = (
@@ -3162,39 +3323,7 @@ class ApplicationService:
             await self.db.commit()
             await self.db.refresh(application)
 
-            # No email on assignment: professors are only mailed when a student
-            # they supervise submits an application. The in-app notification below
-            # remains the channel for an admin/college-initiated assignment.
-
-            # Create in-app notification (use info type which exists in DB enum)
-            try:
-                notification_service = NotificationService(self.db)
-                await notification_service.create_notification(
-                    user_id=professor.id,
-                    notification_type=NotificationType.info,
-                    data={
-                        "title": "新的獎學金申請需要您的審查",
-                        "message": f"申請編號 {application.app_id} 已指派給您進行教授推薦審查",
-                        "application_id": application.id,
-                        "app_id": application.app_id,
-                        "student_name": (
-                            application.student_data.get("std_cname") if application.student_data else "Unknown"
-                        ),
-                        "scholarship_name": application.scholarship_name,
-                        "assigned_by": assigned_by.name,
-                    },
-                    href=f"/professor/applications/{application.id}",
-                    priority=NotificationPriority.high,
-                    # in_app ONLY. NotificationChannel.email here reaches
-                    # _send_email_notification -> EmailService immediately, which
-                    # bypasses the scheduled_emails queue and the assignment
-                    # templates — so it would re-add assignment mail on top of the
-                    # scheduled one.
-                    channels=[NotificationChannel.in_app],
-                )
-                logger.info(f"In-app notification created for professor {professor.nycu_id}")
-            except Exception:
-                logger.exception(f"Failed to create notification for professor {professor.nycu_id}")
+            await self._notify_professor_assigned(application, professor, assigned_by)
 
             # Log the assignment change
             if old_professor_id != professor.id:
@@ -3210,6 +3339,45 @@ class ApplicationService:
             logger.exception("Error assigning professor")
             await self.db.rollback()
             raise
+
+    async def _notify_professor_assigned(self, application: Application, professor: User, assigned_by: User) -> None:
+        """In-app notice to a professor assigned by staff. Runs after the assignment
+        commits and never raises, so a failed notice cannot undo the assignment.
+
+        No email: professors are only mailed when a student they supervise
+        submits an application.
+        """
+        from app.models.notification import NotificationChannel, NotificationPriority, NotificationType
+        from app.services.notification_service import NotificationService
+
+        try:
+            await NotificationService(self.db).create_notification(
+                user_id=professor.id,
+                notification_type=NotificationType.info,
+                data={
+                    "title": "新的獎學金申請需要您的審查",
+                    "message": f"申請編號 {application.app_id} 已指派給您進行教授推薦審查",
+                    "application_id": application.id,
+                    "app_id": application.app_id,
+                    "student_name": (
+                        application.student_data.get("std_cname") if application.student_data else "Unknown"
+                    ),
+                    "scholarship_name": application.scholarship_name,
+                    "assigned_by": assigned_by.name,
+                },
+                href=f"/professor/applications/{application.id}",
+                priority=NotificationPriority.high,
+                # in_app ONLY. NotificationChannel.email here reaches
+                # _send_email_notification -> EmailService immediately, which
+                # bypasses the scheduled_emails queue and the assignment
+                # templates, so it would re-add assignment mail on top of the
+                # scheduled one.
+                channels=[NotificationChannel.in_app],
+            )
+        except Exception:
+            logger.exception("Failed to create notification for professor %s", professor.nycu_id)
+            return
+        logger.info("In-app notification created for professor %s", professor.nycu_id)
 
     # ------------------------------------------------------------------ #
     # Renewal & Challenge application factories

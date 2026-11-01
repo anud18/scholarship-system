@@ -120,6 +120,17 @@ export function createApplicationsApi() {
       return toApiResponse<Application>(response);
     },
 
+    updateFormFields: async (
+      id: number,
+      changedFields: Record<string, unknown>
+    ): Promise<ApiResponse<Application>> => {
+      const response = await typedClient.raw.PATCH('/api/v1/applications/{id}/form-fields', {
+        params: { path: { id } },
+        body: { fields: changedFields },
+      });
+      return toApiResponse<Application>(response);
+    },
+
     /**
      * Update application status (staff/admin only)
      * Type-safe: Path parameter and body validated against OpenAPI

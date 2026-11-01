@@ -261,6 +261,12 @@ class ApplicationUpdate(BaseModel):
     model_config = ConfigDict(json_encoders={datetime: lambda v: v.isoformat()})
 
 
+class StaffFormFieldsUpdate(BaseModel):
+    """Staff correction of submitted form fields: field_name → new value."""
+
+    fields: Dict[str, Any] = Field(..., min_length=1, description="要修改的表單欄位（field_name → 新值）")
+
+
 class ApplicationFileResponse(BaseModel):
     """Application file response schema"""
 
