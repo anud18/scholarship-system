@@ -869,4 +869,120 @@ describe("AdminConfigurationManagement Component", () => {
       expect(mockToggleCollegeView).toHaveBeenCalledWith(1, true);
     });
   });
+
+  describe("本次開放申請類別", () => {
+    const phdWithSubTypes = [
+      { ...mockScholarshipTypes[0], sub_type_list: ["nstc", "moe_1w"] },
+    ];
+
+    const openCreateDialog = async () => {
+      const user = userEvent.setup();
+      render(
+        <AdminConfigurationManagement
+          scholarshipTypes={phdWithSubTypes as never}
+        />
+      );
+      await waitFor(() => {
+        expect(screen.getByText("新增配置")).toBeInTheDocument();
+      });
+      await user.click(screen.getByText("新增配置"));
+      await waitFor(() => {
+        expect(screen.getByText("新增獎學金配置")).toBeInTheDocument();
+      });
+      return user;
+    };
+
+    const createPayload = () =>
+      mockApi.admin.createScholarshipConfiguration.mock.calls[0][0];
+
+    it("ticks every sub-type by default and saves all-open as null", async () => {
+      const user = await openCreateDialog();
+
+      expect(screen.getByRole("checkbox", { name: "nstc" })).toBeChecked();
+      expect(screen.getByRole("checkbox", { name: "moe_1w" })).toBeChecked();
+
+      await user.click(screen.getByText("建立配置"));
+      await waitFor(() => {
+        expect(mockApi.admin.createScholarshipConfiguration).toHaveBeenCalled();
+      });
+      expect(createPayload().open_sub_types ?? null).toBeNull();
+    });
+
+    it("sends the restricted list", async () => {
+      const user = await openCreateDialog();
+
+      await user.click(screen.getByRole("checkbox", { name: "nstc" }));
+      await user.click(screen.getByText("建立配置"));
+
+      await waitFor(() => {
+        expect(mockApi.admin.createScholarshipConfiguration).toHaveBeenCalled();
+      });
+      expect(createPayload().open_sub_types).toEqual(["moe_1w"]);
+    });
+
+    it("blocks save with an inline error when nothing is ticked", async () => {
+      const user = await openCreateDialog();
+
+      await user.click(screen.getByRole("checkbox", { name: "nstc" }));
+      await user.click(screen.getByRole("checkbox", { name: "moe_1w" }));
+
+      expect(
+        screen.getByText("請至少勾選一個開放申請類別")
+      ).toBeInTheDocument();
+      expect(screen.getByText("建立配置")).toBeDisabled();
+      await user.click(screen.getByText("建立配置"));
+      expect(mockApi.admin.createScholarshipConfiguration).not.toHaveBeenCalled();
+    });
+
+    it("shows the open set on a restricted configuration row", async () => {
+      mockApi.admin.getScholarshipConfigurations.mockImplementation((p: any) =>
+        Promise.resolve({
+          success: true,
+          data: p?.is_active
+            ? [{ ...activeConfigs[0], open_sub_types: ["nstc"] }]
+            : [],
+        })
+      );
+
+      render(
+        <AdminConfigurationManagement
+          scholarshipTypes={phdWithSubTypes as never}
+        />
+      );
+
+      expect(await screen.findByText(/開放類別：\s*nstc/)).toBeInTheDocument();
+    });
+
+    it("edits a restricted configuration and reopens everything as null", async () => {
+      const user = userEvent.setup();
+      mockApi.admin.getScholarshipConfigurations.mockImplementation((p: any) =>
+        Promise.resolve({
+          success: true,
+          data: p?.is_active
+            ? [{ ...activeConfigs[0], open_sub_types: ["nstc"] }]
+            : [],
+        })
+      );
+      render(
+        <AdminConfigurationManagement
+          scholarshipTypes={phdWithSubTypes as never}
+        />
+      );
+      await screen.findByText(/開放類別：\s*nstc/);
+      await user.click(screen.getAllByTitle("編輯配置")[0]);
+
+      expect(screen.getByRole("checkbox", { name: "nstc" })).toBeChecked();
+      expect(screen.getByRole("checkbox", { name: "moe_1w" })).not.toBeChecked();
+
+      await user.click(screen.getByRole("checkbox", { name: "moe_1w" }));
+      await user.click(screen.getByRole("button", { name: "更新配置" }));
+
+      await waitFor(() => {
+        expect(mockApi.admin.updateScholarshipConfiguration).toHaveBeenCalled();
+      });
+      const [, payload] =
+        mockApi.admin.updateScholarshipConfiguration.mock.calls[0];
+      expect(payload.open_sub_types).toBeNull();
+    });
+  });
 });

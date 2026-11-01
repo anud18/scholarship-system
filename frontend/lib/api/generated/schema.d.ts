@@ -9069,11 +9069,6 @@ export interface components {
              */
             agree_terms?: boolean | null;
             /**
-             * Is Renewal
-             * @description 是否為續領申請
-             */
-            is_renewal?: boolean | null;
-            /**
              * Sub Type Preferences
              * @description Ordered sub-type preference list
              */
@@ -9814,6 +9809,11 @@ export interface components {
             name_en: string;
             /** Eligible Sub Types */
             eligible_sub_types: components["schemas"]["SubTypeOption"][];
+            /**
+             * Closed Sub Types
+             * @default []
+             */
+            closed_sub_types: components["schemas"]["SubTypeOption"][];
             application_cycle: components["schemas"]["ApplicationCycleEnum"];
             /** Description */
             description?: string | null;

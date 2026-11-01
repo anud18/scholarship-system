@@ -11,8 +11,8 @@ Contract pinned:
   case; the public `update_application` raises NotFoundError uniformly).
 - ValidationError when application is not in editable status
   (only `draft` and `returned` are editable per `is_editable`).
-- Happy path: form_data, status, is_renewal, scholarship_subtype_list
-  all persist to the DB.
+- Happy path: form_data and scholarship_subtype_list persist to the DB.
+- A student cannot set is_renewal (it exempts the open-sub-type submit gate).
 - Student cannot edit another student's draft (access control via
   `_get_application_model`).
 - Professor cannot edit an application that's not assigned to them.
@@ -157,8 +157,8 @@ async def test_update_rejects_when_status_is_not_editable(db: AsyncSession, sile
 
 
 @pytest.mark.asyncio
-async def test_update_persists_form_data_status_is_renewal_subtype_list(db: AsyncSession, silence_collaborators):
-    """All four fields persist to the DB after update."""
+async def test_update_persists_form_data_and_subtype_list(db: AsyncSession, silence_collaborators):
+    """form_data and the sub-type list persist to the DB after update."""
     student = await _seed_user(db, role=UserRole.student, nycu_id="upd_happy_stu")
     cfg = await _seed_config(db, suffix="happy")
     app = await _seed_app(
@@ -185,7 +185,6 @@ async def test_update_persists_form_data_status_is_renewal_subtype_list(db: Asyn
             },
             documents=[],
         ),
-        is_renewal=True,
         scholarship_subtype_list=["nstc", "moe_1w"],
     )
 
@@ -198,12 +197,26 @@ async def test_update_persists_form_data_status_is_renewal_subtype_list(db: Asyn
     persisted = app.submitted_form_data.get("fields", {}).get("bank_account")
     persisted_value = persisted.get("value") if isinstance(persisted, dict) else persisted
     assert persisted_value == "123456789"
-    # is_renewal flipped.
-    assert app.is_renewal is True
-    # subtype list updated.
     assert app.scholarship_subtype_list == ["nstc", "moe_1w"]
-    # Returned object reflects the same state.
-    assert result.is_renewal is True
+    assert result.scholarship_subtype_list == ["nstc", "moe_1w"]
+
+
+@pytest.mark.asyncio
+async def test_student_cannot_set_is_renewal(db: AsyncSession, silence_collaborators):
+    student = await _seed_user(db, role=UserRole.student, nycu_id="upd_renewal_stu")
+    cfg = await _seed_config(db, suffix="renewal_flag")
+    app = await _seed_app(db, student=student, config=cfg, status=ApplicationStatus.draft.value, suffix="renewal_flag")
+    service = ApplicationService(db)
+
+    await service.update_application(
+        application_id=app.id,
+        update_data=ApplicationUpdate.model_validate({"is_renewal": True, "scholarship_subtype_list": ["nstc"]}),
+        current_user=student,
+    )
+
+    await db.refresh(app)
+    assert app.is_renewal is False
+    assert app.scholarship_subtype_list == ["nstc"]
 
 
 @pytest.mark.asyncio
@@ -294,10 +307,10 @@ async def test_college_and_admin_can_update_any_application(db: AsyncSession, si
 
         result = await service.update_application(
             application_id=app.id,
-            update_data=ApplicationUpdate(is_renewal=True),
+            update_data=ApplicationUpdate(scholarship_subtype_list=["nstc"]),
             current_user=staff,
         )
-        assert result.is_renewal is True
+        assert result.scholarship_subtype_list == ["nstc"]
 
 
 @pytest.mark.asyncio
@@ -312,8 +325,8 @@ async def test_returned_status_is_editable_too(db: AsyncSession, silence_collabo
     # Should NOT raise.
     await service.update_application(
         application_id=app.id,
-        update_data=ApplicationUpdate(is_renewal=True),
+        update_data=ApplicationUpdate(scholarship_subtype_list=["nstc"]),
         current_user=student,
     )
     await db.refresh(app)
-    assert app.is_renewal is True
+    assert app.scholarship_subtype_list == ["nstc"]
