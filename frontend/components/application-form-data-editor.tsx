@@ -17,10 +17,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import api from "@/lib/api";
 import type { Application, ApplicationField } from "@/lib/api";
-import {
-  isValidTaiwanMobile,
-  TAIWAN_MOBILE_MESSAGE,
-} from "@/lib/utils/application-helpers";
+import { fieldFormatError, isAdvisorField } from "@/lib/utils/staff-form-edit";
 
 type Locale = "zh" | "en";
 
@@ -37,7 +34,7 @@ interface ApplicationFormDataEditorProps {
   editableFields: ApplicationField[];
   initialValues: Record<string, unknown>;
   locale: Locale;
-  onSaved: (application: Application) => void;
+  onSaved: (application: Application, message: string) => void;
   onCancel: () => void;
 }
 
@@ -170,19 +167,20 @@ export function ApplicationFormDataEditor({
 
   const fieldErrors: Record<string, string> = {};
   inputFields.forEach((field) => {
+    if (!(field.field_name in changedFields)) return;
     const value = values[field.field_name];
-    const isChanged = field.field_name in changedFields;
-    if (field.is_required && field.field_type !== "checkbox" && isChanged && isBlank(value)) {
-      fieldErrors[field.field_name] = t("此欄位為必填", "This field is required");
-    } else if (
-      field.field_name === "contact_phone" &&
-      isChanged &&
-      !isBlank(value) &&
-      !isValidTaiwanMobile(asText(value).trim())
-    ) {
-      fieldErrors[field.field_name] = TAIWAN_MOBILE_MESSAGE;
+    if (isBlank(value)) {
+      if (field.is_required && field.field_type !== "checkbox") {
+        fieldErrors[field.field_name] = t("此欄位為必填", "This field is required");
+      }
+      return;
     }
+    const formatError = fieldFormatError(field, asText(value).trim());
+    if (formatError) fieldErrors[field.field_name] = formatError;
   });
+
+  const advisorFields = inputFields.filter(isAdvisorField);
+  const lastAdvisorField = advisorFields[advisorFields.length - 1]?.field_name;
 
   const hasChanges = Object.keys(changedFields).length > 0;
   const canSave = hasChanges && Object.keys(fieldErrors).length === 0 && !isSaving;
@@ -196,7 +194,7 @@ export function ApplicationFormDataEditor({
         setError(response.message || t("儲存失敗", "Save failed"));
         return;
       }
-      onSaved(response.data);
+      onSaved(response.data, response.message);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -229,6 +227,14 @@ export function ApplicationFormDataEditor({
               invalid={!!fieldError}
             />
             {fieldError && <p className="text-sm text-red-600">{fieldError}</p>}
+            {field.field_name === lastAdvisorField && (
+              <p className="text-sm text-muted-foreground">
+                {t(
+                  "指導教授資料存於學生個人資料，修改後會套用到該生的所有申請",
+                  "Advisor details live on the student's profile; a change applies to all of the student's applications"
+                )}
+              </p>
+            )}
           </div>
         );
       })}

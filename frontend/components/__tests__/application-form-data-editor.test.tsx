@@ -73,7 +73,7 @@ describe("ApplicationFormDataEditor", () => {
     await user.type(householdSize, "5");
     await user.click(screen.getByRole("button", { name: "儲存" }));
 
-    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(updated));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(updated, "表單內容已更新"));
     expect(updateFormFields).toHaveBeenCalledTimes(1);
     expect(updateFormFields).toHaveBeenCalledWith(42, { household_size: 5 });
   });
@@ -131,5 +131,69 @@ describe("ApplicationFormDataEditor", () => {
     expect(screen.getByText("請輸入本人有效的台灣手機 (09xxxxxx)")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "儲存" })).toBeDisabled();
     expect(updateFormFields).not.toHaveBeenCalled();
+  });
+});
+
+const PROFILE_FIELDS = [
+  field({ field_name: "postal_account", fixed_key: "postal_account", field_label: "郵局帳號", is_required: true }),
+  field({ field_name: "advisor_name", fixed_key: "advisor_name", field_label: "教授姓名", is_required: true }),
+  field({ field_name: "advisor_email", fixed_key: "advisor_email", field_label: "教授 Email", field_type: "email" }),
+  field({ field_name: "advisor_nycu_id", fixed_key: "advisor_nycu_id", field_label: "人事編號", is_required: true }),
+];
+
+const PROFILE_INITIAL = {
+  postal_account: "11111111111111",
+  advisor_name: "王教授",
+  advisor_email: "wang@nycu.edu.tw",
+  advisor_nycu_id: "P0001",
+};
+
+const renderProfileEditor = () =>
+  render(
+    <ApplicationFormDataEditor
+      applicationId={42}
+      editableFields={PROFILE_FIELDS}
+      initialValues={PROFILE_INITIAL}
+      locale="zh"
+      onSaved={jest.fn()}
+      onCancel={jest.fn()}
+    />
+  );
+
+describe("ApplicationFormDataEditor 郵局帳號與指導教授", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("offers the account and advisor fields with their current values", () => {
+    renderProfileEditor();
+
+    expect(screen.getByLabelText(/郵局帳號/)).toHaveValue("11111111111111");
+    expect(screen.getByLabelText(/教授姓名/)).toHaveValue("王教授");
+    expect(screen.getByLabelText(/教授 Email/)).toHaveValue("wang@nycu.edu.tw");
+    expect(screen.getByLabelText(/人事編號/)).toHaveValue("P0001");
+    expect(
+      screen.getByText("指導教授資料存於學生個人資料，修改後會套用到該生的所有申請")
+    ).toBeInTheDocument();
+  });
+
+  it("blocks a postal account that is not 14 digits", async () => {
+    const updateFormFields = jest
+      .spyOn(api.applications, "updateFormFields")
+      .mockResolvedValue({ success: true, message: "表單內容已更新", data: { id: 42 } as unknown as Application });
+    const user = userEvent.setup();
+    renderProfileEditor();
+
+    const account = screen.getByLabelText(/郵局帳號/);
+    await user.clear(account);
+    await user.type(account, "1234567");
+
+    expect(screen.getByText("郵局帳號必須為 14 位數字，目前為 7 位")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "儲存" })).toBeDisabled();
+
+    await user.type(account, "-8901234");
+    expect(screen.queryByText(/郵局帳號必須為 14 位數字/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "儲存" }));
+    expect(updateFormFields).toHaveBeenCalledWith(42, { postal_account: "1234567-8901234" });
   });
 });

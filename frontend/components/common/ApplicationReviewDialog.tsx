@@ -77,9 +77,9 @@ import {
   formatFieldName,
 } from "@/lib/utils/application-helpers";
 import {
-  getSubmittedFieldValues,
+  getEffectiveFieldValues,
+  getStaffEditableFields,
   isStaffFormEditable,
-  splitStaffEditableFields,
 } from "@/lib/utils/staff-form-edit";
 import { getCurrentSemesterROC, toROCYear } from "@/src/utils/dateUtils";
 
@@ -734,8 +734,7 @@ export function ApplicationReviewDialog({
   const canEditFormData =
     (isAdminRole || role === "college") &&
     isStaffFormEditable(detailedApplication?.status);
-  const { editable: editableFormFields, profileOwned: profileOwnedFormFields } =
-    splitStaffEditableFields(fieldDefinitions);
+  const editableFormFields = getStaffEditableFields(fieldDefinitions);
 
   // The professor sees the application itself, but not the live SIS 學生資訊
   // tab nor the 操作紀錄 audit trail (the basic tab keeps its 學生資訊 card).
@@ -760,10 +759,15 @@ export function ApplicationReviewDialog({
     setProfessorInfo(professor);
   };
 
-  const handleFormDataSaved = (updated: Application) => {
+  const handleFormDataSaved = (updated: Application, message: string) => {
+    // professorInfo outranks the application's own professor in the 管理 tab,
+    // so drop it when the edit moved the review to another professor.
+    if (updated.professor_id !== detailedApplication?.professor_id) {
+      setProfessorInfo(null);
+    }
     setDetailedApplication(updated);
     setIsEditingForm(false);
-    toast.success(locale === "zh" ? "表單內容已更新" : "Form content updated");
+    toast.success(message);
     onReviewSubmitted?.();
   };
 
@@ -1846,29 +1850,17 @@ export function ApplicationReviewDialog({
                           })()}
 
                           {isEditingForm && detailedApplication ? (
-                            <div className="space-y-4">
-                              {profileOwnedFormFields.length > 0 && (
-                                <Alert>
-                                  <Info className="h-4 w-4" />
-                                  <AlertDescription>
-                                    {locale === "zh"
-                                      ? `${profileOwnedFormFields.map((f) => f.field_label).join("、")} 為學生個人資料，無法在此修改。`
-                                      : "Post office account and advisor details are the student's profile data and cannot be edited here."}
-                                  </AlertDescription>
-                                </Alert>
+                            <ApplicationFormDataEditor
+                              applicationId={detailedApplication.id}
+                              editableFields={editableFormFields}
+                              initialValues={getEffectiveFieldValues(
+                                detailedApplication,
+                                editableFormFields
                               )}
-                              <ApplicationFormDataEditor
-                                applicationId={detailedApplication.id}
-                                editableFields={editableFormFields}
-                                initialValues={getSubmittedFieldValues(
-                                  detailedApplication.submitted_form_data,
-                                  editableFormFields
-                                )}
-                                locale={locale}
-                                onSaved={handleFormDataSaved}
-                                onCancel={() => setIsEditingForm(false)}
-                              />
-                            </div>
+                              locale={locale}
+                              onSaved={handleFormDataSaved}
+                              onCancel={() => setIsEditingForm(false)}
+                            />
                           ) : (
                             <ApplicationFormDataDisplay
                               formData={detailedApplication}
