@@ -42,15 +42,19 @@ async def admin_db_user(db):
 
 @pytest_asyncio.fixture
 async def authed_admin_client(client, admin_db_user):
-    from app.core.security import require_admin
+    from app.core.security import require_admin, require_scholarship_manager
     from app.main import app
 
     async def override_require_admin():
         return admin_db_user
 
+    # DELETE /admin/applications/{id} is also open to 學院 users, so it depends on
+    # require_scholarship_manager rather than require_admin.
     app.dependency_overrides[require_admin] = override_require_admin
+    app.dependency_overrides[require_scholarship_manager] = override_require_admin
     yield client
     del app.dependency_overrides[require_admin]
+    del app.dependency_overrides[require_scholarship_manager]
 
 
 @pytest_asyncio.fixture

@@ -1382,10 +1382,14 @@ export function ApplicationReviewDialog({
     }
   };
 
-  // Handle delete
+  // 刪除申請: offered only when the host wires `onDelete` AND the list row says
+  // the server will accept it (`is_deletable` = not yet in 分發階段). Hand back
+  // the list row — it carries the student_name the confirm dialog shows.
+  const canDelete =
+    !!onDelete && (application as Application | null)?.is_deletable === true;
   const handleDelete = () => {
-    if (detailedApplication && onDelete) {
-      onDelete(detailedApplication as Application);
+    if (application && onDelete) {
+      onDelete(application as Application);
     }
   };
 
@@ -2423,6 +2427,19 @@ export function ApplicationReviewDialog({
               </div>
             </Tabs>
           ) : null}
+
+          {canDelete && (
+            <div className="flex justify-end border-t pt-3">
+              <Button
+                variant="outline"
+                onClick={handleDelete}
+                className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+              >
+                <Trash2 className="h-4 w-4 mr-1" />
+                {locale === "zh" ? "刪除申請" : "Delete Application"}
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
