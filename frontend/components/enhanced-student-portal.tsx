@@ -1381,6 +1381,23 @@ export function EnhancedStudentPortal({
                                   ? subTypeKey
                                   : labelLookup;
 
+                              if (
+                                scholarship.closed_sub_types?.some(
+                                  st => st.value === subTypeKey
+                                )
+                              ) {
+                                return (
+                                  <Badge
+                                    key={subTypeKey}
+                                    variant="outline"
+                                    className="bg-gray-100 text-gray-400 border-gray-200 shadow-sm whitespace-normal text-left"
+                                  >
+                                    ✗ {label} —{" "}
+                                    {t("applications.sub_type_not_open")}
+                                  </Badge>
+                                );
+                              }
+
                               if (isSubEligible) {
                                 return (
                                   <Badge

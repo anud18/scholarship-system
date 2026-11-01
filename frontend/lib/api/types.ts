@@ -267,6 +267,12 @@ export interface ScholarshipType {
     label_en: string;
     is_default: boolean;
   }>;
+  // Sub-types the student qualifies for but the admin has not opened this round.
+  closed_sub_types?: Array<{
+    value: string | null;
+    label: string;
+    label_en: string;
+  }>;
   all_sub_type_list?: string[];
   subtype_eligibility?: {
     [subTypeKey: string]: {

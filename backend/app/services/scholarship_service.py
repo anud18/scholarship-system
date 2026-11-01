@@ -191,6 +191,7 @@ class ScholarshipService:
                         scholarship_type.application_cycle.value if scholarship_type.application_cycle else "semester"
                     ),
                     "sub_type_list": eligible_subtypes,  # Only eligible subtypes
+                    "closed_sub_types": closed,
                     "all_sub_type_list": scholarship_type.sub_type_list or [],  # All subtypes for reference
                     "subtype_eligibility": subtype_eligibility_info,  # Detailed eligibility per subtype
                     "sub_type_selection_mode": (

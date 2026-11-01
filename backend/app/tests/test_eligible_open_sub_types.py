@@ -119,6 +119,7 @@ async def test_all_open_when_unrestricted(student_client: AsyncClient, db: Async
     scholarship = await _eligible(student_client)
 
     assert _offered(scholarship) == ["nstc", "moe_1w"]
+    assert scholarship["closed_sub_types"] == []
     assert _common_error_messages(scholarship) == []
 
 
@@ -129,6 +130,7 @@ async def test_closed_sub_type_is_not_offered(student_client: AsyncClient, db: A
     scholarship = await _eligible(student_client)
 
     assert _offered(scholarship) == ["moe_1w"]
+    assert [(st["value"], st["label"]) for st in scholarship["closed_sub_types"]] == [("nstc", "國科會")]
     assert _common_error_messages(scholarship) == []
 
 

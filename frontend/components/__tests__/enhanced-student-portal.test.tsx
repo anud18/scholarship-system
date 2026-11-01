@@ -397,4 +397,90 @@ describe("EnhancedStudentPortal", () => {
       screen.getByText("Finalized (Contact College Office)")
     ).toBeInTheDocument();
   });
+
+  describe("sub-types the admin has not opened this round", () => {
+    const phdScholarship = {
+      ...mockScholarshipData.data[0],
+      code: "phd",
+      name: "博士生獎學金",
+      all_sub_type_list: ["nstc", "moe_1w"],
+      subtype_eligibility: {
+        nstc: { eligible: true, failed_rules: [], warning_rules: [] },
+        moe_1w: { eligible: true, failed_rules: [], warning_rules: [] },
+      },
+    };
+
+    it("marks a closed sub-type as not open", async () => {
+      (api.scholarships.getEligible as jest.Mock).mockResolvedValue({
+        ...mockScholarshipData,
+        data: [
+          {
+            ...phdScholarship,
+            eligible_sub_types: [
+              { value: "moe_1w", label: "教育部", label_en: "MOE" },
+            ],
+            closed_sub_types: [
+              { value: "nstc", label: "國科會", label_en: "NSTC" },
+            ],
+          },
+        ],
+      });
+
+      await act(async () => {
+        render(
+          <EnhancedStudentPortal
+            user={mockUser}
+            locale="zh"
+            initialTab="scholarship-list"
+          />
+        );
+      });
+
+      expect(
+        await screen.findByText(/國科會博士生獎學金 — 本次未開放/)
+      ).toBeInTheDocument();
+    });
+
+    it("shows the reason when every qualifying sub-type is closed", async () => {
+      (api.scholarships.getEligible as jest.Mock).mockResolvedValue({
+        ...mockScholarshipData,
+        data: [
+          {
+            ...phdScholarship,
+            eligible_sub_types: [
+              { value: "general", label: "通用", label_en: "General" },
+            ],
+            closed_sub_types: [
+              { value: "nstc", label: "國科會", label_en: "NSTC" },
+            ],
+            errors: [
+              {
+                rule_id: "sub_types_not_open",
+                rule_name: "申請類別未開放",
+                rule_type: "open_sub_types",
+                tag: "本次未開放申請類別",
+                message: "本次未開放您符合資格的申請類別",
+                sub_type: null,
+              },
+            ],
+          },
+        ],
+      });
+
+      await act(async () => {
+        render(
+          <EnhancedStudentPortal
+            user={mockUser}
+            locale="zh"
+            initialTab="scholarship-list"
+          />
+        );
+      });
+
+      expect(
+        await screen.findByText("本次未開放您符合資格的申請類別")
+      ).toBeInTheDocument();
+      expect(screen.getByText("不符合申請資格")).toBeInTheDocument();
+    });
+  });
 });
