@@ -9,6 +9,9 @@ appropriate for the *current* review phase:
   (``renewal_requires_{role}_review=True``).
 - During the general **{role}_review** window: only non-renewal applications
   (``is_renewal=False``) for that configuration.
+- A later 梯次 (``application_round >= 2``) uses its own round's window from
+  ``scholarship_application_rounds``; a bound the round leaves NULL falls back
+  to the general window.
 
 The renewal review windows live on :class:`ScholarshipConfiguration`
 (``renewal_professor_review_*``, ``renewal_college_review_*``), and so do
@@ -24,11 +27,12 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Literal
 
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import aliased
 from sqlalchemy.sql import Select
 
 from app.models.application import Application
+from app.models.application_round import ScholarshipApplicationRound
 from app.models.scholarship import ScholarshipConfiguration
 
 ReviewRole = Literal["professor", "college"]
@@ -61,6 +65,13 @@ def _config_fields_for_role(cfg, role: ReviewRole):
             cfg.college_review_end,
         )
     raise ValueError(f"Unknown review role: {role!r}")
+
+
+def _round_fields_for_role(round_alias, role: ReviewRole):
+    """(start, end) review-window columns of a ScholarshipApplicationRound alias."""
+    if role == "professor":
+        return round_alias.professor_review_start, round_alias.professor_review_end
+    return round_alias.college_review_start, round_alias.college_review_end
 
 
 def apply_renewal_phase_filter(
@@ -107,12 +118,23 @@ def apply_renewal_phase_filter(
 
     cfg = aliased(ScholarshipConfiguration, name=alias_name)
     renewal_required, renewal_start, renewal_end, general_start, general_end = _config_fields_for_role(cfg, role)
+    application_round = aliased(ScholarshipApplicationRound, name=f"{alias_name}_round")
+    round_start, round_end = _round_fields_for_role(application_round, role)
+    # Round 1 has no round row (outer join → NULL), so it keeps the general window.
+    general_start = func.coalesce(round_start, general_start)
+    general_end = func.coalesce(round_end, general_end)
 
     stmt = stmt.join(
         cfg,
         and_(
             Application.scholarship_type_id == cfg.scholarship_type_id,
             Application.academic_year == cfg.academic_year,
+        ),
+    ).outerjoin(
+        application_round,
+        and_(
+            application_round.configuration_id == Application.scholarship_configuration_id,
+            application_round.round_number == Application.application_round,
         ),
     )
 

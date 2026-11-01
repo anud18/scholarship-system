@@ -442,6 +442,7 @@ class TestApplicationServiceListResponse:
         application.review_stage = None
         application.is_renewal = False
         application.renewal_year = None
+        application.application_round = 1
         application.previous_application_id = None
         application.challenges_application_id = None
         application.cancelled_due_to_application_id = None

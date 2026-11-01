@@ -50,6 +50,7 @@ import {
   FileText,
   Clock,
   Info,
+  Layers,
 } from "lucide-react";
 import { format } from "date-fns";
 import { zhTW } from "date-fns/locale";
@@ -60,6 +61,8 @@ import apiClient, {
 } from "@/lib/api";
 import { WhitelistManagementDialog } from "./whitelist-management-dialog";
 import { ConfigToggleSwitch } from "@/components/admin/config/ConfigToggleSwitch";
+import { ApplicationRoundsDialog } from "@/components/admin/config/ApplicationRoundsDialog";
+import { roundLabel } from "@/lib/utils/application-round";
 import { QuotaExcelButtons } from "@/components/admin/quota-import/QuotaExcelButtons";
 import { QuotaManagementMode, getQuotaManagementModeLabel } from "@/lib/enums";
 import { toast } from "sonner";
@@ -247,6 +250,8 @@ export function AdminConfigurationManagement({
   const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
   const [showCodeTableDialog, setShowCodeTableDialog] = useState(false);
   const [showWhitelistDialog, setShowWhitelistDialog] = useState(false);
+  const [roundsConfig, setRoundsConfig] =
+    useState<ScholarshipConfiguration | null>(null);
   const [selectedConfig, setSelectedConfig] =
     useState<ScholarshipConfiguration | null>(null);
 
@@ -836,6 +841,11 @@ export function AdminConfigurationManagement({
                                       ~{" "}
                                       {formatDate(config.application_end_date)}
                                     </div>
+                                    {config.first_round_open_sub_types && (
+                                      <div className="text-xs text-muted-foreground">
+                                        開放：{config.first_round_open_sub_types.join("、")}
+                                      </div>
+                                    )}
                                   </div>
                                 ) : null}
 
@@ -855,6 +865,22 @@ export function AdminConfigurationManagement({
                                     </div>
                                   </div>
                                 ) : null}
+
+                                {/* 多梯次申請：第二梯次起 */}
+                                {(config.application_rounds ?? []).map(round => (
+                                  <div key={round.round_number}>
+                                    <div className="font-medium">
+                                      {roundLabel(round.round_number)}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">
+                                      {formatDate(round.application_start_date)} ~{" "}
+                                      {formatDate(round.application_end_date)}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">
+                                      開放：{round.open_sub_types.join("、")}
+                                    </div>
+                                  </div>
+                                ))}
 
                                 {/* 如果兩個期間都沒設定 */}
                                 {!config.application_start_date &&
@@ -952,6 +978,15 @@ export function AdminConfigurationManagement({
                                 <Button
                                   variant="ghost"
                                   size="sm"
+                                  onClick={() => setRoundsConfig(config)}
+                                  title="多梯次申請"
+                                  aria-label="多梯次申請"
+                                >
+                                  <Layers className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
                                   onClick={() => openDuplicateDialog(config)}
                                   title="複製配置"
                                   className="text-blue-600 hover:text-blue-700"
@@ -983,6 +1018,19 @@ export function AdminConfigurationManagement({
           </TabsContent>
         ))}
       </Tabs>
+
+      {/* 多梯次申請 Dialog */}
+      <ApplicationRoundsDialog
+        open={roundsConfig !== null}
+        onOpenChange={open => {
+          if (!open) setRoundsConfig(null);
+        }}
+        configuration={roundsConfig}
+        onSaved={() =>
+          selectedScholarshipType &&
+          void loadConfigurations(selectedScholarshipType)
+        }
+      />
 
       {/* View Configuration Dialog */}
       <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>

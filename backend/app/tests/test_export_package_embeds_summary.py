@@ -104,7 +104,8 @@ async def test_export_zip_contains_summary_tables_matching_folders(monkeypatch):
     a_xlsx = zf.read("1000_A系/114學年度某獎學金學生資料彙整表_A系.xlsx")
     wb = load_workbook(io.BytesIO(a_xlsx))
     ws = wb.active
-    table_codes = {ws.cell(row=r, column=13).value for r in range(3, ws.max_row + 1)}
+    student_no_col = STATIC_HEADERS.index("學號") + 1
+    table_codes = {ws.cell(row=r, column=student_no_col).value for r in range(3, ws.max_row + 1)}
     folder_codes = {
         n.split("/")[1].split("_")[0]
         for n in names

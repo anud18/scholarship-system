@@ -158,6 +158,13 @@ class ApplicationDeadlineError(BusinessLogicError):
         super().__init__(message)
 
 
+class ApplicationPeriodClosedError(ScholarshipException):
+    """Raised when a new application is submitted outside every application window"""
+
+    def __init__(self, message: str = "目前非申請期間，無法送出申請"):
+        super().__init__(message=message, status_code=400, error_code="APPLICATION_PERIOD_CLOSED")
+
+
 class DuplicateApplicationError(ConflictError):
     """Raised when student tries to apply for same scholarship twice"""
 

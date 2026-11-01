@@ -63,6 +63,7 @@ import {
 import { logger } from "@/lib/utils/logger";
 import {
   getRealSubTypes,
+  restorableSubTypes,
   isApplyableScholarship,
 } from "@/lib/scholarship-eligibility";
 import { clsx } from "@/lib/utils";
@@ -76,6 +77,7 @@ import { PROFILE_OWNED_FIELD_SOURCES } from "@/lib/utils/profile-owned-fields";
 import { uppercaseInputValue } from "@/lib/utils/uppercase-input";
 import { useApplications } from "@/hooks/use-applications";
 import { useStudentProfile } from "@/hooks/use-student-profile";
+import { roundLabel } from "@/lib/utils/application-round";
 import {
   validateAdvisorInfo,
   validateBankInfo,
@@ -701,16 +703,14 @@ export function ScholarshipApplicationStep({
         setSelectedScholarship(scholarship);
       }
 
-      // Load sub-types
-      if (
-        editingApplication.scholarship_subtype_list &&
-        editingApplication.scholarship_subtype_list.length > 0
-      ) {
-        const validSubTypes =
-          editingApplication.scholarship_subtype_list.filter(
-            st => st !== "general"
-          );
-        setSelectedSubTypes(validSubTypes);
+      // Load sub-types the scholarship still offers (a closed one would stay
+      // selected without a visible checkbox)
+      const restoredSubTypes = restorableSubTypes(
+        editingApplication.scholarship_subtype_list,
+        scholarship
+      );
+      if (restoredSubTypes.length > 0) {
+        setSelectedSubTypes(restoredSubTypes);
       }
 
       // Load form data
@@ -1488,6 +1488,16 @@ export function ScholarshipApplicationStep({
                 <span className="font-semibold">1. {text.selectPrograms}</span>{" "}
                 <span className="text-red-500">*</span>
               </Label>
+              {((selectedScholarship.current_application_round ?? 1) > 1 ||
+                Object.values(selectedScholarship.subtype_eligibility ?? {}).some(
+                  info => info.closed_in_round
+                )) && (
+                <p className="text-sm text-sky-700">
+                  {locale === "zh"
+                    ? `目前為${roundLabel(selectedScholarship.current_application_round ?? 1)}申請，僅列出本梯次開放的類別。`
+                    : `${roundLabel(selectedScholarship.current_application_round ?? 1, "en")} is open: only the programs it accepts are listed.`}
+                </p>
+              )}
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 {eligibleSubTypes.map((subType, index) => {
                   const subTypeValue = subType.value;

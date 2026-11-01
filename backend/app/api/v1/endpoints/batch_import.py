@@ -39,7 +39,7 @@ from app.schemas.batch_import import (
     BatchImportUpdateRecordRequest,
     BatchImportUploadResponse,
 )
-from app.services.batch_import_service import BatchImportService
+from app.services.batch_import_service import BatchImportService, application_round_error
 from app.services.batch_import_template_service import build_batch_import_template
 
 router = APIRouter()
@@ -507,9 +507,25 @@ async def revalidate_batch_import(
     )
     validation_warnings.extend(eligibility_warnings)
 
+    config = await service._resolve_configuration(
+        batch_import.scholarship_type_id, batch_import.academic_year, batch_import.semester
+    )
+
     for row_data in parsed_data:
         student_id = row_data.get("student_id")
         row_number = row_data.get("row_number") or 0
+
+        round_error = application_round_error(config, row_data)
+        if round_error:
+            validation_errors.append(
+                {
+                    "row_number": row_number,
+                    "student_id": student_id,
+                    "field": "application_round",
+                    "error_type": "invalid_application_round",
+                    "message": round_error,
+                }
+            )
 
         is_valid, error_msg = permission_results.get(student_id, (True, None))
         if not is_valid:

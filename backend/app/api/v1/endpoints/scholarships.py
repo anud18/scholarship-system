@@ -258,6 +258,9 @@ async def get_scholarship_eligibility(
             created_at=scholarship.get("created_at"),
             already_submitted=scholarship.get("already_submitted", False),
             is_application_period=scholarship.get("is_application_period", True),
+            current_application_round=scholarship.get("current_application_round"),
+            current_round_application_end_date=scholarship.get("current_round_application_end_date"),
+            application_rounds=scholarship.get("application_rounds", []),
         )
         response_data.append(response_item)
 

@@ -334,6 +334,7 @@ class TestApplicationService:
         mock_application.review_stage = None
         mock_application.is_renewal = False
         mock_application.renewal_year = None
+        mock_application.application_round = 1
         mock_application.previous_application_id = None
         mock_application.challenges_application_id = None
         mock_application.cancelled_due_to_application_id = None
@@ -434,6 +435,7 @@ class TestApplicationService:
         mock_application.scholarship_subtype_list = []
         mock_application.sub_scholarship_type = "general"
         mock_application.renewal_year = None
+        mock_application.application_round = 1
         mock_application.previous_application_id = None
         mock_application.challenges_application_id = None
         mock_application.cancelled_due_to_application_id = None

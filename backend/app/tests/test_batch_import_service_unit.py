@@ -58,6 +58,9 @@ class TestBatchImportService:
         config.config_name = "Test Scholarship 113-1"
         config.config_code = "test_113_1"
         config.amount = 10000
+        # Single-round configuration: 第一梯次 only, every sub-type open
+        config.application_round_numbers = [1]
+        config.open_sub_types_for_round = Mock(return_value=None)
         return config
 
     @pytest.fixture

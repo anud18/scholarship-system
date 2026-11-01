@@ -58,6 +58,7 @@ function student(over: Partial<DistributionStudent>): DistributionStudent {
     ranking_item_id: 1,
     application_id: 1,
     rank_position: 1,
+    effective_rank: 1,
     applied_sub_types: ["nstc"],
     rejected_sub_types: [],
     professor_review_items: [],

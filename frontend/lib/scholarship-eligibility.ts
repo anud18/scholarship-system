@@ -36,3 +36,14 @@ export function getRealSubTypes(
     st => Boolean(st.value) && st.value !== "general"
   );
 }
+
+// A draft's saved sub-types, minus any the scholarship no longer offers (e.g. a
+// 申請梯次 that closed it): a selection the selector cannot show must not stay
+// selected invisibly and ride along on submit.
+export function restorableSubTypes(
+  savedSubTypes: string[] | null | undefined,
+  scholarship: Pick<ScholarshipType, "eligible_sub_types"> | null | undefined
+): string[] {
+  const offered = new Set(getRealSubTypes(scholarship).map(st => st.value));
+  return (savedSubTypes ?? []).filter(code => offered.has(code));
+}

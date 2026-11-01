@@ -150,8 +150,8 @@ class TestExportTemplateFlag:
         ws = wb.active
         # row1 = title, row2 = headers, row3 = first data row
         assert ws.cell(row=2, column=2).value == "學院初審會議之學院排序"
-        assert ws.cell(row=2, column=13).value == "學號"
-        assert str(ws.cell(row=3, column=13).value) == "310460099"  # 學號 present
+        assert ws.cell(row=2, column=14).value == "學號"
+        assert str(ws.cell(row=3, column=14).value) == "310460099"  # 學號 present
         assert (ws.cell(row=3, column=2).value or "") == ""  # rank BLANK
 
         # PII audit must be recorded even for the template: the 彙整表 still

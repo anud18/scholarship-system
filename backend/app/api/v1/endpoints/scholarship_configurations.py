@@ -23,6 +23,7 @@ from app.db.deps import get_db
 
 # Student model removed - student data now fetched from external API
 from app.models.application import Application, ApplicationStatus
+from app.models.application_round import FIRST_APPLICATION_ROUND
 from app.models.enums import QuotaManagementMode, Semester
 from app.models.audit_log import AuditAction, AuditLog
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
@@ -37,6 +38,7 @@ from app.schemas.scholarship_configuration import (
     WhitelistResponse,
     WhitelistStudentInfo,
 )
+from app.services.application_round_rules import ApplicationRoundRuleError, validate_rounds_against_config
 from app.services.whitelist_excel_service import whitelist_excel_service
 
 logger = logging.getLogger(__name__)
@@ -1048,6 +1050,12 @@ async def get_scholarship_configuration(
             "allow_college_view_distribution": config.allow_college_view_distribution,
             "effective_start_date": config.effective_start_date.isoformat() if config.effective_start_date else None,
             "effective_end_date": config.effective_end_date.isoformat() if config.effective_end_date else None,
+            # 多梯次申請: the general application window above is 第一梯次 (its sub-types:
+            # NULL = every sub-type), then the later rounds
+            "first_round_open_sub_types": config.open_sub_types_for_round(FIRST_APPLICATION_ROUND),
+            "application_rounds": [
+                application_round.to_dict() for application_round in config.extra_application_rounds
+            ],
             "version": config.version,
             "created_at": config.created_at.isoformat() if config.created_at else None,
             "updated_at": config.updated_at.isoformat() if config.updated_at else None,
@@ -1064,6 +1072,23 @@ async def get_scholarship_configuration(
         ) from e
 
 
+async def _assert_rounds_still_valid(db: AsyncSession, config: ScholarshipConfiguration) -> None:
+    """多梯次申請: an edit of round 1's window or the review windows must keep the later rounds valid."""
+    if not config.application_rounds:
+        return
+    sub_type_list = (
+        await db.execute(select(ScholarshipType.sub_type_list).where(ScholarshipType.id == config.scholarship_type_id))
+    ).scalar_one_or_none()
+    try:
+        validate_rounds_against_config(config, config.application_rounds, sub_type_list=sub_type_list or [])
+    except ApplicationRoundRuleError as exc:
+        await db.rollback()  # drop the refused edit, already applied to the session
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"此配置的申請梯次與修改後的設定衝突：{exc.message}（請先調整「多梯次申請」）",
+        ) from exc
+
+
 @router.put("/configurations/{id}")
 async def update_scholarship_configuration(
     id: int,
@@ -1077,12 +1102,16 @@ async def update_scholarship_configuration(
         # Get accessible scholarship IDs
         accessible_scholarship_ids = await get_user_accessible_scholarship_ids(current_user, db)
 
-        # Get existing configuration
-        stmt = select(ScholarshipConfiguration).where(
-            and_(
-                ScholarshipConfiguration.id == id,
-                ScholarshipConfiguration.scholarship_type_id.in_(accessible_scholarship_ids),
+        # Get existing configuration (rounds re-read: _assert_rounds_still_valid checks them)
+        stmt = (
+            select(ScholarshipConfiguration)
+            .where(
+                and_(
+                    ScholarshipConfiguration.id == id,
+                    ScholarshipConfiguration.scholarship_type_id.in_(accessible_scholarship_ids),
+                )
             )
+            .execution_options(populate_existing=True)
         )
 
         result = await db.execute(stmt)
@@ -1192,6 +1221,8 @@ async def update_scholarship_configuration(
             )
             config.shared_quota_sources = config_data["shared_quota_sources"]
             flag_modified(config, "shared_quota_sources")
+
+        await _assert_rounds_still_valid(db, config)
 
         config.updated_by = current_user.id
 
@@ -1566,6 +1597,9 @@ async def list_scholarship_configurations(
                     config.effective_start_date.isoformat() if config.effective_start_date else None
                 ),
                 "effective_end_date": config.effective_end_date.isoformat() if config.effective_end_date else None,
+                # 多梯次申請: 第一梯次's sub-types (NULL = every sub-type), then the later rounds
+                "first_round_open_sub_types": config.open_sub_types_for_round(FIRST_APPLICATION_ROUND),
+                "application_rounds": [r.to_dict() for r in config.extra_application_rounds],
                 "version": config.version,
                 "created_at": config.created_at.isoformat() if config.created_at else None,
                 "updated_at": config.updated_at.isoformat() if config.updated_at else None,

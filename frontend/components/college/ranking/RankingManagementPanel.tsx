@@ -190,6 +190,7 @@ export function RankingManagementPanel({
               }>;
               is_renewal?: boolean;
               renewal_year?: number | null;
+              application_round?: number | null;
               status?: string;
               review_status?: string;
               student_info?: { display_name?: string; student_id?: string };
@@ -242,6 +243,7 @@ export function RankingManagementPanel({
               is_allocated: item.is_allocated || false,
               is_renewal: item.application?.is_renewal || false,
               renewal_year: item.application?.renewal_year || null,
+              application_round: item.application?.application_round ?? 1,
               status: item.application?.status || "pending",
               college_rejected: Boolean(item.college_rejected),
               review_status: item.application?.review_status,

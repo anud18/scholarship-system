@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/card";
 import { apiClient } from "@/lib/api";
 import { logger } from "@/lib/utils/logger";
+import { IMPORT_ROUND_COLUMN_HINT } from "@/lib/utils/application-round";
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 // Backend uses openpyxl which only parses .xlsx (Office Open XML).
@@ -425,7 +426,8 @@ export function SupplementaryImportPanel({
           <p className="text-xs text-muted-foreground">
             {isZh
               ? "申請類別欄填 1 表示有申請該獎學金。"
-              : "A 1 in a category column means the student applied for that scholarship."}
+              : "A 1 in a category column means the student applied for that scholarship."}{" "}
+            {isZh ? IMPORT_ROUND_COLUMN_HINT.zh : IMPORT_ROUND_COLUMN_HINT.en}
           </p>
         </div>
 

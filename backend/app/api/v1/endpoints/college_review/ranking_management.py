@@ -47,6 +47,7 @@ from app.services.department_names import load_department_names
 from app.services.email_automation_service import email_automation_service
 from app.services.review_service import ReviewService
 from app.services.professor_review_export import load_professor_review_data
+from app.services.ranking_groups import application_round_of, find_group_order_violation
 
 from app.utils.export_download import XLSX_MEDIA_TYPE
 from ._helpers import (
@@ -203,7 +204,9 @@ async def get_rankings(
                     "created_at": ranking.created_at.isoformat(),
                     "finalized_at": ranking.finalized_at.isoformat() if ranking.finalized_at else None,
                     "college_review_end": (
-                        config.college_review_end.isoformat() if config and config.college_review_end else None
+                        config.effective_college_review_end.isoformat()
+                        if config and config.effective_college_review_end
+                        else None
                     ),
                 }
             )
@@ -524,6 +527,7 @@ async def get_ranking(
                         "scholarship_type_id": item.application.scholarship_type_id,
                         "sub_type": item.application.sub_scholarship_type,
                         "is_renewal": item.application.is_renewal,
+                        "application_round": application_round_of(item.application),
                         "renewal_year": item.application.renewal_year,
                         # Eligible sub-types that student applied for, with review status
                         "eligible_subtypes": (
@@ -609,7 +613,9 @@ async def get_ranking(
                 "stale_application_count": len(diff.stale_application_ids),
                 "created_at": ranking.created_at.isoformat(),
                 "college_review_end": (
-                    config.college_review_end.isoformat() if config and config.college_review_end else None
+                    config.effective_college_review_end.isoformat()
+                    if config and config.effective_college_review_end
+                    else None
                 ),
             },
         )
@@ -1365,6 +1371,21 @@ async def import_ranking_from_excel(
                 errors.append(
                     f"排名不連續：缺少第 {', '.join(str(r) for r in sorted(missing_ranks))} 名{RANK_SEQUENCE_RULE}"
                 )
+
+        # 5. Group order: renewals first, a later 申請梯次 behind the earlier ones.
+        #    'N' rows are parked at the end and exempt.
+        if not errors:
+            ranked_apps = sorted(
+                (
+                    (item.rank_position, student_id_to_item[item.student_id].application)
+                    for item in import_data
+                    if isinstance(item.rank_position, int) and item.student_id in student_id_to_item
+                ),
+                key=lambda pair: pair[0],
+            )
+            violation = find_group_order_violation(app for _rank, app in ranked_apps)
+            if violation:
+                errors.append(violation)
 
         if errors:
             raise HTTPException(

@@ -27,6 +27,7 @@ from app.models.enums import (
 )
 from app.models.payment_roster import PaymentRoster
 from app.services.college_review_errors import RankingModificationError, RankingNotFoundError, RankingScopeConflictError
+from app.services.ranking_groups import ranking_group
 
 # int4 namespace for pg_advisory_xact_lock(int4, int4) — ASCII "RANK". The second
 # key is hashtext() of the ranking scope, so create / finalize / delete of one
@@ -381,8 +382,9 @@ class RankingScopeMixin:
 
     @staticmethod
     def _ranking_sort_key(app: Application) -> tuple:
-        """Renewal students first, then by professor rank, then earlier submission."""
-        sort_group = 0 if app.is_renewal else 1  # 0 = renewal (top), 1 = new
+        """Renewals first, then each 申請梯次 in round order; inside a group by
+        professor rank, then earlier submission."""
+        sort_group = ranking_group(app)  # 0 = renewal (top), 1 = 第一梯次, 2 = 第二梯次 ...
         # If application has final_ranking_position, use it; otherwise use a large number (lowest priority)
         rank = app.final_ranking_position if app.final_ranking_position else 999999
         # Use submitted_at as secondary sort (earlier submissions get higher priority if same rank)
@@ -517,11 +519,11 @@ class RankingScopeMixin:
     ) -> int:
         """Drop stale items, slot new applications in, renumber 1..n.
 
-        New renewals go right after the last ranked renewal (at the top when there is
-        none) and other new applications after the last ranked one, so the result still
-        satisfies update_ranking_order's 「續領學生的排名必須在所有新申請學生之前」 rule.
-        Rows the college rejected ('N' in the Excel import, parked at the end) stay
-        behind every new applicant.
+        A new application goes right after the last ranked one of its own or an earlier
+        group (續領 → 第一梯次 → 第二梯次 …; at the top when there is none), so the result
+        still satisfies update_ranking_order's group-order rule: renewals before new
+        applications, a later 梯次 behind the earlier ones. Rows the college rejected
+        ('N' in the Excel import, parked at the end) stay behind every new applicant.
         """
         ranked_elsewhere = await self._application_ids_ranked_elsewhere(stale_ids, [ranking.id])
         kept: List[Tuple[Optional[CollegeRankingItem], Optional[Application]]] = []
@@ -540,12 +542,15 @@ class RankingScopeMixin:
             rejected_from -= 1
         ranked, rejected_tail = kept[:rejected_from], kept[rejected_from:]
 
-        renewal_cut = 1 + max(
-            (index for index, (_item, app) in enumerate(ranked) if app is not None and app.is_renewal), default=-1
-        )
-        new_renewals = [(None, app) for app in new_apps if app.is_renewal]
-        new_others = [(None, app) for app in new_apps if not app.is_renewal]
-        ordered = ranked[:renewal_cut] + new_renewals + ranked[renewal_cut:] + new_others + rejected_tail
+        ordered = list(ranked)
+        for app in sorted(new_apps, key=ranking_group):  # stable: keeps the pending order inside a group
+            group = ranking_group(app)
+            cut = 1 + max(
+                (index for index, (_item, ranked_app) in enumerate(ordered) if ranking_group(ranked_app) <= group),
+                default=-1,
+            )
+            ordered.insert(cut, (None, app))
+        ordered += rejected_tail
 
         for position, (item, app) in enumerate(ordered, 1):
             if item is None:

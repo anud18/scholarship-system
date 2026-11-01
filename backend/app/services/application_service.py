@@ -282,6 +282,7 @@ class ApplicationService:
             status_name=application.status_name,
             is_renewal=application.is_renewal,
             renewal_year=application.renewal_year,
+            application_round=application.application_round,
             previous_application_id=application.previous_application_id,
             challenges_application_id=application.challenges_application_id,
             cancelled_due_to_application_id=application.cancelled_due_to_application_id,
@@ -519,6 +520,18 @@ class ApplicationService:
         if not is_draft:
             self._validate_sub_type_for_submission(scholarship, sub_scholarship_type)
 
+        # 多梯次申請: the application belongs to the round open now and may only pick
+        # the sub-types that round opens. A draft saved outside every window keeps
+        # round 1 until its first submit (_assign_application_round_on_first_submit).
+        from app.models.application_round import FIRST_APPLICATION_ROUND
+        from app.services.application_builder import validate_sub_types_open_in_round
+
+        if is_draft:
+            application_round = config.current_application_round or FIRST_APPLICATION_ROUND
+        else:
+            application_round = self._submission_round(config, FIRST_APPLICATION_ROUND)
+        validate_sub_types_open_in_round(config, application_round, scholarship_subtype_list)
+
         from app.models.enums import ApplicationStatus
         from app.services.application_builder import build_submitted_application_values
         from app.utils.i18n import ScholarshipI18n
@@ -553,6 +566,7 @@ class ApplicationService:
             sub_type_selection_mode=sub_type_selection_mode,
             sub_scholarship_type=sub_scholarship_type,
             is_renewal=False,  # New applications are never renewals
+            application_round=application_round,
             academic_year=academic_year,
             semester=semester,
             student_data=student_snapshot,
@@ -777,6 +791,7 @@ class ApplicationService:
             review_stage=serialize_value(application.review_stage),
             is_renewal=application.is_renewal,
             renewal_year=application.renewal_year,
+            application_round=application.application_round,
             previous_application_id=application.previous_application_id,
             challenges_application_id=application.challenges_application_id,
             cancelled_due_to_application_id=application.cancelled_due_to_application_id,
@@ -894,6 +909,7 @@ class ApplicationService:
                 status_name=application.status_name,
                 is_renewal=application.is_renewal,
                 renewal_year=application.renewal_year,
+                application_round=application.application_round,
                 previous_application_id=application.previous_application_id,
                 challenges_application_id=application.challenges_application_id,
                 cancelled_due_to_application_id=application.cancelled_due_to_application_id,
@@ -1061,6 +1077,7 @@ class ApplicationService:
             "review_stage": serialize_value(application.review_stage),
             "is_renewal": application.is_renewal,
             "renewal_year": application.renewal_year,
+            "application_round": application.application_round,
             "previous_application_id": application.previous_application_id,
             "challenges_application_id": application.challenges_application_id,
             "cancelled_due_to_application_id": application.cancelled_due_to_application_id,
@@ -1161,14 +1178,16 @@ class ApplicationService:
                 strip_profile_owned_fields(update_data.form_data.dict())
             )
 
-        # NOTE: status is intentionally not updatable here — see ApplicationUpdate.
-
-        # 更新續領申請標識
-        if update_data.is_renewal is not None:
-            application.is_renewal = update_data.is_renewal
+        # NOTE: status and is_renewal are intentionally not updatable here — see ApplicationUpdate.
 
         # 更新子項目列表（如果提供）
         if update_data.scholarship_subtype_list is not None:
+            # 多梯次申請: a later round only accepts the sub-types it opens.
+            if application.scholarship_configuration_id:
+                config = await self.db.get(
+                    ScholarshipConfiguration, application.scholarship_configuration_id, populate_existing=True
+                )
+                self._check_sub_types_against_round(application, config, update_data.scholarship_subtype_list)
             application.scholarship_subtype_list = update_data.scholarship_subtype_list
             # Keep the denormalized scalar in sync with the list, otherwise an
             # edit that picks a real sub-type (e.g. nstc) leaves a stale "general"
@@ -1276,6 +1295,61 @@ class ApplicationService:
         if not is_valid_taiwan_mobile(phone):
             raise ValidationError(TAIWAN_MOBILE_MESSAGE)
 
+    @staticmethod
+    def _is_draft(application: Application) -> bool:
+        return getattr(application.status, "value", application.status) == ApplicationStatus.draft.value
+
+    @classmethod
+    def _round_for_sub_type_check(cls, application: Application, config) -> Optional[int]:
+        """The 申請梯次 an application's sub-types must fit: a draft joins the round open
+        now (its stored round outside every window); a returned application keeps its own."""
+        if cls._is_draft(application):
+            return config.current_application_round or application.application_round
+        return application.application_round
+
+    @classmethod
+    def _check_sub_types_against_round(cls, application: Application, config, sub_types: List[str]) -> None:
+        from app.services.application_builder import validate_sub_types_open_in_round
+
+        if config is None or application.is_renewal:
+            return
+        validate_sub_types_open_in_round(config, cls._round_for_sub_type_check(application, config), sub_types)
+
+    @staticmethod
+    def _submission_round(config, stored_round: int) -> int:
+        """The 申請梯次 a new application joins when it is submitted: the round open now.
+
+        Outside every window the submission is refused, except for a configuration
+        that is not period-gated at all or under the dev ALWAYS_OPEN_APPLICATION
+        bypass, where the application keeps ``stored_round``.
+        """
+        from app.core.exceptions import ApplicationPeriodClosedError
+        from app.services.eligibility_service import application_period_bypassed
+
+        current_round = config.current_application_round
+        if current_round is not None:
+            return current_round
+        if application_period_bypassed() or not config.is_period_gated:
+            return stored_round
+        raise ApplicationPeriodClosedError()
+
+    @classmethod
+    def _assign_application_round_on_first_submit(cls, application: Application) -> None:
+        """Set a draft's 申請梯次 to the round open now (refused outside every window),
+        then check the sub-types against the application's round. A returned
+        application keeps its round and is only re-checked."""
+        from app.models.application_round import FIRST_APPLICATION_ROUND
+
+        config = application.scholarship_configuration
+        if config is None or application.is_renewal:
+            return
+        if cls._is_draft(application):
+            application.application_round = cls._submission_round(
+                config, application.application_round or FIRST_APPLICATION_ROUND
+            )
+        sub_types = list(application.scholarship_subtype_list or []) or [application.sub_scholarship_type]
+        cls._check_sub_types_against_round(application, config, sub_types)
+
     async def submit_application(self, application_id: int, user: User) -> ApplicationResponse:
         """提交申請"""
         # Get application with relationships loaded
@@ -1285,6 +1359,7 @@ class ApplicationService:
                 selectinload(Application.files),
                 selectinload(Application.reviews).selectinload(ApplicationReview.reviewer),
                 selectinload(Application.scholarship),
+                selectinload(Application.scholarship_configuration),
             )
             .where(Application.id == application_id)
         )
@@ -1311,6 +1386,11 @@ class ApplicationService:
         # for scholarships that define real ones (the "general" fallback maps
         # to no quota slot at distribution time).
         self._validate_sub_type_for_submission(application.scholarship, application.sub_scholarship_type)
+
+        # 多梯次申請: a first submission joins the round open now (a draft saved in
+        # 第一梯次 and sent in 第二梯次 is a 第二梯次 application) and must pick a
+        # sub-type that round opens. A returned application keeps its round.
+        self._assign_application_round_on_first_submit(application)
 
         # Load user profile once (reused for the 存摺封面 check, auto-assign professor and email notification)
         advisor_profile = await self._get_user_profile(application.user_id)
@@ -1415,6 +1495,7 @@ class ApplicationService:
             "status_name": application.status_name,
             "is_renewal": application.is_renewal,
             "renewal_year": application.renewal_year,
+            "application_round": application.application_round,
             "previous_application_id": application.previous_application_id,
             "challenges_application_id": application.challenges_application_id,
             "cancelled_due_to_application_id": application.cancelled_due_to_application_id,
@@ -1563,6 +1644,7 @@ class ApplicationService:
                 status_name=application.status_name,
                 is_renewal=application.is_renewal,
                 renewal_year=application.renewal_year,
+                application_round=application.application_round,
                 previous_application_id=application.previous_application_id,
                 challenges_application_id=application.challenges_application_id,
                 cancelled_due_to_application_id=application.cancelled_due_to_application_id,
@@ -2037,6 +2119,7 @@ class ApplicationService:
                 status_name=application.status_name,
                 is_renewal=application.is_renewal,
                 renewal_year=application.renewal_year,
+                application_round=application.application_round,
                 previous_application_id=application.previous_application_id,
                 challenges_application_id=application.challenges_application_id,
                 cancelled_due_to_application_id=application.cancelled_due_to_application_id,
@@ -2694,6 +2777,7 @@ class ApplicationService:
                         status=app.status,
                         status_name=app.status,  # Using status as status_name for now
                         is_renewal=app.is_renewal or False,
+                        application_round=app.application_round,
                         academic_year=app.academic_year or 0,
                         semester=app.semester.value if app.semester else None,
                         student_data=app.student_data or {},
@@ -2733,7 +2817,7 @@ class ApplicationService:
                                 # 教授審查截止 for this application's track (renewal vs general),
                                 # so the professor queue can show the exact closing minute.
                                 "professor_review_end": app.scholarship_configuration.professor_review_end_for(
-                                    bool(app.is_renewal)
+                                    bool(app.is_renewal), app.application_round
                                 ),
                             }
                             if app.scholarship_configuration
@@ -2859,8 +2943,12 @@ class ApplicationService:
             else:
                 # Check regular review period - from application start to professor review end
                 # Professor can review from when student submits application until professor review deadline
-                review_start = config.application_start_date  # Changed from professor_review_start
-                review_end = config.professor_review_end_for(False)
+                # A later 梯次 opens its own window: from that round's application start.
+                round_row = config.get_application_round(application.application_round)
+                review_start = (
+                    round_row.application_start_date if round_row else config.application_start_date
+                )  # Changed from professor_review_start
+                review_end = config.professor_review_end_for(False, application.application_round)
 
                 if review_start and review_end:
                     if review_start.tzinfo is None:

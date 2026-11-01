@@ -60,6 +60,7 @@ import {
   getDepartmentName,
 } from "@/hooks/use-reference-data";
 import { splitSubTypeLabel } from "@/lib/utils/sub-type-label";
+import { applicationRoundLabel } from "@/lib/utils/application-round";
 import {
   AlertCircle,
   Calendar,
@@ -140,6 +141,9 @@ interface DashboardApplication {
   review_stage?: string;
   /** Server-computed: admin may hard-delete until the application enters 分發階段 */
   is_deletable?: boolean;
+  is_renewal?: boolean;
+  /** 申請梯次 (1 = 第一梯次) */
+  application_round?: number;
   submitted_at?: string;
   professor_review_items?: Array<{
     sub_type_code: string;
@@ -257,6 +261,8 @@ const transformApplicationData = (app: any): DashboardApplication => {
     status_name: app.status_name,
     review_stage: app.review_stage,
     is_deletable: app.is_deletable,
+    is_renewal: app.is_renewal,
+    application_round: app.application_round,
     submitted_at: app.submitted_at,
     professor_review_items: app.professor_review_items || [],
     created_at: app.created_at,
@@ -906,6 +912,7 @@ export function AdminScholarshipDashboard({
                     />
                   </TableHead>
                   <TableHead>申請人</TableHead>
+                  <TableHead className="whitespace-nowrap">梯次</TableHead>
                   {showSubTypes && <TableHead>學生申請獎學金類別</TableHead>}
                   <TableHead>指派教授</TableHead>
                   <TableHead>教授審核結果</TableHead>
@@ -950,6 +957,11 @@ export function AdminScholarshipDashboard({
                           departments
                         )}
                       </div>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <Badge variant="outline" className="text-xs">
+                        {applicationRoundLabel(app)}
+                      </Badge>
                     </TableCell>
                     {showSubTypes && (
                       <TableCell>

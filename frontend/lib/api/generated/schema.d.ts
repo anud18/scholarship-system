@@ -3730,6 +3730,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/scholarship-configurations/configurations/{id}/application-rounds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Application Rounds
+         * @description List a configuration's 申請梯次 (第一梯次 = its own application window).
+         */
+        get: operations["get_application_rounds_api_v1_scholarship_configurations_configurations__id__application_rounds_get"];
+        /**
+         * Update Application Rounds
+         * @description Replace a configuration's round settings: 第一梯次's sub-types and the later 申請梯次.
+         *
+         *     Rounds missing from the body are removed (409 when a round already holds
+         *     applications); an empty list turns the configuration back into a single round.
+         *     A null ``first_round_open_sub_types`` opens every sub-type in 第一梯次. A round may
+         *     not stop opening a sub-type its submitted applications use (409).
+         */
+        put: operations["update_application_rounds_api_v1_scholarship_configurations_configurations__id__application_rounds_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reference-data/degrees": {
         parameters: {
             query?: never;
@@ -8860,6 +8889,82 @@ export interface components {
             reviewer_role?: string | null;
         };
         /**
+         * ApplicationRoundInput
+         * @description One later 申請梯次 as the administrator sets it.
+         */
+        ApplicationRoundInput: {
+            /**
+             * Round Number
+             * @description 2 = 第二梯次, 3 = 第三梯次 ...
+             */
+            round_number: number;
+            /**
+             * Application Start Date
+             * Format: date-time
+             */
+            application_start_date: string;
+            /**
+             * Application End Date
+             * Format: date-time
+             */
+            application_end_date: string;
+            /**
+             * Open Sub Types
+             * @description 開放申請的子類別代碼
+             */
+            open_sub_types: string[];
+            /** Professor Review Start */
+            professor_review_start?: string | null;
+            /** Professor Review End */
+            professor_review_end?: string | null;
+            /** College Review Start */
+            college_review_start?: string | null;
+            /** College Review End */
+            college_review_end?: string | null;
+        };
+        /**
+         * ApplicationRoundSummary
+         * @description A later 申請梯次 (第二梯次起) as students see it
+         */
+        ApplicationRoundSummary: {
+            /** Round Number */
+            round_number: number;
+            /**
+             * Application Start Date
+             * Format: date-time
+             */
+            application_start_date: string;
+            /**
+             * Application End Date
+             * Format: date-time
+             */
+            application_end_date: string;
+            /**
+             * Open Sub Types
+             * @default []
+             */
+            open_sub_types: string[];
+            /**
+             * Is Open
+             * @default false
+             */
+            is_open: boolean;
+        };
+        /**
+         * ApplicationRoundsUpdate
+         * @description A configuration's round settings: the sub-types 第一梯次 opens and the full list of
+         *     later rounds. Both replace the current values.
+         */
+        ApplicationRoundsUpdate: {
+            /**
+             * First Round Open Sub Types
+             * @description 第一梯次開放申請的子類別代碼；null = 開放所有子類別
+             */
+            first_round_open_sub_types?: string[] | null;
+            /** Rounds */
+            rounds?: components["schemas"]["ApplicationRoundInput"][];
+        };
+        /**
          * ApplicationStatusUpdate
          * @description Application status update schema
          */
@@ -9068,11 +9173,6 @@ export interface components {
              * @description 同意條款
              */
             agree_terms?: boolean | null;
-            /**
-             * Is Renewal
-             * @description 是否為續領申請
-             */
-            is_renewal?: boolean | null;
             /**
              * Sub Type Preferences
              * @description Ordered sub-type preference list
@@ -9875,6 +9975,15 @@ export interface components {
              * @default true
              */
             is_application_period: boolean;
+            /** Current Application Round */
+            current_application_round?: number | null;
+            /** Current Round Application End Date */
+            current_round_application_end_date?: string | null;
+            /**
+             * Application Rounds
+             * @default []
+             */
+            application_rounds: components["schemas"]["ApplicationRoundSummary"][];
         };
         /** EmailAutomationRuleCreate */
         EmailAutomationRuleCreate: {
@@ -11213,6 +11322,11 @@ export interface components {
              * @default []
              */
             warning_rules: components["schemas"]["SubtypeRuleDetail"][];
+            /**
+             * Closed In Round
+             * @default false
+             */
+            closed_in_round: boolean;
         };
         /** SubtypeRuleDetail */
         SubtypeRuleDetail: {
@@ -17872,6 +17986,72 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_application_rounds_api_v1_scholarship_configurations_configurations__id__application_rounds_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_application_rounds_api_v1_scholarship_configurations_configurations__id__application_rounds_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplicationRoundsUpdate"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

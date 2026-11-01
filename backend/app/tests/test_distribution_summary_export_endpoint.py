@@ -262,7 +262,7 @@ async def test_xlsx_export_headers_and_rows(admin_client, scholarship, seeded_di
 
     # Rows are ordered by rank_position — 王小美 (rank 1) first despite being
     # seeded second — and 序號 restarts from 1.
-    first = [ws.cell(row=4, column=c).value for c in range(1, 14)]
+    first = [ws.cell(row=4, column=c).value for c in range(1, 15)]
     assert first == [
         1,
         "工學院",
@@ -271,6 +271,7 @@ async def test_xlsx_export_headers_and_rows(admin_client, scholarship, seeded_di
         "中華民國",
         "女",
         "台灣大學工學院土木工程學系",
+        "第一梯次",
         "113.02.01",
         "312345601",
         None,
@@ -279,10 +280,10 @@ async def test_xlsx_export_headers_and_rows(admin_client, scholarship, seeded_di
         CHECK_CLEAR,
     ]
     # 陸生 (std_identity=17) row: cross-strait auto-check flags 有.
-    second = [ws.cell(row=5, column=c).value for c in range(1, 14)]
+    second = [ws.cell(row=5, column=c).value for c in range(1, 15)]
     assert second[0] == 2
     assert second[3] == "李陸生"
-    assert second[11] == CHECK_FLAGGED
+    assert second[12] == CHECK_FLAGGED
 
 
 @pytest.mark.asyncio

@@ -123,6 +123,8 @@ async def get_all_applications(
             "scholarship_type_id": app.scholarship_type_id or (scholarship_type.id if scholarship_type else None),
             "scholarship_type_zh": scholarship_type.name if scholarship_type else "Unknown Scholarship",
             "scholarship_subtype_list": app.scholarship_subtype_list or [],
+            "is_renewal": bool(app.is_renewal),
+            "application_round": app.application_round,
             "status": app.status,
             "status_name": app.status_name,
             "academic_year": app.academic_year or str(datetime.now().year - 1911),  # Convert to ROC year

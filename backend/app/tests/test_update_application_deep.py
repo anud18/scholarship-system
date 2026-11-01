@@ -11,7 +11,7 @@ Contract pinned:
   case; the public `update_application` raises NotFoundError uniformly).
 - ValidationError when application is not in editable status
   (only `draft` and `returned` are editable per `is_editable`).
-- Happy path: form_data, status, is_renewal, scholarship_subtype_list
+- Happy path: form_data, scholarship_subtype_list; a student-sent is_renewal is ignored
   all persist to the DB.
 - Student cannot edit another student's draft (access control via
   `_get_application_model`).
@@ -157,8 +157,9 @@ async def test_update_rejects_when_status_is_not_editable(db: AsyncSession, sile
 
 
 @pytest.mark.asyncio
-async def test_update_persists_form_data_status_is_renewal_subtype_list(db: AsyncSession, silence_collaborators):
-    """All four fields persist to the DB after update."""
+async def test_update_persists_form_data_and_subtype_list_but_never_is_renewal(db: AsyncSession, silence_collaborators):
+    """form_data and the sub-type list persist; an is_renewal in the body is dropped
+    (a student must not move their application into the 續領 group)."""
     student = await _seed_user(db, role=UserRole.student, nycu_id="upd_happy_stu")
     cfg = await _seed_config(db, suffix="happy")
     app = await _seed_app(
@@ -171,22 +172,24 @@ async def test_update_persists_form_data_status_is_renewal_subtype_list(db: Asyn
     )
     service = ApplicationService(db)
 
-    update_data = ApplicationUpdate(
-        # fields is Dict[str, DynamicFormField] — pass a full field object, not a
-        # bare string (the schema rejects a plain string value).
-        form_data=ApplicationFormData(
-            fields={
-                "bank_account": {
-                    "field_id": "bank_account",
-                    "field_type": "text",
-                    "value": "123456789",
-                    "required": False,
-                }
-            },
-            documents=[],
-        ),
-        is_renewal=True,
-        scholarship_subtype_list=["nstc", "moe_1w"],
+    update_data = ApplicationUpdate.model_validate(
+        {
+            # fields is Dict[str, DynamicFormField] — pass a full field object, not a
+            # bare string (the schema rejects a plain string value).
+            "form_data": ApplicationFormData(
+                fields={
+                    "bank_account": {
+                        "field_id": "bank_account",
+                        "field_type": "text",
+                        "value": "123456789",
+                        "required": False,
+                    }
+                },
+                documents=[],
+            ),
+            "is_renewal": True,
+            "scholarship_subtype_list": ["nstc", "moe_1w"],
+        }
     )
 
     result = await service.update_application(application_id=app.id, update_data=update_data, current_user=student)
@@ -198,12 +201,12 @@ async def test_update_persists_form_data_status_is_renewal_subtype_list(db: Asyn
     persisted = app.submitted_form_data.get("fields", {}).get("bank_account")
     persisted_value = persisted.get("value") if isinstance(persisted, dict) else persisted
     assert persisted_value == "123456789"
-    # is_renewal flipped.
-    assert app.is_renewal is True
+    # is_renewal untouched.
+    assert app.is_renewal is False
     # subtype list updated.
     assert app.scholarship_subtype_list == ["nstc", "moe_1w"]
     # Returned object reflects the same state.
-    assert result.is_renewal is True
+    assert result.is_renewal is False
 
 
 @pytest.mark.asyncio
@@ -294,10 +297,10 @@ async def test_college_and_admin_can_update_any_application(db: AsyncSession, si
 
         result = await service.update_application(
             application_id=app.id,
-            update_data=ApplicationUpdate(is_renewal=True),
+            update_data=ApplicationUpdate(scholarship_subtype_list=["moe_1w"]),
             current_user=staff,
         )
-        assert result.is_renewal is True
+        assert result.scholarship_subtype_list == ["moe_1w"]
 
 
 @pytest.mark.asyncio
@@ -312,8 +315,8 @@ async def test_returned_status_is_editable_too(db: AsyncSession, silence_collabo
     # Should NOT raise.
     await service.update_application(
         application_id=app.id,
-        update_data=ApplicationUpdate(is_renewal=True),
+        update_data=ApplicationUpdate(scholarship_subtype_list=["moe_1w"]),
         current_user=student,
     )
     await db.refresh(app)
-    assert app.is_renewal is True
+    assert app.scholarship_subtype_list == ["moe_1w"]

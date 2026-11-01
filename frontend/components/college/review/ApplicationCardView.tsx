@@ -23,6 +23,7 @@ import {
   getDepartmentName,
 } from "@/hooks/use-reference-data";
 import type { Application } from "@/lib/api/types";
+import { applicationRoundLabel } from "@/lib/utils/application-round";
 import {
   NationalityIdentity,
   ProfessorRecommendation,
@@ -123,6 +124,14 @@ export function ApplicationCardView({
               >
                 {app.is_renewal ? "續領" : "初領"}
               </Badge>
+              {!app.is_renewal && (
+                <Badge
+                  variant="outline"
+                  className="shrink-0 bg-sky-50 text-sky-700 border-sky-300"
+                >
+                  {applicationRoundLabel(app)}
+                </Badge>
+              )}
             </div>
 
             <div className="space-y-1.5 border-t pt-3">

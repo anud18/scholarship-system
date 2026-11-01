@@ -325,7 +325,9 @@ async def get_active_config(
                 "academic_year": academic_year,
                 "semester": "yearly" if is_yearly else sem_raw,
                 "college_review_end": (
-                    config.college_review_end.isoformat() if config and config.college_review_end else None
+                    config.effective_college_review_end.isoformat()
+                    if config and config.effective_college_review_end
+                    else None
                 ),
                 "college_review_start": (
                     config.college_review_start.isoformat() if config and config.college_review_start else None

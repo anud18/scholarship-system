@@ -76,6 +76,7 @@ from app.utils.application_helpers import (
     get_academy_name_from_data,
     get_department_name_from_data,
 )
+from app.services.ranking_groups import application_round_label
 from app.utils.excel_safety import sanitize_excel_cell
 
 # Snapshot coercion/rendering lives in a LEAF util so ManualDistributionService can
@@ -102,6 +103,7 @@ _COLUMNS: List[Tuple[Optional[str], str, float]] = [
     (_BASIC_GROUP, "國籍", 0.8),
     (_BASIC_GROUP, "性別", 0.5),
     (_BASIC_GROUP, "碩士畢業院/校/系所", 1.7),
+    (_BASIC_GROUP, "申請梯次", 0.6),
     (_REGISTRY_GROUP, "受獎博士生首次註冊入學日期(民國年.月.日)", 1.1),
     (_REGISTRY_GROUP, "學號", 0.9),
     (_MANUAL_CHECK_GROUP, "有無本試辦方案第三點第一款至四款之情形(填寫有或無)", 1.2),
@@ -233,6 +235,7 @@ class RecipientExportRow:
     nationality: str
     gender: str
     master_school: str
+    application_round: str  # 續領 / 第N梯次
     enrollment_date: str
     student_number: str
     employment_check: str
@@ -268,6 +271,7 @@ def build_recipient_row(
         nationality=_as_text(student_data.get("std_nation")),
         gender=_gender_label(student_data),
         master_school=_master_school_info(application),
+        application_round=application_round_label(application),
         enrollment_date=format_enrollment_date_roc(student_data),
         student_number=_as_text(student_data.get("std_stdcode")),
         employment_check=derive_employment_check(student_data),
@@ -513,6 +517,7 @@ class ManualDistributionExportService:
             row.nationality,
             row.gender,
             row.master_school,
+            row.application_round,
             row.enrollment_date,
             row.student_number,
             "",  # 請領資格檢核 — manual

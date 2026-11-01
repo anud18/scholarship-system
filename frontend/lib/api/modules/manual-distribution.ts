@@ -58,6 +58,10 @@ export interface DistributionStudent {
   application_identity: string;
   is_renewal: boolean;
   renewal_year: number | null;
+  /** 申請梯次 (1 = 一般申請期間); absent on older payloads */
+  application_round?: number;
+  /** 實際順位: 1..n within the college in 預設分發 order (續領 → 第一梯次 → 第二梯次…, then rank); null for college-rejected rows */
+  effective_rank: number | null;
   renewal_sub_type: string | null;
   received_months: number | null;
   received_months_source: string | null;

@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from app.api.v1.endpoints import (
     admin,
     application_fields,
+    application_rounds,
     applications,
     auth,
     batch_import,
@@ -61,6 +62,11 @@ api_router.include_router(notifications.router, prefix="/notifications", tags=["
 api_router.include_router(application_fields.router, prefix="/application-fields", tags=["Application Fields"])
 api_router.include_router(
     scholarship_configurations.router,
+    prefix="/scholarship-configurations",
+    tags=["Scholarship Configurations"],
+)
+api_router.include_router(
+    application_rounds.router,
     prefix="/scholarship-configurations",
     tags=["Scholarship Configurations"],
 )

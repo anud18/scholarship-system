@@ -17,10 +17,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.application_field import ApplicationField
 from app.models.scholarship import ScholarshipType
+from app.services.batch_import_service import APPLICATION_ROUND_COLUMN
 
 logger = logging.getLogger(__name__)
 
 TEMPLATE_SHEET_NAME = "批次匯入範例"
+
+APPLICATION_ROUND_COMMENT_TEXT = (
+    "申請梯次編號：1 = 第一梯次、2 = 第二梯次…\n"
+    "此獎學金只有第一梯次時可留白；設有多個梯次時必填，且所勾選的申請類別須在該梯次開放。"
+)
 
 
 async def build_batch_import_template(db: AsyncSession, scholarship: ScholarshipType) -> bytes:
@@ -28,7 +34,7 @@ async def build_batch_import_template(db: AsyncSession, scholarship: Scholarship
 
     Columns: 學號 / 學生姓名 / 郵局帳號, the advisor trio when the scholarship
     requires a professor recommendation, one checkmark column per sub-type,
-    then the scholarship's active custom fields — plus two sample rows.
+    申請梯次, then the scholarship's active custom fields — plus two sample rows.
     """
     # Define base columns (Traditional Chinese)
     columns = [
@@ -79,6 +85,10 @@ async def build_batch_import_template(db: AsyncSession, scholarship: Scholarship
             label = sub_type_labels.get(sub_type_code, sub_type_code)
             columns.append(label)
             column_mapping[label] = f"sub_type_{sub_type_code}"
+
+    # 多梯次申請: the round each imported application belongs to
+    columns.append(APPLICATION_ROUND_COLUMN)
+    column_mapping[APPLICATION_ROUND_COLUMN] = "application_round"
 
     # Query custom fields for this scholarship type
     custom_fields_stmt = (
@@ -151,6 +161,9 @@ async def build_batch_import_template(db: AsyncSession, scholarship: Scholarship
             for st_index, sub_type_code in enumerate(scholarship.sub_type_list):
                 label = sub_type_labels.get(sub_type_code, sub_type_code)
                 row[label] = 1 if row_index == 0 or st_index == 0 else 0
+
+    for row in sample_data:
+        row[APPLICATION_ROUND_COLUMN] = 1
 
     # Add custom field sample values
     for field in template_custom_fields:
@@ -234,6 +247,14 @@ async def build_batch_import_template(db: AsyncSession, scholarship: Scholarship
             # Apply width to column
             column_letter = get_column_letter(idx)
             worksheet.column_dimensions[column_letter].width = adjusted_width
+
+            if col == APPLICATION_ROUND_COLUMN:
+                worksheet.cell(row=1, column=idx).comment = Comment(
+                    APPLICATION_ROUND_COMMENT_TEXT,
+                    "獎學金系統",
+                    height=SUB_TYPE_COMMENT_BOX_HEIGHT,
+                    width=SUB_TYPE_COMMENT_BOX_WIDTH,
+                )
 
             if col in sub_type_column_labels:
                 worksheet.cell(row=1, column=idx).comment = Comment(

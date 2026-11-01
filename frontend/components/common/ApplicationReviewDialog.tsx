@@ -75,6 +75,7 @@ import {
   formatFieldName,
 } from "@/lib/utils/application-helpers";
 import { getCurrentSemesterROC, toROCYear } from "@/src/utils/dateUtils";
+import { applicationRoundLabel } from "@/lib/utils/application-round";
 
 // Shape of document entries in `submitted_form_data.documents` from
 // the backend. All fields optional because the upstream JSON can come
@@ -1427,6 +1428,7 @@ export function ApplicationReviewDialog({
     amount: detailedApplication?.amount ?? (application as Application).amount,
     currency: (detailedApplication as Application & EnrichedApplicationExtras)?.currency ?? "TWD",
     is_renewal: detailedApplication?.is_renewal ?? (application as Application).is_renewal ?? false,
+    application_round: detailedApplication?.application_round ?? (application as Application).application_round ?? null,
     created_at: detailedApplication?.created_at ?? application.created_at,
     submitted_at: detailedApplication?.submitted_at ?? (application as Application).submitted_at ?? (application as HistoricalApplication).submitted_at,
     reviewed_at: detailedApplication?.reviewed_at ?? (application as Application).reviewed_at,
@@ -1538,9 +1540,9 @@ export function ApplicationReviewDialog({
                             <Badge variant={getApplicationStatusBadgeVariant(displayData.status as ApplicationStatus)}>
                               {displayData.status_name || getApplicationStatusLabel(displayData.status as ApplicationStatus, locale)}
                             </Badge>
-                            {displayData.is_renewal && (
+                            {(displayData.is_renewal || displayData.application_round != null) && (
                               <Badge variant="outline" className="text-blue-600 border-blue-300">
-                                {locale === "zh" ? "續領" : "Renewal"}
+                                {applicationRoundLabel(displayData, locale === "zh" ? "zh" : "en")}
                               </Badge>
                             )}
                           </div>
