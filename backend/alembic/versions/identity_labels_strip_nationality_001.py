@@ -17,21 +17,16 @@ down_revision: Union[str, Sequence[str], None] = "blank_user_email_to_null_001"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-_OLD_NEW = (
-    (3, "僑生(目前有中華民國國籍生)", "僑生"),
-    (4, "外籍生(目前有中華民國國籍生)", "外籍生"),
-)
-
-
-def _rename(id_: int, old: str, new: str) -> None:
-    op.execute(f"UPDATE identities SET name = '{new}' WHERE id = {id_} AND name = '{old}'")
+_NEW_NAMES = ((3, "僑生"), (4, "外籍生"))
 
 
 def upgrade() -> None:
-    for id_, old, new in _OLD_NEW:
-        _rename(id_, old, new)
+    # Match on id only so variant spellings of the old label are renamed too.
+    for id_, name in _NEW_NAMES:
+        op.execute(f"UPDATE identities SET name = '{name}' WHERE id = {id_}")
 
 
 def downgrade() -> None:
-    for id_, old, new in _OLD_NEW:
-        _rename(id_, new, old)
+    # Intentionally a no-op: fresh databases are seeded with the short names
+    # (see 6d5b1940bf8a), so there is no prior label state to restore.
+    pass
