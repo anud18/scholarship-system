@@ -66,6 +66,7 @@ from app.services.eligibility_service import EligibilityService
 from app.services.email_automation_service import email_automation_service
 from app.services.email_service import EmailService
 from app.services.minio_service import minio_service
+from app.services.staff_edit_roster_sync import lock_application_rosters, sync_roster_bank_account
 from app.services.staff_form_edit import (
     PROFILE_ATTRS,
     AppliedStaffFormEdit,
@@ -1317,10 +1318,13 @@ class ApplicationService:
         if not application:
             raise NotFoundError("Application", str(application_id))
 
+        await lock_application_rosters(self.db, application.id)
+        # FOR NO KEY UPDATE: the edit never changes a key, so a 造冊 item insert
+        # (its foreign key takes FOR KEY SHARE on this row) need not wait for it.
         await self.db.refresh(
             application,
             attribute_names=["status", "submitted_form_data", "meta_data", "professor_id"],
-            with_for_update=True,
+            with_for_update={"key_share": True},
         )
 
         if not application.is_staff_form_editable:
@@ -1362,6 +1366,9 @@ class ApplicationService:
                 user_agent=user_agent,
             )
         reassignment, new_professor = await self._follow_advisor_nycu_id_edit(application, edit.changes)
+        roster_sync = await sync_roster_bank_account(
+            self.db, application, edit.postal_account, current_user, client_ip=ip_address, user_agent=user_agent
+        )
 
         try:
             await self.db.commit()
@@ -1370,11 +1377,12 @@ class ApplicationService:
             raise ConflictError("學生個人資料同時被其他操作建立，請重新整理後再試一次") from exc
         await self._invalidate_app_caches()
         logger.info(
-            "Staff %s edited form fields %s of application %s (professor reassignment: %s)",
+            "Staff %s edited form fields %s of application %s (professor reassignment: %s, rosters: %s)",
             current_user.id,
             sorted(edit.changes),
             application.app_id,
             reassignment,
+            roster_sync.audit_meta(),
         )
         applied = AppliedStaffFormEdit(
             changes=edit.changes,
@@ -1382,6 +1390,7 @@ class ApplicationService:
             cleared_meta=cleared_meta,
             professor_reassignment=reassignment,
             new_professor_name=new_professor.name if new_professor else None,
+            roster_sync=roster_sync,
         )
         if new_professor is not None:
             await self._notify_professor_assigned(application, new_professor, current_user)
