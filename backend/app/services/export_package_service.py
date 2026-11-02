@@ -47,6 +47,7 @@ from app.services.professor_review_export import ProfessorReviewData, load_profe
 from app.services.professor_review_pdf import PROFESSOR_REVIEW_PDF_LABEL, build_professor_review_pdf
 from app.services.profile_owned_fields import (
     PROFILE_OWNED_FORM_KEYS,
+    is_blank,
     load_profile_values_by_user,
     resolve_effective_profile_fields,
     submitted_value,
@@ -384,6 +385,14 @@ def _form_values(submitted_form_data: Mapping[str, Any], profile_values: Mapping
     effective = resolve_effective_profile_fields(submitted_form_data, profile_values)
     values.update({field_id: value for field_id, value in effective.by_field_id().items() if value is not None})
     return values
+
+
+def _display_value(value: Any) -> str:
+    if isinstance(value, bool):
+        return "是" if value else "否"
+    if isinstance(value, list):
+        value = "、".join(str(item) for item in value if not is_blank(item))
+    return "—" if is_blank(value) else str(value)
 
 
 class ExportPackageService:
@@ -860,7 +869,7 @@ class ExportPackageService:
             # would order by CJK codepoint, no more meaningful to a reviewer
             # than the id and needlessly unstable when a label is edited.
             form_rows = [
-                (resolve_field_label(field_id, field_labels), str(form_values[field_id] or "—"))
+                (resolve_field_label(field_id, field_labels), _display_value(form_values[field_id]))
                 for field_id in sorted(form_values)
             ]
             elements.append(self._build_table(form_rows, s_normal, table_style))

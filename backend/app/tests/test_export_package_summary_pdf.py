@@ -163,6 +163,25 @@ class TestFormFieldSection:
         assert "郵局帳號" not in text
         assert "銀行帳戶\n44444444444444" in text
 
+    @pytest.mark.parametrize(
+        ("value", "shown"),
+        [
+            (0, "0"),
+            (False, "否"),
+            (True, "是"),
+            (["甲選項", "乙選項"], "甲選項、乙選項"),
+            (12.5, "12.5"),
+            ("", "—"),
+            ("  ", "—"),
+            (None, "—"),
+            ([], "—"),
+        ],
+    )
+    def test_values_render_for_a_reader(self, value, shown):
+        text = _summary_text({"answer": _field("answer", value)}, {"answer": "某題"})
+
+        assert f"某題\n{shown}" in text
+
     def test_two_distinct_fields_sharing_a_label_and_value_both_render(self):
         # application_fields has no uniqueness constraint on field_label, so two
         # real questions can share one label. The de-dupe is scoped to the
