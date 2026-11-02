@@ -89,7 +89,7 @@ async def build_embedded_summary_tables(
 
     all_apps = [app for apps in dept_groups.values() for app in apps]
 
-    dynamic_fields, sub_type_labels, account_by_user, advisor_by_user = await load_export_aux_data(
+    dynamic_fields, sub_type_labels, account_by_application, advisor_by_user = await load_export_aux_data(
         db,
         scholarship_type=scholarship_type,
         applications=all_apps,
@@ -109,7 +109,7 @@ async def build_embedded_summary_tables(
             ExportRow(
                 rank_position=None,  # 學院初審會議之學院排序 left blank (ranking not done yet)
                 application=app,
-                bank_account=account_by_user.get(app.user_id),
+                bank_account=account_by_application.get(app.id),
                 advisor_names=advisor_by_user.get(app.user_id),
             )
             for app in ordered

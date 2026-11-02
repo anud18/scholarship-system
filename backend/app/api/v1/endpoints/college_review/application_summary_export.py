@@ -164,7 +164,7 @@ async def export_department_summary_single(
     apps.sort(key=_sort_key)
 
     # Aux data
-    dynamic_fields, sub_type_labels, account_by_user, advisor_by_user = await load_export_aux_data(
+    dynamic_fields, sub_type_labels, account_by_application, advisor_by_user = await load_export_aux_data(
         db,
         scholarship_type=stype,
         applications=apps,
@@ -176,7 +176,7 @@ async def export_department_summary_single(
         ExportRow(
             rank_position=None,
             application=app,
-            bank_account=account_by_user.get(app.user_id),
+            bank_account=account_by_application.get(app.id),
             advisor_names=advisor_by_user.get(app.user_id),
         )
         for app in apps
@@ -365,7 +365,7 @@ async def export_department_summary_bulk(
     name_by_code = {d.code: d.name for d in dept_name_rows}
 
     # Aux data — loaded once over the union of applicants
-    dynamic_fields, sub_type_labels, account_by_user, advisor_by_user = await load_export_aux_data(
+    dynamic_fields, sub_type_labels, account_by_application, advisor_by_user = await load_export_aux_data(
         db,
         scholarship_type=stype,
         applications=apps,
@@ -383,7 +383,7 @@ async def export_department_summary_bulk(
                 ExportRow(
                     rank_position=None,
                     application=app,
-                    bank_account=account_by_user.get(app.user_id),
+                    bank_account=account_by_application.get(app.id),
                     advisor_names=advisor_by_user.get(app.user_id),
                 )
                 for app in dept_apps

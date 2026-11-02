@@ -107,7 +107,7 @@ class ExportRow:
 
     rank_position: Optional[int]
     application: Any  # Duck-typed: needs sub_type_preferences, sub_scholarship_type, student_data, submitted_form_data
-    bank_account: Optional[str] = None  # 郵局帳號 (from user_profiles.account_number)
+    bank_account: Optional[str] = None  # the application's effective 郵局帳號 (profile_owned_fields)
     advisor_names: Optional[str] = None  # 指導教授姓名 (comma-joined if multiple advisors)
 
 

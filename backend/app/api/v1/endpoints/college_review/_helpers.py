@@ -17,9 +17,9 @@ from app.models.college_review import CollegeRanking, CollegeRankingItem
 from app.models.professor_student import ProfessorStudentRelationship
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import AdminScholarship, User
-from app.models.user_profile import UserProfile
 from app.services.college_ranking_export_service import DynamicFieldSpec
 from app.services.department_names import load_department_names
+from app.services.profile_owned_fields import load_profile_values_by_user, resolve_effective_profile_fields
 from app.services.sub_type_label_map import sub_type_labels_of
 from app.utils.application_helpers import (
     get_college_code_from_data,
@@ -169,6 +169,7 @@ async def load_export_aux_data(
     *,
     scholarship_type,  # ScholarshipType ORM object or None
     applications: Iterable[Any],
+    profile_values_by_user: Optional[Mapping[int, Mapping[str, Any]]] = None,
 ) -> tuple[
     list[DynamicFieldSpec],
     dict[str, str],
@@ -177,9 +178,15 @@ async def load_export_aux_data(
 ]:
     """Bulk-load auxiliary data shared by the 學生資料彙整表 exports.
 
+    ``profile_values_by_user`` (load_profile_values_by_user over the same
+    applications) is loaded here unless the caller already has it.
+
     Returns:
-        (dynamic_fields, sub_type_labels, account_number_by_user, advisor_string_by_user)
+        (dynamic_fields, sub_type_labels, account_by_application, advisor_string_by_user)
+        where the account is the application's effective 郵局帳號, keyed by
+        application id: one student's applications can carry different accounts.
     """
+    applications = [app for app in applications if app is not None]
 
     # 1. Dynamic text fields flagged for export
     dynamic_fields: list[DynamicFieldSpec] = []
@@ -209,27 +216,22 @@ async def load_export_aux_data(
     # 2. Sub-type Chinese labels
     sub_type_labels = sub_type_labels_of(scholarship_type)
 
-    # 3. Profile lookups (account_number, advisor_name fallback)
-    user_ids: set[int] = set()
+    # 3. Profile-owned values: the effective account, and the advisor_name fallback
+    if profile_values_by_user is None:
+        profile_values_by_user = await load_profile_values_by_user(db, applications)
+    user_ids = {app.user_id for app in applications if app.user_id is not None}
+
+    account_by_application: dict[int, str] = {}
     for app in applications:
-        if app is None:
-            continue
-        uid = getattr(app, "user_id", None)
-        if uid is not None:
-            user_ids.add(uid)
-
-    account_number_by_user: dict[int, str] = {}
-    profile_advisor_by_user: dict[int, str] = {}
-
-    if user_ids:
-        profile_stmt = select(UserProfile.user_id, UserProfile.account_number, UserProfile.advisor_name).where(
-            UserProfile.user_id.in_(user_ids)
+        effective = resolve_effective_profile_fields(
+            app.submitted_form_data, profile_values_by_user.get(app.user_id, {})
         )
-        for uid, acct, adv in (await db.execute(profile_stmt)).all():
-            if acct:
-                account_number_by_user[uid] = acct
-            if adv:
-                profile_advisor_by_user[uid] = adv
+        if effective.postal_account:
+            account_by_application[app.id] = effective.postal_account
+
+    profile_advisor_by_user = {
+        uid: values["advisor_name"] for uid, values in profile_values_by_user.items() if values.get("advisor_name")
+    }
 
     # 4. Advisor names from relationships
     advisor_names_by_user: dict[int, list[str]] = {uid: [] for uid in user_ids}
@@ -256,7 +258,7 @@ async def load_export_aux_data(
         elif uid in profile_advisor_by_user:
             advisor_string_by_user[uid] = profile_advisor_by_user[uid]
 
-    return dynamic_fields, sub_type_labels, account_number_by_user, advisor_string_by_user
+    return dynamic_fields, sub_type_labels, account_by_application, advisor_string_by_user
 
 
 def _pos_key(value: Optional[int]) -> tuple:

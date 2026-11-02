@@ -80,7 +80,7 @@ class TestDeptNameFromApps:
 @pytest.fixture
 def _patch_aux(monkeypatch):
     async def _fake_aux(db, *, scholarship_type, applications):
-        # (dynamic_fields, sub_type_labels, account_by_user, advisor_by_user)
+        # (dynamic_fields, sub_type_labels, account_by_application, advisor_by_user)
         return ([], {}, {}, {})
 
     monkeypatch.setattr("app.services.export_summary_tables.load_export_aux_data", _fake_aux)
