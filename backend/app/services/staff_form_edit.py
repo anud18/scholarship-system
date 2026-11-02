@@ -10,6 +10,13 @@ from app.core.regex_validator import RegexValidationError, safe_regex_match
 from app.models.application_field import FieldType
 from app.schemas.application_field import ApplicationFieldResponse
 from app.services.application_field_service import FIXED_ADVISOR_KEYS, FIXED_KEY_POSTAL_ACCOUNT
+from app.services.profile_owned_fields import (
+    PROFILE_OWNED_FIELD_SOURCES,
+    Source,
+    Store,
+    effective_value,
+    is_blank,
+)
 from app.utils.bank_account_fields import normalize_account_number, validate_postal_account_format
 
 FieldDefinition = ApplicationFieldResponse
@@ -26,10 +33,6 @@ class FieldChange:
 
 def _label(definition: FieldDefinition) -> str:
     return definition.field_label or definition.field_name
-
-
-def _is_blank(value: Any) -> bool:
-    return value is None or (isinstance(value, str) and value.strip() == "")
 
 
 def _invalid(definition: FieldDefinition, reason: str) -> ValidationError:
@@ -124,22 +127,14 @@ FIELD_CODECS: Dict[str, FieldCodec] = {
 }
 
 
-class Store(enum.Enum):
-    FORM = "form"
-    PROFILE = "profile"
-
-
-Source = Tuple[Store, str]
-
-
 @dataclass(frozen=True)
 class FieldRoute:
     """Where a staff edit of one form-config field lands.
 
     `store`/`key` name the write target: a `submitted_form_data.fields` key or
-    a UserProfile attribute. `reads` lists the sources the review display picks
-    the shown value from, first non-blank wins; the edit diffs against that
-    value. `stale_meta_keys` are application meta_data markers that describe
+    a UserProfile attribute. `reads` lists the sources the shown value comes
+    from (see profile_owned_fields); the edit diffs against that value.
+    `stale_meta_keys` are application meta_data markers that describe
     the old value and stop being true once it changes.
     """
 
@@ -159,29 +154,18 @@ BANK_VERIFICATION_META_KEYS = frozenset({"bank_verification", "bank_verification
 POSTAL_ACCOUNT_ROUTE = FieldRoute(
     store=Store.FORM,
     key="account_number",
-    reads=(
-        (Store.FORM, "account_number"),
-        (Store.PROFILE, "account_number"),
-        (Store.FORM, "postal_account"),
-        (Store.FORM, "bank_account"),
-    ),
+    reads=PROFILE_OWNED_FIELD_SOURCES[FIXED_KEY_POSTAL_ACCOUNT],
     codec=FieldCodec(_parse_postal_account, ""),
     stale_meta_keys=BANK_VERIFICATION_META_KEYS,
 )
 
-
-def _profile_route(attr: str) -> FieldRoute:
-    return FieldRoute(store=Store.PROFILE, key=attr, reads=((Store.PROFILE, attr), (Store.FORM, attr)))
-
-
 ROUTED_FIELDS: Dict[str, FieldRoute] = {
     FIXED_KEY_POSTAL_ACCOUNT: POSTAL_ACCOUNT_ROUTE,
-    **{attr: _profile_route(attr) for attr in FIXED_ADVISOR_KEYS},
+    **{
+        attr: FieldRoute(store=Store.PROFILE, key=attr, reads=PROFILE_OWNED_FIELD_SOURCES[attr])
+        for attr in FIXED_ADVISOR_KEYS
+    },
 }
-
-PROFILE_ATTRS = frozenset(
-    key for route in ROUTED_FIELDS.values() for store, key in route.reads if store is Store.PROFILE
-)
 
 
 def _route_for(definition: FieldDefinition) -> FieldRoute:
@@ -220,24 +204,11 @@ def parse_field_value(definition: FieldDefinition, raw: Any, codec: FieldCodec |
     codec = codec or FIELD_CODECS.get(definition.field_type)
     if codec is None:
         raise _invalid(definition, f"的欄位類型 {definition.field_type} 不支援修改")
-    if definition.field_type != FieldType.CHECKBOX.value and _is_blank(raw):
+    if definition.field_type != FieldType.CHECKBOX.value and is_blank(raw):
         if definition.is_required:
             raise _invalid(definition, "為必填欄位，不可清空")
         return codec.cleared_value
     return codec.parse(definition, raw)
-
-
-def _entry_value(entry: Any) -> Any:
-    return entry.get("value") if isinstance(entry, Mapping) else entry
-
-
-def _effective_value(
-    reads: Tuple[Source, ...], stored_fields: Mapping[str, Any], profile_values: Mapping[str, Any]
-) -> Any:
-    values = [
-        _entry_value(stored_fields.get(key)) if store is Store.FORM else profile_values.get(key) for store, key in reads
-    ]
-    return next((value for value in values if not _is_blank(value)), values[0])
 
 
 def apply_staff_form_edit(
@@ -260,12 +231,12 @@ def apply_staff_form_edit(
         definition, route = editable.definition, editable.route
 
         value = parse_field_value(definition, raw, route.codec)
-        old = _effective_value(route.reads, stored_fields, profile_values)
-        if old == value or (_is_blank(old) and _is_blank(value)):
+        old = effective_value(route.reads, stored_fields, profile_values)
+        if old == value or (is_blank(old) and is_blank(value)):
             continue
 
         if route.store is Store.PROFILE:
-            value = None if _is_blank(value) else value
+            value = None if is_blank(value) else value
             profile_updates[route.key] = value
         else:
             entry = stored_fields.get(route.key)
