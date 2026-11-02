@@ -73,6 +73,13 @@ def effective_value(
     return next((value for value in values if not is_blank(value)), values[0])
 
 
+def has_submitted_copy(field_id: str, submitted_fields: Mapping[str, Any]) -> bool:
+    return any(
+        store is Store.FORM and not is_blank(submitted_value(submitted_fields.get(key)))
+        for store, key in PROFILE_OWNED_FIELD_SOURCES[field_id]
+    )
+
+
 @dataclass(frozen=True)
 class EffectiveProfileFields:
     """The shown value of each profile-owned field; None when every source is blank."""

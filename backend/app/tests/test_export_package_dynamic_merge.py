@@ -23,13 +23,19 @@ from app.models.application import Application
 from app.services.export_package_service import ExportPackageService
 from app.services.professor_review_export import ProfessorReviewData, ProfessorReviewEntry
 from app.tests.export_package_fakes import FakeMinio as _FakeMinio
-from app.tests.export_package_fakes import collect_zip, stub_department_names, stub_profile_values
+from app.tests.export_package_fakes import (
+    collect_zip,
+    stub_declared_field_ids,
+    stub_department_names,
+    stub_profile_values,
+)
 
 
 @pytest.fixture(autouse=True)
 def _no_department_table(monkeypatch):
     stub_department_names(monkeypatch)
     stub_profile_values(monkeypatch)
+    stub_declared_field_ids(monkeypatch)
 
 
 def _blank_pdf(num_pages=1):

@@ -38,10 +38,17 @@ def _field(field_id, value):
     return {"field_id": field_id, "field_type": "text", "value": value, "required": True}
 
 
-def _summary_text(fields, field_labels, profile_values=None):
+PROFILE_OWNED_IDS = frozenset({"postal_account", "advisor_name", "advisor_email", "advisor_nycu_id"})
+
+
+def _summary_text(fields, field_labels, profile_values=None, declared_field_ids=None):
     svc = ExportPackageService(db=None, minio_service=None)
-    profile_kwargs = {} if profile_values is None else {"profile_values": profile_values}
-    pdf = svc._generate_summary_pdf(_mk_app(fields), "某獎學金", 114, "first", field_labels, **profile_kwargs)
+    kwargs = {}
+    if profile_values is not None:
+        kwargs["profile_values"] = profile_values
+    if declared_field_ids is not None:
+        kwargs["declared_field_ids"] = declared_field_ids
+    pdf = svc._generate_summary_pdf(_mk_app(fields), "某獎學金", 114, "first", field_labels, **kwargs)
     return "\n".join(page.extract_text() for page in PdfReader(io.BytesIO(pdf)).pages)
 
 
@@ -128,6 +135,7 @@ class TestFormFieldSection:
                 "advisor_email": "wang@nycu.edu.tw",
                 "advisor_nycu_id": "P12345",
             },
+            declared_field_ids=PROFILE_OWNED_IDS,
         )
 
         assert "王教授" in text and "wang@nycu.edu.tw" in text and "P12345" in text
@@ -140,10 +148,44 @@ class TestFormFieldSection:
             {"contact_phone": _field("contact_phone", "0912345678")},
             dict(FIXED_FIELD_LABELS),
             profile_values={"account_number": "33333333333333", "advisor_name": "王教授"},
+            declared_field_ids=PROFILE_OWNED_IDS,
         )
 
         assert "郵局帳號" in text and "33333333333333" in text
         assert "指導教授姓名" in text and "王教授" in text
+
+    def test_profile_values_for_undeclared_fields_stay_out(self):
+        # A profile filled in for another scholarship must not add 指導教授
+        # rows to one whose form never asked for them.
+        text = _summary_text(
+            {"contact_phone": _field("contact_phone", "0912345678")},
+            dict(FIXED_FIELD_LABELS),
+            profile_values={"account_number": "33333333333333", "advisor_name": "王教授"},
+            declared_field_ids=frozenset({"contact_phone", "postal_account"}),
+        )
+
+        assert "郵局帳號\n33333333333333" in text
+        assert "指導教授" not in text and "王教授" not in text
+
+    def test_a_submitted_profile_owned_field_keeps_its_row_when_undeclared(self):
+        text = _summary_text(
+            {"advisor_name": _field("advisor_name", "舊教授")},
+            dict(FIXED_FIELD_LABELS),
+            profile_values={"advisor_name": "王教授"},
+            declared_field_ids=frozenset(),
+        )
+
+        assert "指導教授姓名\n王教授" in text
+
+    def test_no_section_without_submitted_or_declared_fields(self):
+        text = _summary_text(
+            {},
+            dict(FIXED_FIELD_LABELS),
+            profile_values={"account_number": "33333333333333", "advisor_name": "王教授"},
+            declared_field_ids=frozenset(),
+        )
+
+        assert "三、表單填寫資料" not in text
 
     def test_a_submitted_bank_account_prints_as_its_own_row(self):
         text = _summary_text(

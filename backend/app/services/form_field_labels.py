@@ -12,12 +12,13 @@ Two sources feed the map:
   and so have no admin-configured label, making this module their only source.
 """
 
-from typing import Dict, Optional
+from typing import Dict, FrozenSet, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.application_field import ApplicationField
+from app.services.application_field_service import ApplicationFieldService
 
 # field_id -> zh-TW label for the built-in ids, none of which is an
 # application_fields row:
@@ -64,6 +65,18 @@ async def load_form_field_labels(db: AsyncSession, scholarship_code: Optional[st
         if field_name and field_label:
             labels[field_name] = field_label
     return labels
+
+
+async def load_declared_field_ids(db: AsyncSession, scholarship_code: Optional[str]) -> FrozenSet[str]:
+    """The field ids the scholarship's active form config declares, fixed fields included.
+
+    The review dialog shows a profile-owned value only for these ids (frontend
+    `withProfileOwnedFields`), so the export does too.
+    """
+    if not scholarship_code:
+        return frozenset()
+    config = await ApplicationFieldService(db).get_scholarship_form_config(scholarship_code)
+    return frozenset(field.field_name for field in config.fields)
 
 
 def resolve_field_label(field_id: str, labels: Dict[str, str]) -> str:

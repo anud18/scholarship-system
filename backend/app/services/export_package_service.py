@@ -22,7 +22,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from types import MappingProxyType
-from typing import Any, AsyncIterator, Dict, List, Mapping, Optional, Tuple
+from typing import AbstractSet, Any, AsyncIterator, Dict, FrozenSet, List, Mapping, Optional, Tuple
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -39,7 +39,7 @@ from app.models.scholarship import ScholarshipType
 from app.models.student import Academy
 from app.services.department_names import load_department_names
 from app.services.export_summary_tables import build_embedded_summary_tables
-from app.services.form_field_labels import load_form_field_labels, resolve_field_label
+from app.services.form_field_labels import load_declared_field_ids, load_form_field_labels, resolve_field_label
 from app.services.minio_service import MinIOService
 from app.services.pdf_fonts import CJK_FONT_NAME, ensure_cjk_font
 from app.services.pdf_merge import MergeItem, build_merged_pdf
@@ -47,6 +47,7 @@ from app.services.professor_review_export import ProfessorReviewData, load_profe
 from app.services.professor_review_pdf import PROFESSOR_REVIEW_PDF_LABEL, build_professor_review_pdf
 from app.services.profile_owned_fields import (
     PROFILE_OWNED_FORM_KEYS,
+    has_submitted_copy,
     is_blank,
     load_profile_values_by_user,
     resolve_effective_profile_fields,
@@ -351,6 +352,8 @@ class ExportPlan:
     department_names: Mapping[str, str] = field(default_factory=dict)
     #: user_id → profile-owned values (load_profile_values_by_user) for the summary PDFs
     profile_values_by_user: Mapping[int, Mapping[str, Any]] = field(default_factory=dict)
+    #: field ids the scholarship's form config declares (load_declared_field_ids)
+    declared_field_ids: FrozenSet[str] = frozenset()
 
     @property
     def application_count(self) -> int:
@@ -370,20 +373,31 @@ def _merged_subtitle_lines(app: Application, plan: ExportPlan) -> List[str]:
     ]
 
 
-def _form_values(submitted_form_data: Mapping[str, Any], profile_values: Mapping[str, Any]) -> Dict[str, Any]:
+def _form_values(
+    submitted_form_data: Mapping[str, Any], profile_values: Mapping[str, Any], declared_field_ids: AbstractSet[str]
+) -> Dict[str, Any]:
     """field_id -> shown value for 三、表單填寫資料.
 
     Each profile-owned field replaces every submitted key it is read from, so a
     郵局帳號 stored under two ids, or a stale submitted advisor copy, prints
-    once with its effective value.
+    once with its effective value. Like the review dialog, a profile-owned row
+    appears only when the form config declares the field or the application
+    submitted a copy of it.
     """
+    submitted_fields = submitted_form_data.get("fields") or {}
     values = {
         field_id: submitted_value(entry)
-        for field_id, entry in (submitted_form_data.get("fields") or {}).items()
+        for field_id, entry in submitted_fields.items()
         if field_id not in PROFILE_OWNED_FORM_KEYS
     }
     effective = resolve_effective_profile_fields(submitted_form_data, profile_values)
-    values.update({field_id: value for field_id, value in effective.by_field_id().items() if value is not None})
+    values.update(
+        {
+            field_id: value
+            for field_id, value in effective.by_field_id().items()
+            if value is not None and (field_id in declared_field_ids or has_submitted_copy(field_id, submitted_fields))
+        }
+    )
     return values
 
 
@@ -436,6 +450,7 @@ class ExportPackageService:
         # 2.5 zh-TW labels for the submitted form fields, loaded once for the
         # per-student summary PDFs (built later, off the event loop).
         field_labels = await load_form_field_labels(self.db, scholarship_type.code)
+        declared_field_ids = await load_declared_field_ids(self.db, scholarship_type.code)
 
         college_name = _first_college_name(applications) if college_code else None
         academy_names = None if college_code else await self._load_academy_names()
@@ -499,6 +514,7 @@ class ExportPackageService:
             sub_type_labels=sub_type_labels_of(scholarship_type),
             department_names=department_names,
             profile_values_by_user=profile_values_by_user,
+            declared_field_ids=declared_field_ids,
         )
 
     async def iter_export_zip(self, plan: ExportPlan) -> AsyncIterator[bytes]:
@@ -630,6 +646,7 @@ class ExportPackageService:
                 plan.field_labels,
                 department_names=plan.department_names,
                 profile_values=plan.profile_values_by_user.get(app.user_id, {}),
+                declared_field_ids=plan.declared_field_ids,
             )
             # _unique_zip_path here too: two applications can share one
             # base_path (same student code + name in one department, e.g. a
@@ -759,6 +776,7 @@ class ExportPackageService:
         *,
         department_names: Optional[Mapping[str, str]] = None,
         profile_values: Mapping[str, Any] = MappingProxyType({}),
+        declared_field_ids: AbstractSet[str] = frozenset(),
     ) -> bytes:
         """Generate a student summary PDF using reportlab.
 
@@ -861,7 +879,7 @@ class ExportPackageService:
         elements.append(Spacer(1, 4 * mm))
 
         # Section 3: Form Fields
-        form_values = _form_values(submitted, profile_values)
+        form_values = _form_values(submitted, profile_values, declared_field_ids)
         if form_values:
             elements.append(Paragraph("三、表單填寫資料", s_section))
             elements.append(Spacer(1, 2 * mm))

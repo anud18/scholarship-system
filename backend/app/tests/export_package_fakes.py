@@ -112,6 +112,14 @@ def stub_profile_values(monkeypatch, values: Optional[Dict[int, Dict[str, str]]]
     return loader
 
 
+def stub_declared_field_ids(monkeypatch, field_ids: FrozenSet[str] = frozenset()) -> AsyncMock:
+    """Replace prepare_export's form-config load (db is None in these tests)
+    with an AsyncMock returning the declared ``field_ids``."""
+    loader = AsyncMock(return_value=frozenset(field_ids))
+    monkeypatch.setattr("app.services.export_package_service.load_declared_field_ids", loader)
+    return loader
+
+
 async def collect_zip(service: ExportPackageService, plan: ExportPlan) -> io.BytesIO:
     """Drain iter_export_zip into a seekable buffer for zipfile inspection."""
     buf = io.BytesIO()

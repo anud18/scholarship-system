@@ -24,6 +24,7 @@ from app.tests.export_package_fakes import (
     collect_zip,
     make_application,
     make_file,
+    stub_declared_field_ids,
     stub_department_names,
     stub_profile_values,
 )
@@ -36,6 +37,7 @@ _DATA_DESCRIPTOR_FLAG = 0x08
 def _no_department_table(monkeypatch):
     stub_department_names(monkeypatch)
     stub_profile_values(monkeypatch)
+    stub_declared_field_ids(monkeypatch)
 
 
 def _blank_pdf() -> bytes:

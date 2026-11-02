@@ -23,13 +23,19 @@ from app.models.application import Application
 from app.services.college_ranking_export_service import STATIC_HEADERS
 from app.services.export_package_service import ExportPackageService
 from app.services.professor_review_export import ProfessorReviewData
-from app.tests.export_package_fakes import collect_zip, stub_department_names, stub_profile_values
+from app.tests.export_package_fakes import (
+    collect_zip,
+    stub_declared_field_ids,
+    stub_department_names,
+    stub_profile_values,
+)
 
 
 @pytest.fixture(autouse=True)
 def _no_department_table(monkeypatch):
     stub_department_names(monkeypatch)
     stub_profile_values(monkeypatch)
+    stub_declared_field_ids(monkeypatch)
 
 
 def _mk_app(app_id, user_id, dep_no, dep_name, std_code, cname, academy="某學院", academy_no="A"):
@@ -326,6 +332,7 @@ async def test_one_profile_load_feeds_the_tables_and_the_summary_pdfs(monkeypatc
     )
     profiles = {11: {"account_number": "33333333333333", "advisor_name": "王教授"}}
     loader = stub_profile_values(monkeypatch, profiles)
+    declared_loader = stub_declared_field_ids(monkeypatch, frozenset({"postal_account", "advisor_name"}))
 
     app = _mk_app(1, 11, "1000", "A系", "001", "甲")
     app.submitted_form_data = {
@@ -340,6 +347,7 @@ async def test_one_profile_load_feeds_the_tables_and_the_summary_pdfs(monkeypatc
     zf = zipfile.ZipFile(await collect_zip(svc, plan))
 
     assert loader.await_count == 1
+    declared_loader.assert_awaited_once_with(None, "phd")
     assert tables_profile_values == [profiles]
     pdf = zf.read("1000_A系/001_甲/001_甲_學生資料彙整.pdf")
     text = "\n".join(page.extract_text() for page in PdfReader(io.BytesIO(pdf)).pages)
