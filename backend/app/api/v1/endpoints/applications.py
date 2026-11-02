@@ -433,6 +433,7 @@ async def update_application_form_fields(
                 "from_professor_id": edit.professor_reassignment.from_professor_id,
                 "to_professor_id": edit.professor_reassignment.to_professor_id,
             }
+        meta_data.update(edit.roster_sync.audit_meta())
         await ApplicationAuditService(db).log_application_operation(
             application_id=id,
             action=AuditAction.update,

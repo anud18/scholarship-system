@@ -192,6 +192,8 @@ class StaffFormEdit:
     changes: Dict[str, FieldChange]
     profile_updates: Dict[str, Any]
     stale_meta_keys: FrozenSet[str]
+    # The 郵局帳號 digits this edit set; None when it left the account alone or cleared it.
+    postal_account: str | None = None
 
 
 def build_editable_form_spec(definitions: Iterable[FieldDefinition]) -> EditableFormSpec:
@@ -223,6 +225,7 @@ def apply_staff_form_edit(
     profile_updates: Dict[str, Any] = {}
     changes: Dict[str, FieldChange] = {}
     stale_meta_keys: FrozenSet[str] = frozenset()
+    postal_account: str | None = None
 
     for name, raw in raw_fields.items():
         editable = spec.fields.get(name)
@@ -250,10 +253,16 @@ def apply_staff_form_edit(
             }
         changes[name] = FieldChange(old=old, new=value)
         stale_meta_keys |= route.stale_meta_keys
+        if route is POSTAL_ACCOUNT_ROUTE and not is_blank(value):
+            postal_account = value
 
     form = {**current, "fields": {**stored_fields, **written}} if written else current
     return StaffFormEdit(
-        form_data=form, changes=changes, profile_updates=profile_updates, stale_meta_keys=stale_meta_keys
+        form_data=form,
+        changes=changes,
+        profile_updates=profile_updates,
+        stale_meta_keys=stale_meta_keys,
+        postal_account=postal_account,
     )
 
 
@@ -313,6 +322,64 @@ def decide_professor_reassignment(facts: ProfessorFacts) -> ProfessorReassignmen
     return outcome(ReassignmentOutcome.REASSIGNED, to=facts.matched_professor_id)
 
 
+class RosterAccountAction(enum.Enum):
+    SYNCED = "synced"
+    # Synced on a 人為移除 row, which the exported Excel does not list: no re-export is due.
+    SYNCED_REMOVED = "synced_removed"
+    KEPT_LOCKED = "kept_locked"
+
+
+ROSTER_ACCOUNT_CLAUSES: Dict[RosterAccountAction, str] = {
+    RosterAccountAction.SYNCED: "；已同步更新 {count} 份造冊的郵局帳號，請至造冊管理重新匯出 Excel",
+    RosterAccountAction.KEPT_LOCKED: "；{count} 份已鎖定的造冊（{rosters}）未變更，如需更正請解鎖後重新產生",
+}
+ROSTER_ACCOUNT_AUDIT_KEYS: Dict[RosterAccountAction, str] = {
+    RosterAccountAction.SYNCED: "roster_items_updated",
+    RosterAccountAction.SYNCED_REMOVED: "removed_roster_items_updated",
+    RosterAccountAction.KEPT_LOCKED: "locked_rosters_unchanged",
+}
+LISTED_ROSTER_CODES = 3
+
+
+@dataclass(frozen=True)
+class RosterItemRef:
+    roster_id: int
+    roster_code: str
+    item_id: int
+
+
+@dataclass(frozen=True)
+class RosterAccountSync:
+    """What an application account edit did to the 造冊 items that snapshot that account."""
+
+    items: Dict[RosterAccountAction, Tuple[RosterItemRef, ...]] = field(default_factory=dict)
+
+    @property
+    def message_clause(self) -> str:
+        return "".join(
+            clause.format(count=len(_roster_codes(refs)), rosters=_listed_codes(refs))
+            for action, clause in ROSTER_ACCOUNT_CLAUSES.items()
+            if (refs := self.items.get(action))
+        )
+
+    def audit_meta(self) -> Dict[str, Any]:
+        return {
+            ROSTER_ACCOUNT_AUDIT_KEYS[action]: [vars(ref) for ref in refs]
+            for action, refs in self.items.items()
+            if refs
+        }
+
+
+def _roster_codes(refs: Iterable[RosterItemRef]) -> Tuple[str, ...]:
+    return tuple(dict.fromkeys(ref.roster_code for ref in refs))
+
+
+def _listed_codes(refs: Iterable[RosterItemRef]) -> str:
+    codes = _roster_codes(refs)
+    listed = "、".join(codes[:LISTED_ROSTER_CODES])
+    return listed + "…" if len(codes) > LISTED_ROSTER_CODES else listed
+
+
 FORM_EDIT_SAVED_MESSAGE = "表單內容已更新"
 REASSIGNMENT_MESSAGES: Dict[ReassignmentOutcome, str] = {
     ReassignmentOutcome.REASSIGNED: FORM_EDIT_SAVED_MESSAGE + "，審核教授已改派為 {professor_name}",
@@ -331,12 +398,15 @@ class AppliedStaffFormEdit:
     cleared_meta: Dict[str, Any] = field(default_factory=dict)
     professor_reassignment: ProfessorReassignment | None = None
     new_professor_name: str | None = None
+    roster_sync: RosterAccountSync = field(default_factory=RosterAccountSync)
 
     @property
     def message(self) -> str:
         if not self.changes:
             return "表單內容沒有變更"
         if self.professor_reassignment is None:
-            return FORM_EDIT_SAVED_MESSAGE
-        template = REASSIGNMENT_MESSAGES[self.professor_reassignment.outcome]
-        return template.format(professor_name=self.new_professor_name or "")
+            saved = FORM_EDIT_SAVED_MESSAGE
+        else:
+            template = REASSIGNMENT_MESSAGES[self.professor_reassignment.outcome]
+            saved = template.format(professor_name=self.new_professor_name or "")
+        return saved + self.roster_sync.message_clause
