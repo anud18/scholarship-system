@@ -36,6 +36,7 @@ from typing import Any, Optional
 
 import pytest
 
+from app.models.payment_roster import is_listed_in_default_export
 from app.services.excel_export_service import ExcelExportService
 
 # ---------------------------------------------------------------------------
@@ -344,22 +345,19 @@ def _mk_scope_item(name, *, is_included, exclusion_reason=None):
     return it
 
 
-def test_is_manual_removal_detects_lock_and_reconcile_prefixes(service):
-    assert (
-        service._is_manual_removal(_mk_scope_item("a", is_included=False, exclusion_reason="鎖定後移除[停發]：x"))
-        is True
-    )
-    assert (
-        service._is_manual_removal(
-            _mk_scope_item("b", is_included=False, exclusion_reason="比對分發移除：不在分發名單")
-        )
-        is True
-    )
-    assert (
-        service._is_manual_removal(_mk_scope_item("c", is_included=False, exclusion_reason="學籍驗證未通過：已畢業"))
-        is False
-    )
-    assert service._is_manual_removal(_mk_scope_item("d", is_included=True, exclusion_reason=None)) is False
+@pytest.mark.parametrize(
+    ("is_included", "exclusion_reason", "listed"),
+    [
+        (False, "鎖定後移除[停發]：x", False),
+        (False, "比對分發移除：不在分發名單", False),
+        (False, "學籍驗證未通過：已畢業", True),
+        (False, "學生繳回", True),
+        (True, None, True),
+    ],
+)
+def test_default_export_hides_only_manual_removals(is_included, exclusion_reason, listed):
+    item = _mk_scope_item("a", is_included=is_included, exclusion_reason=exclusion_reason)
+    assert is_listed_in_default_export(item) is listed
 
 
 def test_get_roster_items_default_keeps_auto_excluded_hides_manual(service):

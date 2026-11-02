@@ -66,7 +66,7 @@ from app.services.eligibility_service import EligibilityService
 from app.services.email_automation_service import email_automation_service
 from app.services.email_service import EmailService
 from app.services.minio_service import minio_service
-from app.services.staff_edit_roster_sync import sync_roster_bank_account
+from app.services.staff_edit_roster_sync import lock_application_rosters, sync_roster_bank_account
 from app.services.staff_form_edit import (
     PROFILE_ATTRS,
     AppliedStaffFormEdit,
@@ -1318,10 +1318,13 @@ class ApplicationService:
         if not application:
             raise NotFoundError("Application", str(application_id))
 
+        await lock_application_rosters(self.db, application.id)
+        # FOR NO KEY UPDATE: the edit never changes a key, so a 造冊 item insert
+        # (its foreign key takes FOR KEY SHARE on this row) need not wait for it.
         await self.db.refresh(
             application,
             attribute_names=["status", "submitted_form_data", "meta_data", "professor_id"],
-            with_for_update=True,
+            with_for_update={"key_share": True},
         )
 
         if not application.is_staff_form_editable:
@@ -1352,7 +1355,6 @@ class ApplicationService:
             self._enforce_contact_phone_format(edit.form_data["fields"])
         profile_update = self._profile_update_from(edit.profile_updates)
 
-        previous_form_data = application.submitted_form_data
         application.submitted_form_data = edit.form_data
         cleared_meta = self._clear_stale_meta(application, edit.stale_meta_keys)
         if profile_update is not None:
@@ -1365,7 +1367,7 @@ class ApplicationService:
             )
         reassignment, new_professor = await self._follow_advisor_nycu_id_edit(application, edit.changes)
         roster_sync = await sync_roster_bank_account(
-            self.db, application, previous_form_data, current_user, client_ip=ip_address, user_agent=user_agent
+            self.db, application, edit.postal_account, current_user, client_ip=ip_address, user_agent=user_agent
         )
 
         try:

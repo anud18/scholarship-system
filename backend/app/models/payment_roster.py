@@ -87,6 +87,13 @@ MANUAL_REMOVAL_PREFIX_LOCKED = "鎖定後移除"
 MANUAL_REMOVAL_PREFIX_RECONCILE = "比對分發移除"
 MANUAL_REMOVAL_PREFIXES = (MANUAL_REMOVAL_PREFIX_LOCKED, MANUAL_REMOVAL_PREFIX_RECONCILE)
 
+
+def is_listed_in_default_export(item) -> bool:
+    """預設 Excel 匯出列出的明細：納入者與自動排除者（標紅）；人為移除者不列出。"""
+    reason = item.exclusion_reason
+    return item.is_included or not (reason and reason.startswith(MANUAL_REMOVAL_PREFIXES))
+
+
 # 「排除造冊明細」(POST /{roster_id}/items/{item_id}/exclude) 的原因分類 →
 # 顯示標籤。寫入的 exclusion_reason 形如「學生繳回」或「其他: 補充說明」。
 MANUAL_EXCLUSION_CATEGORY_LABELS = {

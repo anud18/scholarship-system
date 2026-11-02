@@ -8,7 +8,6 @@ from typing import Any, Callable, Dict, FrozenSet, Iterable, Mapping, Tuple
 from app.core.exceptions import ValidationError
 from app.core.regex_validator import RegexValidationError, safe_regex_match
 from app.models.application_field import FieldType
-from app.models.payment_roster import RosterStatus
 from app.schemas.application_field import ApplicationFieldResponse
 from app.services.application_field_service import FIXED_ADVISOR_KEYS, FIXED_KEY_POSTAL_ACCOUNT
 from app.utils.bank_account_fields import normalize_account_number, validate_postal_account_format
@@ -209,6 +208,8 @@ class StaffFormEdit:
     changes: Dict[str, FieldChange]
     profile_updates: Dict[str, Any]
     stale_meta_keys: FrozenSet[str]
+    # The 郵局帳號 digits this edit set; None when it left the account alone or cleared it.
+    postal_account: str | None = None
 
 
 def build_editable_form_spec(definitions: Iterable[FieldDefinition]) -> EditableFormSpec:
@@ -253,6 +254,7 @@ def apply_staff_form_edit(
     profile_updates: Dict[str, Any] = {}
     changes: Dict[str, FieldChange] = {}
     stale_meta_keys: FrozenSet[str] = frozenset()
+    postal_account: str | None = None
 
     for name, raw in raw_fields.items():
         editable = spec.fields.get(name)
@@ -280,10 +282,16 @@ def apply_staff_form_edit(
             }
         changes[name] = FieldChange(old=old, new=value)
         stale_meta_keys |= route.stale_meta_keys
+        if route is POSTAL_ACCOUNT_ROUTE and not _is_blank(value):
+            postal_account = value
 
     form = {**current, "fields": {**stored_fields, **written}} if written else current
     return StaffFormEdit(
-        form_data=form, changes=changes, profile_updates=profile_updates, stale_meta_keys=stale_meta_keys
+        form_data=form,
+        changes=changes,
+        profile_updates=profile_updates,
+        stale_meta_keys=stale_meta_keys,
+        postal_account=postal_account,
     )
 
 
@@ -345,19 +353,10 @@ def decide_professor_reassignment(facts: ProfessorFacts) -> ProfessorReassignmen
 
 class RosterAccountAction(enum.Enum):
     SYNCED = "synced"
+    # Synced on a 人為移除 row, which the exported Excel does not list: no re-export is due.
+    SYNCED_REMOVED = "synced_removed"
     KEPT_LOCKED = "kept_locked"
 
-
-# Locking is the 造冊 freeze point: a LOCKED roster refuses 重新生成, while a
-# COMPLETED one is rebuilt from the current form data on demand, so it takes
-# the corrected account now rather than at its next rebuild.
-ROSTER_ACCOUNT_ACTIONS: Dict[RosterStatus, RosterAccountAction] = {
-    RosterStatus.DRAFT: RosterAccountAction.SYNCED,
-    RosterStatus.PROCESSING: RosterAccountAction.SYNCED,
-    RosterStatus.COMPLETED: RosterAccountAction.SYNCED,
-    RosterStatus.FAILED: RosterAccountAction.SYNCED,
-    RosterStatus.LOCKED: RosterAccountAction.KEPT_LOCKED,
-}
 
 ROSTER_ACCOUNT_CLAUSES: Dict[RosterAccountAction, str] = {
     RosterAccountAction.SYNCED: "；已同步更新 {count} 份造冊的郵局帳號，請至造冊管理重新匯出 Excel",
@@ -365,6 +364,7 @@ ROSTER_ACCOUNT_CLAUSES: Dict[RosterAccountAction, str] = {
 }
 ROSTER_ACCOUNT_AUDIT_KEYS: Dict[RosterAccountAction, str] = {
     RosterAccountAction.SYNCED: "roster_items_updated",
+    RosterAccountAction.SYNCED_REMOVED: "removed_roster_items_updated",
     RosterAccountAction.KEPT_LOCKED: "locked_rosters_unchanged",
 }
 LISTED_ROSTER_CODES = 3
@@ -386,8 +386,8 @@ class RosterAccountSync:
     @property
     def message_clause(self) -> str:
         return "".join(
-            ROSTER_ACCOUNT_CLAUSES[action].format(count=len(_roster_codes(refs)), rosters=_listed_codes(refs))
-            for action in RosterAccountAction
+            clause.format(count=len(_roster_codes(refs)), rosters=_listed_codes(refs))
+            for action, clause in ROSTER_ACCOUNT_CLAUSES.items()
             if (refs := self.items.get(action))
         )
 

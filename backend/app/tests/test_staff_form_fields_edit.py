@@ -294,6 +294,26 @@ class TestPostalAccountEdit:
         assert _apply({"postal_account": NEW_ACCOUNT}).stale_meta_keys >= {"bank_verification"}
         assert _apply({"remark": "新備註"}).stale_meta_keys == frozenset()
 
+    def test_edit_names_the_digits_of_the_account_it_set(self):
+        assert _apply({"postal_account": "0001234-5678901"}).postal_account == NEW_ACCOUNT
+        assert _apply({"remark": "新備註"}).postal_account is None
+        assert _apply({"postal_account": ACCOUNT_B}).postal_account is None
+
+    def test_clearing_an_optional_account_names_no_account(self):
+        optional = [
+            (
+                definition.model_copy(update={"is_required": False})
+                if definition.field_name == "postal_account"
+                else definition
+            )
+            for definition in DEFINITIONS
+        ]
+
+        edit = _apply({"postal_account": ""}, _with_fields(account_number=ACCOUNT_A), definitions=optional)
+
+        assert edit.changes["postal_account"].new == ""
+        assert edit.postal_account is None
+
 
 class TestAdvisorEdit:
     def test_advisor_edits_go_to_the_profile_and_leave_the_form_alone(self):
