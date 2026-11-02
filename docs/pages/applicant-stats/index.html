@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- The uploaded 彙整表 holds PII. connect-src 'none' guarantees the page
+       cannot send it anywhere: everything is counted in this tab. -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self' https://cdn.sheetjs.com https://cdn.jsdelivr.net; style-src 'self'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>申請人數統計</title>
+  <link rel="stylesheet" href="../shared/tool.css">
+</head>
+<body>
+  <main class="page">
+    <header class="page-header">
+      <a class="back" href="../">← 回首頁</a>
+      <h1>申請人數統計</h1>
+      <p class="lead">上傳學生申請資料彙整表，產生「統計各學院各年級申請人數」與「統計各學院外籍生國科會申請人數」。</p>
+    </header>
+
+    <section class="notice" aria-label="隱私說明">
+      <strong>資料不會離開您的電腦。</strong>
+      檔案只在此瀏覽器分頁內讀取與統計，不會上傳到任何伺服器（本頁的安全政策禁止對外連線）；關閉分頁即清除。
+    </section>
+
+    <section class="card">
+      <h2><span class="step">1</span>申請資料彙整表</h2>
+      <p class="hint">需含「學院」、「年級」欄；外籍生國科會統計另需「國籍」、「申請獎學金類別」欄。</p>
+      <label id="applicant-drop" class="dropzone">
+        <input id="applicant-file" class="visually-hidden" type="file" accept=".xlsx,.xls,.csv">
+        <svg class="drop-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4.5 4.5M12 4l4.5 4.5M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+        <span class="drop-title">拖曳檔案到這裡，或<span class="drop-link">選擇檔案</span></span>
+        <span class="drop-hint">.xlsx / .xls / .csv，一次一個檔案；重新選擇會取代</span>
+      </label>
+      <p id="applicant-status" class="status" role="status"></p>
+    </section>
+
+    <section id="results" class="card" hidden>
+      <div class="results-head">
+        <h2><span class="step">2</span>統計結果</h2>
+        <button id="download" type="button" class="primary">下載統計表 (.xlsx)</button>
+      </div>
+      <ul id="warnings" class="warnings" hidden></ul>
+      <div id="tabs" class="filters" role="tablist" aria-label="統計表"></div>
+      <p id="report-caption" class="hint report-caption"></p>
+      <div class="table-wrap">
+        <table class="stats">
+          <thead id="stats-head"></thead>
+          <tbody id="stats-body"></tbody>
+          <tfoot id="stats-foot"></tfoot>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"
+          integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT"
+          crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"
+          integrity="sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz"
+          crossorigin="anonymous"></script>
+  <script src="../renewal-compare/compare.js"></script>
+  <script src="../shared/dom.js"></script>
+  <script src="stats.js"></script>
+  <script src="stats-export.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

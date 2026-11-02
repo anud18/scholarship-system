@@ -160,6 +160,30 @@ async def _apply_quota_fields(db: AsyncSession, config, config_data, *, scholars
         config.total_quota = config_data["total_quota"]
 
 
+def _unprocessable(detail: str) -> HTTPException:
+    return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detail)
+
+
+async def _parse_open_sub_types(db: AsyncSession, scholarship_type_id: int, raw: Any) -> Optional[List[str]]:
+    """Parse the admin's 本次開放申請類別. None keeps every sub-type open; a list must name real sub-types."""
+    if raw is None:
+        return None
+    if not isinstance(raw, list) or not all(isinstance(code, str) for code in raw):
+        raise _unprocessable("本次開放申請類別格式錯誤")
+    codes = list(dict.fromkeys(code.strip().lower() for code in raw))
+    if not codes:
+        raise _unprocessable("本次開放申請類別至少需勾選一項")
+
+    sub_type_list = await db.scalar(
+        select(ScholarshipType.sub_type_list).where(ScholarshipType.id == scholarship_type_id)
+    )
+    real_sub_types = {st.strip().lower() for st in sub_type_list or [] if st and st.strip().lower() != "general"}
+    unknown = [code for code in codes if code not in real_sub_types]
+    if unknown:
+        raise _unprocessable(f"本次開放申請類別不屬於此獎學金：{'、'.join(unknown)}")
+    return codes
+
+
 async def get_user_accessible_scholarship_ids(user: User, db: AsyncSession) -> List[int]:
     """Get scholarship IDs that the user can access based on their role and permissions"""
     if user.is_super_admin():
@@ -896,6 +920,7 @@ async def create_scholarship_configuration(
             renewal_application_end_date=parse_date_field(config_data.get("renewal_application_end_date")),
             application_start_date=parse_date_field(config_data.get("application_start_date")),
             application_end_date=parse_date_field(config_data.get("application_end_date")),
+            open_sub_types=await _parse_open_sub_types(db, scholarship_type_id, config_data.get("open_sub_types")),
             renewal_requires_professor_review=renewal_requires_professor_review,
             renewal_professor_review_start=(
                 parse_date_field(config_data.get("renewal_professor_review_start"))
@@ -1020,6 +1045,7 @@ async def get_scholarship_configuration(
                 config.application_start_date.isoformat() if config.application_start_date else None
             ),
             "application_end_date": config.application_end_date.isoformat() if config.application_end_date else None,
+            "open_sub_types": config.open_sub_types,
             "renewal_requires_professor_review": config.renewal_requires_professor_review,
             "renewal_professor_review_start": (
                 config.renewal_professor_review_start.isoformat() if config.renewal_professor_review_start else None
@@ -1117,6 +1143,10 @@ async def update_scholarship_configuration(
             config.application_start_date = parse_date_field(config_data["application_start_date"])
         if "application_end_date" in config_data:
             config.application_end_date = parse_date_field(config_data["application_end_date"])
+        if "open_sub_types" in config_data:
+            config.open_sub_types = await _parse_open_sub_types(
+                db, config.scholarship_type_id, config_data["open_sub_types"]
+            )
 
         # Update review periods.
         # The renewal_requires_* columns are non-nullable: only literal true
@@ -1534,6 +1564,7 @@ async def list_scholarship_configurations(
                 "application_end_date": (
                     config.application_end_date.isoformat() if config.application_end_date else None
                 ),
+                "open_sub_types": config.open_sub_types,
                 # Add review-related fields
                 "renewal_requires_professor_review": config.renewal_requires_professor_review,
                 "renewal_professor_review_start": (

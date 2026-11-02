@@ -48,7 +48,7 @@ from __future__ import annotations
 import io
 import re
 from dataclasses import dataclass
-from typing import Any, List, Optional, Sequence, Tuple
+from typing import Any, List, Mapping, Optional, Sequence, Tuple
 
 from openpyxl import Workbook
 from reportlab.lib.pagesizes import A4, landscape
@@ -56,7 +56,6 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import PageBreak, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from app.core.college_mappings import COLLEGE_MAPPINGS
 from app.services.export_table_chassis import (
     PDF_MARGIN_PT,
     apply_xlsx_borders,
@@ -72,6 +71,11 @@ from app.services.export_table_chassis import (
     write_xlsx_title_row,
 )
 from app.services.pdf_fonts import CJK_FONT_NAME, ensure_cjk_font
+from app.utils.application_helpers import (
+    get_academy_code_from_data,
+    get_academy_name_from_data,
+    get_department_name_from_data,
+)
 from app.utils.excel_safety import sanitize_excel_cell
 
 # Snapshot coercion/rendering lives in a LEAF util so ManualDistributionService can
@@ -190,11 +194,8 @@ def _gender_label(student_data: dict) -> str:
 
 
 def _college_label(student_data: dict) -> str:
-    name = _as_text(student_data.get("trm_academyname"))
-    if name:
-        return name
-    code = _as_text(student_data.get("std_academyno")) or _as_text(student_data.get("trm_academyno"))
-    return COLLEGE_MAPPINGS.get(code, code)
+    """API 1's academy (std_academyno) by name; the bare code when no name resolves."""
+    return _as_text(get_academy_name_from_data(student_data)) or _as_text(get_academy_code_from_data(student_data))
 
 
 MASTER_SCHOOL_FIELD = "master_school_info"
@@ -249,13 +250,20 @@ class RecipientExportGroup:
     rows: List[RecipientExportRow]
 
 
-def build_recipient_row(seq: int, application: Any) -> RecipientExportRow:
-    """Derive one export row from an Application's SIS snapshot + form data."""
+def build_recipient_row(
+    seq: int, application: Any, department_names: Optional[Mapping[str, str]] = None
+) -> RecipientExportRow:
+    """Derive one export row from an Application's SIS snapshot + form data.
+
+    ``department_names`` (系所代碼 → 名稱, ``load_department_names``) resolves the
+    系所 from API 1's std_depno; without it, or for an unknown code, the term
+    row's name is used.
+    """
     student_data = getattr(application, "student_data", None) or {}
     return RecipientExportRow(
         seq=seq,
         college=_college_label(student_data),
-        department=_as_text(student_data.get("trm_depname")),
+        department=_as_text(get_department_name_from_data(student_data, department_names)),
         student_name=_as_text(student_data.get("std_cname")),
         nationality=_as_text(student_data.get("std_nation")),
         gender=_gender_label(student_data),

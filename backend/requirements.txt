@@ -43,7 +43,7 @@ aiosmtplib==5.1.2  # Direct SMTP sending (EmailService); declared explicitly aft
 jinja2==3.1.6  # Security: Fixed sandbox escape vulnerability (GHSA-cpwx-vrp4-4pq7)
 
 # File processing and OCR
-pillow==12.3.0  # Security: PYSEC-2026-2253..2257, PYSEC-2026-3451..3454, CVE-2026-54058/59198/59200/59204 (<12.3.0)
+pillow==13.0.0  # Security: PYSEC-2026-2253..2257, PYSEC-2026-3451..3454, CVE-2026-54058/59198/59200/59204 (<12.3.0)
 google-generativeai==0.8.3
 python-magic==0.4.27
 
@@ -56,7 +56,7 @@ openpyxl==3.1.2
 
 # PDF generation
 reportlab==4.4.10  # Used by export_package_service
-pypdf==6.19.0  # Security: Dependabot #222-#251 (<6.19.0); merged 申請資料合併檔 PDF in the export package (pdf_merge.py)
+pypdf==6.21.2  # Security: Dependabot #222-#251 (<6.19.0); merged 申請資料合併檔 PDF in the export package (pdf_merge.py)
 
 # Logging and monitoring
 structlog==24.4.0  # Updated for Python 3.13 compatibility

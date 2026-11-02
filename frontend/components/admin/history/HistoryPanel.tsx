@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApplicationReviewDialog } from "@/components/common/ApplicationReviewDialog";
+import { StudentIdentityLabel } from "@/components/common/StudentIdentityLabel";
 import apiClient, {
   HistoricalApplication,
   HistoricalApplicationFilters,
@@ -522,17 +523,10 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                                 </div>
                                 {application.student_identity != null && (
                                   <div className="text-xs text-gray-500">
-                                    {(() => {
-                                      const idMap: Record<number, string> = {
-                                        1: "本國生",
-                                        2: "僑生",
-                                        3: "外籍生",
-                                        4: "陸生",
-                                        5: "港澳生",
-                                        6: "外籍交換生",
-                                      };
-                                      return idMap[application.student_identity!] || `身分別 ${application.student_identity}`;
-                                    })()}
+                                    <StudentIdentityLabel
+                                      code={application.student_identity}
+                                      locale={locale}
+                                    />
                                   </div>
                                 )}
                               </TableCell>
@@ -879,17 +873,10 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                                 </div>
                                 {application.student_identity != null && (
                                   <div className="text-xs text-gray-500">
-                                    {(() => {
-                                      const idMap: Record<number, string> = {
-                                        1: "本國生",
-                                        2: "僑生",
-                                        3: "外籍生",
-                                        4: "陸生",
-                                        5: "港澳生",
-                                        6: "外籍交換生",
-                                      };
-                                      return idMap[application.student_identity!] || `身分別 ${application.student_identity}`;
-                                    })()}
+                                    <StudentIdentityLabel
+                                      code={application.student_identity}
+                                      locale={locale}
+                                    />
                                   </div>
                                 )}
                               </TableCell>

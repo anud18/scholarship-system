@@ -270,6 +270,8 @@ class EligibleScholarshipResponse(BaseModel):
     name: str
     name_en: str
     eligible_sub_types: List[SubTypeOption]
+    # Sub-types the student qualifies for but the admin has not opened this round.
+    closed_sub_types: List[SubTypeOption] = []
     application_cycle: ApplicationCycleEnum
     description: Optional[str] = None
     description_en: Optional[str] = None

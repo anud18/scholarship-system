@@ -23,8 +23,10 @@ import { toast } from "sonner";
 import { ProgressTimeline } from "@/components/progress-timeline";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { ApplicationFormDataDisplay } from "@/components/application-form-data-display";
+import { ApplicationFormDataEditor } from "@/components/application-form-data-editor";
 import { ApplicationAuditTrail } from "@/components/application-audit-trail";
 import { ProfessorAssignmentDropdown } from "@/components/professor-assignment-dropdown";
+import { SisTermResyncCard } from "@/components/admin/SisTermResyncCard";
 import {
   FileText,
   Eye,
@@ -46,9 +48,10 @@ import {
   ShieldCheck,
   ShieldX,
   Send,
+  Pencil,
 } from "lucide-react";
 import { Locale } from "@/lib/validators";
-import { Application, HistoricalApplication, User } from "@/lib/api";
+import { Application, ApplicationField, HistoricalApplication, User } from "@/lib/api";
 import api from "@/lib/api";
 import { useStudentPreview } from "@/hooks/use-student-preview";
 import {
@@ -73,6 +76,11 @@ import {
   fetchApplicationFiles,
   formatFieldName,
 } from "@/lib/utils/application-helpers";
+import {
+  getEffectiveFieldValues,
+  getStaffEditableFields,
+  isStaffFormEditable,
+} from "@/lib/utils/staff-form-edit";
 import { getCurrentSemesterROC, toROCYear } from "@/src/utils/dateUtils";
 
 // Shape of document entries in `submitted_form_data.documents` from
@@ -656,10 +664,15 @@ export function ApplicationReviewDialog({
     [key: string]: { zh?: string; en?: string };
   }>({});
   const [applicationFields, setApplicationFields] = useState<string[]>([]);
+  const [fieldDefinitions, setFieldDefinitions] = useState<ApplicationField[]>([]);
+  const [isEditingForm, setIsEditingForm] = useState(false);
   const [isLoadingFields, setIsLoadingFields] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [detailedApplication, setDetailedApplication] = useState<Application | null>(null);
+  // Controlled so a reload after an in-dialog action (重新同步, 郵局驗證) keeps the
+  // admin on the tab they were on — the reload spinner unmounts <Tabs>.
+  const [activeTab, setActiveTab] = useState("basic");
 
   // Sub-type review state (for unified review system)
   const [subTypes, setSubTypes] = useState<SubTypeOption[]>([]);
@@ -718,6 +731,11 @@ export function ApplicationReviewDialog({
   const isAdminRole = role === "admin" || role === "super_admin";
   const canSubmitReview = isAdminRole;
 
+  const canEditFormData =
+    (isAdminRole || role === "college") &&
+    isStaffFormEditable(detailedApplication?.status);
+  const editableFormFields = getStaffEditableFields(fieldDefinitions);
+
   // The professor sees the application itself, but not the live SIS 學生資訊
   // tab nor the 操作紀錄 audit trail (the basic tab keeps its 學生資訊 card).
   const canViewStudentAndAudit = role !== "professor";
@@ -739,6 +757,18 @@ export function ApplicationReviewDialog({
   // Handle professor assignment
   const handleProfessorAssigned = (professor: ProfessorInfo) => {
     setProfessorInfo(professor);
+  };
+
+  const handleFormDataSaved = (updated: Application, message: string) => {
+    // professorInfo outranks the application's own professor in the 管理 tab,
+    // so drop it when the edit moved the review to another professor.
+    if (updated.professor_id !== detailedApplication?.professor_id) {
+      setProfessorInfo(null);
+    }
+    setDetailedApplication(updated);
+    setIsEditingForm(false);
+    toast.success(message);
+    onReviewSubmitted?.();
   };
 
   // NOTE: Old admin approve/reject handlers removed - admin now uses unified sub-type review system
@@ -1003,6 +1033,8 @@ export function ApplicationReviewDialog({
   // Load form configuration and files when dialog opens
   useEffect(() => {
     if (open && application) {
+      setActiveTab("basic");
+      setIsEditingForm(false);
       loadApplicationDetails(application.id);
       // Reset admin comments when opening a new application
       setAdminComments("");
@@ -1059,6 +1091,7 @@ export function ApplicationReviewDialog({
         setDocumentLabels({});
         setFieldLabels({});
         setApplicationFields([]);
+        setFieldDefinitions([]);
         setIsLoadingLabels(false);
         setIsLoadingFields(false);
         return;
@@ -1093,6 +1126,7 @@ export function ApplicationReviewDialog({
 
           setFieldLabels(fieldLabels);
           setApplicationFields(fieldNames);
+          setFieldDefinitions(response.data.fields);
         }
       }
     } catch (error) {
@@ -1100,6 +1134,7 @@ export function ApplicationReviewDialog({
       setDocumentLabels({});
       setFieldLabels({});
       setApplicationFields([]);
+      setFieldDefinitions([]);
     } finally {
       setIsLoadingLabels(false);
       setIsLoadingFields(false);
@@ -1377,10 +1412,14 @@ export function ApplicationReviewDialog({
     }
   };
 
-  // Handle delete
+  // 刪除申請: offered only when the host wires `onDelete` AND the list row says
+  // the server will accept it (`is_deletable` = not yet in 分發階段). Hand back
+  // the list row — it carries the student_name the confirm dialog shows.
+  const canDelete =
+    !!onDelete && (application as Application | null)?.is_deletable === true;
   const handleDelete = () => {
-    if (detailedApplication && onDelete) {
-      onDelete(detailedApplication as Application);
+    if (application && onDelete) {
+      onDelete(application as Application);
     }
   };
 
@@ -1467,7 +1506,7 @@ export function ApplicationReviewDialog({
               </Alert>
             </div>
           ) : detailedApplication ? (
-            <Tabs defaultValue="basic" className="flex-1 overflow-hidden flex flex-col">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 overflow-hidden flex flex-col">
               <TabsList className={`grid w-full ${tabGridClass}`}>
                 <TabsTrigger value="basic">
                   <Info className="h-4 w-4 mr-1" />
@@ -1770,10 +1809,16 @@ export function ApplicationReviewDialog({
                 {/* Form Content Tab */}
                 <TabsContent value="form" className="space-y-4 mt-4">
                   <Card>
-                    <CardHeader>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0">
                       <CardTitle className="text-lg">
                         {locale === "zh" ? "申請表單內容" : "Application Form Content"}
                       </CardTitle>
+                      {canEditFormData && !isEditingForm && !isLoadingFields && (
+                        <Button size="sm" variant="outline" onClick={() => setIsEditingForm(true)}>
+                          <Pencil className="h-4 w-4 mr-1" />
+                          {locale === "zh" ? "編輯" : "Edit"}
+                        </Button>
+                      )}
                     </CardHeader>
                     <CardContent>
                       {error ? (
@@ -1808,11 +1853,25 @@ export function ApplicationReviewDialog({
                             return null;
                           })()}
 
-                          <ApplicationFormDataDisplay
-                            formData={detailedApplication}
-                            locale={locale}
-                            fieldLabels={fieldLabels}
-                          />
+                          {isEditingForm && detailedApplication ? (
+                            <ApplicationFormDataEditor
+                              applicationId={detailedApplication.id}
+                              editableFields={editableFormFields}
+                              initialValues={getEffectiveFieldValues(
+                                detailedApplication,
+                                editableFormFields
+                              )}
+                              locale={locale}
+                              onSaved={handleFormDataSaved}
+                              onCancel={() => setIsEditingForm(false)}
+                            />
+                          ) : (
+                            <ApplicationFormDataDisplay
+                              formData={detailedApplication}
+                              locale={locale}
+                              fieldLabels={fieldLabels}
+                            />
+                          )}
                         </>
                       )}
                     </CardContent>
@@ -2168,6 +2227,15 @@ export function ApplicationReviewDialog({
                 {/* Management Tab (Admin and Super Admin) */}
                 {isAdminRole && (
                   <TabsContent value="management" className="space-y-4 mt-4">
+                    {detailedApplication && (
+                      <SisTermResyncCard
+                        applicationId={detailedApplication.id}
+                        studentData={detailedApplication.student_data}
+                        locale={locale}
+                        onResynced={() => loadApplicationDetails(detailedApplication.id)}
+                      />
+                    )}
+
                     {/* Post Office Verification Section */}
                     <Card>
                       <CardHeader>
@@ -2361,6 +2429,10 @@ export function ApplicationReviewDialog({
                                       (detailedApplication as Application).professor?.nycu_id ||
                                       professorInfo?.nycu_id
                                     }
+                                    currentProfessorName={
+                                      (detailedApplication as Application).professor?.name ||
+                                      professorInfo?.name
+                                    }
                                     onAssigned={handleProfessorAssigned}
                                   />
                                 </div>
@@ -2405,6 +2477,19 @@ export function ApplicationReviewDialog({
               </div>
             </Tabs>
           ) : null}
+
+          {canDelete && (
+            <div className="flex justify-end border-t pt-3">
+              <Button
+                variant="outline"
+                onClick={handleDelete}
+                className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+              >
+                <Trash2 className="h-4 w-4 mr-1" />
+                {locale === "zh" ? "刪除申請" : "Delete Application"}
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

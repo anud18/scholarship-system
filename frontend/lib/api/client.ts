@@ -283,7 +283,7 @@ export class ApiClient {
           if (error instanceof z.ZodError) {
             logger.error("API Response Validation Failed", {
               endpoint,
-              errorCount: error.errors.length,
+              errorCount: error.issues.length,
             });
 
             // Only throw in development to prevent breaking production

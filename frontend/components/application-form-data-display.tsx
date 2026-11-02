@@ -10,9 +10,9 @@ import {
   formatFieldValue,
 } from "@/lib/utils/application-helpers";
 import {
-  CANONICAL_ACCOUNT_FIELD_ID,
   canonicalizeFieldId,
-  collectProfileOwnedFieldValues,
+  collectSubmittedValues,
+  withProfileOwnedFields,
 } from "@/lib/utils/profile-owned-fields";
 
 interface ApplicationFormDataDisplayProps {
@@ -26,97 +26,6 @@ interface ApplicationFormDataDisplayProps {
   locale: Locale;
   fieldLabels?: { [key: string]: { zh?: string; en?: string } };
 }
-
-// Never rendered as form data: `files` is upload bookkeeping and `agree_terms`
-// has its own consent row in the dialog.
-const EXCLUDED_FIELD_IDS = new Set(["files", "agree_terms"]);
-
-// The wizard folds the account the student typed into the submitted fields
-// under this id. A `postal_account` copy may instead be another student's
-// account leaked through the shared form-config prefill (#1443).
-const OWN_ACCOUNT_FIELD_ID = "account_number";
-
-const getSubmittedFields = (
-  formData: ApplicationFormDataDisplayProps["formData"]
-): Record<string, unknown> =>
-  (formData as { submitted_form_data?: { fields?: Record<string, unknown> } })
-    ?.submitted_form_data?.fields || {};
-
-const hasValue = (value: unknown): boolean =>
-  value !== null && value !== undefined && value !== "";
-
-/** What the student actually submitted, with the 郵局帳號 synonyms collapsed. */
-const collectSubmittedValues = (
-  formData: ApplicationFormDataDisplayProps["formData"]
-): Record<string, unknown> => {
-  const values: Record<string, unknown> = {};
-
-  Object.entries(getSubmittedFields(formData)).forEach(([fieldId, fieldData]) => {
-    if (!fieldData || typeof fieldData !== "object" || !("value" in fieldData)) {
-      return;
-    }
-    const value = (fieldData as { value: unknown }).value;
-    if (!hasValue(value)) return;
-    if (EXCLUDED_FIELD_IDS.has(fieldId)) return;
-
-    // Submissions may store the account under both synonyms. The student's own
-    // `account_number` wins, whatever the JSON key order.
-    const canonicalId = canonicalizeFieldId(fieldId);
-    if (canonicalId in values && fieldId !== OWN_ACCOUNT_FIELD_ID) return;
-    values[canonicalId] = value;
-  });
-
-  return values;
-};
-
-const hasSubmittedOwnAccount = (
-  formData: ApplicationFormDataDisplayProps["formData"]
-): boolean => {
-  const field = getSubmittedFields(formData)[OWN_ACCOUNT_FIELD_ID];
-  return (
-    !!field &&
-    typeof field === "object" &&
-    "value" in field &&
-    hasValue((field as { value: unknown }).value)
-  );
-};
-
-/**
- * The submitted values plus the fixed fields that live on the student's
- * UserProfile instead of `submitted_form_data` — without them 郵局帳號 renders
- * twice (once filled, once「未填寫」) and the 指導教授 block renders entirely as
- * 「未填寫」. See `profile-owned-fields.ts`.
- *
- * Only fields the scholarship's own form config declares (`fieldLabels`) are
- * merged: the backend injects the 指導教授 trio only when the scholarship
- * requires professor review, and an application that never asked for those
- * fields must not sprout them from a profile filled in for another scholarship.
- */
-const withProfileOwnedFields = (
-  submittedValues: Record<string, unknown>,
-  formData: ApplicationFormDataDisplayProps["formData"],
-  fieldLabels?: ApplicationFormDataDisplayProps["fieldLabels"]
-): Record<string, unknown> => {
-  const values = { ...submittedValues };
-  if (!fieldLabels) return values;
-
-  const keepSubmittedAccount = hasSubmittedOwnAccount(formData);
-  Object.entries(
-    collectProfileOwnedFieldValues(formData as Record<string, unknown>)
-  ).forEach(([fieldId, value]) => {
-    if (!(fieldId in fieldLabels)) return;
-    // The account the student submitted with this application stays.
-    if (fieldId === CANONICAL_ACCOUNT_FIELD_ID && keepSubmittedAccount) return;
-    // Otherwise the profile wins over a submitted copy: these fields belong on
-    // the profile, and a copy in submitted_form_data may be another student's
-    // values leaked through the shared form-config prefill (#1443). An empty
-    // profile value was dropped above, so an imported application whose
-    // profile lacks it keeps its own copy.
-    values[fieldId] = value;
-  });
-
-  return values;
-};
 
 // 獲取欄位標籤（優先使用動態標籤，後備使用靜態標籤）
 const getFieldLabel = (

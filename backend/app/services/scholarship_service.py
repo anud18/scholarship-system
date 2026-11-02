@@ -21,6 +21,17 @@ from app.models.review import ApplicationReview
 
 logger = logging.getLogger(__name__)
 
+SUB_TYPES_NOT_OPEN_TAG = "本次未開放申請類別"
+SUB_TYPES_NOT_OPEN_ERROR = {
+    "rule_id": "sub_types_not_open",
+    "rule_name": "申請類別未開放",
+    "rule_type": "open_sub_types",
+    "tag": SUB_TYPES_NOT_OPEN_TAG,
+    "sub_type": None,
+    "message": "本次未開放您符合資格的申請類別",
+    "message_en": "None of the categories you qualify for are open in this application round",
+}
+
 
 class ScholarshipService:
     def __init__(self, db: AsyncSession):
@@ -84,16 +95,16 @@ class ScholarshipService:
                 cache_key = f"{config.academic_year}_{config.semester.value if config.semester else 'yearly'}"
 
                 if cache_key not in student_data_cache["student_term"]:
-                    # Convert semester enum to string for API call
-                    semester_str = config.semester.value if config.semester else "1"  # Default to first semester
+                    semester_str = config.semester.value if config.semester else "yearly"
                     academic_year_str = str(config.academic_year)
 
                     # Fetch term-specific data
                     student_code = student_data.get("std_stdcode")
                     if student_code:
                         try:
-                            term_data = await student_service.get_student_term_info(
-                                student_code, academic_year_str, semester_str
+                            # Same term rule as the application snapshot (yearly: term 2, else term 1)
+                            term_data, _, _ = await student_service.get_scholarship_term_info(
+                                student_code, academic_year_str, config.semester
                             )
                             if term_data:
                                 # Merge basic data with term-specific data
@@ -107,7 +118,7 @@ class ScholarshipService:
                                 current_student_data = {
                                     **student_data,
                                     "_term_data_status": "not_found",
-                                    "_term_error_message": f"查無 {academic_year_str} 學年第 {semester_str} 學期的學期資料",
+                                    "_term_error_message": f"查無 {academic_year_str} 學年（{semester_str}）的學期資料",
                                 }
                                 student_data_cache["student_term"][cache_key] = current_student_data
                         except Exception as e:
@@ -159,6 +170,12 @@ class ScholarshipService:
                     eligibility_details,
                     scholarship_type,
                 )
+                errors = eligibility_details.get("errors", [])
+                closed = [st for st in eligible_subtypes if st["value"] and not config.is_sub_type_open(st["value"])]
+                if closed:
+                    eligible_subtypes = [st for st in eligible_subtypes if st not in closed]
+                    if not any(st["value"] and st["value"] != "general" for st in eligible_subtypes):
+                        errors = [*errors, SUB_TYPES_NOT_OPEN_ERROR]
 
                 scholarship_dict = {
                     "id": scholarship_type.id,
@@ -174,6 +191,7 @@ class ScholarshipService:
                         scholarship_type.application_cycle.value if scholarship_type.application_cycle else "semester"
                     ),
                     "sub_type_list": eligible_subtypes,  # Only eligible subtypes
+                    "closed_sub_types": closed,
                     "all_sub_type_list": scholarship_type.sub_type_list or [],  # All subtypes for reference
                     "subtype_eligibility": subtype_eligibility_info,  # Detailed eligibility per subtype
                     "sub_type_selection_mode": (
@@ -224,7 +242,7 @@ class ScholarshipService:
                         # Add rule evaluation results
                         "passed": eligibility_details.get("passed", []),
                         "warnings": eligibility_details.get("warnings", []),
-                        "errors": eligibility_details.get("errors", []),
+                        "errors": errors,
                         # Hide already-submitted scholarships from the apply flow
                         "already_submitted": already_submitted,
                         # Whether the scholarship is currently accepting applications.

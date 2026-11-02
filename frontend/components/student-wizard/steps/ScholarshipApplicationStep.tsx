@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   Card,
   CardContent,
@@ -162,9 +162,16 @@ export function ScholarshipApplicationStep({
 }: ScholarshipApplicationStepProps) {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [eligibleScholarships, setEligibleScholarships] = useState<
+  const [scholarshipOptions, setScholarshipOptions] = useState<
     ScholarshipType[]
   >([]);
+  const eligibleScholarships = useMemo(
+    () => scholarshipOptions.filter(isApplyableScholarship),
+    [scholarshipOptions]
+  );
+  const [editingSubTypeNotice, setEditingSubTypeNotice] = useState<
+    string | null
+  >(null);
   const [selectedScholarship, setSelectedScholarship] =
     useState<ScholarshipType | null>(null);
   const [selectedSubTypes, setSelectedSubTypes] = useState<string[]>([]);
@@ -270,6 +277,7 @@ export function ScholarshipApplicationStep({
       selectScholarshipPlaceholder: "請選擇要申請的獎學金",
       selectPrograms: "選擇申請項目",
       programsRequired: "請至少選擇一個申請項目",
+      subTypesClosedUnticked: "本次未開放申請，已取消勾選",
       formProgress: "表單完成度",
       completeAllRequired: "請完成所有必填項目",
       savePersonalInfoFirst:
@@ -373,6 +381,8 @@ export function ScholarshipApplicationStep({
       selectScholarshipPlaceholder: "Please select a scholarship to apply",
       selectPrograms: "Select Programs",
       programsRequired: "Please select at least one program",
+      subTypesClosedUnticked:
+        "not open in this round, so it has been deselected",
       formProgress: "Form Completion",
       completeAllRequired: "Please complete all required fields",
       savePersonalInfoFirst:
@@ -689,7 +699,7 @@ export function ScholarshipApplicationStep({
 
   // Load editing application data
   useEffect(() => {
-    if (editingApplication && eligibleScholarships.length > 0) {
+    if (editingApplication && scholarshipOptions.length > 0) {
       if (restoredEditingIdRef.current === editingApplication.id) return;
       restoredEditingIdRef.current = editingApplication.id ?? null;
 
@@ -699,18 +709,43 @@ export function ScholarshipApplicationStep({
       );
       if (scholarship) {
         setSelectedScholarship(scholarship);
+      } else {
+        const blockedReasons = (
+          scholarshipOptions.find(
+            s => s.code === editingApplication.scholarship_type
+          )?.errors ?? []
+        )
+          .filter(rule => !rule.sub_type)
+          .map(rule => rule.message);
+        if (blockedReasons.length > 0) {
+          setEditingSubTypeNotice(blockedReasons.join("；"));
+        }
       }
 
-      // Load sub-types
+      // Load sub-types. The admin's current opening wins over what was saved,
+      // so a sub-type closed since then is unticked with a visible notice.
       if (
         editingApplication.scholarship_subtype_list &&
         editingApplication.scholarship_subtype_list.length > 0
       ) {
+        const closed = (scholarship?.closed_sub_types ?? []).filter(
+          st =>
+            st.value &&
+            editingApplication.scholarship_subtype_list?.includes(st.value)
+        );
         const validSubTypes =
           editingApplication.scholarship_subtype_list.filter(
-            st => st !== "general"
+            st =>
+              st !== "general" &&
+              !closed.some(closedSt => closedSt.value === st)
           );
         setSelectedSubTypes(validSubTypes);
+        if (closed.length > 0) {
+          const labels = closed
+            .map(st => (locale === "zh" ? st.label : st.label_en))
+            .join("、");
+          setEditingSubTypeNotice(`${labels} ${text.subTypesClosedUnticked}`);
+        }
       }
 
       // Load form data
@@ -808,7 +843,7 @@ export function ScholarshipApplicationStep({
         setAgreedToTerms(true);
       }
     }
-  }, [editingApplication, eligibleScholarships]);
+  }, [editingApplication, scholarshipOptions, eligibleScholarships]);
 
   const loadEligibleScholarships = async () => {
     setLoading(true);
@@ -816,7 +851,7 @@ export function ScholarshipApplicationStep({
     try {
       const response = await api.scholarships.getEligible();
       if (response.success && response.data) {
-        setEligibleScholarships(response.data.filter(isApplyableScholarship));
+        setScholarshipOptions(response.data);
       } else {
         setError(response.message || text.loadError);
       }
@@ -1480,6 +1515,15 @@ export function ScholarshipApplicationStep({
               </SelectContent>
             </Select>
           </div>
+
+          {editingSubTypeNotice && (
+            <Alert className="border-amber-200 bg-amber-50">
+              <AlertCircle className="h-4 w-4 text-amber-600" />
+              <AlertDescription className="text-amber-800">
+                {editingSubTypeNotice}
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* Sub-type Selection */}
           {selectedScholarship && hasSpecialSubTypes && (

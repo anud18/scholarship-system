@@ -16,7 +16,12 @@ from app.models.application import Application, ApplicationFile
 from app.models.payment_roster import PaymentRosterItem
 from app.models.student_bank_account import StudentBankAccount
 from app.services.ocr_service import get_ocr_service
-from app.utils.bank_account_fields import BANK_ACCOUNT_FIELD_KEYS, BANK_ACCOUNT_FIELD_LOOKUP
+from app.utils.bank_account_fields import (
+    BANK_ACCOUNT_FIELD_KEYS,
+    BANK_ACCOUNT_FIELD_LOOKUP,
+    normalize_account_number,
+    validate_postal_account_format,
+)
 
 # Verification thresholds and constants
 ACCOUNT_NUMBER_EXACT_MATCH_REQUIRED = True  # Account number must match 100%
@@ -31,44 +36,8 @@ class BankVerificationService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    def validate_postal_account_format(self, account_number: str) -> tuple[bool, Optional[str]]:
-        """
-        Validate postal account number format
-
-        Taiwanese postal accounts should be 14 digits (format: 7 digits + 7 digits)
-
-        Returns:
-            tuple[bool, Optional[str]]: (is_valid, error_message)
-        """
-        if not account_number:
-            return False, "帳號不可為空"
-
-        # Remove all non-digit characters (spaces, dashes, etc.)
-        cleaned = re.sub(r"\D", "", account_number)
-
-        # Check if it's exactly 14 digits
-        if len(cleaned) != 14:
-            return False, f"郵局帳號必須為 14 位數字，目前為 {len(cleaned)} 位"
-
-        # Check if all characters are digits
-        if not cleaned.isdigit():
-            return False, "郵局帳號只能包含數字"
-
-        return True, None
-
-    def normalize_account_number(self, account: str) -> str:
-        """
-        Normalize account number by removing all non-digit characters
-
-        Args:
-            account: Account number string (may contain spaces, dashes, etc.)
-
-        Returns:
-            Normalized account number with only digits
-        """
-        if not account:
-            return ""
-        return re.sub(r"[^0-9]", "", account)
+    validate_postal_account_format = staticmethod(validate_postal_account_format)
+    normalize_account_number = staticmethod(normalize_account_number)
 
     def verify_account_number_exact(self, form_value: str, ocr_value: str) -> Dict[str, Any]:
         """

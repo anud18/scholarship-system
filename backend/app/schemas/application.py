@@ -237,13 +237,14 @@ class ApplicationUpdate(BaseModel):
 
     scholarship_subtype_list: Optional[List[str]] = Field(None, description="獎學金子類型列表")
     form_data: Optional[ApplicationFormData] = Field(None, description="表單資料")
+    # SECURITY: `is_renewal` is not accepted: it exempts an application from the
+    # 本次開放申請類別 submit gate, so a student must never be able to set it.
     # SECURITY: `status` is deliberately NOT accepted here. It used to be assigned
     # straight onto the model in ApplicationService.update_application, letting a
     # student PUT {"status": "approved"} onto their own editable draft and skip
     # professor review, college ranking and quota allocation entirely. Workflow
     # transitions belong to the guarded PUT /applications/{id}/status path.
     agree_terms: Optional[bool] = Field(None, description="同意條款")
-    is_renewal: Optional[bool] = Field(None, description="是否為續領申請")
     sub_type_preferences: Optional[List[str]] = Field(None, description="Ordered sub-type preference list")
 
     @field_validator("sub_type_preferences")
@@ -258,6 +259,12 @@ class ApplicationUpdate(BaseModel):
         return v
 
     model_config = ConfigDict(json_encoders={datetime: lambda v: v.isoformat()})
+
+
+class StaffFormFieldsUpdate(BaseModel):
+    """Staff correction of submitted form fields: field_name → new value."""
+
+    fields: Dict[str, Any] = Field(..., min_length=1, description="要修改的表單欄位（field_name → 新值）")
 
 
 class ApplicationFileResponse(BaseModel):
@@ -371,10 +378,10 @@ class ApplicationResponse(BaseModel):
     advisor_nycu_id: Optional[str] = Field(None, description="指導教授本校人事編號（來自學生 UserProfile）")
 
     # === Academic Organization ===
-    academy_code: Optional[str] = None  # std_academyno / trm_academyno
-    academy_name: Optional[str] = None  # trm_academyname
-    department_code: Optional[str] = None  # std_depno / trm_depno
-    department_name: Optional[str] = None  # trm_depname
+    academy_code: Optional[str] = None  # std_academyno, else trm_academyno
+    academy_name: Optional[str] = None  # from the std_academyno code (academy table); trm_academyname only as fallback
+    department_code: Optional[str] = None  # std_depno, else trm_depno
+    department_name: Optional[str] = None  # from the std_depno code (departments table); trm_depname only as fallback
     degree: Optional[int] = None  # std_degree / trm_degree
     studying_status: Optional[int] = None  # std_studingstatus
     studying_status_name: Optional[str] = None  # mgd_title
@@ -616,10 +623,10 @@ class ApplicationListResponse(BaseModel):
     student_phone: Optional[str] = None  # com_cellphone
 
     # === Academic Organization ===
-    academy_code: Optional[str] = None  # std_academyno / trm_academyno
-    academy_name: Optional[str] = None  # trm_academyname
-    department_code: Optional[str] = None  # std_depno / trm_depno
-    department_name: Optional[str] = None  # trm_depname
+    academy_code: Optional[str] = None  # std_academyno, else trm_academyno
+    academy_name: Optional[str] = None  # not filled in list rows (codes only; the client looks the name up)
+    department_code: Optional[str] = None  # std_depno, else trm_depno
+    department_name: Optional[str] = None  # not filled in list rows (codes only; the client looks the name up)
     degree: Optional[int] = None  # std_degree / trm_degree
     studying_status: Optional[int] = None  # std_studingstatus
     studying_status_name: Optional[str] = None  # mgd_title

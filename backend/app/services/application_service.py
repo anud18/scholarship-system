@@ -4,18 +4,28 @@ Application service for scholarship application management
 
 import asyncio
 import logging
+from copy import deepcopy
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, FrozenSet, List, Mapping, Optional, Tuple
 
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import and_, desc
 from sqlalchemy import func as sa_func
 from sqlalchemy import or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.cache import invalidate as cache_invalidate
-from app.core.exceptions import AuthorizationError, BusinessLogicError, NotFoundError, ValidationError
+from app.core.college_mappings import ORIGINAL_ACADEMY_CODES_KEY
+from app.core.exceptions import (
+    AuthorizationError,
+    BusinessLogicError,
+    ConflictError,
+    NotFoundError,
+    ValidationError,
+)
 from app.core.metrics import scholarship_applications_total
 from app.core.schema_validation import serialize_value
 from app.models.audit_log import AuditAction, AuditLog
@@ -37,15 +47,46 @@ from app.schemas.application import (
     ApplicationResponse,
     ApplicationStatusUpdate,
     ApplicationUpdate,
-    StudentDataSchema,
 )
-from app.services.application_builder import backfill_professor_assignments, order_sub_type_preferences
-from app.services.application_field_service import FIXED_ADVISOR_KEYS, FIXED_KEY_POSTAL_ACCOUNT
+from app.schemas.user_profile import UserProfileUpdate
+from app.services.application_builder import (
+    backfill_professor_assignments,
+    ensure_sub_types_open,
+    find_professor_by_nycu_id,
+    order_sub_type_preferences,
+)
+from app.services.application_field_service import (
+    FIXED_ADVISOR_KEYS,
+    FIXED_KEY_ADVISOR_NYCU_ID,
+    FIXED_KEY_POSTAL_ACCOUNT,
+    ApplicationFieldService,
+)
+from app.services.department_names import load_department_names
 from app.services.eligibility_service import EligibilityService
 from app.services.email_automation_service import email_automation_service
 from app.services.email_service import EmailService
 from app.services.minio_service import minio_service
+from app.services.profile_owned_fields import profile_values_of
+from app.services.staff_edit_roster_sync import lock_application_rosters, sync_roster_bank_account
+from app.services.staff_form_edit import (
+    AppliedStaffFormEdit,
+    FieldChange,
+    ProfessorFacts,
+    ProfessorReassignment,
+    ReassignmentOutcome,
+    advisor_nycu_id_changed,
+    apply_staff_form_edit,
+    build_editable_form_spec,
+    decide_professor_reassignment,
+)
 from app.services.student_service import StudentService
+from app.services.user_profile_service import UserProfileService
+from app.utils.application_helpers import (
+    get_academy_code_from_data,
+    get_academy_name_from_data,
+    get_department_code_from_data,
+    get_department_name_from_data,
+)
 from app.utils.college_scope import (
     college_scope_for_user,
     college_user_may_access,
@@ -130,12 +171,19 @@ class ApplicationService:
             return None
         return user.nycu_id
 
-    def _extract_student_fields(self, student_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _extract_student_fields(
+        self, student_data: Dict[str, Any], department_names: Optional[Mapping[str, str]] = None
+    ) -> Dict[str, Any]:
         """
         Extract commonly used student fields from student_data snapshot.
 
         Converts raw API data into structured fields for ApplicationResponse.
-        Prefers term data (trm_*) over basic data (std_*) when both available.
+        學院/系所 follow the API 1 record (std_*): the code comes from std_* first and the
+        name is resolved from that code (``department_names``: code → name, see
+        load_department_names), the term row only filling a gap — so a snapshot whose
+        term lookup failed still has names, and a transferred student's code and name
+        describe the same unit. Term-only data (degree, term count, GPA, rankings)
+        prefers the term row (trm_*).
         """
         if not student_data:
             return {}
@@ -148,11 +196,11 @@ class ApplicationService:
             "student_pid": student_data.get("std_pid"),
             "student_email": student_data.get("com_email"),
             "student_phone": student_data.get("com_cellphone"),
-            # Academic org (prefer term data)
-            "academy_code": student_data.get("trm_academyno") or student_data.get("std_academyno"),
-            "academy_name": student_data.get("trm_academyname"),
-            "department_code": student_data.get("trm_depno") or student_data.get("std_depno"),
-            "department_name": student_data.get("trm_depname"),
+            # Academic org (API 1 first; names resolved from the API 1 code)
+            "academy_code": get_academy_code_from_data(student_data),
+            "academy_name": get_academy_name_from_data(student_data),
+            "department_code": get_department_code_from_data(student_data),
+            "department_name": get_department_name_from_data(student_data, department_names),
             "degree": student_data.get("trm_degree") or student_data.get("std_degree"),
             "studying_status": student_data.get("std_studingstatus"),
             # Enrollment
@@ -253,7 +301,7 @@ class ApplicationService:
         )
 
         # Extract student fields from student_data snapshot
-        student_fields = self._extract_student_fields(application.student_data)
+        student_fields = self._extract_student_fields(application.student_data, await load_department_names(self.db))
 
         return ApplicationResponse(
             id=application.id,
@@ -503,6 +551,7 @@ class ApplicationService:
         # scholarship defines real ones — drafts may stay incomplete.
         if not is_draft:
             self._validate_sub_type_for_submission(scholarship, sub_scholarship_type)
+            await ensure_sub_types_open(self.db, config, scholarship_subtype_list)
 
         from app.models.enums import ApplicationStatus
         from app.services.application_builder import build_submitted_application_values
@@ -945,7 +994,7 @@ class ApplicationService:
             # SECURITY (#1223 A): 學院 staff are scoped to their own college's
             # applicants. This branch previously fell through to an unconditional
             # `pass` alongside admin, so College-A staff could read — and through
-            # update_application / update_student_data, WRITE — any other college's
+            # update_application, WRITE — any other college's
             # application by walking ids. Same rule PR #1222 applied to the file
             # proxy (endpoints/files.py).
             if not college_user_may_access(current_user, application):
@@ -1007,7 +1056,7 @@ class ApplicationService:
             scholarship_name = application.scholarship.name
 
         # Extract student fields from student_data snapshot
-        student_fields = self._extract_student_fields(application.student_data)
+        student_fields = self._extract_student_fields(application.student_data, await load_department_names(self.db))
 
         # Get user information as fallback for student_name and student_no
         if not student_fields.get("student_name") and application.student:
@@ -1148,10 +1197,6 @@ class ApplicationService:
 
         # NOTE: status is intentionally not updatable here — see ApplicationUpdate.
 
-        # 更新續領申請標識
-        if update_data.is_renewal is not None:
-            application.is_renewal = update_data.is_renewal
-
         # 更新子項目列表（如果提供）
         if update_data.scholarship_subtype_list is not None:
             application.scholarship_subtype_list = update_data.scholarship_subtype_list
@@ -1199,84 +1244,54 @@ class ApplicationService:
 
         return application
 
-    async def update_student_data(
-        self,
-        application_id: int,
-        student_data_update: StudentDataSchema,
-        current_user: User,
-        refresh_from_api: bool = False,
-    ) -> Application:
-        """更新申請中的學生資料
+    async def _refresh_incomplete_student_snapshot(self, application: Application) -> None:
+        """Re-fetch the SIS snapshot live when the draft's term data is not ``success``.
 
-        Args:
-            application_id: 申請ID
-            student_data_update: 要更新的學生資料
-            current_user: 當前用戶
-            refresh_from_api: 是否重新從外部API獲取基本學生資料
+        A failed refresh never blocks submission: the draft snapshot is kept, and
+        so is a refresh that still came back ``error``.
         """
+        current = application.student_data or {}
+        if current.get("_term_data_status") == "success":
+            return
 
-        # 取得申請 (use internal method to get the model for modification)
-        application = await self._get_application_model(application_id, current_user)
-        if not application:
-            raise NotFoundError(f"Application {application_id} not found")
+        student_code = current.get("std_stdcode")
+        if not student_code:
+            logger.warning(f"Application {application.app_id} snapshot has no std_stdcode; cannot refresh term data")
+            return
 
-        # 檢查權限
-        if current_user.role not in [
-            UserRole.admin,
-            UserRole.super_admin,
-            UserRole.college,
-        ]:
-            if application.user_id != current_user.id:
-                raise AuthorizationError("You can only update your own application data")
+        try:
+            refreshed = await self.student_service.get_student_snapshot(
+                student_code,
+                academic_year=str(application.academic_year),
+                semester=getattr(application.semester, "value", application.semester),
+                fresh=True,
+            )
+        except Exception:
+            logger.warning(
+                f"Refreshing SIS snapshot for {application.app_id} failed; keeping the draft snapshot",
+                exc_info=True,
+            )
+            return
 
-        # 檢查是否可以編輯
-        if application.status not in [
-            ApplicationStatus.draft.value,
-            ApplicationStatus.returned.value,
-        ]:
-            raise ValidationError("Cannot update student data for submitted applications")
+        if refreshed.get("_term_data_status") == "error":
+            logger.warning(
+                f"Refreshed SIS snapshot for {application.app_id} still has no term data: "
+                f"{refreshed.get('_term_error_message')}"
+            )
+            return
 
-        # 獲取當前學生資料
-        current_student_data = application.student_data or {}
-
-        # 如果需要，重新從外部API獲取基本學生資料
-        if refresh_from_api:
-            if not current_user.nycu_id or not current_user.nycu_id.strip():
-                raise ValidationError("Student NYCU ID is required to refresh data from API")
-
-            fresh_api_data = await self.student_service.get_student_snapshot(current_user.nycu_id)
-            if fresh_api_data:
-                # 合併API資料，但保留用戶輸入的資料
-                current_student_data.update(fresh_api_data)
-
-        # 合併用戶更新的資料
-        update_dict = student_data_update.model_dump(exclude_none=True)
-        for field, value in update_dict.items():
-            if field in ["financial_info", "supervisor_info"]:
-                # 對於嵌套對象，進行深度合併
-                if value:
-                    if field not in current_student_data:
-                        current_student_data[field] = {}
-                    current_student_data[field].update(value)
-            else:
-                # 對於普通欄位，直接更新
-                current_student_data[field] = value
-
-        # 更新到資料庫。current_student_data may be the SAME dict reference
-        # as application.student_data (line 1165's `or {}` only branches when
-        # student_data is falsy), so plain `=` assignment doesn't change the
-        # column's object identity. SQLAlchemy's default JSON change detection
-        # compares identity, not contents, so without flag_modified() the
-        # in-place mutations above would be silently dropped on commit.
-        from sqlalchemy.orm.attributes import flag_modified
-
-        application.student_data = current_student_data
-        flag_modified(application, "student_data")
-
-        await self.db.commit()
-        await self.db.refresh(application)
-
-        return application
+        # Keep non-SIS keys (financial_info …) from the draft. Drop its term fields first: a
+        # partial draft holds the fallback term, whose extra trm_* keys must not survive.
+        kept = {
+            key: value
+            for key, value in current.items()
+            if not key.startswith("trm_") and key != ORIGINAL_ACADEMY_CODES_KEY
+        }
+        application.student_data = {**kept, **refreshed}
+        logger.info(
+            f"Refreshed SIS snapshot for {application.app_id} at submit "
+            f"({current.get('_term_data_status')} -> {refreshed.get('_term_data_status')})"
+        )
 
     def _enforce_contact_phone_format(self, form_fields: Optional[Dict[str, Any]]) -> None:
         """Reject a submission whose contact_phone is present but not a TW mobile.
@@ -1290,6 +1305,149 @@ class ApplicationService:
             return
         if not is_valid_taiwan_mobile(phone):
             raise ValidationError(TAIWAN_MOBILE_MESSAGE)
+
+    async def update_submitted_form_fields(
+        self,
+        application_id: int,
+        raw_fields: Dict[str, Any],
+        current_user: User,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+    ) -> AppliedStaffFormEdit:
+        application = await self._get_application_model(application_id, current_user)
+        if not application:
+            raise NotFoundError("Application", str(application_id))
+
+        await lock_application_rosters(self.db, application.id)
+        # FOR NO KEY UPDATE: the edit never changes a key, so a 造冊 item insert
+        # (its foreign key takes FOR KEY SHARE on this row) need not wait for it.
+        await self.db.refresh(
+            application,
+            attribute_names=["status", "submitted_form_data", "meta_data", "professor_id"],
+            with_for_update={"key_share": True},
+        )
+
+        if not application.is_staff_form_editable:
+            raise ValidationError(
+                "此申請目前的狀態不允許修改表單內容（草稿、退回修改或已撤回／取消的申請由學生自行處理）"
+            )
+        configuration = application.scholarship_configuration
+        scholarship = configuration.scholarship_type if configuration else None
+        scholarship = scholarship or application.scholarship
+        if scholarship is None:
+            raise ValidationError("找不到此申請的獎學金類型，無法修改表單內容")
+
+        form_config = await ApplicationFieldService(self.db).get_scholarship_form_config(scholarship.code)
+        profile = (
+            await self.db.execute(
+                select(UserProfile).where(UserProfile.user_id == application.user_id).with_for_update()
+            )
+        ).scalar_one_or_none()
+        profile_values = profile_values_of(profile)
+
+        edit = apply_staff_form_edit(
+            application.submitted_form_data, build_editable_form_spec(form_config.fields), raw_fields, profile_values
+        )
+        if not edit.changes:
+            return AppliedStaffFormEdit(changes={})
+
+        if "contact_phone" in edit.changes:
+            self._enforce_contact_phone_format(edit.form_data["fields"])
+        profile_update = self._profile_update_from(edit.profile_updates)
+
+        application.submitted_form_data = edit.form_data
+        cleared_meta = self._clear_stale_meta(application, edit.stale_meta_keys)
+        if profile_update is not None:
+            await UserProfileService(self.db).stage_user_profile_update(
+                user_id=application.user_id,
+                profile_data=profile_update,
+                change_reason=f"審核人員 {current_user.name} 於申請 {application.app_id} 修改",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+        reassignment, new_professor = await self._follow_advisor_nycu_id_edit(application, edit.changes)
+        roster_sync = await sync_roster_bank_account(
+            self.db, application, edit.postal_account, current_user, client_ip=ip_address, user_agent=user_agent
+        )
+
+        try:
+            await self.db.commit()
+        except IntegrityError as exc:
+            await self.db.rollback()
+            raise ConflictError("學生個人資料同時被其他操作建立，請重新整理後再試一次") from exc
+        await self._invalidate_app_caches()
+        logger.info(
+            "Staff %s edited form fields %s of application %s (professor reassignment: %s, rosters: %s)",
+            current_user.id,
+            sorted(edit.changes),
+            application.app_id,
+            reassignment,
+            roster_sync.audit_meta(),
+        )
+        applied = AppliedStaffFormEdit(
+            changes=edit.changes,
+            profile_fields_updated=tuple(sorted(edit.profile_updates)),
+            cleared_meta=cleared_meta,
+            professor_reassignment=reassignment,
+            new_professor_name=new_professor.name if new_professor else None,
+            roster_sync=roster_sync,
+        )
+        if new_professor is not None:
+            await self._notify_professor_assigned(application, new_professor, current_user)
+        return applied
+
+    @staticmethod
+    def _clear_stale_meta(application: Application, stale_keys: FrozenSet[str]) -> Dict[str, Any]:
+        """Drop meta_data markers the edit made untrue; returns what was dropped for the audit row."""
+        meta_data = application.meta_data or {}
+        cleared = {key: meta_data[key] for key in stale_keys if key in meta_data}
+        if cleared:
+            application.meta_data = {key: value for key, value in meta_data.items() if key not in cleared}
+        return cleared
+
+    async def _follow_advisor_nycu_id_edit(
+        self, application: Application, changes: Mapping[str, FieldChange]
+    ) -> Tuple[Optional[ProfessorReassignment], Optional[User]]:
+        """Move the reviewing professor to the advisor a staff edit names, unless they already reviewed.
+
+        Returns the decision (None when the 人事編號 did not really change) and the
+        newly assigned professor, if any.
+        """
+        change = changes.get(FIXED_KEY_ADVISOR_NYCU_ID)
+        if change is None or not advisor_nycu_id_changed(change.old, change.new):
+            return None, None
+
+        config = application.scholarship_configuration
+        current_id = application.professor_id
+        matched = await find_professor_by_nycu_id(self.db, change.new) if change.new else None
+        decision = decide_professor_reassignment(
+            ProfessorFacts(
+                has_professor_stage=bool(config and config.requires_professor_review_for(bool(application.is_renewal))),
+                is_professor_actionable=getattr(application.status, "value", application.status)
+                in PROFESSOR_ACTIONABLE_APPLICATION_STATUSES,
+                current_professor_id=current_id,
+                current_professor_reviewed=current_id is not None
+                and await self._has_professor_reviewed(application.id, current_id),
+                matched_professor_id=matched.id if matched else None,
+            )
+        )
+        if decision.changes_assignment:
+            application.professor_id = decision.to_professor_id
+        is_reassigned = decision.outcome is ReassignmentOutcome.REASSIGNED
+        return decision, matched if is_reassigned else None
+
+    async def _has_professor_reviewed(self, application_id: int, professor_id: int) -> bool:
+        stmt = select(Application.id).where(Application.id == application_id, self._professor_reviewed(professor_id))
+        return (await self.db.execute(stmt)).first() is not None
+
+    @staticmethod
+    def _profile_update_from(profile_updates: Dict[str, Any]) -> Optional[UserProfileUpdate]:
+        if not profile_updates:
+            return None
+        try:
+            return UserProfileUpdate(**profile_updates)
+        except PydanticValidationError as exc:
+            raise ValidationError(f"指導教授資料格式不正確：{exc.errors()[0].get('msg')}") from exc
 
     async def submit_application(self, application_id: int, user: User) -> ApplicationResponse:
         """提交申請"""
@@ -1327,6 +1485,11 @@ class ApplicationService:
         # to no quota slot at distribution time).
         self._validate_sub_type_for_submission(application.scholarship, application.sub_scholarship_type)
 
+        # The admin's current opening governs every submit, including a 退回補件 resubmit; renewals keep their award.
+        if application.scholarship_configuration_id and not application.is_renewal:
+            config = await self.db.get(ScholarshipConfiguration, application.scholarship_configuration_id)
+            await ensure_sub_types_open(self.db, config, application.scholarship_subtype_list)
+
         # Load user profile once (reused for the 存摺封面 check, auto-assign professor and email notification)
         advisor_profile = await self._get_user_profile(application.user_id)
 
@@ -1336,6 +1499,9 @@ class ApplicationService:
 
         # 處理銀行帳戶證明文件 clone（從個人資料複製到申請）
         await self._clone_user_profile_documents(application, user)
+
+        # 草稿建立時學期資料沒抓到（SIS 逾時等），送出前再抓一次
+        await self._refresh_incomplete_student_snapshot(application)
 
         # 更新狀態為已提交
         from app.utils.i18n import ScholarshipI18n
@@ -2366,22 +2532,6 @@ class ApplicationService:
                     logger.debug(f"No {doc_config['file_type']} found for user {user.id}")
                     continue
 
-                # Check if the document is already cloned to avoid duplication
-                existing_file_stmt = select(ApplicationFile).where(
-                    ApplicationFile.application_id == application.id,
-                    ApplicationFile.file_type == doc_config["file_type"],
-                )
-                existing_file_result = await self.db.execute(existing_file_stmt)
-                existing_file = existing_file_result.scalar_one_or_none()
-
-                if existing_file:
-                    logger.debug(
-                        f"{doc_config['document_name']} already cloned for application {application.app_id}, skipping"
-                    )
-                    continue
-
-                logger.info(f"Cloning {doc_config['document_name']} for application {application.app_id}")
-
                 # 使用儲存的 object_name，如果沒有則從 URL 提取
                 if hasattr(user_profile, doc_config["object_name_field"]):
                     source_object_name = getattr(user_profile, doc_config["object_name_field"], None)
@@ -2396,6 +2546,32 @@ class ApplicationService:
                     filename = doc_url.split("/")[-1].split("?")[0]
                     source_object_name = f"user-profiles/{user.id}/bank-documents/{filename}"
 
+                # Locked so overlapping saves cannot each copy the file and orphan one of the copies.
+                existing_file_stmt = (
+                    select(ApplicationFile)
+                    .where(
+                        ApplicationFile.application_id == application.id,
+                        ApplicationFile.file_type == doc_config["file_type"],
+                    )
+                    .order_by(ApplicationFile.id)
+                    .limit(1)
+                    .with_for_update()
+                )
+                existing_file_result = await self.db.execute(existing_file_stmt)
+                existing_file = existing_file_result.scalars().first()
+
+                # Skip only while the copy still matches the profile's current document.
+                # The student can replace the profile document after the first clone
+                # (draft autosave clones it early); without this comparison the
+                # application kept submitting the stale first copy.
+                if existing_file and existing_file.source_object_name == source_object_name:
+                    logger.debug(
+                        f"{doc_config['document_name']} already cloned for application {application.app_id}, skipping"
+                    )
+                    continue
+
+                logger.info(f"Cloning {doc_config['document_name']} for application {application.app_id}")
+
                 # 使用 MinIO 服務複製文件到申請路徑
                 new_object_name = minio_service.clone_file_to_application(
                     source_object_name=source_object_name,
@@ -2404,20 +2580,35 @@ class ApplicationService:
 
                 logger.debug(f"File cloned from {source_object_name} to {new_object_name}")
 
-                # 創建 ApplicationFile 記錄 - 與動態上傳文件相同處理
-                application_file = ApplicationFile(
-                    application_id=application.id,
-                    file_type=doc_config["file_type"],
-                    filename=filename,
-                    original_filename=filename,
-                    file_size=0,  # 大小會在實際使用時獲取
-                    content_type="application/octet-stream",  # 會在實際使用時更新
-                    object_name=new_object_name,
-                    is_verified=True,  # 固定文件預設已驗證
-                    uploaded_at=datetime.now(timezone.utc),
-                )
-
-                self.db.add(application_file)
+                replaced_object_name = None
+                if existing_file:
+                    # Re-point the existing row so file_id and the document list stay valid.
+                    replaced_object_name = existing_file.object_name
+                    existing_file.filename = filename
+                    existing_file.original_filename = filename
+                    existing_file.object_name = new_object_name
+                    existing_file.source_object_name = source_object_name
+                    # Size and type described the replaced object; they are filled in on use, as for a new row.
+                    existing_file.file_size = 0
+                    existing_file.content_type = "application/octet-stream"
+                    existing_file.mime_type = None
+                    existing_file.uploaded_at = datetime.now(timezone.utc)
+                    application_file = existing_file
+                else:
+                    # 創建 ApplicationFile 記錄 - 與動態上傳文件相同處理
+                    application_file = ApplicationFile(
+                        application_id=application.id,
+                        file_type=doc_config["file_type"],
+                        filename=filename,
+                        original_filename=filename,
+                        file_size=0,  # 大小會在實際使用時獲取
+                        content_type="application/octet-stream",  # 會在實際使用時更新
+                        object_name=new_object_name,
+                        source_object_name=source_object_name,
+                        is_verified=True,  # 固定文件預設已驗證
+                        uploaded_at=datetime.now(timezone.utc),
+                    )
+                    self.db.add(application_file)
                 await self.db.flush()  # 確保獲得 application_file.id
 
                 cloned_documents.append(
@@ -2426,12 +2617,14 @@ class ApplicationService:
                         "document_name": doc_config["document_name"],
                         "file_id": application_file.id,
                         "object_name": new_object_name,
+                        "replaced_object_name": replaced_object_name,
                     }
                 )
 
             # 批量更新申請的 form_data
             if cloned_documents:
-                form_data = application.submitted_form_data or {}
+                # Deep copy: assigning the same dict back would not mark the JSON column dirty.
+                form_data = deepcopy(application.submitted_form_data or {})
 
                 # 生成文件訪問 URL
                 from app.core.config import settings
@@ -2482,6 +2675,19 @@ class ApplicationService:
                 logger.info(
                     f"{len(cloned_documents)} documents successfully cloned and linked to application {application.app_id}"
                 )
+
+                # Drop the superseded copies only after the new ones are committed. Once the
+                # application has left draft, reviewers may still need the copy they saw.
+                is_draft = getattr(application.status, "value", application.status) == ApplicationStatus.draft.value
+                for cloned_doc in cloned_documents:
+                    replaced_object_name = cloned_doc["replaced_object_name"]
+                    if is_draft and replaced_object_name and not minio_service.delete_file(replaced_object_name):
+                        logger.warning(
+                            "Could not delete superseded %s %s for application %s",
+                            cloned_doc["file_type"],
+                            replaced_object_name,
+                            application.app_id,
+                        )
 
         except Exception:
             logger.exception(f"Failed to clone user profile documents for application {application.app_id}")
@@ -3056,10 +3262,8 @@ class ApplicationService:
         """Assign professor to application with notification"""
         try:
             from app.core.exceptions import NotFoundError, ValidationError
-            from app.models.notification import NotificationChannel, NotificationPriority, NotificationType
             from app.models.user import UserRole
             from app.services.email_service import EmailService
-            from app.services.notification_service import NotificationService
 
             # Get application with all relationships loaded to avoid lazy loading
             stmt = (
@@ -3128,39 +3332,7 @@ class ApplicationService:
             await self.db.commit()
             await self.db.refresh(application)
 
-            # No email on assignment: professors are only mailed when a student
-            # they supervise submits an application. The in-app notification below
-            # remains the channel for an admin/college-initiated assignment.
-
-            # Create in-app notification (use info type which exists in DB enum)
-            try:
-                notification_service = NotificationService(self.db)
-                await notification_service.create_notification(
-                    user_id=professor.id,
-                    notification_type=NotificationType.info,
-                    data={
-                        "title": "新的獎學金申請需要您的審查",
-                        "message": f"申請編號 {application.app_id} 已指派給您進行教授推薦審查",
-                        "application_id": application.id,
-                        "app_id": application.app_id,
-                        "student_name": (
-                            application.student_data.get("std_cname") if application.student_data else "Unknown"
-                        ),
-                        "scholarship_name": application.scholarship_name,
-                        "assigned_by": assigned_by.name,
-                    },
-                    href=f"/professor/applications/{application.id}",
-                    priority=NotificationPriority.high,
-                    # in_app ONLY. NotificationChannel.email here reaches
-                    # _send_email_notification -> EmailService immediately, which
-                    # bypasses the scheduled_emails queue and the assignment
-                    # templates — so it would re-add assignment mail on top of the
-                    # scheduled one.
-                    channels=[NotificationChannel.in_app],
-                )
-                logger.info(f"In-app notification created for professor {professor.nycu_id}")
-            except Exception:
-                logger.exception(f"Failed to create notification for professor {professor.nycu_id}")
+            await self._notify_professor_assigned(application, professor, assigned_by)
 
             # Log the assignment change
             if old_professor_id != professor.id:
@@ -3176,6 +3348,45 @@ class ApplicationService:
             logger.exception("Error assigning professor")
             await self.db.rollback()
             raise
+
+    async def _notify_professor_assigned(self, application: Application, professor: User, assigned_by: User) -> None:
+        """In-app notice to a professor assigned by staff. Runs after the assignment
+        commits and never raises, so a failed notice cannot undo the assignment.
+
+        No email: professors are only mailed when a student they supervise
+        submits an application.
+        """
+        from app.models.notification import NotificationChannel, NotificationPriority, NotificationType
+        from app.services.notification_service import NotificationService
+
+        try:
+            await NotificationService(self.db).create_notification(
+                user_id=professor.id,
+                notification_type=NotificationType.info,
+                data={
+                    "title": "新的獎學金申請需要您的審查",
+                    "message": f"申請編號 {application.app_id} 已指派給您進行教授推薦審查",
+                    "application_id": application.id,
+                    "app_id": application.app_id,
+                    "student_name": (
+                        application.student_data.get("std_cname") if application.student_data else "Unknown"
+                    ),
+                    "scholarship_name": application.scholarship_name,
+                    "assigned_by": assigned_by.name,
+                },
+                href=f"/professor/applications/{application.id}",
+                priority=NotificationPriority.high,
+                # in_app ONLY. NotificationChannel.email here reaches
+                # _send_email_notification -> EmailService immediately, which
+                # bypasses the scheduled_emails queue and the assignment
+                # templates, so it would re-add assignment mail on top of the
+                # scheduled one.
+                channels=[NotificationChannel.in_app],
+            )
+        except Exception:
+            logger.exception("Failed to create notification for professor %s", professor.nycu_id)
+            return
+        logger.info("In-app notification created for professor %s", professor.nycu_id)
 
     # ------------------------------------------------------------------ #
     # Renewal & Challenge application factories

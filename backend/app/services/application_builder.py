@@ -17,7 +17,7 @@ from app.core.exceptions import ValidationError
 from app.models.application import Application
 from app.models.application_sequence import ApplicationSequence
 from app.models.enums import PROFESSOR_ACTIONABLE_APPLICATION_STATUSES, ApplicationStatus, ReviewStage
-from app.models.scholarship import ScholarshipConfiguration
+from app.models.scholarship import ScholarshipConfiguration, ScholarshipSubTypeConfig
 from app.models.user import User, UserRole
 from app.models.user_profile import UserProfile
 from app.utils.i18n import ScholarshipI18n
@@ -54,6 +54,23 @@ def validate_sub_type_for_submission(scholarship, sub_scholarship_type: Optional
             raise ValidationError("此獎學金需選擇申請類別（" + "、".join(real_sub_types) + "），不可使用通用類別")
     elif normalized != "general":
         raise ValidationError("此獎學金不提供申請類別選擇，不可指定子類別")
+
+
+async def ensure_sub_types_open(
+    db: AsyncSession, config: ScholarshipConfiguration, sub_types: Optional[List[str]]
+) -> None:
+    """Reject a new (一般) application that selects a sub-type the admin has not opened this round."""
+    closed = [code for code in sub_types or [] if not config.is_sub_type_open(code)]
+    if not closed:
+        return
+    rows = await db.execute(
+        select(ScholarshipSubTypeConfig.sub_type_code, ScholarshipSubTypeConfig.name).where(
+            ScholarshipSubTypeConfig.scholarship_type_id == config.scholarship_type_id
+        )
+    )
+    names = {code.strip().lower(): name for code, name in rows.all()}
+    label = "、".join(names.get(code.strip().lower(), code) for code in closed)
+    raise ValidationError(f"{label} 本次未開放申請，請取消勾選")
 
 
 def order_sub_type_preferences(sub_types: List[str]) -> List[str]:
@@ -133,6 +150,20 @@ async def generate_app_id(
     return f"{app_id}{suffix}"
 
 
+async def find_professor_by_nycu_id(db: AsyncSession, nycu_id: str) -> Optional[User]:
+    """The professor account a student's advisor 人事代號 names, or None."""
+    # 人事代號 is entered uppercased, but account nycu_ids may not be. users.nycu_id
+    # is unique only case-sensitively, so prefer an exact match and never let two
+    # case-variant accounts raise MultipleResultsFound mid-submit.
+    stmt = (
+        select(User)
+        .where(func.upper(User.nycu_id) == nycu_id.upper(), User.role == UserRole.professor)
+        .order_by((User.nycu_id == nycu_id).desc(), User.id)
+        .limit(1)
+    )
+    return (await db.execute(stmt)).scalars().first()
+
+
 async def assign_professor_from_profile(
     db: AsyncSession, application, user_id: int, profile: Optional[UserProfile] = None
 ) -> Optional[User]:
@@ -154,21 +185,7 @@ async def assign_professor_from_profile(
     if not profile or not profile.advisor_nycu_id:
         return None
 
-    # 人事代號 is entered uppercased, but account nycu_ids may not be. users.nycu_id
-    # is unique only case-sensitively, so prefer an exact match and never let two
-    # case-variant accounts raise MultipleResultsFound mid-submit.
-    professor_stmt = (
-        select(User)
-        .where(
-            func.upper(User.nycu_id) == profile.advisor_nycu_id.upper(),
-            User.role == UserRole.professor,
-        )
-        .order_by((User.nycu_id == profile.advisor_nycu_id).desc(), User.id)
-        .limit(1)
-    )
-    professor_result = await db.execute(professor_stmt)
-    professor = professor_result.scalars().first()
-
+    professor = await find_professor_by_nycu_id(db, profile.advisor_nycu_id)
     if professor:
         application.professor_id = professor.id
         logger.info(

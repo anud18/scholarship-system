@@ -13,15 +13,18 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AuthorizationError, NotFoundError, ScholarshipException
-from app.core.security import get_current_user, require_staff, require_student
+from app.api.v1.endpoints.user_profiles import get_client_info
+from app.core.security import get_current_user, require_roles, require_staff, require_student
 from app.db.deps import get_db
+from app.models.audit_log import AuditAction
 from app.models.enums import REAPPLY_ALLOWED_APPLICATION_STATUSES
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.application import (
     ApplicationCreate,
     ApplicationStatusUpdate,
     ApplicationStatusUpdateResponse,
     ApplicationUpdate,
+    StaffFormFieldsUpdate,
     StudentDataSchema,
 )
 from app.services.application_audit_service import ApplicationAuditService
@@ -396,6 +399,59 @@ async def update_application(
     }
 
 
+@router.patch("/{id}/form-fields")
+async def update_application_form_fields(
+    id: int = Path(..., description="Application ID"),
+    update_data: StaffFormFieldsUpdate = Body(...),
+    current_user: User = Depends(require_roles(UserRole.admin, UserRole.super_admin, UserRole.college)),
+    db: AsyncSession = Depends(get_db),
+    request: Request = None,
+):
+    """Correct the form fields a student submitted (admin / college staff)."""
+    service = ApplicationService(db)
+    ip_address, user_agent = get_client_info(request) if request else (None, None)
+    edit = await service.update_submitted_form_fields(
+        id, update_data.fields, current_user, ip_address=ip_address, user_agent=user_agent
+    )
+
+    result = await service.get_application_by_id(id, current_user)
+    if result is None:
+        raise NotFoundError("Application", str(id))
+
+    if edit.changes:
+        meta_data = {
+            "app_id": result.app_id,
+            "update_type": "staff_form_fields_edit",
+            "changed_fields": sorted(edit.changes),
+            "profile_fields_updated": list(edit.profile_fields_updated),
+        }
+        if edit.cleared_meta:
+            meta_data["cleared_meta_data"] = edit.cleared_meta
+        if edit.professor_reassignment is not None:
+            meta_data["professor_reassignment"] = {
+                "outcome": edit.professor_reassignment.outcome.value,
+                "from_professor_id": edit.professor_reassignment.from_professor_id,
+                "to_professor_id": edit.professor_reassignment.to_professor_id,
+            }
+        meta_data.update(edit.roster_sync.audit_meta())
+        await ApplicationAuditService(db).log_application_operation(
+            application_id=id,
+            action=AuditAction.update,
+            user=current_user,
+            request=request,
+            description=f"修改申請表單內容 {result.app_id}",
+            old_values={name: change.old for name, change in edit.changes.items()},
+            new_values={name: change.new for name, change in edit.changes.items()},
+            meta_data=meta_data,
+        )
+
+    return {
+        "success": True,
+        "message": edit.message,
+        "data": _serialize_result(result),
+    }
+
+
 @router.post("/{id}/submit")
 async def submit_application(
     id: int = Path(..., description="Application ID"),
@@ -750,62 +806,6 @@ async def get_college_applications_for_review(
         "message": "查詢成功",
         "data": [_serialize_result(item) for item in result],
     }
-
-
-@router.put("/{id}/student-data")
-async def update_student_data(
-    id: int,
-    student_data: StudentDataSchema,
-    refresh_from_api: bool = Query(False, description="是否重新從外部API獲取基本學生資料"),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    request: Request = None,
-):
-    """更新申請的學生相關資料 (銀行帳號、指導教授資訊等)"""
-    service = ApplicationService(db)
-
-    try:
-        # Get app_id before update
-        app = await service.get_application_by_id(id, current_user)
-        app_id = app.app_id if hasattr(app, "app_id") else f"APP-{id}"
-
-        await service.update_student_data(
-            id=id,
-            student_data_update=student_data,
-            current_user=current_user,
-            refresh_from_api=refresh_from_api,
-        )
-
-        # Log audit trail for student data update
-        audit_service = ApplicationAuditService(db)
-        updated_fields = []
-        if hasattr(student_data, "model_dump"):
-            updated_fields = [k for k, v in student_data.model_dump(exclude_unset=True).items() if v is not None]
-        elif hasattr(student_data, "dict"):
-            updated_fields = [k for k, v in student_data.dict(exclude_unset=True).items() if v is not None]
-
-        await audit_service.log_student_data_update(
-            application_id=id,
-            app_id=app_id,
-            user=current_user,
-            updated_fields=updated_fields,
-            request=request,
-        )
-
-        return {
-            "success": True,
-            "message": "學生資料更新成功",
-            "data": {"id": id},
-        }
-    except (NotFoundError, ValidationError, AuthorizationError) as e:
-        raise HTTPException(
-            status_code=(
-                status.HTTP_400_BAD_REQUEST
-                if isinstance(e, ValidationError)
-                else status.HTTP_404_NOT_FOUND if isinstance(e, NotFoundError) else status.HTTP_403_FORBIDDEN
-            ),
-            detail=str(e),
-        ) from e
 
 
 @router.get("/{id}/student-data")
