@@ -30,11 +30,11 @@ Source = Tuple[Store, str]
 # profile. A submitted `postal_account` ranks below the profile because the
 # wizard's copy may be another student's account leaked through the shared
 # form-config prefill (#1443); batch/renewal imports carry only that key.
+# A submitted `bank_account` is a separate 銀行帳戶 answer, never the 郵局帳號.
 POSTAL_ACCOUNT_SOURCES: Tuple[Source, ...] = (
     (Store.FORM, "account_number"),
     (Store.PROFILE, "account_number"),
     (Store.FORM, "postal_account"),
-    (Store.FORM, "bank_account"),
 )
 
 # form-config field id -> where its shown value comes from, first non-blank wins.

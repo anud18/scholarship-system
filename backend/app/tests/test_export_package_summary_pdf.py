@@ -145,6 +145,24 @@ class TestFormFieldSection:
         assert "郵局帳號" in text and "33333333333333" in text
         assert "指導教授姓名" in text and "王教授" in text
 
+    def test_a_submitted_bank_account_prints_as_its_own_row(self):
+        text = _summary_text(
+            {
+                "account_number": _field("account_number", "11111111111111"),
+                "bank_account": _field("bank_account", "44444444444444"),
+            },
+            dict(FIXED_FIELD_LABELS),
+        )
+
+        assert "郵局帳號\n11111111111111" in text
+        assert "銀行帳戶\n44444444444444" in text
+
+    def test_a_submitted_bank_account_never_fills_the_postal_account(self):
+        text = _summary_text({"bank_account": _field("bank_account", "44444444444444")}, dict(FIXED_FIELD_LABELS))
+
+        assert "郵局帳號" not in text
+        assert "銀行帳戶\n44444444444444" in text
+
     def test_two_distinct_fields_sharing_a_label_and_value_both_render(self):
         # application_fields has no uniqueness constraint on field_label, so two
         # real questions can share one label. The de-dupe is scoped to the

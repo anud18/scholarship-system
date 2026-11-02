@@ -31,8 +31,9 @@ class TestPostalAccount:
     def test_imported_application_without_profile_uses_postal_account(self):
         assert _account(_form(postal_account=LEAKED, bank_account=BANK)) == LEAKED
 
-    def test_bank_account_is_the_last_resort(self):
-        assert _account(_form(bank_account=BANK)) == BANK
+    def test_a_submitted_bank_account_is_not_the_postal_account(self):
+        assert _account(_form(bank_account=BANK)) is None
+        assert _account(_form(bank_account=BANK), {"account_number": PROFILE}) == PROFILE
 
     @pytest.mark.parametrize("blank", ["", "   ", None])
     def test_blank_sources_fall_through(self, blank):
