@@ -738,3 +738,111 @@ class TestDepartmentSummaryExportBulkEndpoint:
             for r in range(3, ws.max_row + 1)
         }
         assert rows == {"S101": ("環境工程學系", 2), "S102": ("環境工程學系", 3)}
+
+
+# ---------------------------------------------------------------------------
+# 學生匯款帳號 column: the application's effective 郵局帳號
+# ---------------------------------------------------------------------------
+
+from app.models.user_profile import UserProfile  # noqa: E402
+
+_PROFILE_ACCOUNT = "99999999999999"
+
+
+def _account_form(**values):
+    return {"fields": {key: {"field_id": key, "value": value} for key, value in values.items()}}
+
+
+class TestSummaryExportAccountColumn:
+    def setup_method(self):
+        _create_tables()
+
+    def teardown_method(self):
+        _drop_tables()
+        app.dependency_overrides.clear()
+
+    def _seed(self, applications, profiles):
+        async def _impl():
+            async with _AsyncSession() as session:
+                session.add(Department(code="CE4460", name="土木工程學系", academy_code="CE"))
+                session.add(ScholarshipType(id=1, code="phd_scholarship", name="博士生獎學金"))
+                for user_id, account in profiles.items():
+                    session.add(UserProfile(user_id=user_id, account_number=account))
+                for app_pk, user_id, stdcode, form in applications:
+                    session.add(
+                        Application(
+                            id=app_pk,
+                            app_id=f"APP-114-1-{app_pk:05d}",
+                            user_id=user_id,
+                            scholarship_type_id=1,
+                            academic_year=114,
+                            semester="first",
+                            status="submitted",
+                            sub_type_selection_mode=SubTypeSelectionMode.single,
+                            student_data={"std_depno": "CE4460", "std_stdcode": stdcode},
+                            submitted_form_data=form,
+                        )
+                    )
+                await session.commit()
+
+        _run_async(_impl())
+
+    def _exported_accounts(self):
+        import io as _io
+
+        from openpyxl import load_workbook
+
+        from app.services.college_ranking_export_service import STATIC_HEADERS
+
+        async def _fake_db():
+            async with _AsyncSession() as session:
+                yield session
+
+        app.dependency_overrides[get_db] = _fake_db
+        app.dependency_overrides[require_scholarship_manager] = _make_admin_user
+        response = TestClient(app, raise_server_exceptions=True).get(
+            "/api/v1/college-review/applications/department-summary-export",
+            params={"scholarship_type_id": 1, "academic_year": 114, "semester": "first", "department_code": "CE4460"},
+        )
+        assert response.status_code == 200, response.text
+        ws = load_workbook(_io.BytesIO(response.content)).active
+        code_col = STATIC_HEADERS.index("學號") + 1
+        account_col = STATIC_HEADERS.index("學生匯款帳號") + 1
+        return sorted(
+            (ws.cell(row=r, column=code_col).value, ws.cell(row=r, column=account_col).value)
+            for r in range(3, ws.max_row + 1)
+        )
+
+    def test_each_application_of_one_student_gets_its_own_account(self):
+        # One student may hold a renewal and a new application in the same
+        # term (separate partial unique indexes). SQLite ignores the partial
+        # predicates, so the loader is driven directly with two in-memory rows.
+        from types import SimpleNamespace
+
+        from app.api.v1.endpoints.college_review._helpers import load_export_aux_data
+
+        self._seed([], profiles={401: _PROFILE_ACCOUNT})
+        renewal = SimpleNamespace(id=4001, user_id=401, submitted_form_data=_account_form(account_number="1" * 14))
+        new = SimpleNamespace(id=4002, user_id=401, submitted_form_data=_account_form(account_number="2" * 14))
+
+        async def _load():
+            async with _AsyncSession() as session:
+                return await load_export_aux_data(session, scholarship_type=None, applications=[renewal, new])
+
+        _, _, account_by_application, _ = _run_async(_load())
+        assert account_by_application == {4001: "1" * 14, 4002: "2" * 14}
+
+    def test_staff_edited_account_beats_the_profile(self):
+        self._seed(
+            [(4003, 403, "S403", _account_form(account_number="33333333333333", postal_account="44444444444444"))],
+            profiles={403: _PROFILE_ACCOUNT},
+        )
+        assert self._exported_accounts() == [("S403", "33333333333333")]
+
+    def test_imported_application_without_profile_exports_its_postal_account(self):
+        self._seed([(4004, 404, "S404", _account_form(postal_account="55555555555555"))], profiles={})
+        assert self._exported_accounts() == [("S404", "55555555555555")]
+
+    def test_profile_account_fills_in_when_the_application_has_none(self):
+        self._seed([(4005, 405, "S405", _account_form(contact_phone="0912345678"))], profiles={405: _PROFILE_ACCOUNT})
+        assert self._exported_accounts() == [("S405", _PROFILE_ACCOUNT)]
