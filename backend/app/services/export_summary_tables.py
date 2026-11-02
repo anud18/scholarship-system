@@ -83,7 +83,7 @@ async def build_embedded_summary_tables(
     per-department tables; pass the mapping the caller already loaded for the
     same export, otherwise it is loaded here — once for every table.
     ``profile_values_by_user`` follows the same rule for the applicants'
-    profile rows behind the 學生匯款帳號 column.
+    profile rows behind the 學生匯款帳號 and 指導教授 values.
     """
     # Lazy import: keep this module's top level free of export_package_service
     # (which pulls in reportlab) so callers that only need _sort_key — e.g. the
@@ -92,7 +92,7 @@ async def build_embedded_summary_tables(
 
     all_apps = [app for apps in dept_groups.values() for app in apps]
 
-    dynamic_fields, sub_type_labels, account_by_application, advisor_by_user = await load_export_aux_data(
+    dynamic_fields, sub_type_labels, profile_fields_by_application, advisor_by_application = await load_export_aux_data(
         db,
         scholarship_type=scholarship_type,
         applications=all_apps,
@@ -113,8 +113,8 @@ async def build_embedded_summary_tables(
             ExportRow(
                 rank_position=None,  # 學院初審會議之學院排序 left blank (ranking not done yet)
                 application=app,
-                bank_account=account_by_application.get(app.id),
-                advisor_names=advisor_by_user.get(app.user_id),
+                profile_fields=profile_fields_by_application.get(app.id),
+                advisor_names=advisor_by_application.get(app.id),
             )
             for app in ordered
         ]

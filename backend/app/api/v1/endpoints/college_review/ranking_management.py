@@ -1502,7 +1502,7 @@ async def export_ranking_excel(
     items_sorted = sorted(ranking.items or [], key=lambda x: x.rank_position)
     apps_in_ranking = [item.application for item in items_sorted if item.application is not None]
 
-    dynamic_fields, sub_type_labels, account_by_application, advisor_string_by_user = await load_export_aux_data(
+    dynamic_fields, sub_type_labels, profile_fields_by_application, advisor_by_application = await load_export_aux_data(
         db,
         scholarship_type=ranking.scholarship_type,
         applications=apps_in_ranking,
@@ -1515,8 +1515,8 @@ async def export_ranking_excel(
         ExportRow(
             rank_position=None if template else item.rank_position,
             application=item.application,
-            bank_account=account_by_application.get(item.application.id),
-            advisor_names=advisor_string_by_user.get(item.application.user_id),
+            profile_fields=profile_fields_by_application.get(item.application.id),
+            advisor_names=advisor_by_application.get(item.application.id),
         )
         for item in items_sorted
         if item.application is not None

@@ -30,8 +30,10 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import KeepInFrame, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
+from app.services.application_field_service import FIXED_KEY_POSTAL_ACCOUNT
 from app.services.pdf_fonts import CJK_FONT_NAME, ensure_cjk_font
 from app.services.professor_review_export import ProfessorReviewData
+from app.services.profile_owned_fields import PROFILE_OWNED_FIELD_SOURCES, EffectiveProfileFields
 from app.utils.application_helpers import get_department_name_from_data, get_term_count_from_data
 from app.utils.college_display_number import format_student_college
 from app.utils.excel_safety import sanitize_excel_cell
@@ -107,7 +109,9 @@ class ExportRow:
 
     rank_position: Optional[int]
     application: Any  # Duck-typed: needs sub_type_preferences, sub_scholarship_type, student_data, submitted_form_data
-    bank_account: Optional[str] = None  # the application's effective 郵局帳號 (profile_owned_fields)
+    # The application's effective 郵局帳號 and 指導教授 values; they fill the
+    # 學生匯款帳號 column and any flagged dynamic column for those fields.
+    profile_fields: Optional[EffectiveProfileFields] = None
     advisor_names: Optional[str] = None  # 指導教授姓名 (comma-joined if multiple advisors)
 
 
@@ -406,7 +410,7 @@ class CollegeRankingExportService:
             self._render_enrollment_date(sd.get("std_enrollyear"), sd.get("std_enrollterm")),
             self._safe_str(sd.get("std_stdcode")),
             self._safe_str(sd.get("std_pid")),
-            self._safe_str(row.bank_account),
+            self._safe_str(self._profile_value(row, FIXED_KEY_POSTAL_ACCOUNT)),
             self._safe_str(sd.get("com_email")),
             self._safe_str(sd.get("com_commadd")),
             self._safe_str(row.advisor_names),
@@ -469,7 +473,18 @@ class CollegeRankingExportService:
         form_data = getattr(row.application, "submitted_form_data", None) or {}
         fields_map = form_data.get("fields") if isinstance(form_data, dict) else None
         fields_map = fields_map if isinstance(fields_map, dict) else {}
-        return [self._extract_dynamic_value(fields_map, spec.field_name) for spec in sorted_dynamic]
+        return [
+            (
+                self._safe_str(self._profile_value(row, spec.field_name))
+                if spec.field_name in PROFILE_OWNED_FIELD_SOURCES
+                else self._extract_dynamic_value(fields_map, spec.field_name)
+            )
+            for spec in sorted_dynamic
+        ]
+
+    @staticmethod
+    def _profile_value(row: ExportRow, field_id: str) -> Optional[str]:
+        return getattr(row.profile_fields, field_id) if row.profile_fields else None
 
     def _extract_dynamic_value(self, fields_map: Dict[str, Any], field_name: str) -> str:
         entry = fields_map.get(field_name)

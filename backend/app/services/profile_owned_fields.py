@@ -84,10 +84,10 @@ def has_submitted_copy(field_id: str, submitted_fields: Mapping[str, Any]) -> bo
 class EffectiveProfileFields:
     """The shown value of each profile-owned field; None when every source is blank."""
 
-    postal_account: Optional[str]
-    advisor_name: Optional[str]
-    advisor_email: Optional[str]
-    advisor_nycu_id: Optional[str]
+    postal_account: Optional[str] = None
+    advisor_name: Optional[str] = None
+    advisor_email: Optional[str] = None
+    advisor_nycu_id: Optional[str] = None
 
     def by_field_id(self) -> Dict[str, Optional[str]]:
         return {field_id: getattr(self, field_id) for field_id in PROFILE_OWNED_FIELD_SOURCES}

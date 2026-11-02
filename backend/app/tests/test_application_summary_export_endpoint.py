@@ -761,13 +761,14 @@ class TestSummaryExportAccountColumn:
         _drop_tables()
         app.dependency_overrides.clear()
 
-    def _seed(self, applications, profiles):
+    def _seed(self, applications, profiles, extra_rows=()):
         async def _impl():
             async with _AsyncSession() as session:
                 session.add(Department(code="CE4460", name="土木工程學系", academy_code="CE"))
                 session.add(ScholarshipType(id=1, code="phd_scholarship", name="博士生獎學金"))
                 for user_id, account in profiles.items():
                     session.add(UserProfile(user_id=user_id, account_number=account))
+                session.add_all(extra_rows)
                 for app_pk, user_id, stdcode, form in applications:
                     session.add(
                         Application(
@@ -788,11 +789,12 @@ class TestSummaryExportAccountColumn:
         _run_async(_impl())
 
     def _exported_accounts(self):
+        return self._exported_column("學生匯款帳號")
+
+    def _exported_column(self, header):
         import io as _io
 
         from openpyxl import load_workbook
-
-        from app.services.college_ranking_export_service import STATIC_HEADERS
 
         async def _fake_db():
             async with _AsyncSession() as session:
@@ -806,14 +808,15 @@ class TestSummaryExportAccountColumn:
         )
         assert response.status_code == 200, response.text
         ws = load_workbook(_io.BytesIO(response.content)).active
-        code_col = STATIC_HEADERS.index("學號") + 1
-        account_col = STATIC_HEADERS.index("學生匯款帳號") + 1
+        headers = [cell.value for cell in ws[2]]
+        code_col = headers.index("學號") + 1
+        value_col = headers.index(header) + 1
         return sorted(
-            (ws.cell(row=r, column=code_col).value, ws.cell(row=r, column=account_col).value)
+            (ws.cell(row=r, column=code_col).value, ws.cell(row=r, column=value_col).value)
             for r in range(3, ws.max_row + 1)
         )
 
-    def test_each_application_of_one_student_gets_its_own_account(self):
+    def test_each_application_of_one_student_gets_its_own_account_and_advisor(self):
         # One student may hold a renewal and a new application in the same
         # term (separate partial unique indexes). SQLite ignores the partial
         # predicates, so the loader is driven directly with two in-memory rows.
@@ -822,15 +825,23 @@ class TestSummaryExportAccountColumn:
         from app.api.v1.endpoints.college_review._helpers import load_export_aux_data
 
         self._seed([], profiles={401: _PROFILE_ACCOUNT})
-        renewal = SimpleNamespace(id=4001, user_id=401, submitted_form_data=_account_form(account_number="1" * 14))
-        new = SimpleNamespace(id=4002, user_id=401, submitted_form_data=_account_form(account_number="2" * 14))
+        renewal = SimpleNamespace(
+            id=4001, user_id=401, submitted_form_data=_account_form(account_number="1" * 14, advisor_name="甲教授")
+        )
+        new = SimpleNamespace(
+            id=4002, user_id=401, submitted_form_data=_account_form(account_number="2" * 14, advisor_name="乙教授")
+        )
 
         async def _load():
             async with _AsyncSession() as session:
                 return await load_export_aux_data(session, scholarship_type=None, applications=[renewal, new])
 
-        _, _, account_by_application, _ = _run_async(_load())
-        assert account_by_application == {4001: "1" * 14, 4002: "2" * 14}
+        _, _, profile_fields_by_application, advisor_by_application = _run_async(_load())
+        assert {app_id: fields.postal_account for app_id, fields in profile_fields_by_application.items()} == {
+            4001: "1" * 14,
+            4002: "2" * 14,
+        }
+        assert advisor_by_application == {4001: "甲教授", 4002: "乙教授"}
 
     def test_staff_edited_account_beats_the_profile(self):
         self._seed(
@@ -846,3 +857,85 @@ class TestSummaryExportAccountColumn:
     def test_profile_account_fills_in_when_the_application_has_none(self):
         self._seed([(4005, 405, "S405", _account_form(contact_phone="0912345678"))], profiles={405: _PROFILE_ACCOUNT})
         assert self._exported_accounts() == [("S405", _PROFILE_ACCOUNT)]
+
+    def test_advisor_column_falls_back_to_the_submitted_advisor(self):
+        self._seed([(4006, 406, "S406", _account_form(advisor_name="李教授"))], profiles={})
+        assert self._exported_column("指導教授姓名") == [("S406", "李教授")]
+
+    def test_advisor_column_prefers_the_curated_relationship(self):
+        from app.models.professor_student import ProfessorStudentRelationship
+
+        professor = User(
+            id=9100,
+            nycu_id="prof_chen",
+            name="陳教授",
+            email="chen@test.nycu.edu.tw",
+            user_type=UserType.employee,
+            status=EmployeeStatus.active,
+            role=UserRole.professor,
+        )
+        relationship = ProfessorStudentRelationship(
+            professor_id=9100, student_id=407, relationship_type="advisor", is_active=True
+        )
+        self._seed(
+            [(4007, 407, "S407", _account_form(advisor_name="李教授"))],
+            profiles={},
+            extra_rows=[professor, relationship, UserProfile(user_id=407, advisor_name="王教授")],
+        )
+        assert self._exported_column("指導教授姓名") == [("S407", "陳教授")]
+
+    def test_flagged_profile_owned_columns_show_the_effective_values(self):
+        from app.models.application_field import ApplicationField
+
+        def _flagged(field_name, label):
+            return ApplicationField(
+                scholarship_type="phd_scholarship",
+                field_name=field_name,
+                fixed_key=field_name,
+                field_label=label,
+                field_type="text",
+                is_active=True,
+                include_in_college_export=True,
+                export_column_label=f"匯出{label}",
+            )
+
+        self._seed(
+            [
+                (
+                    4008,
+                    408,
+                    "S408",
+                    _account_form(
+                        account_number="11111111111111", postal_account="33333333333333", advisor_name="舊教授"
+                    ),
+                )
+            ],
+            profiles={},
+            extra_rows=[
+                _flagged("postal_account", "郵局帳號"),
+                _flagged("advisor_name", "指導教授"),
+                UserProfile(user_id=408, account_number=_PROFILE_ACCOUNT, advisor_name="王教授"),
+            ],
+        )
+        assert self._exported_column("匯出郵局帳號") == [("S408", "11111111111111")]
+        assert self._exported_column("匯出指導教授") == [("S408", "王教授")]
+
+    def test_flagged_advisor_column_shows_a_profile_only_advisor(self):
+        from app.models.application_field import ApplicationField
+
+        self._seed(
+            [(4009, 409, "S409", _account_form(contact_phone="0912345678"))],
+            profiles={},
+            extra_rows=[
+                ApplicationField(
+                    scholarship_type="phd_scholarship",
+                    field_name="advisor_name",
+                    field_label="指導教授",
+                    field_type="text",
+                    is_active=True,
+                    include_in_college_export=True,
+                ),
+                UserProfile(user_id=409, advisor_name="王教授"),
+            ],
+        )
+        assert self._exported_column("指導教授") == [("S409", "王教授")]

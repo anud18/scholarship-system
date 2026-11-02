@@ -457,8 +457,8 @@ class ExportPackageService:
         # Loaded once for the whole export: folder names, the embedded tables
         # and every per-student summary PDF resolve 系所 names from it.
         department_names = await load_department_names(self.db)
-        # One profile query feeds both the embedded tables' account column and
-        # the per-student summary PDFs.
+        # One profile query feeds both the embedded tables' 郵局帳號/指導教授
+        # values and the per-student summary PDFs.
         profile_values_by_user = await load_profile_values_by_user(self.db, applications)
         dept_groups, college_labels = _group_by_department(applications, academy_names, department_names)
 

@@ -97,7 +97,7 @@ def test_summary_table_college_column_is_numbered():
         sub_type_preferences=[],
         sub_scholarship_type=None,
     )
-    row = ExportRow(rank_position=1, application=app, bank_account="", advisor_names="")
+    row = ExportRow(rank_position=1, application=app, advisor_names="")
     values = CollegeRankingExportService()._static_values(row, 1, {})
     assert values[STATIC_HEADERS.index("學院")] == "6. 資訊學院"
     assert values[STATIC_HEADERS.index("系所")] == "資訊工程學系"
