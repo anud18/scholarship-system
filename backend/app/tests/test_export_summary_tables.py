@@ -79,7 +79,7 @@ class TestDeptNameFromApps:
 
 @pytest.fixture
 def _patch_aux(monkeypatch):
-    async def _fake_aux(db, *, scholarship_type, applications):
+    async def _fake_aux(db, *, scholarship_type, applications, profile_values_by_user=None):
         # (dynamic_fields, sub_type_labels, account_by_application, advisor_by_user)
         return ([], {}, {}, {})
 

@@ -24,7 +24,8 @@ export const PROFILE_OWNED_FIELD_SOURCES: Readonly<Record<string, string>> = {
  * `postal_account`, while the wizard folds the same value into the submitted
  * fields as `account_number` (for the bank-verification service). Both resolve
  * to the label 郵局帳號, so rendering them separately shows the field twice.
- * Mirrors `ACCOUNT_FIELD_SYNONYMS` in `backend/app/services/form_field_labels.py`.
+ * The backend's export PDF collapses them the same way through
+ * `PROFILE_OWNED_FIELD_SOURCES` in `backend/app/services/profile_owned_fields.py`.
  */
 export const CANONICAL_ACCOUNT_FIELD_ID = "postal_account";
 const ACCOUNT_FIELD_SYNONYMS = new Set([

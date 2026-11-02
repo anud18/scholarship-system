@@ -36,11 +36,6 @@ FIXED_FIELD_LABELS: Dict[str, str] = {
     "advisor_nycu_id": "指導教授本校人事編號",
 }
 
-# The ids that carry the one account number a student typed. They resolve to
-# the same label, so the summary PDF prints only the first of an identical
-# (label, value) pair — see _generate_summary_pdf.
-ACCOUNT_FIELD_SYNONYMS = frozenset({"postal_account", "account_number"})
-
 
 async def load_form_field_labels(db: AsyncSession, scholarship_code: Optional[str]) -> Dict[str, str]:
     """Build the field_id -> zh-TW label map for one scholarship type.

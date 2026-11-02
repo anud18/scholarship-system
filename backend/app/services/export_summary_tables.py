@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -68,6 +68,7 @@ async def build_embedded_summary_tables(
     *,
     professor_review: ProfessorReviewData,
     department_names: Optional[Mapping[str, str]] = None,
+    profile_values_by_user: Optional[Mapping[int, Mapping[str, Any]]] = None,
 ) -> Dict[str, bytes]:
     """Return { zip_inner_path : xlsx_bytes } for the college-level table
     (ZIP root) plus one table per department folder — and, when
@@ -81,6 +82,8 @@ async def build_embedded_summary_tables(
     ``department_names`` (系所代碼 → 名稱) names the 系所 column and the
     per-department tables; pass the mapping the caller already loaded for the
     same export, otherwise it is loaded here — once for every table.
+    ``profile_values_by_user`` follows the same rule for the applicants'
+    profile rows behind the 學生匯款帳號 column.
     """
     # Lazy import: keep this module's top level free of export_package_service
     # (which pulls in reportlab) so callers that only need _sort_key — e.g. the
@@ -93,6 +96,7 @@ async def build_embedded_summary_tables(
         db,
         scholarship_type=scholarship_type,
         applications=all_apps,
+        profile_values_by_user=profile_values_by_user,
     )
     if department_names is None:
         department_names = await load_department_names(db)
