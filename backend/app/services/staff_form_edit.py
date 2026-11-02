@@ -8,6 +8,7 @@ from typing import Any, Callable, Dict, FrozenSet, Iterable, Mapping, Tuple
 from app.core.exceptions import ValidationError
 from app.core.regex_validator import RegexValidationError, safe_regex_match
 from app.models.application_field import FieldType
+from app.models.payment_roster import RosterStatus
 from app.schemas.application_field import ApplicationFieldResponse
 from app.services.application_field_service import FIXED_ADVISOR_KEYS, FIXED_KEY_POSTAL_ACCOUNT
 from app.utils.bank_account_fields import normalize_account_number, validate_postal_account_format
@@ -342,6 +343,72 @@ def decide_professor_reassignment(facts: ProfessorFacts) -> ProfessorReassignmen
     return outcome(ReassignmentOutcome.REASSIGNED, to=facts.matched_professor_id)
 
 
+class RosterAccountAction(enum.Enum):
+    SYNCED = "synced"
+    KEPT_LOCKED = "kept_locked"
+
+
+# Locking is the 造冊 freeze point: a LOCKED roster refuses 重新生成, while a
+# COMPLETED one is rebuilt from the current form data on demand, so it takes
+# the corrected account now rather than at its next rebuild.
+ROSTER_ACCOUNT_ACTIONS: Dict[RosterStatus, RosterAccountAction] = {
+    RosterStatus.DRAFT: RosterAccountAction.SYNCED,
+    RosterStatus.PROCESSING: RosterAccountAction.SYNCED,
+    RosterStatus.COMPLETED: RosterAccountAction.SYNCED,
+    RosterStatus.FAILED: RosterAccountAction.SYNCED,
+    RosterStatus.LOCKED: RosterAccountAction.KEPT_LOCKED,
+}
+
+ROSTER_ACCOUNT_CLAUSES: Dict[RosterAccountAction, str] = {
+    RosterAccountAction.SYNCED: "；已同步更新 {count} 份造冊的郵局帳號，請至造冊管理重新匯出 Excel",
+    RosterAccountAction.KEPT_LOCKED: "；{count} 份已鎖定的造冊（{rosters}）未變更，如需更正請解鎖後重新產生",
+}
+ROSTER_ACCOUNT_AUDIT_KEYS: Dict[RosterAccountAction, str] = {
+    RosterAccountAction.SYNCED: "roster_items_updated",
+    RosterAccountAction.KEPT_LOCKED: "locked_rosters_unchanged",
+}
+LISTED_ROSTER_CODES = 3
+
+
+@dataclass(frozen=True)
+class RosterItemRef:
+    roster_id: int
+    roster_code: str
+    item_id: int
+
+
+@dataclass(frozen=True)
+class RosterAccountSync:
+    """What an application account edit did to the 造冊 items that snapshot that account."""
+
+    items: Dict[RosterAccountAction, Tuple[RosterItemRef, ...]] = field(default_factory=dict)
+
+    @property
+    def message_clause(self) -> str:
+        return "".join(
+            ROSTER_ACCOUNT_CLAUSES[action].format(count=len(_roster_codes(refs)), rosters=_listed_codes(refs))
+            for action in RosterAccountAction
+            if (refs := self.items.get(action))
+        )
+
+    def audit_meta(self) -> Dict[str, Any]:
+        return {
+            ROSTER_ACCOUNT_AUDIT_KEYS[action]: [vars(ref) for ref in refs]
+            for action, refs in self.items.items()
+            if refs
+        }
+
+
+def _roster_codes(refs: Iterable[RosterItemRef]) -> Tuple[str, ...]:
+    return tuple(dict.fromkeys(ref.roster_code for ref in refs))
+
+
+def _listed_codes(refs: Iterable[RosterItemRef]) -> str:
+    codes = _roster_codes(refs)
+    listed = "、".join(codes[:LISTED_ROSTER_CODES])
+    return listed + "…" if len(codes) > LISTED_ROSTER_CODES else listed
+
+
 FORM_EDIT_SAVED_MESSAGE = "表單內容已更新"
 REASSIGNMENT_MESSAGES: Dict[ReassignmentOutcome, str] = {
     ReassignmentOutcome.REASSIGNED: FORM_EDIT_SAVED_MESSAGE + "，審核教授已改派為 {professor_name}",
@@ -360,12 +427,15 @@ class AppliedStaffFormEdit:
     cleared_meta: Dict[str, Any] = field(default_factory=dict)
     professor_reassignment: ProfessorReassignment | None = None
     new_professor_name: str | None = None
+    roster_sync: RosterAccountSync = field(default_factory=RosterAccountSync)
 
     @property
     def message(self) -> str:
         if not self.changes:
             return "表單內容沒有變更"
         if self.professor_reassignment is None:
-            return FORM_EDIT_SAVED_MESSAGE
-        template = REASSIGNMENT_MESSAGES[self.professor_reassignment.outcome]
-        return template.format(professor_name=self.new_professor_name or "")
+            saved = FORM_EDIT_SAVED_MESSAGE
+        else:
+            template = REASSIGNMENT_MESSAGES[self.professor_reassignment.outcome]
+            saved = template.format(professor_name=self.new_professor_name or "")
+        return saved + self.roster_sync.message_clause
