@@ -24,7 +24,9 @@ from app.tests.export_package_fakes import (
     collect_zip,
     make_application,
     make_file,
+    stub_declared_field_ids,
     stub_department_names,
+    stub_profile_values,
 )
 
 _MIB = 1024 * 1024
@@ -34,6 +36,8 @@ _DATA_DESCRIPTOR_FLAG = 0x08
 @pytest.fixture(autouse=True)
 def _no_department_table(monkeypatch):
     stub_department_names(monkeypatch)
+    stub_profile_values(monkeypatch)
+    stub_declared_field_ids(monkeypatch)
 
 
 def _blank_pdf() -> bytes:
@@ -52,7 +56,7 @@ def _coro_returning(value):
 
 
 async def _prepare(monkeypatch, apps, minio, summary_pdf=None):
-    async def _fake_aux(db, *, scholarship_type, applications):
+    async def _fake_aux(db, *, scholarship_type, applications, profile_values_by_user=None):
         return ([], {}, {}, {})
 
     monkeypatch.setattr("app.services.export_summary_tables.load_export_aux_data", _fake_aux)

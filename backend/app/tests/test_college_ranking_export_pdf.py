@@ -18,6 +18,7 @@ from app.services.college_ranking_export_service import (
     DynamicFieldSpec,
     ExportRow,
 )
+from app.services.profile_owned_fields import EffectiveProfileFields
 
 
 @pytest.fixture
@@ -48,7 +49,12 @@ def sample_row():
         sub_type_preferences=["nstc"],
         sub_scholarship_type=None,
     )
-    return ExportRow(rank_position=1, application=app, bank_account="0001234567", advisor_names="陳教授")
+    return ExportRow(
+        rank_position=1,
+        application=app,
+        profile_fields=EffectiveProfileFields(postal_account="0001234567"),
+        advisor_names="陳教授",
+    )
 
 
 @pytest.fixture

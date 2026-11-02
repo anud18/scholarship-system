@@ -16,6 +16,7 @@ from app.services.college_ranking_export_service import (
     DynamicFieldSpec,
     ExportRow,
 )
+from app.services.profile_owned_fields import EffectiveProfileFields
 
 
 @dataclass
@@ -35,7 +36,7 @@ def _make_row(
     return ExportRow(
         rank_position=rank_position,
         application=app or FakeApplication(),
-        bank_account=bank_account,
+        profile_fields=EffectiveProfileFields(postal_account=bank_account),
         advisor_names=advisor_names,
     )
 

@@ -38,9 +38,17 @@ def _field(field_id, value):
     return {"field_id": field_id, "field_type": "text", "value": value, "required": True}
 
 
-def _summary_text(fields, field_labels):
+PROFILE_OWNED_IDS = frozenset({"postal_account", "advisor_name", "advisor_email", "advisor_nycu_id"})
+
+
+def _summary_text(fields, field_labels, profile_values=None, declared_field_ids=None):
     svc = ExportPackageService(db=None, minio_service=None)
-    pdf = svc._generate_summary_pdf(_mk_app(fields), "某獎學金", 114, "first", field_labels)
+    kwargs = {}
+    if profile_values is not None:
+        kwargs["profile_values"] = profile_values
+    if declared_field_ids is not None:
+        kwargs["declared_field_ids"] = declared_field_ids
+    pdf = svc._generate_summary_pdf(_mk_app(fields), "某獎學金", 114, "first", field_labels, **kwargs)
     return "\n".join(page.extract_text() for page in PdfReader(io.BytesIO(pdf)).pages)
 
 
@@ -87,20 +95,134 @@ class TestFormFieldSection:
         assert text.count("郵局帳號") == 1
         assert text.count("12341234123412") == 1
 
-    def test_differing_account_values_both_render(self):
-        # The de-dupe is on (label, value) — a genuine discrepancy between the
-        # two account ids must stay visible to the reviewer.
+    def test_differing_account_ids_render_only_the_effective_account(self):
+        # account_number is what the student typed (or staff corrected); a
+        # differing postal_account is a stale or leaked copy (#1443).
         text = _summary_text(
             {
-                "account_number": _field("account_number", "111"),
-                "postal_account": _field("postal_account", "222"),
+                "account_number": _field("account_number", "11111111111111"),
+                "postal_account": _field("postal_account", "22222222222222"),
+            },
+            dict(FIXED_FIELD_LABELS),
+            profile_values={"account_number": "33333333333333"},
+        )
+
+        assert text.count("郵局帳號") == 1
+        assert "11111111111111" in text
+        assert "22222222222222" not in text
+        assert "33333333333333" not in text
+
+    def test_profile_account_replaces_a_submitted_postal_account(self):
+        text = _summary_text(
+            {"postal_account": _field("postal_account", "22222222222222")},
+            dict(FIXED_FIELD_LABELS),
+            profile_values={"account_number": "33333333333333"},
+        )
+
+        assert text.count("郵局帳號") == 1
+        assert "33333333333333" in text
+        assert "22222222222222" not in text
+
+    def test_advisor_rows_show_the_profile_over_a_submitted_copy(self):
+        text = _summary_text(
+            {
+                "advisor_name": _field("advisor_name", "舊教授"),
+                "advisor_email": _field("advisor_email", "old@nycu.edu.tw"),
+            },
+            dict(FIXED_FIELD_LABELS),
+            profile_values={
+                "advisor_name": "王教授",
+                "advisor_email": "wang@nycu.edu.tw",
+                "advisor_nycu_id": "P12345",
+            },
+            declared_field_ids=PROFILE_OWNED_IDS,
+        )
+
+        assert "王教授" in text and "wang@nycu.edu.tw" in text and "P12345" in text
+        assert "舊教授" not in text and "old@nycu.edu.tw" not in text
+        assert text.count("指導教授姓名") == 1
+
+    def test_profile_owned_values_render_for_a_wizard_application(self):
+        # The wizard never writes these into submitted_form_data.
+        text = _summary_text(
+            {"contact_phone": _field("contact_phone", "0912345678")},
+            dict(FIXED_FIELD_LABELS),
+            profile_values={"account_number": "33333333333333", "advisor_name": "王教授"},
+            declared_field_ids=PROFILE_OWNED_IDS,
+        )
+
+        assert "郵局帳號" in text and "33333333333333" in text
+        assert "指導教授姓名" in text and "王教授" in text
+
+    def test_profile_values_for_undeclared_fields_stay_out(self):
+        # A profile filled in for another scholarship must not add 指導教授
+        # rows to one whose form never asked for them.
+        text = _summary_text(
+            {"contact_phone": _field("contact_phone", "0912345678")},
+            dict(FIXED_FIELD_LABELS),
+            profile_values={"account_number": "33333333333333", "advisor_name": "王教授"},
+            declared_field_ids=frozenset({"contact_phone", "postal_account"}),
+        )
+
+        assert "郵局帳號\n33333333333333" in text
+        assert "指導教授" not in text and "王教授" not in text
+
+    def test_a_submitted_profile_owned_field_keeps_its_row_when_undeclared(self):
+        text = _summary_text(
+            {"advisor_name": _field("advisor_name", "舊教授")},
+            dict(FIXED_FIELD_LABELS),
+            profile_values={"advisor_name": "王教授"},
+            declared_field_ids=frozenset(),
+        )
+
+        assert "指導教授姓名\n王教授" in text
+
+    def test_no_section_without_submitted_or_declared_fields(self):
+        text = _summary_text(
+            {},
+            dict(FIXED_FIELD_LABELS),
+            profile_values={"account_number": "33333333333333", "advisor_name": "王教授"},
+            declared_field_ids=frozenset(),
+        )
+
+        assert "三、表單填寫資料" not in text
+
+    def test_a_submitted_bank_account_prints_as_its_own_row(self):
+        text = _summary_text(
+            {
+                "account_number": _field("account_number", "11111111111111"),
+                "bank_account": _field("bank_account", "44444444444444"),
             },
             dict(FIXED_FIELD_LABELS),
         )
 
-        assert text.count("郵局帳號") == 2
-        assert "111" in text
-        assert "222" in text
+        assert "郵局帳號\n11111111111111" in text
+        assert "銀行帳戶\n44444444444444" in text
+
+    def test_a_submitted_bank_account_never_fills_the_postal_account(self):
+        text = _summary_text({"bank_account": _field("bank_account", "44444444444444")}, dict(FIXED_FIELD_LABELS))
+
+        assert "郵局帳號" not in text
+        assert "銀行帳戶\n44444444444444" in text
+
+    @pytest.mark.parametrize(
+        ("value", "shown"),
+        [
+            (0, "0"),
+            (False, "否"),
+            (True, "是"),
+            (["甲選項", "乙選項"], "甲選項、乙選項"),
+            (12.5, "12.5"),
+            ("", "—"),
+            ("  ", "—"),
+            (None, "—"),
+            ([], "—"),
+        ],
+    )
+    def test_values_render_for_a_reader(self, value, shown):
+        text = _summary_text({"answer": _field("answer", value)}, {"answer": "某題"})
+
+        assert f"某題\n{shown}" in text
 
     def test_two_distinct_fields_sharing_a_label_and_value_both_render(self):
         # application_fields has no uniqueness constraint on field_label, so two

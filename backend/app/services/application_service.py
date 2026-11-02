@@ -66,9 +66,9 @@ from app.services.eligibility_service import EligibilityService
 from app.services.email_automation_service import email_automation_service
 from app.services.email_service import EmailService
 from app.services.minio_service import minio_service
+from app.services.profile_owned_fields import profile_values_of
 from app.services.staff_edit_roster_sync import lock_application_rosters, sync_roster_bank_account
 from app.services.staff_form_edit import (
-    PROFILE_ATTRS,
     AppliedStaffFormEdit,
     FieldChange,
     ProfessorFacts,
@@ -1343,7 +1343,7 @@ class ApplicationService:
                 select(UserProfile).where(UserProfile.user_id == application.user_id).with_for_update()
             )
         ).scalar_one_or_none()
-        profile_values = {attr: getattr(profile, attr) if profile else None for attr in PROFILE_ATTRS}
+        profile_values = profile_values_of(profile)
 
         edit = apply_staff_form_edit(
             application.submitted_form_data, build_editable_form_spec(form_config.fields), raw_fields, profile_values

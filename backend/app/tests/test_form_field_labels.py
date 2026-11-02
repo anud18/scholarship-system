@@ -6,12 +6,14 @@ without this map the PDF prints `postal_account` / `advisor_name` where the
 reviewer expects 郵局帳號 / 指導教授姓名.
 """
 
+from types import SimpleNamespace
+
 import pytest
 
 from app.services.application_field_service import ApplicationFieldService
 from app.services.form_field_labels import (
-    ACCOUNT_FIELD_SYNONYMS,
     FIXED_FIELD_LABELS,
+    load_declared_field_ids,
     load_form_field_labels,
     resolve_field_label,
 )
@@ -51,17 +53,10 @@ class TestFixedFieldLabels:
             "advisor_nycu_id",
         }
 
-    def test_every_account_synonym_has_a_label(self):
-        # The synonym set drives the summary PDF's de-dupe; an id in it with no
-        # label would de-dupe on a raw English id instead.
-        assert ACCOUNT_FIELD_SYNONYMS <= set(FIXED_FIELD_LABELS)
-
     def test_postal_account_and_account_number_share_one_label(self):
-        # Both ids carry the same 郵局帳號 the student typed — the summary PDF
-        # relies on the identical label to collapse them into one row.
+        # Both ids carry the same 郵局帳號 the student typed.
         assert FIXED_FIELD_LABELS["postal_account"] == "郵局帳號"
         assert FIXED_FIELD_LABELS["account_number"] == "郵局帳號"
-        assert set(ACCOUNT_FIELD_SYNONYMS) == {"postal_account", "account_number"}
 
     def test_all_labels_are_non_empty_chinese(self):
         for key, label in FIXED_FIELD_LABELS.items():
@@ -128,6 +123,30 @@ class TestLoadFormFieldLabels:
         sql = str(db.statements[0]).lower()
         assert "scholarship_type" in sql
         assert "is_active" not in sql
+
+
+class TestLoadDeclaredFieldIds:
+    @pytest.mark.asyncio
+    async def test_returns_the_form_config_field_ids(self, monkeypatch):
+        seen_codes = []
+
+        async def _form_config(service, scholarship_type):
+            seen_codes.append(scholarship_type)
+            return SimpleNamespace(
+                fields=[SimpleNamespace(field_name="contact_phone"), SimpleNamespace(field_name="postal_account")]
+            )
+
+        monkeypatch.setattr(ApplicationFieldService, "get_scholarship_form_config", _form_config)
+
+        assert await load_declared_field_ids(_FakeDb(), "phd") == frozenset({"contact_phone", "postal_account"})
+        assert seen_codes == ["phd"]
+
+    @pytest.mark.asyncio
+    async def test_missing_scholarship_code_declares_nothing(self):
+        db = _FakeDb()
+
+        assert await load_declared_field_ids(db, None) == frozenset()
+        assert db.statements == []
 
 
 class TestResolveFieldLabel:

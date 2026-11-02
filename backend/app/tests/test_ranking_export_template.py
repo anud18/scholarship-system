@@ -20,6 +20,8 @@ from app.models.scholarship import (
     SubTypeSelectionMode,
 )
 from app.models.user import AdminScholarship, User, UserRole, UserType
+from app.models.user_profile import UserProfile
+from app.services.college_ranking_export_service import STATIC_HEADERS
 
 
 @pytest_asyncio.fixture
@@ -186,3 +188,26 @@ class TestExportTemplateFlag:
         wb = load_workbook(io.BytesIO(resp.content))
         ws = wb.active
         assert ws.cell(row=3, column=2).value == 1  # rank present
+
+    async def test_account_column_is_the_applications_edited_account(
+        self,
+        client: AsyncClient,
+        db: AsyncSession,
+        admin_user: User,
+        ranking_with_item: CollegeRanking,
+    ):
+        app_row = (await db.execute(select(Application).where(Application.app_id == "APP-114-0-09999"))).scalar_one()
+        app_row.submitted_form_data = {"fields": {"account_number": {"field_id": "account_number", "value": "1" * 14}}}
+        db.add(UserProfile(user_id=app_row.user_id, account_number="9" * 14))
+        await db.flush()
+
+        app.dependency_overrides[require_scholarship_manager] = lambda: admin_user
+        try:
+            resp = await client.get(f"/api/v1/college-review/rankings/{ranking_with_item.id}/export-excel")
+        finally:
+            app.dependency_overrides.pop(require_scholarship_manager, None)
+
+        assert resp.status_code == 200, resp.text
+        ws = load_workbook(io.BytesIO(resp.content)).active
+        account_col = STATIC_HEADERS.index("學生匯款帳號") + 1
+        assert ws.cell(row=3, column=account_col).value == "1" * 14

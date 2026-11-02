@@ -261,7 +261,7 @@ class TestPostalAccountEdit:
             ({"account_number": ACCOUNT_A, "postal_account": ACCOUNT_C}, ACCOUNT_B, ACCOUNT_A),
             ({"postal_account": ACCOUNT_C, "bank_account": ACCOUNT_D}, ACCOUNT_B, ACCOUNT_B),
             ({"postal_account": ACCOUNT_C, "bank_account": ACCOUNT_D}, None, ACCOUNT_C),
-            ({"bank_account": ACCOUNT_D}, "", ACCOUNT_D),
+            ({"bank_account": ACCOUNT_D}, "", None),
             ({}, None, None),
         ],
     )

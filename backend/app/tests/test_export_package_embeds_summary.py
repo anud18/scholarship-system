@@ -23,12 +23,19 @@ from app.models.application import Application
 from app.services.college_ranking_export_service import STATIC_HEADERS
 from app.services.export_package_service import ExportPackageService
 from app.services.professor_review_export import ProfessorReviewData
-from app.tests.export_package_fakes import collect_zip, stub_department_names
+from app.tests.export_package_fakes import (
+    collect_zip,
+    stub_declared_field_ids,
+    stub_department_names,
+    stub_profile_values,
+)
 
 
 @pytest.fixture(autouse=True)
 def _no_department_table(monkeypatch):
     stub_department_names(monkeypatch)
+    stub_profile_values(monkeypatch)
+    stub_declared_field_ids(monkeypatch)
 
 
 def _mk_app(app_id, user_id, dep_no, dep_name, std_code, cname, academy="某學院", academy_no="A"):
@@ -61,7 +68,7 @@ def _coro_returning(value):
 async def test_export_zip_contains_summary_tables_matching_folders(monkeypatch):
     monkeypatch.setattr("app.services.export_package_service.ensure_cjk_font", lambda: None)
 
-    async def _fake_aux(db, *, scholarship_type, applications):
+    async def _fake_aux(db, *, scholarship_type, applications, profile_values_by_user=None):
         return ([], {}, {}, {})
 
     monkeypatch.setattr("app.services.export_summary_tables.load_export_aux_data", _fake_aux)
@@ -161,7 +168,7 @@ async def test_whole_school_export_nests_department_folders_under_each_college(m
     come from the academies table, falling back to the snapshot name."""
     monkeypatch.setattr("app.services.export_package_service.ensure_cjk_font", lambda: None)
 
-    async def _fake_aux(db, *, scholarship_type, applications):
+    async def _fake_aux(db, *, scholarship_type, applications, profile_values_by_user=None):
         return ([], {}, {}, {})
 
     monkeypatch.setattr("app.services.export_summary_tables.load_export_aux_data", _fake_aux)
@@ -230,7 +237,7 @@ async def test_folders_tables_and_pdfs_follow_the_api1_department(monkeypatch):
     """
     monkeypatch.setattr("app.services.export_package_service.ensure_cjk_font", lambda: None)
 
-    async def _fake_aux(db, *, scholarship_type, applications):
+    async def _fake_aux(db, *, scholarship_type, applications, profile_values_by_user=None):
         return ([], {}, {}, {})
 
     monkeypatch.setattr("app.services.export_summary_tables.load_export_aux_data", _fake_aux)
@@ -306,3 +313,43 @@ async def test_folders_tables_and_pdfs_follow_the_api1_department(monkeypatch):
     assert _cells(c_table, dept_col) == ["C系"]
     assert _cells(c_table, grade_col) == [2]  # term-only 年級 still reads trm_termcount 4
     assert _cells(unknown_table, dept_col) == ["舊系名"]
+
+
+@pytest.mark.asyncio
+async def test_one_profile_load_feeds_the_tables_and_the_summary_pdfs(monkeypatch):
+    from pypdf import PdfReader
+
+    tables_profile_values = []
+
+    async def _fake_aux(db, *, scholarship_type, applications, profile_values_by_user=None):
+        tables_profile_values.append(profile_values_by_user)
+        return ([], {}, {}, {})
+
+    monkeypatch.setattr("app.services.export_summary_tables.load_export_aux_data", _fake_aux)
+    monkeypatch.setattr("app.services.export_package_service.load_form_field_labels", _coro_returning({}))
+    monkeypatch.setattr(
+        "app.services.export_package_service.load_professor_review_data", _coro_returning(ProfessorReviewData())
+    )
+    profiles = {11: {"account_number": "33333333333333", "advisor_name": "王教授"}}
+    loader = stub_profile_values(monkeypatch, profiles)
+    declared_loader = stub_declared_field_ids(monkeypatch, frozenset({"postal_account", "advisor_name"}))
+
+    app = _mk_app(1, 11, "1000", "A系", "001", "甲")
+    app.submitted_form_data = {
+        "fields": {"postal_account": {"field_id": "postal_account", "value": "22222222222222"}},
+        "documents": [],
+    }
+    svc = ExportPackageService(db=None, minio_service=None)
+    monkeypatch.setattr(svc, "_get_scholarship_type", _coro_returning(SimpleNamespace(name="某獎學金", code="phd")))
+    monkeypatch.setattr(svc, "_query_applications", _coro_returning([app]))
+
+    plan = await svc.prepare_export(scholarship_type_id=1, academic_year=114, semester="first", college_code="A")
+    zf = zipfile.ZipFile(await collect_zip(svc, plan))
+
+    assert loader.await_count == 1
+    declared_loader.assert_awaited_once_with(None, "phd")
+    assert tables_profile_values == [profiles]
+    pdf = zf.read("1000_A系/001_甲/001_甲_學生資料彙整.pdf")
+    text = "\n".join(page.extract_text() for page in PdfReader(io.BytesIO(pdf)).pages)
+    assert "33333333333333" in text and "王教授" in text
+    assert "22222222222222" not in text
