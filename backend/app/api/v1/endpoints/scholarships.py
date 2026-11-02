@@ -233,6 +233,7 @@ async def get_scholarship_eligibility(
             name=scholarship["name"],
             name_en=scholarship.get("name_en") or scholarship["name"],
             eligible_sub_types=sub_type_list,
+            closed_sub_types=scholarship.get("closed_sub_types", []),
             all_sub_type_list=scholarship.get("all_sub_type_list", []),
             subtype_eligibility=scholarship.get("subtype_eligibility", {}),
             academic_year=scholarship.get("academic_year"),

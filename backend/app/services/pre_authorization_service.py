@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import NotFoundError, ValidationError
 from app.models.scholarship import ScholarshipType
 from app.models.user import AdminScholarship, EmployeeStatus, User, UserRole, UserType
+from app.utils.portal_email import normalize_portal_email
 
 
 class PreAuthorizationService:
@@ -125,7 +126,7 @@ class PreAuthorizationService:
         user = User(
             nycu_id=nycu_id,
             name=portal_data.get("txtName", ""),
-            email=portal_data.get("mail", ""),
+            email=normalize_portal_email(portal_data.get("mail")),
             user_type=self._map_user_type(portal_data.get("userType")),
             status=self._map_employee_status(portal_data.get("employeestatus")),
             dept_code=portal_data.get("deptCode"),
@@ -145,7 +146,7 @@ class PreAuthorizationService:
 
         # Update basic info
         user.name = portal_data.get("txtName", user.name)
-        user.email = portal_data.get("mail", user.email)
+        user.email = normalize_portal_email(portal_data.get("mail")) or user.email or None
         user.user_type = self._map_user_type(portal_data.get("userType"))
         user.status = self._map_employee_status(portal_data.get("employeestatus"))
         user.dept_code = portal_data.get("deptCode")

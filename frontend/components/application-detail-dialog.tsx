@@ -45,8 +45,8 @@ import {
 import { canonicalizeFieldId } from "@/lib/utils/profile-owned-fields";
 import { useReferenceData, getDegreeName } from "@/hooks/use-reference-data";
 import {
-  getAcademyName,
-  getDepartmentName,
+  getApplicationAcademyName,
+  getApplicationDepartmentName,
   getDegreeCode,
   getTermCount,
 } from "@/lib/utils/student-data-helpers";
@@ -608,21 +608,21 @@ export function ApplicationDetailDialog({
                     </p>
                   </div>
                   {/* 學院 - 只在有資料時顯示 */}
-                  {getAcademyName(application.student_data) && (
+                  {getApplicationAcademyName(application) && (
                     <div>
                       <Label className="font-medium">
                         {t("dialogs.application_detail.academy")}
                       </Label>
-                      <p className="text-sm">{getAcademyName(application.student_data)}</p>
+                      <p className="text-sm">{getApplicationAcademyName(application)}</p>
                     </div>
                   )}
                   {/* 系所 - 只在有資料時顯示 */}
-                  {getDepartmentName(application.student_data) && (
+                  {getApplicationDepartmentName(application) && (
                     <div>
                       <Label className="font-medium">
                         {t("dialogs.application_detail.department")}
                       </Label>
-                      <p className="text-sm">{getDepartmentName(application.student_data)}</p>
+                      <p className="text-sm">{getApplicationDepartmentName(application)}</p>
                     </div>
                   )}
                   {/* 學位 - 只在有資料時顯示 */}
@@ -982,6 +982,10 @@ export function ApplicationDetailDialog({
                             currentProfessorId={
                               application.professor?.nycu_id ||
                               professorInfo?.nycu_id
+                            }
+                            currentProfessorName={
+                              application.professor?.name ||
+                              professorInfo?.name
                             }
                             onAssigned={handleProfessorAssigned}
                           />

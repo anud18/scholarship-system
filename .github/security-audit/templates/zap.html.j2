@@ -1,0 +1,43 @@
+{% extends "base.html.j2" %}
+{% block title %}OWASP ZAP 動態弱點掃描報告{% endblock %}
+{% block body %}
+<h1>OWASP ZAP 動態弱點掃描報告</h1>
+{% include "_meta.html.j2" %}
+
+{% if not zap.produced %}
+<p class="note"><strong>ZAP 未產出報告</strong>：掃描步驟失敗，請檢查 workflow log。</p>
+{% else %}
+<p>受測對象為以正式環境組態建置的服務堆疊（經 <code>nginx/nginx.prod.conf</code>），
+範圍、方法與限制請見 <code>security-audit-summary.pdf</code>。</p>
+
+<h2>告警總覽</h2>
+<table>
+  <tr><th>告警</th><th>風險</th><th>信心</th><th>CWE</th><th>範圍</th><th class="num">實例數</th></tr>
+  {% for a in zap.alerts %}
+  <tr><td>{{ a.name }}</td><td><span class="sev sev-{{ a.risk }}">{{ a.risk }}</span></td>
+      <td>{{ a.confidence }}</td><td>{{ a.cwe if a.cwe not in ('', '-1', '0') else '—' }}</td>
+      <td>{{ a.areas | join('、') }}</td><td class="num">{{ a.count }}</td></tr>
+  {% endfor %}
+</table>
+{% if not zap.alerts %}<p>未發現任何告警。</p>{% endif %}
+
+<h2>告警明細</h2>
+{% for a in zap.alerts %}
+<div class="finding long sev-border-{{ a.risk }}">
+  <h3><span class="sev sev-{{ a.risk }}">{{ a.risk }}</span> {{ a.name }}
+      <span class="muted">（Plugin {{ a.plugin_id }}，信心 {{ a.confidence }}）</span></h3>
+  {% if a.desc %}<p><strong>說明</strong></p>{% for para in a.desc %}<p>{{ para }}</p>{% endfor %}{% endif %}
+  {% if a.solution %}<p><strong>建議修正</strong></p>{% for para in a.solution %}<p>{{ para }}</p>{% endfor %}{% endif %}
+  <table>
+    <tr><th>方法</th><th>URL</th><th>參數</th><th>證據 / 攻擊字串</th></tr>
+    {% for i in a.instances %}
+    <tr><td>{{ i.method }}</td><td class="mono">{{ i.uri }}</td><td class="mono">{{ i.param }}</td>
+        <td class="mono">{{ i.evidence or i.attack }}</td></tr>
+    {% endfor %}
+  </table>
+  {% if a.truncated %}<p class="muted">另有 {{ a.truncated }} 筆實例未列出（完整清單見 zap-raw-report.html / zap-raw-report.json）。</p>{% endif %}
+  {% if a.reference %}<p class="muted">參考：{% for ref in a.reference %}<br><span class="mono">{{ ref }}</span>{% endfor %}</p>{% endif %}
+</div>
+{% endfor %}
+{% endif %}
+{% endblock %}

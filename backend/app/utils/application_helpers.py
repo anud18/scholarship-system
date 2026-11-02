@@ -2,20 +2,13 @@
 學生資料存取 Helper 函數
 
 資料來源說明：
-1. 快照資料 (application.student_data)
-   - 用途：歷史紀錄查看
-   - 特性：申請時的資料快照，不會改變
-
-2. 獎學金期間資料 (StudentService.get_student_term_info)
-   - 用途：造冊、分配、資格檢查
-   - 特性：該獎學金 config 學年學期的最新狀態
-   - 查詢規則：
+快照資料 (application.student_data) 是申請時 SIS 兩支 API 的快照，不會改變：
+1. API 1 (ScholarshipStudent, std_* / com_*)：學生本人的學籍 —— 學院、系所的代碼與歸屬以它為準
+2. API 2 (ScholarshipStudentTerm, trm_*)：該獎學金學年學期的紀錄 —— GPA、排名、學期數；
+   只在 API 1 沒有時補位（名稱類欄位）
+   學期選擇規則集中在 StudentService.get_scholarship_term_info：
      * 學期制 (Semester.first/second): 只查指定學期
-     * 學年制 (None): 先查第二學期，無資料再查第一學期
-
-3. 當前資料 (StudentService.get_student_basic_info)
-   - 用途：顯示用戶目前狀態
-   - 特性：當前學年學期的最新資料
+     * 學年制 (None / yearly): 先查第二學期，無資料再查第一學期
 
 錯誤處理原則：
 - API 呼叫失敗時直接拋出錯誤
@@ -24,13 +17,10 @@
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Mapping, Optional
 
-from app.core.exceptions import NotFoundError
+from app.core.college_mappings import COLLEGE_MAPPINGS, normalize_academy_code
 from app.models.application import Application
-from app.models.enums import Semester
-from app.models.scholarship import ScholarshipConfiguration
-from app.services.student_service import StudentService
 
 logger = logging.getLogger(__name__)
 
@@ -120,71 +110,8 @@ def get_snapshot_email(application: Application) -> Optional[str]:
 
 
 # ============================================================================
-# 獎學金期間資料存取函數（用於造冊、分配、資格檢查）
+# 學生資料欄位存取（來自 student_data 快照 / SIS 回應）
 # ============================================================================
-
-
-async def get_scholarship_period_student_data(
-    student_code: str,
-    scholarship_config: ScholarshipConfiguration,
-    student_service: StudentService,
-) -> Dict[str, Any]:
-    """
-    取得獎學金 config 學年學期的最新學生資料
-
-    查詢邏輯：
-    1. Semester.first → 只查 term="1"，無資料則報錯
-    2. Semester.second → 只查 term="2"，無資料則報錯
-    3. None (學年制) → 先查 term="2"，403 則查 term="1"，都無資料則報錯
-
-    Args:
-        student_code: 學號
-        scholarship_config: 獎學金配置
-        student_service: StudentService 實例
-
-    Returns:
-        學生資料字典
-
-    Raises:
-        ServiceUnavailableError: API 呼叫失敗 (非 403/404)
-        NotFoundError: 無學生資料
-    """
-    academic_year = str(scholarship_config.academic_year)
-    semester = scholarship_config.semester
-
-    if semester == Semester.first:
-        # 學期制 - 只查第一學期
-        logger.info(f"查詢學生 {student_code} 在 {academic_year} 學年度第一學期的資料")
-        data = await student_service.get_student_term_info(student_code, academic_year, "1")
-        if not data:
-            raise NotFoundError(f"學生 {student_code} 在 {academic_year} 學年度第一學期無資料")
-        return data
-
-    elif semester == Semester.second:
-        # 學期制 - 只查第二學期
-        logger.info(f"查詢學生 {student_code} 在 {academic_year} 學年度第二學期的資料")
-        data = await student_service.get_student_term_info(student_code, academic_year, "2")
-        if not data:
-            raise NotFoundError(f"學生 {student_code} 在 {academic_year} 學年度第二學期無資料")
-        return data
-
-    else:  # 學年制 (semester is None OR Semester.yearly)
-        # 先查第二學期
-        logger.info(f"查詢學生 {student_code} 在 {academic_year} 學年度的資料（學年制，先查第二學期）")
-        data = await student_service.get_student_term_info(student_code, academic_year, "2")
-        if data:
-            logger.info(f"學生 {student_code} 在第二學期有資料")
-            return data
-
-        # 第二學期無資料，查第一學期
-        logger.info(f"學生 {student_code} 第二學期無資料，嘗試查詢第一學期")
-        data = await student_service.get_student_term_info(student_code, academic_year, "1")
-        if data:
-            logger.info(f"學生 {student_code} 在第一學期有資料")
-            return data
-
-        # 兩個學期都無資料
-        raise NotFoundError(f"學生 {student_code} 在 {academic_year} 學年度兩個學期都無資料")
 
 
 def get_student_name_from_data(student_data: Dict[str, Any]) -> str:
@@ -267,10 +194,11 @@ def get_department_code_from_data(student_data: Dict[str, Any]) -> Optional[str]
     Returns:
         部門代碼，無資料時返回 None
     """
-    if not student_data or not isinstance(student_data, dict):
+    if not student_data or not isinstance(student_data, Mapping):
         return None
 
-    return student_data.get("trm_depno") or student_data.get("std_depno")
+    # API 1 (std_*) is the student's own record; the term row only fills a gap
+    return student_data.get("std_depno") or student_data.get("trm_depno")
 
 
 def get_academy_code_from_data(student_data: Dict[str, Any]) -> Optional[str]:
@@ -283,11 +211,57 @@ def get_academy_code_from_data(student_data: Dict[str, Any]) -> Optional[str]:
     Returns:
         學院代碼，無資料時返回 None
     """
-    if not student_data or not isinstance(student_data, dict):
+    if not student_data or not isinstance(student_data, Mapping):
         return None
 
-    # std_academyno is the correct field from API, prioritize it
-    return student_data.get("trm_academyno") or student_data.get("std_academyno")
+    # API 1 (std_*) first — the same field get_college_code_from_data scopes colleges by
+    return student_data.get("std_academyno") or student_data.get("trm_academyno")
+
+
+def _term_row_describes(student_data: Mapping[str, Any], term_code_key: str, code: Any, normalize=str) -> bool:
+    """The term row may lend its NAME only if it is about the same unit as ``code``
+    (or names no unit of its own) — otherwise a transferred student would get the new
+    code next to the old unit's name."""
+    term_code = student_data.get(term_code_key)
+    return not term_code or normalize(str(term_code).strip()) == normalize(str(code).strip())
+
+
+def get_academy_name_from_data(student_data: Mapping[str, Any]) -> Optional[str]:
+    """
+    學院名稱：以 API 1 的學院代碼（std_academyno）對應學院表
+
+    查不到時才用學期資料的名稱，而且只在學期資料指的是同一個學院時 ——
+    代碼與名稱因此永遠描述同一個學院（學期資料的學院可能是轉院前的）。
+    """
+    if not student_data or not isinstance(student_data, Mapping):
+        return None
+
+    code = normalize_academy_code(get_academy_code_from_data(student_data))
+    if code and COLLEGE_MAPPINGS.get(str(code).strip()):
+        return COLLEGE_MAPPINGS[str(code).strip()]
+    if not code or _term_row_describes(student_data, "trm_academyno", code, normalize_academy_code):
+        return student_data.get("trm_academyname") or None
+    return None
+
+
+def get_department_name_from_data(
+    student_data: Mapping[str, Any], department_names: Optional[Mapping[str, str]] = None
+) -> Optional[str]:
+    """
+    系所名稱：以 API 1 的系所代碼（std_depno）查系所表（``department_names``：代碼 → 名稱，
+    見 app.services.department_names.load_department_names）
+
+    查不到時才用學期資料的名稱，而且只在學期資料指的是同一個系所時（同 get_academy_name_from_data）。
+    """
+    if not student_data or not isinstance(student_data, Mapping):
+        return None
+
+    code = get_department_code_from_data(student_data)
+    if code and department_names and department_names.get(str(code).strip()):
+        return department_names[str(code).strip()]
+    if not code or _term_row_describes(student_data, "trm_depno", code):
+        return student_data.get("trm_depname") or None
+    return None
 
 
 def get_term_count_from_data(student_data: Dict[str, Any]) -> Optional[str]:
@@ -326,33 +300,3 @@ def get_enrollment_info_from_data(student_data: Dict[str, Any]) -> Dict[str, Any
         "enrollyear": student_data.get("std_enrollyear"),
         "enrollterm": student_data.get("std_enrollterm"),
     }
-
-
-# ============================================================================
-# 當前資料存取函數（用於顯示用戶狀態）
-# ============================================================================
-
-
-async def get_current_student_data(
-    student_code: str,
-    student_service: StudentService,
-) -> Dict[str, Any]:
-    """
-    取得當前學年學期的學生資料
-
-    Args:
-        student_code: 學號
-        student_service: StudentService 實例
-
-    Returns:
-        學生資料字典
-
-    Raises:
-        ServiceUnavailableError: API 呼叫失敗
-        NotFoundError: 學生不存在
-    """
-    logger.info(f"查詢學生 {student_code} 的當前資料")
-    data = await student_service.get_student_basic_info(student_code)
-    if not data:
-        raise NotFoundError(f"學生 {student_code} 不存在")
-    return data

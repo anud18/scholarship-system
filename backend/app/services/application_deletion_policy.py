@@ -14,6 +14,10 @@ the money trail and must be preserved.
   (``is_allocated`` / ``allocated_sub_type`` / status ``allocated``), or its
   ranking has ``distribution_executed``
 - a PaymentRosterItem references the application
+
+學院承辦人 are held to one more rule: they may not delete an application that
+sits in a 確認排名 (finalized) ranking — that would silently rewrite a locked
+ranking. They must unlock (unfinalize) it first; admins are not restricted.
 """
 
 from typing import Iterable
@@ -27,6 +31,7 @@ from app.models.enums import ApplicationStatus, ReviewStage
 from app.models.payment_roster import PaymentRosterItem
 
 DELETE_BLOCKED_MESSAGE = "申請已進入分發階段，不可刪除"
+LOCKED_RANKING_DELETE_BLOCKED_MESSAGE = "申請所在的學院排名已確認，請先解除排名鎖定後再刪除"
 
 DISTRIBUTION_REVIEW_STAGES: frozenset[str] = frozenset(
     {
@@ -99,3 +104,18 @@ async def is_application_deletable(db: AsyncSession, application: Application) -
     """Single-application convenience wrapper used by the delete endpoint."""
     distributed_ids = await find_distributed_application_ids(db, [application.id])
     return not has_entered_distribution(application, distributed_ids)
+
+
+async def find_locked_ranking_application_ids(db: AsyncSession, application_ids: Iterable[int]) -> set[int]:
+    """Return the subset of ``application_ids`` placed in a finalized (確認排名)
+    college ranking — rows a 學院 user must not delete until it is unlocked."""
+    ids = list({int(app_id) for app_id in application_ids})
+    if not ids:
+        return set()
+
+    stmt = (
+        select(CollegeRankingItem.application_id)
+        .join(CollegeRanking, CollegeRanking.id == CollegeRankingItem.ranking_id)
+        .where(CollegeRankingItem.application_id.in_(ids), CollegeRanking.is_finalized.is_(True))
+    )
+    return set((await db.execute(stmt)).scalars().all())

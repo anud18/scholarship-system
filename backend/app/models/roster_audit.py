@@ -4,7 +4,7 @@ Roster audit log models for tracking all roster operations
 """
 
 import enum
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import JSON, Column, DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
@@ -32,6 +32,14 @@ class RosterAuditAction(enum.Enum):
     ITEM_REMOVE = "item_remove"  # 移除明細
     ITEM_UPDATE = "item_update"  # 更新明細
     ITEM_RESTORE = "item_restore"  # 回復明細（將已移除者放回名單）
+
+
+ROSTER_ITEM_ACTION_LABELS = {
+    RosterAuditAction.ITEM_REMOVE: "移除",
+    RosterAuditAction.ITEM_ADD: "新增",
+    RosterAuditAction.ITEM_RESTORE: "回復",
+    RosterAuditAction.ITEM_UPDATE: "更新",
+}
 
 
 class RosterAuditLevel(enum.Enum):
@@ -151,6 +159,51 @@ class RosterAuditLog(Base):
             warning_message=warning_message,
             audit_metadata=audit_metadata,
             tags=tags,
+        )
+
+    @classmethod
+    def for_item(
+        cls,
+        *,
+        roster_id: int,
+        action: RosterAuditAction,
+        item: Any,
+        user_id: Optional[int],
+        user: Any,
+        source: str,
+        reason: Optional[str] = None,
+        student_id: Optional[str] = None,
+        client_ip: Optional[str] = None,
+        user_agent: Optional[str] = None,
+        old_values: Optional[dict] = None,
+        new_values: Optional[dict] = None,
+    ) -> "RosterAuditLog":
+        """One item-level row for the 造冊 操作紀錄 panel, with an operator snapshot.
+
+        `item` is a PaymentRosterItem and `user` the operator User (None when the
+        id no longer resolves).
+        """
+        label = ROSTER_ITEM_ACTION_LABELS.get(action, action.value)
+        return cls.create_audit_log(
+            roster_id=roster_id,
+            action=action,
+            title=f"{label} {item.student_name}",
+            description=f"{label} {item.student_name}（原因：{reason or '—'}）",
+            user_id=user_id,
+            user_name=user.name if user else None,
+            user_role=(user.role.value if user and user.role else None),
+            client_ip=client_ip,
+            user_agent=user_agent,
+            old_values=old_values,
+            new_values=new_values,
+            audit_metadata={
+                "student_name": item.student_name,
+                "student_id": student_id,
+                "application_id": item.application_id,
+                "source": source,
+                "reason": reason,
+            },
+            affected_items_count=1,
         )
 
     def is_error(self) -> bool:

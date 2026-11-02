@@ -4,7 +4,7 @@ FROM oven/bun:1-alpine AS buildbase
 # Security: Pin exact package version and configure trusted repositories to prevent dependency confusion attacks
 RUN echo "https://dl-cdn.alpinelinux.org/alpine/v3.22/main" > /etc/apk/repositories && \
     echo "https://dl-cdn.alpinelinux.org/alpine/v3.22/community" >> /etc/apk/repositories && \
-    apk add --no-cache nodejs=22.23.2-r0
+    apk add --no-cache nodejs=22.23.4-r0
 
 # Install dependencies only when needed
 FROM buildbase AS deps
@@ -47,7 +47,7 @@ FROM alpine:3.22 AS runner
 # Security: Pin exact package version and configure trusted repositories to prevent dependency confusion attacks
 RUN echo "https://dl-cdn.alpinelinux.org/alpine/v3.22/main" > /etc/apk/repositories && \
     echo "https://dl-cdn.alpinelinux.org/alpine/v3.22/community" >> /etc/apk/repositories && \
-    apk add --no-cache nodejs=22.23.2-r0
+    apk add --no-cache nodejs=22.23.4-r0
 WORKDIR /app
 
 ENV NODE_ENV production

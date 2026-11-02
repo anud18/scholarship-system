@@ -20,7 +20,7 @@ diff-cover==9.2.0  # Per-PR coverage ratchet (Phase 2 of test-surface-hardening 
 hypothesis==6.112.0  # Symmetry / none-safety properties for RosterService._evaluate_condition
 
 # Code quality and formatting
-black==26.3.1  # Updated for Python 3.13 compatibility
+black==26.10.1  # Updated for Python 3.13 compatibility
 isort==5.13.2  # Updated for Python 3.13 compatibility
 flake8==7.1.1  # Updated for Python 3.13 compatibility
 mypy==1.11.0  # Updated for Python 3.13 compatibility

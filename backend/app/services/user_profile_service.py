@@ -154,37 +154,68 @@ class UserProfileService:
                 user_agent=user_agent,
             )
 
-        # Track changes for audit log with schema-based validation to prevent mass assignment
-        # This automatically stays in sync with schema changes
-        allowed_fields = set(profile_data.model_fields.keys())
-
-        update_dict = profile_data.model_dump(exclude_unset=True)
-
-        for field_name, new_value in update_dict.items():
-            if field_name in allowed_fields and hasattr(profile, field_name):
-                old_value = getattr(profile, field_name)
-
-                # Only log if value actually changed
-                if old_value != new_value:
-                    await self._log_profile_change(
-                        user_id=user_id,
-                        field_name=field_name,
-                        old_value=str(old_value) if old_value is not None else None,
-                        new_value=str(new_value) if new_value is not None else None,
-                        change_reason=change_reason,
-                        ip_address=ip_address,
-                        user_agent=user_agent,
-                    )
-
-                setattr(profile, field_name, new_value)
-
-        # Update timestamp
-        profile.updated_at = datetime.now(timezone.utc)
+        await self._stage_profile_changes(profile, profile_data, change_reason, ip_address, user_agent)
 
         await self.db.commit()
         await self.db.refresh(profile)
 
         return profile
+
+    async def stage_user_profile_update(
+        self,
+        user_id: int,
+        profile_data: UserProfileUpdate,
+        change_reason: Optional[str] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+    ) -> UserProfile:
+        """Like update_user_profile, but leaves the commit to the caller so the
+        change can join a larger transaction. A missing profile is created in the session."""
+        profile = await self.get_user_profile(user_id)
+        if profile is None:
+            profile = UserProfile(user_id=user_id)
+            self.db.add(profile)
+            await self._log_profile_change(
+                user_id=user_id,
+                field_name="profile_created",
+                old_value=None,
+                new_value="Profile created",
+                change_reason=change_reason,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+
+        await self._stage_profile_changes(profile, profile_data, change_reason, ip_address, user_agent)
+        return profile
+
+    async def _stage_profile_changes(
+        self,
+        profile: UserProfile,
+        profile_data: UserProfileUpdate,
+        change_reason: Optional[str],
+        ip_address: Optional[str],
+        user_agent: Optional[str],
+    ) -> None:
+        # Only schema fields are assignable, which blocks mass assignment of model columns.
+        allowed_fields = set(profile_data.model_fields.keys())
+
+        for field_name, new_value in profile_data.model_dump(exclude_unset=True).items():
+            if field_name not in allowed_fields or not hasattr(profile, field_name):
+                continue
+            old_value = getattr(profile, field_name)
+            if old_value != new_value:
+                await self._log_profile_change(
+                    user_id=profile.user_id,
+                    field_name=field_name,
+                    old_value=str(old_value) if old_value is not None else None,
+                    new_value=str(new_value) if new_value is not None else None,
+                    change_reason=change_reason,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                )
+            setattr(profile, field_name, new_value)
+
+        profile.updated_at = datetime.now(timezone.utc)
 
     async def upload_bank_document_to_minio(self, user_id: int, document_upload: BankDocumentPhotoUpload) -> str:
         """Upload bank document to MinIO storage"""

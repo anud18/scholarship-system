@@ -3,7 +3,8 @@
  *
  * Provides consistent extraction of student information from application data.
  * Follows backend pattern from application_helpers.py with field priority:
- * - trm_* (term-specific data) > std_* (basic student data) > legacy fields
+ * - 學院/系所: std_* (API 1, the student's own record) > trm_* (term data) > legacy fields
+ * - term-only data (term count, GPA, ...): trm_* (term-specific data) > std_* > legacy fields
  *
  * Based on schema from backend/app/schemas/student_snapshot.py
  */
@@ -63,16 +64,25 @@ export function getStudentAddress(studentData?: StudentData | null): string | nu
 }
 
 /**
+ * 學院/系所 follow API 1 (std_*), the student's own current record, like the backend
+ * (application_helpers.get_academy_code_from_data / get_department_name_from_data):
+ * codes come from std_* first, and names are resolved server-side from that code.
+ * The term row (trm_*) only fills a gap — e.g. a snapshot whose term lookup failed has
+ * std_* but no trm_*, and after a transfer the term row may describe the old unit.
+ */
+
+/**
  * Extract academy code from student data
- * Priority: trm_academyno (term data) > std_academyno (basic data) > academy_code
+ * Priority: std_academyno (basic data) > trm_academyno (term data) > academy_code
  */
 export function getAcademyCode(studentData?: StudentData | null): string | null {
   if (!studentData) return null;
-  return studentData.trm_academyno || studentData.std_academyno || studentData.academy_code || null;
+  return studentData.std_academyno || studentData.trm_academyno || studentData.academy_code || null;
 }
 
 /**
- * Extract academy name from student data
+ * Extract academy name from the raw student data snapshot (no server resolution).
+ * Prefer getApplicationAcademyName when an application response is at hand.
  * Priority: trm_academyname (term data) > academy_name
  */
 export function getAcademyName(studentData?: StudentData | null): string | null {
@@ -82,20 +92,48 @@ export function getAcademyName(studentData?: StudentData | null): string | null 
 
 /**
  * Extract department code from student data
- * Priority: trm_depno (term data) > std_depno (basic data) > department_code
+ * Priority: std_depno (basic data) > trm_depno (term data) > department_code
  */
 export function getDepartmentCode(studentData?: StudentData | null): string | null {
   if (!studentData) return null;
-  return studentData.trm_depno || studentData.std_depno || studentData.department_code || null;
+  return studentData.std_depno || studentData.trm_depno || studentData.department_code || null;
 }
 
 /**
- * Extract department name from student data
+ * Extract department name from the raw student data snapshot (no server resolution).
+ * Prefer getApplicationDepartmentName when an application response is at hand.
  * Priority: trm_depname (term data) > department_name
  */
 export function getDepartmentName(studentData?: StudentData | null): string | null {
   if (!studentData) return null;
   return studentData.trm_depname || studentData.department_name || null;
+}
+
+/** The parts of an application response that carry 學院/系所 names. */
+export interface ApplicationOrgSource {
+  /** Resolved by the backend from the API 1 code (std_academyno) */
+  academy_name?: string | null;
+  /** Resolved by the backend from the API 1 code (std_depno) */
+  department_name?: string | null;
+  student_data?: StudentData | null;
+}
+
+/**
+ * Academy name for an application response
+ * Priority: server-resolved academy_name > raw snapshot (trm_academyname)
+ */
+export function getApplicationAcademyName(application?: ApplicationOrgSource | null): string | null {
+  if (!application) return null;
+  return application.academy_name || getAcademyName(application.student_data);
+}
+
+/**
+ * Department name for an application response
+ * Priority: server-resolved department_name > raw snapshot (trm_depname)
+ */
+export function getApplicationDepartmentName(application?: ApplicationOrgSource | null): string | null {
+  if (!application) return null;
+  return application.department_name || getDepartmentName(application.student_data);
 }
 
 /**

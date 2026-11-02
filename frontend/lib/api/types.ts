@@ -129,9 +129,10 @@ export interface Application {
    *  review but misses the quota cut keeps its original `status` and only
    *  advances `review_stage` to `quota_distributed`. */
   review_stage?: string;
-  /** Server-computed on the admin 申請案件列表: admin may hard-delete this
-   *  application until it enters 分發階段 (saved/finalized allocation or
-   *  roster entry). Absent on other list endpoints. */
+  /** Server-computed on the admin 申請案件列表 and the 學院審查 list: admin /
+   *  學院承辦人 may hard-delete this application until it enters 分發階段
+   *  (saved/finalized allocation or roster entry). Absent on other list
+   *  endpoints. */
   is_deletable?: boolean;
   is_renewal?: boolean;
   /** 續領年份 (民國年，如 113)；批次匯入指定或承接自前一申請 */
@@ -267,6 +268,12 @@ export interface ScholarshipType {
     label_en: string;
     is_default: boolean;
   }>;
+  // Sub-types the student qualifies for but the admin has not opened this round.
+  closed_sub_types?: Array<{
+    value: string | null;
+    label: string;
+    label_en: string;
+  }>;
   all_sub_type_list?: string[];
   subtype_eligibility?: {
     [subTypeKey: string]: {
@@ -374,6 +381,8 @@ export interface ScholarshipConfiguration {
   renewal_application_end_date?: string;
   application_start_date?: string;
   application_end_date?: string;
+  // 本次開放申請類別; null = every real sub-type is open.
+  open_sub_types?: string[] | null;
   renewal_requires_professor_review: boolean;
   renewal_professor_review_start?: string;
   renewal_professor_review_end?: string;
@@ -1248,6 +1257,7 @@ export interface ScholarshipConfigurationFormData {
   renewal_application_end_date?: string;
   application_start_date?: string;
   application_end_date?: string;
+  open_sub_types?: string[] | null;
   renewal_requires_professor_review?: boolean;
   renewal_professor_review_start?: string;
   renewal_professor_review_end?: string;

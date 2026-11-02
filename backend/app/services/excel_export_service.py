@@ -19,11 +19,11 @@ from openpyxl.utils import get_column_letter
 from app.core.config import settings
 from app.core.exceptions import FileStorageError
 from app.models.payment_roster import (
-    MANUAL_REMOVAL_PREFIXES,
     STUDENT_VERIFICATION_STATUS_LABELS,
     PaymentRoster,
     PaymentRosterItem,
     StudentVerificationStatus,
+    is_listed_in_default_export,
 )
 from app.services.minio_service import MinIOService
 from app.utils.excel_safety import sanitize_excel_cell
@@ -402,14 +402,6 @@ class ExcelExportService:
             raise FileStorageError(f"Failed to export Excel file: {e}", file_name=file_name) from e
 
     @staticmethod
-    def _is_manual_removal(item) -> bool:
-        """True 表示此 item 是「鎖定後手動移除」或「比對分發移除」，
-        應排除於資格驗證視圖之外（自動因資格不符排除者則保留並標紅）。
-        前綴常數與 roster_service 產生端共用（MANUAL_REMOVAL_PREFIXES）。"""
-        reason = getattr(item, "exclusion_reason", None)
-        return bool(reason and reason.startswith(MANUAL_REMOVAL_PREFIXES))
-
-    @staticmethod
     def _rule_details(item) -> Dict[str, Any]:
         """取出凍結快照的逐條規則 details；缺漏／格式不符時回傳空 dict。"""
         rvr = getattr(item, "rule_validation_result", None)
@@ -425,7 +417,7 @@ class ExcelExportService:
         items = list(roster.items)
 
         if not include_excluded:
-            items = [item for item in items if item.is_included or not self._is_manual_removal(item)]
+            items = [item for item in items if is_listed_in_default_export(item)]
 
         return sorted(items, key=lambda x: x.student_name)
 

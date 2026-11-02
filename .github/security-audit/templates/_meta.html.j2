@@ -1,0 +1,8 @@
+<table class="meta">
+  <tr><td>受測系統</td><td>https://{{ meta.target_host }}</td></tr>
+  <tr><td>Repository</td><td>{{ meta.repo }}</td></tr>
+  <tr><td>版本 (ref / commit)</td><td>{{ meta.ref }} / <code>{{ meta.commit }}</code></td></tr>
+  <tr><td>產出時間</td><td>{{ meta.generated }}</td></tr>
+  <tr><td>GitHub Actions run</td><td><code>{{ meta.run_url }}</code></td></tr>
+  <tr><td>工具</td><td>CodeQL {{ codeql.version or '—' }}；OWASP ZAP {{ zap.version or '—' }}</td></tr>
+</table>

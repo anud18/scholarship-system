@@ -3,11 +3,26 @@ User schemas for API requests and responses
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Annotated, Any, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, EmailStr, Field, model_validator
 
 from app.models.user import EmployeeStatus, UserRole, UserType
+
+
+def _blank_to_none(value: Any) -> Any:
+    """Treat an empty / whitespace-only string as "no email".
+
+    The 權限管理 forms send `email: ""` for accounts without an address, and EmailStr
+    rejects "" (HTTP 422). This is for request bodies only: response schemas do not
+    re-validate stored data.
+    """
+    if isinstance(value, str) and not value.strip():
+        return None
+    return value
+
+
+OptionalEmail = Annotated[Optional[EmailStr], BeforeValidator(_blank_to_none)]
 
 
 class UserBase(BaseModel):
@@ -29,7 +44,7 @@ class UserCreate(BaseModel):
 
     nycu_id: str = Field(..., min_length=1, max_length=50, description="NYCU ID (required)")
     name: Optional[str] = Field(None, min_length=1, max_length=100, description="User name (auto-populated by SSO)")
-    email: Optional[EmailStr] = Field(None, description="User email (auto-populated by SSO)")
+    email: OptionalEmail = Field(None, description="User email (auto-populated by SSO)")
     user_type: Optional[UserType] = Field(UserType.student, description="User type (defaults to student)")
     status: Optional[EmployeeStatus] = Field(EmployeeStatus.student, description="User status (defaults to 在學)")
     dept_code: Optional[str] = Field(None, max_length=20)
@@ -43,7 +58,7 @@ class UserUpdate(BaseModel):
     """User update schema"""
 
     name: Optional[str] = Field(None, min_length=1, max_length=100)
-    email: Optional[EmailStr] = None
+    email: OptionalEmail = None
     user_type: Optional[UserType] = None
     status: Optional[EmployeeStatus] = None
     dept_code: Optional[str] = Field(None, max_length=20)
@@ -51,6 +66,15 @@ class UserUpdate(BaseModel):
     college_code: Optional[str] = Field(None, max_length=10)
     role: Optional[UserRole] = None
     comment: Optional[str] = Field(None, max_length=255)
+
+    @model_validator(mode="after")
+    def _blank_email_means_unchanged(self) -> "UserUpdate":
+        # The address comes from NYCU Portal and the forms show it read-only, so a blank
+        # one is the form echoing an empty value, never a request to wipe it. Dropping it
+        # from the set fields keeps `model_dump(exclude_unset=True)` from writing NULL.
+        if self.email is None:
+            self.model_fields_set.discard("email")
+        return self
 
 
 class UserLogin(BaseModel):
@@ -65,7 +89,7 @@ class UserResponse(BaseModel):
     id: int
     nycu_id: str
     name: Optional[str] = None
-    email: Optional[EmailStr] = None
+    email: Optional[str] = None
     user_type: Optional[UserType] = None
     status: Optional[EmployeeStatus] = None
     dept_code: Optional[str] = None
@@ -87,7 +111,7 @@ class UserListResponse(BaseModel):
     id: int
     nycu_id: str
     name: str
-    email: str
+    email: Optional[str] = None
     user_type: str
     status: str
     dept_code: Optional[str] = None

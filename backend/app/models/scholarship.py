@@ -574,6 +574,9 @@ class ScholarshipConfiguration(Base):
     application_start_date = Column(DateTime(timezone=True), nullable=True)
     application_end_date = Column(DateTime(timezone=True), nullable=True)
 
+    # 本次一般申請開放的子類別（小寫代碼）；NULL = 全部開放
+    open_sub_types = Column(JSON, nullable=True)
+
     # 續領審查期間 (從 ScholarshipType 移至此處)
     # 管理員決定續領是否需要教授/學院審查（與一般申請的 requires_* 各自獨立）
     renewal_requires_professor_review = Column(Boolean, default=False, nullable=False, server_default="false")
@@ -648,6 +651,13 @@ class ScholarshipConfiguration(Base):
         if is_renewal:
             return bool(self.renewal_requires_college_review)
         return bool(self.requires_college_review)
+
+    def is_sub_type_open(self, code: str) -> bool:
+        """Whether a new (一般) application may pick this sub-type in the current opening."""
+        normalized = code.strip().lower()
+        if self.open_sub_types is None or normalized == "general":
+            return True
+        return normalized in self.open_sub_types
 
     def professor_review_end_for(self, is_renewal: bool) -> Optional[datetime]:
         """教授審查截止 for an application of the given kind."""

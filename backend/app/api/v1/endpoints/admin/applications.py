@@ -24,15 +24,17 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.exceptions import AuthorizationError, NotFoundError
-from app.core.security import require_admin
+from app.api.v1.endpoints.college_review._helpers import _check_scholarship_permission
+from app.core.exceptions import AuthorizationError, NotFoundError, ValidationError
+from app.core.security import require_admin, require_scholarship_manager
 from app.db.deps import get_db
 from app.models.application import Application, ApplicationStatus
+from app.models.audit_log import AuditAction
 from app.models.college_review import CollegeRankingItem
 from app.models.enums import Semester
 from app.models.payment_roster import PaymentRosterItem
 from app.models.scholarship import ScholarshipType
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.application import (
     ApplicationListResponse,
     ApplicationStatusUpdate,
@@ -42,9 +44,16 @@ from app.schemas.application import (
 )
 from app.schemas.common import PaginatedResponse
 from app.services.application_audit_service import ApplicationAuditService
-from app.services.application_deletion_policy import DELETE_BLOCKED_MESSAGE, is_application_deletable
+from app.services.application_deletion_policy import (
+    DELETE_BLOCKED_MESSAGE,
+    LOCKED_RANKING_DELETE_BLOCKED_MESSAGE,
+    find_locked_ranking_application_ids,
+    is_application_deletable,
+)
 from app.services.application_service import ApplicationService
 from app.services.bulk_approval_service import BulkApprovalService
+from app.services.student_snapshot_resync import needs_term_resync, resync_application_term_data
+from app.utils.college_scope import college_user_may_access, get_application_college_code, get_user_college_code
 from app.utils.excel_safety import sanitize_excel_cell
 
 logger = logging.getLogger(__name__)
@@ -603,8 +612,91 @@ async def admin_update_application_status(
     }
 
 
+@router.post("/applications/{id}/resync-sis-term-data")
+async def resync_sis_term_data(
+    id: int,
+    request: Request = None,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Re-fetch the SIS term data (系所、年級等 trm_* 欄位) of an application whose
+    snapshot was stored without it (SIS timed out / failed when the draft was created).
+
+    Only the term part of the snapshot changes; 申請當時的 std_* basic data is kept.
+    A basic-data (API 1) SIS failure surfaces as 503. When the term lookup failed or
+    SIS has no term record for the year, or another request completed the snapshot
+    meanwhile, nothing is written and the response is ``updated: false`` with the reason.
+    """
+    app = (await db.execute(select(Application).where(Application.id == id))).scalar_one_or_none()
+    if not app:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+    if not needs_term_resync(app.student_data):
+        raise ValidationError("此申請的學籍學期資料已完整，無需重新同步")
+
+    result = await resync_application_term_data(db, id)
+    # Commit even when nothing changed: it releases the row lock taken for the merge.
+    # (A rollback would expire `current_user`, breaking the audit write below.)
+    await db.commit()
+
+    # Use only `id` / `result` below — `app` may be stale after the locked re-read
+    await ApplicationAuditService(db).log_application_operation(
+        application_id=id,
+        action=AuditAction.update,
+        user=current_user,
+        request=request,
+        description=f"重新同步學籍學期資料 {result.app_id}",
+        old_values={"_term_data_status": result.previous_status},
+        new_values={"_term_data_status": result.new_status, "updated": result.updated},
+        status="success" if result.updated else "failed",
+        error_message=result.error_message,
+        meta_data={"app_id": result.app_id, "update_type": "sis_term_resync"},
+    )
+
+    message = "已重新同步學籍學期資料" if result.updated else f"未變更：{result.error_message}"
+    return {
+        "success": True,
+        "message": message,
+        "data": {
+            "id": id,
+            "app_id": result.app_id,
+            "previous_status": result.previous_status,
+            "new_status": result.new_status,
+            "updated": result.updated,
+        },
+    }
+
+
 class DeleteApplicationRequest(BaseModel):
     reason: str = Field(..., min_length=1, max_length=500)
+
+
+async def _assert_college_may_delete(db: AsyncSession, user: User, app: Application) -> None:
+    """Extra gates for a 學院承辦人 hard-delete (admins skip these).
+
+    - Own college only. Anything else is 404, not 403, so an out-of-scope id is
+      indistinguishable from a nonexistent one (no cross-college enumeration).
+    - Same per-scholarship AdminScholarship permission as the 學院審查 list.
+    - Not while the application sits in a finalized (確認排名) ranking — deleting
+      would silently rewrite a locked ranking; unlock it first.
+    """
+    if not college_user_may_access(user, app):
+        logger.warning(
+            "SECURITY: college user attempted cross-college application hard-delete",
+            extra={
+                "user_id": user.id,
+                "user_college": get_user_college_code(user),
+                "owner_college": get_application_college_code(app),
+                "application_id": app.id,
+            },
+        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+
+    if not await _check_scholarship_permission(user, app.scholarship_type_id, db):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="您沒有此獎學金的管理權限")
+
+    if await find_locked_ranking_application_ids(db, [app.id]):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=LOCKED_RANKING_DELETE_BLOCKED_MESSAGE)
 
 
 @router.delete("/applications/{id}")
@@ -612,11 +704,15 @@ async def delete_application(
     id: int,
     payload: DeleteApplicationRequest,
     request: Request = None,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_scholarship_manager),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Hard-delete an application (admin only).
+    Hard-delete an application (admin, or 學院承辦人 for their own college).
+
+    A college user may only delete applications whose SIS snapshot belongs to
+    their bound college; anything else returns 404, exactly like a nonexistent
+    id, so the endpoint cannot enumerate other colleges' applications.
 
     Allowed at any point BEFORE the application enters the 配額分發 stage
     (see app.services.application_deletion_policy). Once an allocation has
@@ -636,6 +732,9 @@ async def delete_application(
 
     if not app:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+
+    if current_user.role == UserRole.college:
+        await _assert_college_may_delete(db, current_user, app)
 
     if not await is_application_deletable(db, app):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=DELETE_BLOCKED_MESSAGE)

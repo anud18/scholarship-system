@@ -43,7 +43,7 @@ export const UserSchema = z.object({
   last_login_at: z.string().optional(),
   created_at: z.string(),
   updated_at: z.string(),
-  raw_data: z.record(z.any()).optional(),
+  raw_data: z.record(z.string(), z.any()).optional(),
   // Backward compatibility fields
   username: z.string().optional(),
   full_name: z.string().optional(),

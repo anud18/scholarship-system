@@ -29,6 +29,7 @@ from app.schemas.application import RevokeRequest, SuspendRequest
 from app.services.application_audit_service import ApplicationAuditService
 from app.services.college_award_stats_service import award_record, build_award_stats_export
 from app.services.college_stats_export_service import stats_period_label
+from app.services.department_names import load_department_names
 from app.services.email_service import EmailService
 from app.services.manual_distribution_export_service import (
     ManualDistributionExportService,
@@ -40,6 +41,11 @@ from app.services.moe_department_award_stats_service import (
     build_moe_department_award_stats_export,
     load_scholarship,
     scholarship_has_moe_sub_type,
+)
+from app.utils.application_helpers import (
+    get_academy_code_from_data,
+    get_academy_name_from_data,
+    get_department_name_from_data,
 )
 from app.utils.date_utils import now_taipei_str
 from app.utils.export_download import XLSX_MEDIA_TYPE, sanitise_filename_part, xlsx_attachment_response
@@ -561,6 +567,7 @@ async def get_distribution_summary(
                 "data": {"groups": [], "total_allocated": 0},
             }
 
+        department_names = await load_department_names(db)
         group_data = []
         total_allocated = 0
         for group in groups:
@@ -574,9 +581,10 @@ async def get_distribution_summary(
                         "application_id": item.application_id,
                         "student_name": sd.get("std_cname", ""),
                         "student_id": sd.get("std_stdcode", ""),
-                        "college_code": sd.get("std_academyno") or sd.get("trm_academyno", ""),
-                        "college_name": sd.get("trm_academyname", ""),
-                        "department_name": sd.get("trm_depname", ""),
+                        # API 1 (std_*) decides 學院/系所; the term row only fills a gap
+                        "college_code": get_academy_code_from_data(sd) or "",
+                        "college_name": get_academy_name_from_data(sd) or "",
+                        "department_name": get_department_name_from_data(sd, department_names) or "",
                         "rank_position": item.rank_position,
                         # The panel renders a red "N" instead of the rank for these.
                         # An allocated-but-college-rejected row is legitimate: admin
@@ -626,7 +634,7 @@ def _export_sort_key(item) -> tuple:
     """
     app = item.application
     sd = (app.student_data or {}) if app else {}
-    college = sd.get("std_academyno") or sd.get("trm_academyno") or ""
+    college = get_academy_code_from_data(sd) or ""
     return (str(college), item.rank_position or 0, item.id)
 
 
@@ -692,6 +700,7 @@ async def export_distribution_summary(
         await db.execute(select(ScholarshipType.name).where(ScholarshipType.id == scholarship_type_id))
     ).scalar_one()
 
+    department_names = await load_department_names(db)
     export_groups = []
     _seq_counter = 0
     for group in groups:
@@ -703,7 +712,7 @@ async def export_distribution_summary(
         rows = []
         for _it in ordered_items:
             _seq_counter += 1
-            rows.append(build_recipient_row(_seq_counter, _it.application))
+            rows.append(build_recipient_row(_seq_counter, _it.application, department_names))
         export_groups.append(
             RecipientExportGroup(
                 label=sub_type_labels.get(group.sub_type, group.sub_type),

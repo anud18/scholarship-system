@@ -6,7 +6,7 @@ Roster service core logic for scholarship payment roster generation
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from sqlalchemy import and_, case as sa_case, func, or_
 from sqlalchemy.orm import Session, joinedload
@@ -37,11 +37,13 @@ from app.models.payment_roster import (
 )
 from app.models.roster_audit import RosterAuditAction, RosterAuditLevel, RosterAuditLog
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule
+from app.models.student import Department
 from app.models.user import User
 from app.schemas.payment_roster import DistributionDiffEntry, RevokedSuspendedEntry
 from app.services.audit_service import audit_service
 from app.services.student_verification_service import StudentVerificationService
-from app.utils.bank_account_fields import BANK_ACCOUNT_FIELD_LOOKUP
+from app.utils.application_helpers import get_academy_name_from_data, get_department_name_from_data
+from app.utils.bank_account_fields import submitted_bank_account
 from app.utils.pii_masking import mask_id_number
 
 logger = logging.getLogger(__name__)
@@ -899,23 +901,8 @@ class RosterService:
         # 3. 擷取銀行帳戶資訊（僅作快照與提醒用，「缺少銀行帳戶」不構成排除原因，
         #    也不影響造冊人數／總金額：學生補件後即可撥款。缺帳號僅在 Excel
         #    說明欄提示「缺少郵局帳號資訊」，供承辦人催補件）
-        # IMPORTANT: Support both nested (schema-compliant) and flat (legacy) data structures
         form_data = application.submitted_form_data or {}
-        form_fields = form_data.get("fields", {})
-
-        # Extract bank_account from various possible field names
-        bank_account = ""
-        for field_name in BANK_ACCOUNT_FIELD_LOOKUP:
-            # Check nested structure first (schema-compliant)
-            if field_name in form_fields and form_fields[field_name].get("value"):
-                bank_account = str(form_fields[field_name]["value"])
-                logger.debug(f"Found bank account '{bank_account}' in nested structure (field: {field_name})")
-                break
-            # Check flat structure (backward compatibility for existing data)
-            elif field_name in form_data and form_data.get(field_name):
-                bank_account = str(form_data[field_name])
-                logger.debug(f"Found bank account '{bank_account}' in flat structure (field: {field_name})")
-                break
+        bank_account = submitted_bank_account(form_data)
 
         if not bank_account:
             logger.warning(
@@ -2109,12 +2096,6 @@ class RosterService:
         roster.total_amount = total_amount
         return qualified, total_count, total_amount
 
-    _AUDIT_ACTION_LABELS = {
-        RosterAuditAction.ITEM_REMOVE: "移除",
-        RosterAuditAction.ITEM_ADD: "新增",
-        RosterAuditAction.ITEM_RESTORE: "回復",
-    }
-
     def _write_roster_item_audit(
         self,
         roster_id: int,
@@ -2126,28 +2107,19 @@ class RosterService:
     ) -> None:
         """Add (not commit) one RosterAuditLog row for an item-level mutation.
         Caller commits. `source` is one of exclude/reconcile/locked_remove/restore."""
-        user = self.db.get(User, admin_user_id)
         student_id = None
         if item.application is not None and item.application.student_data:
             student_id = item.application.student_data.get("std_stdcode")
-        label = self._AUDIT_ACTION_LABELS.get(action, action.value)
         self.db.add(
-            RosterAuditLog.create_audit_log(
+            RosterAuditLog.for_item(
                 roster_id=roster_id,
                 action=action,
-                title=f"{label} {item.student_name}",
-                description=f"{label} {item.student_name}（原因：{reason or '—'}）",
+                item=item,
                 user_id=admin_user_id,
-                user_name=user.name if user else None,
-                user_role=(user.role.value if user and user.role else None),
-                audit_metadata={
-                    "student_name": item.student_name,
-                    "student_id": student_id,
-                    "application_id": item.application_id,
-                    "source": source,
-                    "reason": reason,
-                },
-                affected_items_count=1,
+                user=self.db.get(User, admin_user_id),
+                source=source,
+                reason=reason,
+                student_id=student_id,
             )
         )
 
@@ -2225,10 +2197,23 @@ class RosterService:
                 result[item.application_id] = item
         return result
 
-    def get_distribution_diff_for_roster(self, roster_id: int) -> dict:
+    def _load_department_names(self) -> Dict[str, str]:
+        """系所代碼 → 名稱 — the sync-session twin of ``load_department_names``.
+
+        Read once per operation (the table is tiny), never per row.
+        """
+        rows = self.db.query(Department.code, Department.name).filter(Department.code.isnot(None)).all()
+        return {code: name for code, name in rows}
+
+    def get_distribution_diff_for_roster(
+        self, roster_id: int, department_names: Optional[Mapping[str, str]] = None
+    ) -> dict:
         """Compute the diff between this roster and its slice of the
         distribution. Returns a dict with to_add (allocated-but-missing) and
-        to_remove (in-roster-but-unallocated) lists of DistributionDiffEntry."""
+        to_remove (in-roster-but-unallocated) lists of DistributionDiffEntry.
+
+        學院/系所 follow API 1 (std_academyno / std_depno, names resolved from the
+        code); ``department_names`` (代碼 → 名稱) is loaded here when not given."""
         from app.models.application import ApplicationStatus
 
         roster = self.db.get(PaymentRoster, roster_id)
@@ -2242,6 +2227,8 @@ class RosterService:
 
         existing_items = self.db.query(PaymentRosterItem).filter(PaymentRosterItem.roster_id == roster_id).all()
         existing_app_ids = {it.application_id for it in existing_items}
+        if department_names is None:
+            department_names = self._load_department_names()
 
         to_add = []
         for app_id, ranking_item in allocated_map.items():
@@ -2275,8 +2262,8 @@ class RosterService:
                     item_id=None,
                     student_id=std_code,
                     student_name=std_name,
-                    department_name=sd.get("trm_depname"),
-                    college_name=sd.get("trm_academyname"),
+                    department_name=get_department_name_from_data(sd, department_names),
+                    college_name=get_academy_name_from_data(sd),
                     allocation_year=consumed.academic_year,
                     allocated_sub_type=ranking_item.allocated_sub_type,
                     application_identity=None,
@@ -2308,8 +2295,8 @@ class RosterService:
                     # which would render under the 學號 column in the UI).
                     student_id=sd.get("std_stdcode"),
                     student_name=item.student_name,
-                    department_name=sd.get("trm_depname"),
-                    college_name=sd.get("trm_academyname"),
+                    department_name=get_department_name_from_data(sd, department_names),
+                    college_name=get_academy_name_from_data(sd),
                     allocation_year=item.allocation_year,
                     allocated_sub_type=item.allocated_sub_type,
                     application_identity=item.application_identity,
