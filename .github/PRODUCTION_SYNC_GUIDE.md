@@ -171,7 +171,7 @@ Trigger a sync manually from GitHub UI:
 | **OWASP ZAP (baseline)** | `.github/workflows/zap-report.yml` | 在 runner 內啟動整套 stack，掃描**正式環境組態的前端**（`frontend/Dockerfile` → `next start`，:3100）與**後端 API**（:8000） |
 | **CodeQL** | `.github/workflows/sarif-to-pdf.yml` | 取用該 commit 的 CodeQL run SARIF，產生 PDF |
 
-兩者皆輸出 PDF（另含 HTML/JSON/MD）。mirror run 頁面另有一段 consolidated summary
+兩者皆輸出 PDF（另含 HTML/JSON/MD）。PDF 以**未壓縮**的 artifact 上傳、檔名即版本號：`vX.Y.Z弱點掃描.pdf`（ZAP）與 `vX.Y.Z源碼掃描.pdf`（CodeQL）；版本號由最先執行的 `release-version` job 算出，掃描與 `sync-to-production` 共用同一個值。mirror run 頁面另有一段 consolidated summary
 （`security-report-summary` job），列出各風險等級數量與下載位置。
 
 **設計上的幾個取捨：**

@@ -26,7 +26,7 @@ on:
   workflow_dispatch:
     inputs:
       label:
-        description: "Label shown in the report header and appended to artifact names (e.g. v1.2.3)"
+        description: "Label shown in the report header, prefixed to the PDF name and appended to the raw-report artifact name (e.g. v1.2.3)"
         required: false
         type: string
       spider_minutes:
@@ -59,8 +59,11 @@ on:
         description: "Low-risk alerts across both targets"
         value: ${{ jobs.zap-scan.outputs.low }}
       artifact:
-        description: "Name of the uploaded report artifact"
+        description: "Name of the uploaded raw-report artifact (HTML / JSON / MD)"
         value: ${{ jobs.zap-scan.outputs.artifact }}
+      pdf_artifact:
+        description: "Name of the uploaded PDF artifact (the PDF file itself, uploaded unzipped)"
+        value: ${{ jobs.zap-scan.outputs.pdf_artifact }}
       scanned_sha:
         description: "Commit SHA that was actually scanned"
         value: ${{ jobs.zap-scan.outputs.scanned_sha }}
@@ -82,6 +85,7 @@ jobs:
       medium: ${{ steps.counts.outputs.medium }}
       low: ${{ steps.counts.outputs.low }}
       artifact: ${{ steps.names.outputs.artifact }}
+      pdf_artifact: ${{ steps.names.outputs.pdf_artifact }}
       scanned_sha: ${{ steps.names.outputs.sha }}
 
     steps:
@@ -110,6 +114,8 @@ jobs:
             echo "short_sha=$SHORT_SHA"
             echo "label=$LABEL"
             echo "artifact=zap-security-report${SUFFIX}"
+            # Uploaded unzipped, so the artifact name IS this file name.
+            echo "pdf_artifact=${LABEL}弱點掃描.pdf"
           } >> "$GITHUB_OUTPUT"
 
       - name: Bring up docker-compose.dev.yml
@@ -409,17 +415,30 @@ jobs:
           print("Totals:", dict(totals))
 
       - name: Convert summary to PDF
+        env:
+          PDF_PATH: zap-out/${{ steps.names.outputs.pdf_artifact }}
         run: |
           python - <<'PY'
+          import os
           from weasyprint import HTML, CSS
           from weasyprint.text.fonts import FontConfiguration
           fc = FontConfiguration()
           css = CSS(string='@page { size: A4; margin: 14mm; }', font_config=fc)
           HTML('zap-out/zap-summary.html').write_pdf(
-              'zap-out/zap-security-report.pdf', stylesheets=[css], font_config=fc)
+              os.environ['PDF_PATH'], stylesheets=[css], font_config=fc)
           print("PDF generated")
           PY
-          ls -lh zap-out/zap-security-report.pdf
+          ls -lh "$PDF_PATH"
+
+      - name: Upload ZAP PDF
+        # archive: false uploads the PDF unzipped; the artifact is named after
+        # the file (`name` is ignored in this mode).
+        uses: actions/upload-artifact@v7
+        with:
+          path: zap-out/${{ steps.names.outputs.pdf_artifact }}
+          archive: false
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Upload ZAP report
         if: always()
@@ -427,8 +446,6 @@ jobs:
         with:
           name: ${{ steps.names.outputs.artifact }}
           path: |
-            zap-out/zap-security-report.pdf
-            zap-out/zap-summary.html
             zap-out/*.html
             zap-out/*.json
             zap-out/*.md

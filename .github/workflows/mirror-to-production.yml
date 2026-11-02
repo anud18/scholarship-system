@@ -39,34 +39,100 @@ permissions:
 
 jobs:
   # ---------------------------------------------------------------------------
+  # The release version, minted ONCE up front.
+  #
+  # Both the security reports (named `<version>弱點掃描.pdf` /
+  # `<version>源碼掃描.pdf`) and sync-to-production (PR title, squash commit,
+  # GHCR tag) need it, and the reports run in parallel with the sync job — so
+  # it cannot be computed inside sync-to-production any more.
+  #
+  # Only the production repo's tags are read: the dev repo carries no v* tags.
+  # An unreachable/unauthorised production repo FAILS the job instead of
+  # silently restarting the numbering at v0.9.0.
+  # ---------------------------------------------------------------------------
+  release-version:
+    name: Calculate release version
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    permissions: {}
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - name: Calculate next version
+        id: version
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          PRODUCTION_REPO: ${{ secrets.PRODUCTION_REPO }}
+          VERSION_BUMP: ${{ inputs.version_bump || 'patch' }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$GH_PAT" ] || [ -z "$PRODUCTION_REPO" ]; then
+            echo "::error::GH_PAT and PRODUCTION_REPO secrets are required to read the production repo's tags"
+            exit 1
+          fi
+
+          REMOTE_TAGS=$(git ls-remote --tags --refs \
+            "https://x-access-token:${GH_PAT}@github.com/${PRODUCTION_REPO}.git" 'v*.*.*')
+          LATEST_TAG=$(printf '%s\n' "$REMOTE_TAGS" \
+            | sed -n 's#.*refs/tags/\(v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)$#\1#p' \
+            | sort -V | tail -1)
+
+          if [ -z "$LATEST_TAG" ]; then
+            echo "::notice::No previous version found, starting with v0.9.0"
+            NEXT_VERSION="v0.9.0"
+          else
+            echo "::notice::Latest version: $LATEST_TAG"
+            IFS='.' read -r MAJOR MINOR PATCH <<< "${LATEST_TAG#v}"
+            case "$VERSION_BUMP" in
+              major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+              minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+              patch) PATCH=$((PATCH + 1)) ;;
+              *) echo "::error::Unknown version_bump: $VERSION_BUMP"; exit 1 ;;
+            esac
+            NEXT_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+          fi
+
+          echo "::notice::Next version: $NEXT_VERSION"
+          echo "version=$NEXT_VERSION" >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
   # Security evidence for the exact commit being shipped.
   #
   # The reports are published as ARTIFACTS ON THIS WORKFLOW RUN (each reusable
-  # workflow uploads its own; see the run's Artifacts section). Nothing is
+  # workflow uploads its own; see the run's Artifacts section). The PDFs are
+  # uploaded unzipped and named `<version>弱點掃描.pdf` (ZAP) and
+  # `<version>源碼掃描.pdf` (CodeQL). Nothing is
   # committed into the sync payload and nothing is posted to the production PR —
   # the production repo's PR content is intentionally unchanged.
   #
   # These run IN PARALLEL with sync-to-production rather than gating it: a scan
   # takes tens of minutes, and blocking the mirror on it would make releases
   # slow without making them safer. They are also deliberately NOT `needs`-ed by
-  # the sync job, so a scanner hiccup can never block a release.
+  # the sync job, so a scanner hiccup can never block a release. They only wait
+  # for release-version (seconds) so the PDFs carry the release version.
   # ---------------------------------------------------------------------------
   zap-report:
     name: ZAP baseline report
+    needs: release-version
     if: github.event_name == 'workflow_dispatch' && inputs.security_reports
     uses: ./.github/workflows/zap-report.yml
     with:
       ref: ${{ github.sha }}
+      label: ${{ needs.release-version.outputs.version }}
     permissions:
       contents: read
 
   codeql-report:
     name: CodeQL PDF report
+    needs: release-version
     if: github.event_name == 'workflow_dispatch' && inputs.security_reports
     uses: ./.github/workflows/sarif-to-pdf.yml
     with:
       # Report on the commit being mirrored, not merely the newest scan.
       sha: ${{ github.sha }}
+      label: ${{ needs.release-version.outputs.version }}
     permissions:
       actions: read
       contents: read
@@ -74,19 +140,21 @@ jobs:
   sync-to-production:
     name: Sync to Production Repository
     runs-on: ubuntu-latest
+    needs: release-version
     # Only run if secrets are configured
     if: github.event_name == 'workflow_dispatch'
 
     # Consumed by tag-release-images, which stamps this release version onto the
     # GHCR images already built from this very commit.
     outputs:
-      version: ${{ steps.version.outputs.version }}
+      version: ${{ needs.release-version.outputs.version }}
       pr_url: ${{ steps.create-pr.outputs.pr_url }}
 
     # Directory owned by the production repository. The mirror neither pushes
     # development content into it nor deletes what production keeps there.
     env:
       PROTECTED_DOCS_DIR: docs/資訊中心文件
+      NEXT_VERSION: ${{ needs.release-version.outputs.version }}
 
     steps:
       - name: Checkout repository
@@ -779,54 +847,6 @@ jobs:
           echo "customized=${DIFFERS}" >> $GITHUB_OUTPUT
           echo "::endgroup::"
 
-      - name: Calculate next version
-        id: version
-        env:
-          VERSION_BUMP: ${{ github.event.inputs.version_bump || 'patch' }}
-        run: |
-          echo "::group::Calculate next version"
-
-          # Fetch tags from production repo
-          git fetch prod-repo --tags 2>/dev/null || true
-
-          # Get latest semantic version tag
-          LATEST_TAG=$(git tag -l "v*.*.*" --sort=-v:refname | head -1 || echo "")
-
-          if [ -z "$LATEST_TAG" ]; then
-            echo "::notice::No previous version found, starting with v0.9.0"
-            NEXT_VERSION="v0.9.0"
-          else
-            echo "::notice::Latest version: $LATEST_TAG"
-
-            # Parse version (remove 'v' prefix)
-            VERSION=${LATEST_TAG#v}
-            IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
-
-            # Increment based on bump type
-            case "$VERSION_BUMP" in
-              major)
-                MAJOR=$((MAJOR + 1))
-                MINOR=0
-                PATCH=0
-                ;;
-              minor)
-                MINOR=$((MINOR + 1))
-                PATCH=0
-                ;;
-              patch)
-                PATCH=$((PATCH + 1))
-                ;;
-            esac
-
-            NEXT_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
-          fi
-
-          echo "::notice::Next version: $NEXT_VERSION"
-          echo "version=$NEXT_VERSION" >> $GITHUB_OUTPUT
-          echo "NEXT_VERSION=$NEXT_VERSION" >> $GITHUB_ENV
-
-          echo "::endgroup::"
-
       - name: Generate release notes
         id: release-notes
         run: |
@@ -1348,6 +1368,7 @@ jobs:
           ZAP_MEDIUM: ${{ needs.zap-report.outputs.medium }}
           ZAP_LOW: ${{ needs.zap-report.outputs.low }}
           ZAP_ARTIFACT: ${{ needs.zap-report.outputs.artifact }}
+          ZAP_PDF: ${{ needs.zap-report.outputs.pdf_artifact }}
 
           CODEQL_RESULT: ${{ needs.codeql-report.result }}
           CODEQL_TOTAL: ${{ needs.codeql-report.outputs.total }}
@@ -1387,10 +1408,11 @@ jobs:
             echo ""
             echo "📥 **下載**（本次 run 頁面下方 Artifacts 區）：[${RUN_URL}](${RUN_URL})"
             if [ "${ZAP_RESULT}" = "success" ]; then
-              echo "- \`${ZAP_ARTIFACT}\` — ZAP：PDF / HTML / JSON / MD"
+              echo "- \`${ZAP_PDF}\` — ZAP 弱點掃描 PDF"
+              echo "- \`${ZAP_ARTIFACT}\` — ZAP 原始報告：HTML / JSON / MD"
             fi
             if [ "${CODEQL_RESULT}" = "success" ]; then
-              echo "- \`${CODEQL_ARTIFACT}\` — CodeQL：PDF"
+              echo "- \`${CODEQL_ARTIFACT}\` — CodeQL 源碼掃描 PDF"
             fi
             echo ""
 
