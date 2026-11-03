@@ -101,6 +101,5 @@ jobs:
       confirm: ${{ inputs.confirm }}
       mode: ${{ inputs.mode }}
       reason: ${{ inputs.reason }}
-    secrets: inherit
     permissions:
       contents: read

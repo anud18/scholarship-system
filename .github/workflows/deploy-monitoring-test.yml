@@ -67,6 +67,10 @@ jobs:
     # Reads secrets from the `test` ENVIRONMENT, which overrides the
     # repository-level (production) values. The environment scoping happens
     # inside the called workflow.
-    secrets: inherit
+    secrets:
+      GH_PAT: ${{ secrets.GH_PAT }}
+      GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+      GRAFANA_ADMIN_USER: ${{ secrets.GRAFANA_ADMIN_USER }}
+      GRAFANA_SECRET_KEY: ${{ secrets.GRAFANA_SECRET_KEY }}
     permissions:
       contents: read
