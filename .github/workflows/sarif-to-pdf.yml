@@ -12,7 +12,7 @@ on:
         required: false
         type: string
       label:
-        description: "Label shown in the report header and appended to artifact names (e.g. v1.2.3)"
+        description: "Label shown in the report header, prefixed to the PDF name and appended to the HTML artifact name (e.g. v1.2.3)"
         required: false
         type: string
 
@@ -44,7 +44,7 @@ on:
         description: "Medium-severity findings"
         value: ${{ jobs.generate-pdf.outputs.medium }}
       artifact:
-        description: "Name of the uploaded PDF artifact"
+        description: "Name of the uploaded PDF artifact (the PDF file itself, uploaded unzipped)"
         value: ${{ jobs.generate-pdf.outputs.artifact }}
       resolved_sha:
         description: "Commit SHA the reported CodeQL run actually analysed"
@@ -145,7 +145,8 @@ jobs:
           fi
           {
             echo "label=$LABEL"
-            echo "pdf_artifact=codeql-security-report${SUFFIX}"
+            # Uploaded unzipped, so the artifact name IS this file name.
+            echo "pdf_artifact=${LABEL}源碼掃描.pdf"
             echo "html_artifact=codeql-security-report-html${SUFFIX}"
           } >> "$GITHUB_OUTPUT"
 
@@ -511,7 +512,11 @@ jobs:
 
       - name: Convert HTML to PDF
         shell: python
+        env:
+          PDF_NAME: ${{ steps.names.outputs.pdf_artifact }}
         run: |
+          import os
+
           from weasyprint import HTML, CSS
           from weasyprint.text.fonts import FontConfiguration
 
@@ -526,14 +531,16 @@ jobs:
           ''', font_config=font_config)
 
           HTML('codeql-report.html').write_pdf(
-              'codeql-security-report.pdf',
+              os.environ['PDF_NAME'],
               stylesheets=[css],
               font_config=font_config
           )
           print("PDF generated successfully")
 
       - name: Verify PDF output
-        run: ls -lh codeql-security-report.pdf
+        env:
+          PDF_NAME: ${{ steps.names.outputs.pdf_artifact }}
+        run: ls -lh "$PDF_NAME"
 
       - name: Export finding counts
         id: counts
@@ -547,10 +554,13 @@ jobs:
           PY
 
       - name: Upload PDF Report
-        uses: actions/upload-artifact@v6
+        # archive: false uploads the PDF unzipped; the artifact is named after
+        # the file (`name` is ignored in this mode).
+        uses: actions/upload-artifact@v7
         with:
-          name: ${{ steps.names.outputs.pdf_artifact }}
-          path: codeql-security-report.pdf
+          path: ${{ steps.names.outputs.pdf_artifact }}
+          archive: false
+          if-no-files-found: error
           retention-days: 90
 
       - name: Upload HTML Report
