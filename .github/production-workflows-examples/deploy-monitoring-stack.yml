@@ -104,6 +104,19 @@ on:
         required: false
         type: string
         default: ''
+    # Explicit allow-list instead of the caller's `secrets: inherit`, so this
+    # workflow only ever receives what it uses. A same-named
+    # secret in the job's `environment:` still takes precedence over the passed
+    # (repository-level) value, exactly as it did with `inherit`.
+    secrets:
+      GH_PAT:
+        required: false
+      GRAFANA_ADMIN_PASSWORD:
+        required: false
+      GRAFANA_ADMIN_USER:
+        required: false
+      GRAFANA_SECRET_KEY:
+        required: false
 
 jobs:
   deploy-monitoring:

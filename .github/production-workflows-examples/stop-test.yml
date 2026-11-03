@@ -88,7 +88,7 @@ jobs:
       mode: ${{ inputs.mode }}
       reason: ${{ inputs.reason }}
     # The called workflow reads variables from the `test` ENVIRONMENT, which
-    # overrides the repository-level (production) values.
-    secrets: inherit
+    # overrides the repository-level (production) values. stop-stack.yml reads
+    # no secrets, so none are passed (no `secrets: inherit`).
     permissions:
       contents: read
