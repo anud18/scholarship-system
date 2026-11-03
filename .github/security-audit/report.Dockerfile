@@ -23,6 +23,6 @@ COPY templates /app/templates
 # Never run as root (Fortify: Default User Privilege). The workflow also
 # passes --user "$(id -u):$(id -g)" so /reports is owned by the runner; this
 # is the fallback for any other invocation.
-RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin reporter
+RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin reporter
 USER reporter
 ENTRYPOINT ["python", "/app/render_reports.py"]
