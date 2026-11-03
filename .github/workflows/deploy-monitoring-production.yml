@@ -65,6 +65,10 @@ jobs:
       stage: production
       runner_labels: '["self-hosted","linux","production"]'
       reset_grafana_volume: ${{ inputs.reset_grafana_volume || false }}
-    secrets: inherit
+    secrets:
+      GH_PAT: ${{ secrets.GH_PAT }}
+      GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+      GRAFANA_ADMIN_USER: ${{ secrets.GRAFANA_ADMIN_USER }}
+      GRAFANA_SECRET_KEY: ${{ secrets.GRAFANA_SECRET_KEY }}
     permissions:
       contents: read

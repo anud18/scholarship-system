@@ -69,6 +69,73 @@ on:
         required: false
         type: string
         default: ''
+    # Explicit allow-list instead of the caller's `secrets: inherit`, so this
+    # workflow only ever receives what it uses. A same-named
+    # secret in the job's `environment:` still takes precedence over the passed
+    # (repository-level) value, exactly as it did with `inherit`.
+    secrets:
+      CORS_ORIGINS:
+        required: false
+      DB_HOST:
+        required: false
+      DB_NAME:
+        required: false
+      DB_PASSWORD:
+        required: false
+      DB_PORT:
+        required: false
+      DB_USER:
+        required: false
+      DOMAIN:
+        required: false
+      EMAIL_FROM:
+        required: false
+      EMAIL_FROM_NAME:
+        required: false
+      GH_PAT:
+        required: false
+      MINIO_ACCESS_KEY:
+        required: false
+      MINIO_BUCKET_NAME:
+        required: false
+      MINIO_HOST:
+        required: false
+      MINIO_PORT:
+        required: false
+      MINIO_SECRET_KEY:
+        required: false
+      MINIO_SECURE:
+        required: false
+      NEXT_PUBLIC_NYCU_PORTAL_URL:
+        required: false
+      PII_ENCRYPTION_ACTIVE_VERSION:
+        required: false
+      PII_ENCRYPTION_KEYS:
+        required: false
+      PORTAL_JWT_SERVER_URL:
+        required: false
+      REDIS_PASSWORD:
+        required: false
+      SECRET_KEY:
+        required: false
+      SMTP_HOST:
+        required: false
+      SMTP_PASSWORD:
+        required: false
+      SMTP_PORT:
+        required: false
+      SMTP_USER:
+        required: false
+      SSL_CHAIN_PEM:
+        required: false
+      SSL_FULLCHAIN_PEM:
+        required: false
+      SSL_PRIVKEY_PEM:
+        required: false
+      STUDENT_API_BASE_URL:
+        required: false
+      SUPER_ADMIN_NYCU_ID:
+        required: false
 
 env:
   REGISTRY: ghcr.io
