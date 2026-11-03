@@ -13,6 +13,12 @@ on:
           - major
         default: patch
 
+      update_open_release:
+        description: '加到尚未 merge 的 release PR：沿用它的版號，把這次的 commit 更新進同一個 PR（不開新 PR、不升版）。沒有 open 的 release PR 時，照 version_bump 正常升版'
+        required: false
+        type: boolean
+        default: false
+
       pr_title:
         description: 'Pull Request 標題（選填，預設會自動生成）'
         required: false
@@ -49,6 +55,13 @@ jobs:
   # Only the production repo's tags are read: the dev repo carries no v* tags.
   # An unreachable/unauthorised production repo FAILS the job instead of
   # silently restarting the numbering at v0.9.0.
+  #
+  # update_open_release: if the production repo has an OPEN release PR that an
+  # earlier mirror run created (head branch `production-sync-*`), reuse its
+  # version and hand its number/branch/head SHA to sync-to-production, which
+  # then force-pushes the new squash commit onto that branch and edits the PR
+  # instead of opening another one. Only an UNMERGED release can be updated:
+  # its version has no git tag yet, so nothing has been released under it.
   # ---------------------------------------------------------------------------
   release-version:
     name: Calculate release version
@@ -57,14 +70,21 @@ jobs:
     permissions: {}
     outputs:
       version: ${{ steps.version.outputs.version }}
+      open_pr_number: ${{ steps.version.outputs.open_pr_number }}
+      open_pr_url: ${{ steps.version.outputs.open_pr_url }}
+      open_pr_branch: ${{ steps.version.outputs.open_pr_branch }}
+      open_pr_head_sha: ${{ steps.version.outputs.open_pr_head_sha }}
 
     steps:
       - name: Calculate next version
         id: version
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}
           PRODUCTION_REPO: ${{ secrets.PRODUCTION_REPO }}
+          PRODUCTION_BRANCH: ${{ secrets.PRODUCTION_BRANCH || 'main' }}
           VERSION_BUMP: ${{ inputs.version_bump || 'patch' }}
+          UPDATE_OPEN_RELEASE: ${{ inputs.update_open_release && 'true' || 'false' }}
         run: |
           set -euo pipefail
 
@@ -78,6 +98,54 @@ jobs:
           LATEST_TAG=$(printf '%s\n' "$REMOTE_TAGS" \
             | sed -n 's#.*refs/tags/\(v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)$#\1#p' \
             | sort -V | tail -1)
+
+          if [ "$UPDATE_OPEN_RELEASE" = "true" ]; then
+            # Release PRs this workflow opened: same-repo head `production-sync-*`,
+            # version in the title (`Release vX.Y.Z`) or, for a custom pr_title,
+            # in the AUTO_TAG_METADATA block of the body.
+            OPEN_RELEASES=$(gh pr list --repo "$PRODUCTION_REPO" --base "$PRODUCTION_BRANCH" \
+              --state open --limit 100 \
+              --json number,url,title,body,headRefName,headRefOid,isCrossRepository \
+              --jq '[ .[]
+                      | select(.isCrossRepository | not)
+                      | select(.headRefName | startswith("production-sync-"))
+                      | . + { version: (
+                          ([(.title // "") | capture("^Release (?<v>v[0-9]+\\.[0-9]+\\.[0-9]+)$") | .v][0])
+                          // ([(.body // "") | capture("Version:[[:space:]]*(?<v>v[0-9]+\\.[0-9]+\\.[0-9]+)") | .v][0])
+                          // "") }
+                      | select(.version != "") ]')
+            COUNT=$(jq 'length' <<< "$OPEN_RELEASES")
+
+            if [ "$COUNT" -gt 1 ]; then
+              echo "::error::update_open_release: ${COUNT} open release PRs in ${PRODUCTION_REPO} — cannot tell which one to update:"
+              jq -r '.[] | "::error::  #\(.number) \(.version) \(.url)"' <<< "$OPEN_RELEASES"
+              echo "::error::Close the stale one(s) and re-run."
+              exit 1
+            fi
+
+            if [ "$COUNT" -eq 1 ]; then
+              OPEN_VERSION=$(jq -r '.[0].version' <<< "$OPEN_RELEASES")
+              # A tag for it means the version was already released (e.g. the PR
+              # was merged and then re-opened). Never ship different content
+              # under a released version.
+              if printf '%s\n' "$REMOTE_TAGS" | awk '{print $2}' | grep -qxF "refs/tags/${OPEN_VERSION}"; then
+                echo "::error::Open release PR $(jq -r '.[0].url' <<< "$OPEN_RELEASES") is for ${OPEN_VERSION}, which is already tagged in ${PRODUCTION_REPO}."
+                echo "::error::Close that PR, or re-run without update_open_release to cut a new version."
+                exit 1
+              fi
+              echo "::notice::Updating open release PR #$(jq -r '.[0].number' <<< "$OPEN_RELEASES") — keeping version ${OPEN_VERSION}"
+              {
+                echo "version=${OPEN_VERSION}"
+                echo "open_pr_number=$(jq -r '.[0].number' <<< "$OPEN_RELEASES")"
+                echo "open_pr_url=$(jq -r '.[0].url' <<< "$OPEN_RELEASES")"
+                echo "open_pr_branch=$(jq -r '.[0].headRefName' <<< "$OPEN_RELEASES")"
+                echo "open_pr_head_sha=$(jq -r '.[0].headRefOid' <<< "$OPEN_RELEASES")"
+              } >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            echo "::notice::update_open_release: no open release PR in ${PRODUCTION_REPO} — cutting a new version (${VERSION_BUMP})"
+          fi
 
           if [ -z "$LATEST_TAG" ]; then
             echo "::notice::No previous version found, starting with v0.9.0"
@@ -155,6 +223,11 @@ jobs:
     env:
       PROTECTED_DOCS_DIR: docs/資訊中心文件
       NEXT_VERSION: ${{ needs.release-version.outputs.version }}
+      # Set only when update_open_release found an open release PR to update.
+      OPEN_PR_NUMBER: ${{ needs.release-version.outputs.open_pr_number }}
+      OPEN_PR_URL: ${{ needs.release-version.outputs.open_pr_url }}
+      OPEN_PR_BRANCH: ${{ needs.release-version.outputs.open_pr_branch }}
+      OPEN_PR_HEAD_SHA: ${{ needs.release-version.outputs.open_pr_head_sha }}
 
     steps:
       - name: Checkout repository
@@ -1129,7 +1202,23 @@ jobs:
           PRODUCTION_REPO: ${{ secrets.PRODUCTION_REPO }}
           PRODUCTION_BRANCH: ${{ secrets.PRODUCTION_BRANCH || 'main' }}
         run: |
+          set -euo pipefail
           echo "::group::Push to production repository"
+
+          if [ -n "${OPEN_PR_BRANCH:-}" ]; then
+            # update_open_release: replace the open release PR's single squash
+            # commit with this run's. Both are based on prod-repo/main, so this
+            # is a forced push — leased to the head SHA read in release-version,
+            # so a push made to that branch since then is never overwritten.
+            TEMP_BRANCH="$OPEN_PR_BRANCH"
+            echo "::notice::Updating open release PR #${OPEN_PR_NUMBER} branch: $TEMP_BRANCH (was ${OPEN_PR_HEAD_SHA})"
+            echo "temp_branch=$TEMP_BRANCH" >> "$GITHUB_OUTPUT"
+            git push --force-with-lease="refs/heads/${TEMP_BRANCH}:${OPEN_PR_HEAD_SHA}" \
+              prod-repo production:"refs/heads/${TEMP_BRANCH}"
+            echo "::notice::✅ Updated production repository branch: $TEMP_BRANCH"
+            echo "::endgroup::"
+            exit 0
+          fi
 
           # Generate temp branch name
           TEMP_BRANCH="production-sync-$(date -u '+%Y%m%d-%H%M%S')"
@@ -1159,24 +1248,39 @@ jobs:
             PR_TITLE="Release ${{ env.NEXT_VERSION }}"
           fi
 
-          echo "::notice::Creating PR with title: $PR_TITLE"
+          if [ -n "$OPEN_PR_NUMBER" ]; then
+            # update_open_release: the branch was already updated in push-temp;
+            # refresh the PR's notes (new source commit, file list) and leave a
+            # comment so reviewers know the diff changed under them.
+            echo "::notice::Updating PR #${OPEN_PR_NUMBER} with title: $PR_TITLE"
+            gh pr edit "$OPEN_PR_NUMBER" --repo "$PRODUCTION_REPO" \
+              --title "$PR_TITLE" \
+              --body-file /tmp/release-notes-final.md
+            gh pr comment "$OPEN_PR_NUMBER" --repo "$PRODUCTION_REPO" --body \
+              "🔄 Updated by [mirror run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}): now synced from source commit \`${{ github.sha }}\` (previous head \`${OPEN_PR_HEAD_SHA}\`). Version stays ${{ env.NEXT_VERSION }}."
+            PR_URL="$OPEN_PR_URL"
+            PR_ACTION="Updated"
+          else
+            echo "::notice::Creating PR with title: $PR_TITLE"
 
-          # Create PR in production repository
-          PR_URL=$(gh pr create \
-            --repo "${{ secrets.PRODUCTION_REPO }}" \
-            --base "${{ secrets.PRODUCTION_BRANCH || 'main' }}" \
-            --head "${{ steps.push-temp.outputs.temp_branch }}" \
-            --title "$PR_TITLE" \
-            --body-file /tmp/release-notes-final.md)
+            # Create PR in production repository
+            PR_URL=$(gh pr create \
+              --repo "${{ secrets.PRODUCTION_REPO }}" \
+              --base "${{ secrets.PRODUCTION_BRANCH || 'main' }}" \
+              --head "${{ steps.push-temp.outputs.temp_branch }}" \
+              --title "$PR_TITLE" \
+              --body-file /tmp/release-notes-final.md)
+            PR_ACTION="Created"
+          fi
 
-          echo "::notice::✅ Pull Request created: $PR_URL"
+          echo "::notice::✅ Pull Request ${PR_ACTION}: $PR_URL"
           echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
 
           # Also save to job summary
           cat >> $GITHUB_STEP_SUMMARY <<EOF
           # 🚀 Production Sync Complete
 
-          ## Pull Request Created
+          ## Pull Request ${PR_ACTION}
 
           **PR URL**: $PR_URL
 
@@ -1259,6 +1363,8 @@ jobs:
   # (the calculation reads the production repo's tags, and an unmerged PR
   # created none) and re-points the image tag at the newer commit. The version
   # therefore always names the content that actually shipped as that release.
+  # update_open_release relies on exactly this: it keeps the open PR's version,
+  # and this job re-points that (still untagged) version at the new commit.
   # ---------------------------------------------------------------------------
   tag-release-images:
     name: Tag GHCR images ${{ needs.sync-to-production.outputs.version }}
