@@ -68,7 +68,16 @@ storage_config:
 compactor:
   working_directory: /loki/compactor
   compaction_interval: 10m
-  retention_enabled: false
+  # Retention is enforced by the compactor; without this, retention_period
+  # in limits.yml is ignored and chunks are never deleted.
+  retention_enabled: true
+  retention_delete_delay: 2h
+  delete_request_store: filesystem
+
+# Per-tenant overrides (retention, query lookback, ingestion). Loki only reads
+# limits.yml through this block — mounting the file alone does nothing.
+runtime_config:
+  file: /etc/loki/limits.yml
 
 # Limits configuration
 limits_config:
@@ -84,6 +93,8 @@ limits_config:
   max_label_name_length: 1024
   max_label_value_length: 2048
   max_label_names_per_series: 30
+  # Fallback for tenants without an override in limits.yml: keep 6 months.
+  retention_period: 4320h
   max_cache_freshness_per_query: 10m
   split_queries_by_interval: 15m
 
