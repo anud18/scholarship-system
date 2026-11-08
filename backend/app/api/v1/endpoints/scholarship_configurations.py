@@ -405,12 +405,15 @@ async def get_matrix_quota_status(
         # Get sub-types from the scholarship type configuration
         sub_types = phd_scholarship.sub_type_list or ["nstc", "moe_1w", "moe_2w"]
 
-        # Get college codes from the quota configuration
-        college_codes = set()
+        # Every academy gets a column (0 when it has no quota entry yet) so admins can
+        # assign quota to colleges absent from the saved JSON; saved keys outside the
+        # academies table stay visible too.
+        academy_result = await db.execute(select(Academy.code))
+        college_codes = set(academy_result.scalars().all())
         for sub_type_quotas in matrix_quotas.values():
             if isinstance(sub_type_quotas, dict):
                 college_codes.update(sub_type_quotas.keys())
-        college_codes = sorted(list(college_codes))
+        college_codes = sorted(college_codes)
 
         # Get usage data efficiently from applications with student_data JSON field
         usage_data = {}
