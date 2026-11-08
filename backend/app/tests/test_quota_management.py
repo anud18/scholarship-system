@@ -249,6 +249,32 @@ class TestMatrixQuotaOperations:
         assert phd_quotas["nstc"]["Q"]["total_quota"] == 1
 
     @pytest.mark.asyncio
+    async def test_matrix_quota_status_with_no_saved_quotas(
+        self,
+        client: AsyncClient,
+        super_admin_user: User,
+        db: AsyncSession,
+    ):
+        """A config with no quotas yet returns an all-zero grid instead of 404."""
+        _auth_as(super_admin_user)
+
+        db.add_all([Academy(code="E", name="電機學院"), Academy(code="G", name="綠能學院")])
+        phd_scholarship = ScholarshipType(code="phd", name="博士生獎學金", status="active", sub_type_list=["nstc"])
+        db.add(phd_scholarship)
+        await db.commit()
+
+        db.add(_make_config(phd_scholarship.id, quotas=None))
+        await db.commit()
+
+        response = await client.get("/api/v1/scholarship-configurations/matrix-quota-status/113")
+
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert set(data["phd_quotas"]["nstc"]) == {"E", "G"}
+        assert data["phd_quotas"]["nstc"]["G"]["total_quota"] == 0
+        assert data["grand_total"]["total_quota"] == 0
+
+    @pytest.mark.asyncio
     async def test_update_matrix_quota_success(
         self,
         client: AsyncClient,
