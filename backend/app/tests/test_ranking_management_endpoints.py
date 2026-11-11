@@ -305,7 +305,7 @@ class TestRankingAuthorization:
 
     async def test_cross_college_import_excel_403(self, client, login, rank_users, ranking_sci):
         login(rank_users["college_eng"])
-        payload = [{"student_id": "S001", "student_name": "X", "rank_position": 1}]
+        payload = [{"student_id": "S001", "rank_position": 1}]
         response = await client.post(f"{RANKINGS_URL}/{ranking_sci.id}/import-excel", json=payload)
         assert response.status_code == 403
 
@@ -494,7 +494,7 @@ class TestRankingValidationAndGuards:
 
     async def test_import_excel_invalid_rank_422(self, client, login, rank_users, ranking_eng):
         login(rank_users["college_eng"])
-        payload = [{"student_id": "S001", "student_name": "X", "rank_position": "X"}]
+        payload = [{"student_id": "S001", "rank_position": "X"}]
         response = await client.post(f"{RANKINGS_URL}/{ranking_eng.id}/import-excel", json=payload)
         assert response.status_code == 422
 
@@ -503,8 +503,8 @@ class TestRankingValidationAndGuards:
     ):
         login(rank_users["college_eng"])
         payload = [
-            {"student_id": "S001", "student_name": "A", "rank_position": 1},
-            {"student_id": "S001", "student_name": "A", "rank_position": 2},
+            {"student_id": "S001", "rank_position": 1},
+            {"student_id": "S001", "rank_position": 2},
         ]
         response = await client.post(f"{RANKINGS_URL}/{ranking_eng.id}/import-excel", json=payload)
         assert response.status_code == 422
@@ -512,9 +512,9 @@ class TestRankingValidationAndGuards:
     async def test_import_excel_unknown_student_422(self, client, login, rank_users, ranking_eng, ranking_eng_items):
         login(rank_users["college_eng"])
         payload = [
-            {"student_id": "S001", "student_name": "A", "rank_position": 1},
-            {"student_id": "S002", "student_name": "B", "rank_position": 2},
-            {"student_id": "S999", "student_name": "Ghost", "rank_position": 3},
+            {"student_id": "S001", "rank_position": 1},
+            {"student_id": "S002", "rank_position": 2},
+            {"student_id": "S999", "rank_position": 3},
         ]
         response = await client.post(f"{RANKINGS_URL}/{ranking_eng.id}/import-excel", json=payload)
         assert response.status_code == 422
@@ -615,8 +615,8 @@ class TestRankingFlowAndEnvelope:
     async def test_import_excel_happy_path(self, client, login, db, rank_users, ranking_eng, ranking_eng_items):
         login(rank_users["college_eng"])
         payload = [
-            {"student_id": "S002", "student_name": "Ranked Student 2", "rank_position": 1},
-            {"student_id": "S001", "student_name": "Ranked Student 1", "rank_position": "N"},
+            {"student_id": "S002", "rank_position": 1},
+            {"student_id": "S001", "rank_position": "N"},
         ]
         response = await client.post(f"{RANKINGS_URL}/{ranking_eng.id}/import-excel", json=payload)
         assert response.status_code == 200
@@ -753,8 +753,8 @@ class TestImportExcelDeadlineGuard:
 
         login(rank_users["college_eng"])
         payload = [
-            {"student_id": "S001", "student_name": "A", "rank_position": 1},
-            {"student_id": "S002", "student_name": "B", "rank_position": 2},
+            {"student_id": "S001", "rank_position": 1},
+            {"student_id": "S002", "rank_position": 2},
         ]
         response = await client.post(f"{RANKINGS_URL}/{ranking_eng.id}/import-excel", json=payload)
         assert response.status_code == 403

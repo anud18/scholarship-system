@@ -43,7 +43,6 @@ import { BACKEND_URL } from "../helpers/env";
 
 const STUDENT_NYCU_ID = "csphd0001";
 const STUDENT_STD_CODE = "csphd0001"; // std_stdcode returned by mock SIS API
-const STUDENT_NAME = "王博士研究生"; // std_cname returned by mock SIS API
 const COLLEGE_NYCU_ID = "cs_college";
 const COLLEGE_CODE = "C"; // cs_college.college_code in seed data
 const SCHOLARSHIP_CODE = "phd";
@@ -88,13 +87,12 @@ test.describe("學院排名 Excel 匯入 | College ranking import-excel @nightly
    */
   async function buildFullImportRows(
     fixtureRank: number | "N",
-  ): Promise<Array<{ student_id: string; student_name: string; rank_position: number | "N" }>> {
+  ): Promise<Array<{ student_id: string; rank_position: number | "N" }>> {
     const res = await apiAs<{
       success: boolean;
       data: {
         items: Array<{
           student_id: string;
-          student_name?: string;
           application: { id: number };
         }>;
       };
@@ -110,12 +108,10 @@ test.describe("學院排名 Excel 匯入 | College ranking import-excel @nightly
       item.application.id === fixtureAppDbId
         ? {
             student_id: item.student_id,
-            student_name: STUDENT_NAME,
             rank_position: fixtureRank,
           }
         : {
             student_id: item.student_id,
-            student_name: item.student_name ?? "學生",
             rank_position: nextRank++,
           },
     );

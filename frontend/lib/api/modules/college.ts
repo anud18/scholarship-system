@@ -292,7 +292,6 @@ export function createCollegeApi() {
       rankingId: number,
       importData: Array<{
         student_id: string;
-        student_name: string;
         rank_position: number;
       }>
     ): Promise<ApiResponse<unknown>> => {

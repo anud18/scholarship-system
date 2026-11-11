@@ -740,7 +740,6 @@ export function RankingManagementPanel({
     async (
       data: Array<{
         student_id: string;
-        student_name: string;
         rank_position: number | string;
       }>
     ) => {
@@ -756,7 +755,6 @@ export function RankingManagementPanel({
           selectedRanking,
           data as Array<{
             student_id: string;
-            student_name: string;
             rank_position: number;
           }>
         );

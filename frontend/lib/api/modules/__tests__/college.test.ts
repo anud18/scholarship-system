@@ -211,12 +211,12 @@ describe("createCollegeApi", () => {
 
   // ─── importRankingExcel body is array ─────────────────────────────
 
-  it("importRankingExcel body is ARRAY of {student_id, student_name, rank_position}", async () => {
+  it("importRankingExcel body is ARRAY of {student_id, rank_position}", async () => {
     mockedRaw.POST.mockResolvedValueOnce({});
     const api = createCollegeApi();
     await api.importRankingExcel(42, [
-      { student_id: "310460031", student_name: "王小明", rank_position: 1 },
-      { student_id: "310460032", student_name: "李大華", rank_position: 2 },
+      { student_id: "310460031", rank_position: 1 },
+      { student_id: "310460032", rank_position: 2 },
     ]);
     expect(mockedRaw.POST).toHaveBeenCalledWith(
       "/api/v1/college-review/rankings/{ranking_id}/import-excel",

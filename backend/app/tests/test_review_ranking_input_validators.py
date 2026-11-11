@@ -113,28 +113,28 @@ def test_review_create_accepts_single_item():
 
 
 def test_rank_positive_int_accepted():
-    item = RankingImportItem(student_id="0856001", student_name="王小明", rank_position=1)
+    item = RankingImportItem(student_id="0856001", rank_position=1)
     assert item.rank_position == 1
 
 
 def test_rank_string_n_accepted_as_sentinel():
     """'N' = rejected applicant. Pin both casings ('N' / 'n')."""
-    item = RankingImportItem(student_id="0856001", student_name="X", rank_position="N")
+    item = RankingImportItem(student_id="0856001", rank_position="N")
     assert item.rank_position == "N"
 
-    item2 = RankingImportItem(student_id="0856001", student_name="X", rank_position="n")
+    item2 = RankingImportItem(student_id="0856001", rank_position="n")
     assert item2.rank_position == "N"  # normalized to uppercase
 
 
 def test_rank_string_with_whitespace_normalized():
     """Excel sometimes adds trailing spaces — pin strip() behavior."""
-    item = RankingImportItem(student_id="0856001", student_name="X", rank_position="  N  ")
+    item = RankingImportItem(student_id="0856001", rank_position="  N  ")
     assert item.rank_position == "N"
 
 
 def test_rank_numeric_string_coerced_to_int():
     """Excel exports numbers as strings — '5' must become int 5."""
-    item = RankingImportItem(student_id="0856001", student_name="X", rank_position="5")
+    item = RankingImportItem(student_id="0856001", rank_position="5")
     assert item.rank_position == 5
     assert isinstance(item.rank_position, int)
 
@@ -143,13 +143,13 @@ def test_rank_zero_rejected():
     """Pin: rank must be ≥ 1. A 0-rank would slot before #1 in
     downstream sorting → distorts the entire preliminary rank list."""
     with pytest.raises(ValidationError) as exc:
-        RankingImportItem(student_id="0856001", student_name="X", rank_position=0)
+        RankingImportItem(student_id="0856001", rank_position=0)
     assert "正整數" in str(exc.value)
 
 
 def test_rank_negative_rejected():
     with pytest.raises(ValidationError):
-        RankingImportItem(student_id="0856001", student_name="X", rank_position=-3)
+        RankingImportItem(student_id="0856001", rank_position=-3)
 
 
 def test_rank_bool_rejected_first():
@@ -158,22 +158,22 @@ def test_rank_bool_rejected_first():
     coerce to rank=1 (and False to rank=0). The bool guard must run
     before the int branch."""
     with pytest.raises(ValidationError) as exc:
-        RankingImportItem(student_id="0856001", student_name="X", rank_position=True)
+        RankingImportItem(student_id="0856001", rank_position=True)
     assert "正整數或 'N'" in str(exc.value)
 
     with pytest.raises(ValidationError):
-        RankingImportItem(student_id="0856001", student_name="X", rank_position=False)
+        RankingImportItem(student_id="0856001", rank_position=False)
 
 
 def test_rank_non_integer_float_rejected():
     """3.5 → reject. A float that's actually an integer (5.0) should
     coerce. This branch handles Excel's tendency to load 5 as 5.0."""
     with pytest.raises(ValidationError) as exc:
-        RankingImportItem(student_id="0856001", student_name="X", rank_position=3.5)
+        RankingImportItem(student_id="0856001", rank_position=3.5)
     assert "整數" in str(exc.value)
 
     # 5.0 is an integer-valued float → accepted as int(5)
-    item = RankingImportItem(student_id="0856001", student_name="X", rank_position=5.0)
+    item = RankingImportItem(student_id="0856001", rank_position=5.0)
     assert item.rank_position == 5
     assert isinstance(item.rank_position, int)
 
@@ -182,4 +182,4 @@ def test_rank_garbage_string_rejected():
     """Pin: non-numeric, non-N strings rejected. Otherwise typos in
     Excel cells silently become string-comparison junk downstream."""
     with pytest.raises(ValidationError):
-        RankingImportItem(student_id="0856001", student_name="X", rank_position="abc")
+        RankingImportItem(student_id="0856001", rank_position="abc")
