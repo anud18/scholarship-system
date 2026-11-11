@@ -30,7 +30,10 @@ describe("parseRankingSheet", () => {
       rowOf("310460100", "李小華", "n"),
     ]);
     expect(errors).toEqual([]);
-    expect(importData[1].rank_position).toBe("N");
+    expect(importData[1]).toEqual<ExcelRankingImportRow>({
+      student_id: "310460100",
+      rank_position: "N",
+    });
   });
 
   it("skips rows with an empty 學號", () => {

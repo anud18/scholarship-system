@@ -19,6 +19,7 @@ import { Plus, RefreshCw, Loader2, Clock, AlertTriangle, Lock } from "lucide-rea
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { logger } from "@/lib/utils/logger";
+import type { ExcelRankingImportRow } from "@/lib/ranking/parse-ranking-sheet";
 import { formatDeadline } from "@/lib/utils/format-deadline";
 import {
   buildDefaultRankingName,
@@ -737,26 +738,13 @@ export function RankingManagementPanel({
   ]);
 
   const handleImportExcel = useCallback(
-    async (
-      data: Array<{
-        student_id: string;
-        rank_position: number | string;
-      }>
-    ) => {
+    async (data: ExcelRankingImportRow[]) => {
       if (!selectedRanking) throw new Error("No ranking selected");
 
       try {
-        // The Excel parser produces rank_position as `number | string` (the
-        // "N" sentinel for unranked rows). The api.college.importRankingExcel
-        // type declares `number` only, but the backend handler accepts both
-        // shapes — cast here to preserve the runtime behavior. Tracked in
-        // college-ranking-table.tsx parser at lines 627-645.
         const response = await apiClient.college.importRankingExcel(
           selectedRanking,
-          data as Array<{
-            student_id: string;
-            rank_position: number;
-          }>
+          data
         );
         if (response.success) {
           await fetchRankingDetails(selectedRanking);
