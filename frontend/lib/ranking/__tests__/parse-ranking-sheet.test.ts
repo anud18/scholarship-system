@@ -12,15 +12,15 @@ const rowOf = (id: string, name: string, rank: unknown) => ({
 });
 
 describe("parseRankingSheet", () => {
-  it("reads 學號 + 學生中文姓名 + 學院初審會議之學院排序 for integer ranks", () => {
+  it("reads 學號 + 學院初審會議之學院排序 for integer ranks and never emits the name", () => {
     const { importData, errors } = parseRankingSheet([
       rowOf("310460099", "王小明", 1),
       rowOf("310460100", "李小華", 2),
     ]);
     expect(errors).toEqual([]);
     expect(importData).toEqual<ExcelRankingImportRow[]>([
-      { student_id: "310460099", student_name: "王小明", rank_position: 1 },
-      { student_id: "310460100", student_name: "李小華", rank_position: 2 },
+      { student_id: "310460099", rank_position: 1 },
+      { student_id: "310460100", rank_position: 2 },
     ]);
   });
 
@@ -30,7 +30,10 @@ describe("parseRankingSheet", () => {
       rowOf("310460100", "李小華", "n"),
     ]);
     expect(errors).toEqual([]);
-    expect(importData[1].rank_position).toBe("N");
+    expect(importData[1]).toEqual<ExcelRankingImportRow>({
+      student_id: "310460100",
+      rank_position: "N",
+    });
   });
 
   it("skips rows with an empty 學號", () => {

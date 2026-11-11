@@ -3,17 +3,19 @@
  *
  * Input rows are the objects produced by `XLSX.utils.sheet_to_json(ws, { range: 1 })`
  * — keyed by the export's row-2 headers (the merged title on row 1 is skipped by
- * the caller via `range: 1`). We only read the three columns the backend
- * `POST /import-excel` needs; every other 彙整表 column is ignored.
+ * the caller via `range: 1`). We only read the two columns the backend
+ * `POST /import-excel` needs (學號 + 排序); every other 彙整表 column — including
+ * the student name — is ignored and never leaves the browser. The backend
+ * matches by 學號 only, and rare (non-BMP) characters in names got the whole
+ * request rejected by the campus WAF.
  *
  * Data rows start at Excel row 3 (row 1 = title, row 2 = headers), so the
  * human-facing row number for error messages is `index + 3`.
  */
 
 // Header strings — must match backend STATIC_HEADERS exactly
-// (college_ranking_export_service.py STATIC_HEADERS indices 12 / 7 / 1).
+// (college_ranking_export_service.py STATIC_HEADERS indices 12 / 1).
 const COL_STUDENT_ID = "學號";
-const COL_STUDENT_NAME = "學生中文姓名";
 const COL_RANK = "學院初審會議之學院排序";
 
 const FIRST_DATA_EXCEL_ROW = 3;
@@ -24,7 +26,6 @@ const RANK_SEQUENCE_RULE = "，排名數字不可重複、不可跳號";
 
 export interface ExcelRankingImportRow {
   student_id: string;
-  student_name: string;
   rank_position: number | "N"; // integer rank, or "N" for rejected
 }
 
@@ -49,7 +50,6 @@ export function parseRankingSheet(
   rows.forEach((row, index) => {
     const rowNum = index + FIRST_DATA_EXCEL_ROW;
     const studentId = String(row[COL_STUDENT_ID] ?? "").trim();
-    const studentName = String(row[COL_STUDENT_NAME] ?? "").trim();
     const rawRank = row[COL_RANK];
 
     if (!studentId) return; // skip empty rows
@@ -68,7 +68,6 @@ export function parseRankingSheet(
     if (rankStr.toUpperCase() === "N") {
       importData.push({
         student_id: studentId,
-        student_name: studentName,
         rank_position: "N",
       });
       return;
@@ -83,7 +82,6 @@ export function parseRankingSheet(
     }
     importData.push({
       student_id: studentId,
-      student_name: studentName,
       rank_position: rankNum,
     });
   });
