@@ -28,6 +28,10 @@ const AuditLogPanel = dynamic(() => import("./audit/AuditLogPanel").then(mod => 
   loading: () => <div className="flex items-center justify-center py-8"><div className="animate-spin rounded-full h-6 w-6 border-2 border-nycu-blue-600 border-t-transparent"></div></div>
 });
 
+const CollegeRankingOverviewPanel = dynamic(() => import("./ranking-overview/CollegeRankingOverviewPanel").then(mod => ({ default: mod.CollegeRankingOverviewPanel })), {
+  loading: () => <div className="flex items-center justify-center py-8"><div className="animate-spin rounded-full h-6 w-6 border-2 border-nycu-blue-600 border-t-transparent"></div></div>
+});
+
 // Import lighter components directly
 import { UserManagementPanel } from "./users/UserManagementPanel";
 import { StudentListManagement } from "./students/StudentListManagement";
@@ -104,7 +108,7 @@ function AdminManagementContent({ user }: AdminManagementShellProps) {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList
-          className={`grid w-full ${hasQuotaPermission ? "grid-cols-[repeat(14,minmax(0,1fr))]" : "grid-cols-[repeat(13,minmax(0,1fr))]"}`}
+          className={`grid w-full ${hasQuotaPermission ? "grid-cols-[repeat(15,minmax(0,1fr))]" : "grid-cols-[repeat(14,minmax(0,1fr))]"}`}
         >
           <TabsTrigger value="dashboard">系統概覽</TabsTrigger>
           <TabsTrigger value="users">使用者權限</TabsTrigger>
@@ -118,6 +122,7 @@ function AdminManagementContent({ user }: AdminManagementShellProps) {
           <TabsTrigger value="workflows">工作流程</TabsTrigger>
           <TabsTrigger value="email">郵件管理</TabsTrigger>
           <TabsTrigger value="history">歷史申請</TabsTrigger>
+          <TabsTrigger value="ranking-overview">學院排名繳交</TabsTrigger>
           <TabsTrigger value="audit-logs">稽核日誌</TabsTrigger>
           <TabsTrigger value="announcements">系統公告</TabsTrigger>
           <TabsTrigger value="settings">系統設定</TabsTrigger>
@@ -164,6 +169,10 @@ function AdminManagementContent({ user }: AdminManagementShellProps) {
 
         <TabsContent value="history" className="space-y-4">
           <HistoryPanel user={user} />
+        </TabsContent>
+
+        <TabsContent value="ranking-overview" className="space-y-4">
+          <CollegeRankingOverviewPanel />
         </TabsContent>
 
         <TabsContent value="announcements" className="space-y-4">

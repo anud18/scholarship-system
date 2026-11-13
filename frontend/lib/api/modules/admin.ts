@@ -30,6 +30,43 @@ export interface SisTermResyncResult {
   updated: boolean;
 }
 
+export type CollegeRankingStatus = "not_created" | "draft" | "draft_imported" | "finalized";
+
+/** One ranking of a college in GET /admin/scholarships/{id}/college-ranking-overview */
+export interface CollegeRankingOverviewRanking {
+  id: number;
+  ranking_name: string | null;
+  sub_type_code: string;
+  is_finalized: boolean;
+  distribution_executed: boolean;
+  total_applications: number;
+  created_at: string | null;
+  created_by: string | null;
+  finalized_at: string | null;
+  finalized_by: string | null;
+  last_import_at: string | null;
+  last_import_by: string | null;
+}
+
+export interface CollegeRankingOverviewCollege {
+  /** "" for an admin-created ranking that spans every college */
+  college_code: string;
+  college_name: string;
+  applicant_count: number;
+  status: CollegeRankingStatus;
+  last_import_at: string | null;
+  last_import_by: string | null;
+  rankings: CollegeRankingOverviewRanking[];
+}
+
+export interface CollegeRankingOverview {
+  scholarship: { id: number; code: string; name: string };
+  academic_year: number;
+  semester: string | null;
+  colleges: CollegeRankingOverviewCollege[];
+  summary: Record<CollegeRankingStatus | "total", number>;
+}
+
 export function createAdminApi() {
   return {
     // ========== Dashboard and Statistics ==========
@@ -175,6 +212,27 @@ export function createAdminApi() {
         `${params.academicYear}學年度_統計各學院學生申請人數.xlsx`,
         "無法匯出統計各學院學生申請人數"
       );
+    },
+
+    /**
+     * 各學院排名繳交總覽 — every college's ranking status for one scholarship
+     * and period. `semester` omitted ⇒ a year-based scholarship.
+     */
+    getCollegeRankingOverview: async (params: {
+      scholarshipCode: string;
+      academicYear: number;
+      semester?: string;
+    }): Promise<ApiResponse<CollegeRankingOverview>> => {
+      const response = await typedClient.raw.GET(
+        '/api/v1/admin/scholarships/{scholarship_identifier}/college-ranking-overview',
+        {
+          params: {
+            path: { scholarship_identifier: params.scholarshipCode },
+            query: { academic_year: params.academicYear, semester: params.semester },
+          },
+        }
+      );
+      return toApiResponse(response) as ApiResponse<CollegeRankingOverview>;
     },
 
     /**

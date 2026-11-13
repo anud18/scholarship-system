@@ -1643,6 +1643,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/scholarships/{scholarship_identifier}/college-ranking-overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get College Ranking Overview
+         * @description Ranking status of every college for one scholarship and period.
+         */
+        get: operations["get_college_ranking_overview_api_v1_admin_scholarships__scholarship_identifier__college_ranking_overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/scholarship-permissions": {
         parameters: {
             query?: never;
@@ -14331,6 +14351,42 @@ export interface operations {
                 /** @description ROC academic year */
                 academic_year: number;
                 /** @description first / second / yearly; omit to include every semester of the year */
+                semester?: string | null;
+            };
+            header?: never;
+            path: {
+                scholarship_identifier: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_college_ranking_overview_api_v1_admin_scholarships__scholarship_identifier__college_ranking_overview_get: {
+        parameters: {
+            query: {
+                /** @description ROC academic year */
+                academic_year: number;
+                /** @description first / second / yearly; omit for a year-based scholarship */
                 semester?: string | null;
             };
             header?: never;
