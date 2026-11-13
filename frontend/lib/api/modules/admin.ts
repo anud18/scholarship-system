@@ -64,7 +64,10 @@ export interface CollegeRankingOverview {
   academic_year: number;
   semester: string | null;
   colleges: CollegeRankingOverviewCollege[];
+  /** Counts real colleges only — the admin global ranking's row is left out. */
   summary: Record<CollegeRankingStatus | "total", number>;
+  /** Rankable applications whose snapshot has no college, so no ranking picks them up. */
+  unassigned_applicant_count: number;
 }
 
 export function createAdminApi() {

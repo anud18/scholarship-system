@@ -236,6 +236,20 @@ async def test_college_is_only_as_complete_as_its_least_complete_sub_type(db, ph
     assert colleges["C"]["applicant_count"] == 0
     assert len(colleges["C"]["rankings"]) == 2
     assert colleges[""]["college_name"] == "全校（管理員建立）"
+    # The admin global ranking is listed but is not a college that owes a ranking.
+    assert resp.json()["data"]["summary"]["total"] == 1
+
+
+@pytest.mark.asyncio
+async def test_applications_without_a_college_are_reported_separately(db, phd, as_user):
+    admin = await _user(db, "cro_admin", UserRole.admin)
+    await _application(db, phd, await _user(db, "cro_s1", UserRole.student), "C")
+    await _application(db, phd, await _user(db, "cro_s2", UserRole.student), "")
+
+    resp = await as_user(admin).get(URL.format(code=phd.code), params={"academic_year": 115})
+
+    assert list(_by_college(resp.json())) == ["C"]
+    assert resp.json()["data"]["unassigned_applicant_count"] == 1
 
 
 @pytest.mark.asyncio

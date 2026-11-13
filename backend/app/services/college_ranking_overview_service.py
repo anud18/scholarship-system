@@ -86,10 +86,14 @@ class CollegeRankingOverviewService:
         )
         # Same college field the per-college ranking filter reads (std_academyno).
         applicant_counts: Dict[str, int] = {}
+        # Rankable applications no college's ranking will pick up (no std_academyno).
+        unassigned_applicant_count = 0
         for application in applications:
             college_code = (application.student_data or {}).get("std_academyno")
             if college_code:
                 applicant_counts[college_code] = applicant_counts.get(college_code, 0) + 1
+            else:
+                unassigned_applicant_count += 1
 
         rankings = await self._load_rankings(review_service, scholarship_type_id, academic_year, semester)
         imports = await self._load_last_imports([ranking.id for ranking in rankings])
@@ -115,8 +119,14 @@ class CollegeRankingOverviewService:
             )
             for code in college_codes
         ]
-        summary = {status: sum(1 for row in colleges if row["status"] == status) for status in _STATUS_ORDER}
-        return {"colleges": colleges, "summary": {**summary, "total": len(colleges)}}
+        # The admin global ranking's row is not a college that owes a ranking.
+        real_colleges = [row for row in colleges if row["college_code"]]
+        summary = {status: sum(1 for row in real_colleges if row["status"] == status) for status in _STATUS_ORDER}
+        return {
+            "colleges": colleges,
+            "summary": {**summary, "total": len(real_colleges)},
+            "unassigned_applicant_count": unassigned_applicant_count,
+        }
 
     async def _load_rankings(
         self,

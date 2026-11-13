@@ -12,13 +12,12 @@ GET /college-review/rankings/{id}/export-excel, which admins may call for any co
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, Path, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.endpoints.admin._helpers import load_scholarship_by_identifier
 from app.core.security import require_admin
 from app.db.deps import get_db
-from app.models.scholarship import ScholarshipType
 from app.models.user import User
 from app.services.college_ranking_overview_service import CollegeRankingOverviewService
 
@@ -40,14 +39,7 @@ async def get_college_ranking_overview(
     db: AsyncSession = Depends(get_db),
 ):
     """Ranking status of every college for one scholarship and period."""
-    stmt = select(ScholarshipType)
-    if scholarship_identifier.isdigit():
-        stmt = stmt.where(ScholarshipType.id == int(scholarship_identifier))
-    else:
-        stmt = stmt.where(ScholarshipType.code == scholarship_identifier)
-    scholarship = (await db.execute(stmt)).scalar_one_or_none()
-    if scholarship is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此獎學金類型")
+    scholarship = await load_scholarship_by_identifier(db, scholarship_identifier)
 
     overview = await CollegeRankingOverviewService(db).build_overview(
         scholarship_type_id=scholarship.id, academic_year=academic_year, semester=semester

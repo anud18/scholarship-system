@@ -165,13 +165,20 @@ export function CollegeRankingOverviewPanel() {
     let isCancelled = false;
     const loadPeriods = async () => {
       try {
-        const response = await apiClient.admin.getScholarshipConfigurations();
+        // The list defaults to active configurations; closed periods must stay reachable.
+        const responses = await Promise.all([
+          apiClient.admin.getScholarshipConfigurations({ is_active: true }),
+          apiClient.admin.getScholarshipConfigurations({ is_active: false }),
+        ]);
         if (isCancelled) return;
-        if (!response.success || !response.data) {
-          setError(response.message || "載入獎學金期別失敗");
+        const failed = responses.find(response => !response.success || !response.data);
+        if (failed) {
+          setError(failed.message || "載入獎學金期別失敗");
           return;
         }
-        const options = buildPeriodOptions(response.data as ConfigurationRow[]);
+        const options = buildPeriodOptions(
+          responses.flatMap(response => response.data as ConfigurationRow[])
+        ).sort((a, b) => b.academicYear - a.academicYear);
         setPeriods(options);
         setSelectedKey(current => current || options[0]?.key || "");
       } catch (err: unknown) {
@@ -213,6 +220,8 @@ export function CollegeRankingOverviewPanel() {
   }, []);
 
   useEffect(() => {
+    // Never show (or export from) the previous period's table under the new label.
+    setOverview(null);
     if (selectedPeriod) loadOverview(selectedPeriod);
   }, [selectedPeriod, loadOverview]);
 
@@ -234,6 +243,7 @@ export function CollegeRankingOverviewPanel() {
         <p className="text-sm text-muted-foreground">
           查看各學院是否已建立、匯入並確認學生排序名單，並可匯出各學院的排名（學生資料彙整表）。
           系統不保存學院上傳的原始 Excel 檔，匯出內容為系統內目前的排序。
+          「最後匯入 Excel」只計入目前仍存在的排名；確認排名時被刪除的其他草稿，其匯入紀錄請至稽核日誌查詢。
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -277,6 +287,12 @@ export function CollegeRankingOverviewPanel() {
                 </span>
               ))}
             </div>
+
+            {overview.unassigned_applicant_count > 0 && (
+              <p className="text-sm text-amber-700">
+                另有 {overview.unassigned_applicant_count} 件可排名申請缺少學院資料，不會出現在任何學院的排名中。
+              </p>
+            )}
 
             {overview.colleges.length === 0 ? (
               <p className="text-sm text-muted-foreground py-6 text-center">

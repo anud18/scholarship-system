@@ -29,6 +29,7 @@ const OVERVIEW: CollegeRankingOverview = {
   academic_year: 115,
   semester: null,
   summary: { not_created: 1, draft: 0, draft_imported: 1, finalized: 1, total: 3 },
+  unassigned_applicant_count: 2,
   colleges: [
     {
       college_code: "A",
@@ -104,10 +105,19 @@ const OVERVIEW: CollegeRankingOverview = {
   ],
 };
 
-function mockApi(overview: CollegeRankingOverview = OVERVIEW) {
-  jest
+function mockConfigurations() {
+  // Active and inactive configurations are fetched separately and merged.
+  return jest
     .spyOn(apiClient.admin, "getScholarshipConfigurations")
-    .mockResolvedValue({ success: true, message: "", data: CONFIGURATIONS } as any);
+    .mockImplementation(async params => ({
+      success: true,
+      message: "",
+      data: params?.is_active === false ? CONFIGURATIONS.slice(2) : CONFIGURATIONS.slice(0, 2),
+    }));
+}
+
+function mockApi(overview: CollegeRankingOverview = OVERVIEW) {
+  mockConfigurations();
   return jest
     .spyOn(apiClient.admin, "getCollegeRankingOverview")
     .mockResolvedValue({ success: true, message: "", data: overview } as any);
@@ -152,6 +162,7 @@ describe("CollegeRankingOverviewPanel", () => {
     expect(within(rowOf("資訊學院")).getAllByText("資訊承辦").length).toBeGreaterThan(0);
     expect(within(rowOf("電機學院")).getAllByText("已確認").length).toBeGreaterThan(0);
     expect(screen.getByText("共 3 個學院")).toBeInTheDocument();
+    expect(screen.getByText(/另有 2 件可排名申請缺少學院資料/)).toBeInTheDocument();
     // A college without a ranking has nothing to export.
     expect(within(rowOf("人社院")).queryByRole("button")).not.toBeInTheDocument();
   });
@@ -185,9 +196,7 @@ describe("CollegeRankingOverviewPanel", () => {
   });
 
   it("shows the load error instead of a stale table", async () => {
-    jest
-      .spyOn(apiClient.admin, "getScholarshipConfigurations")
-      .mockResolvedValue({ success: true, message: "", data: CONFIGURATIONS } as any);
+    mockConfigurations();
     jest
       .spyOn(apiClient.admin, "getCollegeRankingOverview")
       .mockResolvedValue({ success: false, message: "找不到此獎學金類型" } as any);
