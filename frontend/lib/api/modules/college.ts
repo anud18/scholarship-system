@@ -290,11 +290,7 @@ export function createCollegeApi() {
      */
     importRankingExcel: async (
       rankingId: number,
-      importData: Array<{
-        student_id: string;
-        student_name: string;
-        rank_position: number;
-      }>
+      importData: SchemaComponents["schemas"]["RankingImportItem"][]
     ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.POST(
         "/api/v1/college-review/rankings/{ranking_id}/import-excel",

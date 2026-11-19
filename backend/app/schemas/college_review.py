@@ -138,7 +138,6 @@ class RankingImportItem(BaseModel):
     """Schema for importing ranking data from Excel"""
 
     student_id: str = Field(..., description="Student ID (學號)")
-    student_name: str = Field(..., description="Student name (姓名)")
     rank_position: Union[int, Literal["N"]] = Field(
         ..., description="Ranking position (排名): positive integer or 'N' for rejected"
     )
