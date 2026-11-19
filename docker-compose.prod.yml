@@ -197,7 +197,9 @@ services:
 
   # Nginx Reverse Proxy with SSL
   nginx:
-    image: nginx:alpine
+    # Pinned (>= 1.31.9 for the recent CVE fixes). Never float on nginx:alpine —
+    # the deploy VM would keep whatever it first pulled. Bump the tag to upgrade.
+    image: nginx:1.31.9-alpine
     container_name: scholarship_nginx_prod
     ports:
       - "80:80"

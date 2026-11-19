@@ -723,6 +723,12 @@ jobs:
           cd "${DEPLOY_DIR}"
           # --env-file is the single source of interpolation values; TAG and
           # IMAGE_OWNER come from the job env and intentionally take precedence.
+          # Pull the pinned nginx image BEFORE `down` so a registry failure
+          # aborts the deploy with the old stack still serving, and a changed
+          # tag in docker-compose.prod.yml actually takes effect (backend and
+          # frontend are pulled above; nginx would otherwise only be fetched
+          # when absent from the VM).
+          docker compose --env-file "${ENV_FILE}" pull nginx
           docker compose --env-file "${ENV_FILE}" down || true
 
           # scholarship_prod_network is declared external so it keeps a stable,
