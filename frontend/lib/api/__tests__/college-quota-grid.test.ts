@@ -4,7 +4,10 @@
  * blocks 儲存/確認分發; these tests pin the delta math that produces it.
  */
 
-import { buildCollegeQuotaGrid } from "../modules/college-quota-grid";
+import {
+  buildCollegeQuotaGrid,
+  buildLiveColumnUsage,
+} from "../modules/college-quota-grid";
 import type {
   DistributionStudent,
   LocalAlloc,
@@ -207,5 +210,60 @@ describe("buildCollegeQuotaGrid", () => {
     expect(grid.hasCollegeSplit(COL.key)).toBe(false);
     expect(grid.cell("A", COL.key)).toBeNull();
     expect(grid.overflows).toEqual([]);
+  });
+});
+
+describe("buildLiveColumnUsage (即時剩餘名額)", () => {
+  // Server says 3 of 17 are already gone — e.g. approved renewals, or another
+  // round borrowing this config — none of which are ticks on this screen.
+  const SHARED: SubTypeConfigCol = { ...COL, total: 17, remaining: 14 };
+
+  it("counts server-side consumers (renewals, other rounds) with no local ticks", () => {
+    const used = buildLiveColumnUsage({
+      cols: [SHARED],
+      students: [student({ ranking_item_id: 1 })],
+      localAllocations: staged([[1, null]]),
+    });
+    expect(used[SHARED.key]).toBe(3);
+  });
+
+  it("adds unsaved ticks on top of the server count", () => {
+    const used = buildLiveColumnUsage({
+      cols: [SHARED],
+      students: [student({ ranking_item_id: 1 })],
+      localAllocations: staged([[1, { sub_type: "nstc", config_id: 7 }]]),
+    });
+    expect(used[SHARED.key]).toBe(4);
+  });
+
+  it("does not double-count a saved allocation, and frees it when unticked", () => {
+    const saved = student({
+      ranking_item_id: 1,
+      is_allocated: true,
+      allocated_sub_type: "nstc",
+      allocation_config_id: 7,
+    });
+    const kept = buildLiveColumnUsage({
+      cols: [SHARED],
+      students: [saved],
+      localAllocations: staged([[1, { sub_type: "nstc", config_id: 7 }]]),
+    });
+    expect(kept[SHARED.key]).toBe(3);
+
+    const unticked = buildLiveColumnUsage({
+      cols: [SHARED],
+      students: [saved],
+      localAllocations: staged([[1, null]]),
+    });
+    expect(unticked[SHARED.key]).toBe(2);
+  });
+
+  it("ignores renewal rows — the server already counts them", () => {
+    const used = buildLiveColumnUsage({
+      cols: [SHARED],
+      students: [student({ ranking_item_id: 1, is_renewal: true })],
+      localAllocations: staged([[1, { sub_type: "nstc", config_id: 7 }]]),
+    });
+    expect(used[SHARED.key]).toBe(3);
   });
 });

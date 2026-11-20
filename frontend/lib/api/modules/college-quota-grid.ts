@@ -102,6 +102,33 @@ function buildLocalDelta(
   return delta;
 }
 
+/**
+ * Live GLOBAL usage per column (key → used), i.e. the 即時剩餘名額 sidebar.
+ *
+ * Starts from the server's live consumption (`total − remaining`, which already
+ * counts approved renewals and slots taken by any other round borrowing the
+ * same config) and adds the unsaved staged delta. Counting only the local
+ * ticks — as the sidebar used to — silently dropped every renewal and every
+ * cross-round consumer, so a column could read 00/17 while 3 slots were gone.
+ */
+export function buildLiveColumnUsage({
+  cols,
+  students,
+  localAllocations,
+}: Omit<BuildArgs, "quotaStatus">): Record<string, number> {
+  const localDelta = buildLocalDelta(students, localAllocations);
+  const deltaByCol: Record<string, number> = {};
+  for (const [key, delta] of Object.entries(localDelta)) {
+    const colKey = key.slice(key.indexOf("|") + 1);
+    deltaByCol[colKey] = (deltaByCol[colKey] ?? 0) + delta;
+  }
+  const used: Record<string, number> = {};
+  for (const col of cols) {
+    used[col.key] = col.total - col.remaining + (deltaByCol[col.key] ?? 0);
+  }
+  return used;
+}
+
 export function buildCollegeQuotaGrid({
   cols,
   quotaStatus,
