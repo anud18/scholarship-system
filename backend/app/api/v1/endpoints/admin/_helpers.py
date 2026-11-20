@@ -13,8 +13,10 @@ from typing import List
 from fastapi import Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.security import require_admin
+from app.models.scholarship import ScholarshipType
 from app.models.user import AdminScholarship, User, UserRole
 
 logger = logging.getLogger(__name__)
@@ -25,6 +27,19 @@ def require_super_admin(current_user: User = Depends(require_admin)) -> User:
     if not current_user.is_super_admin():
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Super admin access required")
     return current_user
+
+
+async def load_scholarship_by_identifier(db: AsyncSession, identifier: str) -> ScholarshipType:
+    """ScholarshipType (with its sub-type configs) by numeric id or code; 404 when unknown."""
+    stmt = select(ScholarshipType).options(selectinload(ScholarshipType.sub_type_configs))
+    if identifier.isdigit():
+        stmt = stmt.where(ScholarshipType.id == int(identifier))
+    else:
+        stmt = stmt.where(ScholarshipType.code == identifier)
+    scholarship = (await db.execute(stmt)).scalar_one_or_none()
+    if scholarship is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此獎學金類型")
+    return scholarship
 
 
 async def get_allowed_scholarship_ids(current_user: User, db: AsyncSession) -> List[int]:
