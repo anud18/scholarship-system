@@ -34,7 +34,10 @@ import {
   toStagedItems,
   unallocatedReasonLabel,
 } from "@/lib/api/modules/manual-distribution";
-import { buildCollegeQuotaGrid } from "@/lib/api/modules/college-quota-grid";
+import {
+  buildCollegeQuotaGrid,
+  buildLiveColumnUsage,
+} from "@/lib/api/modules/college-quota-grid";
 import { User } from "@/types/user";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -400,6 +403,9 @@ export function ManualDistributionPanel({
   const [distributionState, setDistributionState] =
     useState<DistributionState | null>(null);
   const [isLoadingState, setIsLoadingState] = useState(false);
+  // Bumped after every server mutation so the 剩餘可分配配額 panel refetches —
+  // without it the panel kept its first-load counts until the year changed.
+  const [stateVersion, setStateVersion] = useState(0);
   const [action, setAction] = useState<{
     mode: AllocationMode;
     applicationId: number;
@@ -443,18 +449,15 @@ export function ManualDistributionPanel({
     return cols;
   }, [quotaStatus]);
 
-  /** Count how many local allocations are using each (sub_type, config) slot */
-  const localAllocCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const col of subTypeCols) counts[col.key] = 0;
-    for (const [, alloc] of localAllocations) {
-      if (alloc) {
-        const k = makeColKey(alloc.sub_type, alloc.config_id);
-        counts[k] = (counts[k] ?? 0) + 1;
-      }
-    }
-    return counts;
-  }, [localAllocations, subTypeCols]);
+  /**
+   * Live used count per (sub_type, config) column: server consumption
+   * (renewals + every round's saved allocations) plus unsaved ticks.
+   */
+  const localAllocCounts = useMemo(
+    () =>
+      buildLiveColumnUsage({ cols: subTypeCols, students, localAllocations }),
+    [subTypeCols, students, localAllocations]
+  );
 
   // Academies-first code→name map, shared with the quota matrix so every
   // college label on this screen resolves identically (see buildCollegeNameMap).
@@ -633,6 +636,7 @@ export function ManualDistributionPanel({
     if (quotaResp.success && quotaResp.data) {
       setQuotaStatus(quotaResp.data);
     }
+    setStateVersion(v => v + 1);
   }, [scholarshipTypeId, selectedAcademicYear, selectedSemester]);
 
   useEffect(() => {
@@ -672,7 +676,7 @@ export function ManualDistributionPanel({
     return () => {
       cancelled = true;
     };
-  }, [scholarshipTypeId, selectedAcademicYear]);
+  }, [scholarshipTypeId, selectedAcademicYear, stateVersion]);
 
   // Lookup: which `application_id`s are challenge applications. Used to
   // surface the 🛡 marker and amber styling in the candidate table.
@@ -2430,6 +2434,8 @@ export function ManualDistributionPanel({
         const hadAllocation = action?.hasAllocation ?? true;
         setAction(null);
         await fetchData();
+        // 撤銷/停發/復原 frees or re-takes a slot — refresh 剩餘可分配配額 too.
+        setStateVersion(v => v + 1);
         // Set success message AFTER fetchData so it isn't cleared by
         // fetchData's own setSaveMessage(null) (preserves the race fix
         // from commit 2dd0f611).
